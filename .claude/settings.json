@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit", "Write",
+      "Bash(npm run *)", "Bash(npm test*)", "Bash(npx vitest*)", "Bash(npx playwright*)",
+      "Bash(git add*)", "Bash(git commit*)", "Bash(git status*)", "Bash(git diff*)",
+      "Bash(python3 *)", "Bash(uvicorn *)", "Bash(ls*)", "Bash(cat*)", "Bash(grep*)"
+    ],
+    "deny": ["Bash(git push*)", "Bash(rm -rf*)", "Bash(curl * | sh*)"]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "npm run -s lint:changed 2>/dev/null || true" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "bash .claude/verify-task.sh"
+        }]
+      }
+    ]
+  }
+}

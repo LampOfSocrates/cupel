@@ -1,0 +1,14 @@
+{
+  "name": "loom",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
+  }
+}

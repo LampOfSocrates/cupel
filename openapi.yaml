@@ -1,0 +1,1543 @@
+openapi: 3.0.3
+info:
+  title: Loom API — Phase 1 contract
+  version: 0.1.0
+  description: |
+    Phase 1 API contract for Loom (draft). Scope: exactly the endpoints Phase 1
+    features need — chat (both stream modes), conversations + forks, agents +
+    versioned instructions + snapshots, replay (conversation and turn level),
+    runs, traces, task queue, eval basics (judge / judgments / summaries), and
+    identity/meta. Source of truth: docs/feature-spec.md "API" section
+    (feature-spec.md:114-135) filtered by the Phase 1 plan (loom-phases.md:9-66).
+
+    Scoping rule (feature-spec.md:115): "Tree-scoped: conversation/run/chat
+    resources live under /agenttrees/{tree_id}/… — permission checks fall out of
+    the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
+
+    Phase 1 has no auth (loom-phases.md:10 "No auth (dev user)"): no security
+    schemes here; GET /me is still always called and answers with the dev user
+    (feature-spec.md:17, invariant loom-phases.md:160).
+
+    Invariants encoded in this contract: instruction versions, judgments and
+    snapshots are append-only — no endpoint updates or deletes them
+    (loom-phases.md:160).
+
+    Deferred to later phases (deliberately absent): /auth/*, /admin/* (users,
+    permissions, tree enable/disable, generator control API), /settings,
+    /settings/repo, /assist, /webhooks/git, memory, casebooks/inspector, eval
+    cases/sets CRUD + import, and replay context-policy/tools-mode fields
+    (feature-spec.md:82 — Phase 1 replays always run frozen; loom-phases.md:98
+    lists the rest under Phase 2 mock deliverables).
+servers:
+  - url: http://localhost:4010
+    description: FastAPI mock (loom-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
+tags:
+  - name: identity
+  - name: meta
+  - name: trees
+  - name: agents
+  - name: conversations
+  - name: chat
+  - name: runs
+  - name: trace
+  - name: tasks
+  - name: eval
+
+paths:
+  # ---------------------------------------------------------------- identity
+  /me:
+    get:
+      tags: [identity]
+      operationId: getMe
+      summary: Current user and per-tree permissions
+      description: |
+        feature-spec.md:120: "GET /me (user + per-tree permissions; answers in
+        both auth modes)". Always called on boot — invariant (loom-phases.md:160
+        "/me is always called"). Phase 1: backend/mock answers with the dev user
+        (feature-spec.md:17).
+      responses:
+        "200":
+          description: The current (Phase 1 = dev) user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
+  # -------------------------------------------------------------------- meta
+  /healthz:
+    get:
+      tags: [meta]
+      operationId: getHealthz
+      summary: Liveness / server info
+      description: |
+        feature-spec.md:122 "GET /healthz (backend switcher)"; feature-spec.md:159
+        "shows status, latency, server version, and (for mock) the loaded seed"
+        (latency is client-measured). Note: the backend-switcher UI that consumes
+        this is Phase 2 (sketch 09); the endpoint ships in Phase 1 for mock/e2e
+        liveness only.
+      responses:
+        "200":
+          description: Server is up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /models:
+    get:
+      tags: [meta]
+      operationId: listModels
+      summary: Available models
+      description: |
+        feature-spec.md:122: "GET /models (chat/run/judge model dropdowns)".
+      responses:
+        "200":
+          description: Model list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Model" }
+
+  # ------------------------------------------------------------------- trees
+  /agenttrees:
+    get:
+      tags: [trees]
+      operationId: listAgentTrees
+      summary: Permitted agent trees
+      description: |
+        feature-spec.md:121: "GET /agenttrees (permitted + enabled; admins also
+        see disabled)". Phase 1 has no admin/disable mechanics; all seeded trees
+        return enabled=true (disable toggle is Phase 2, feature-spec.md:20).
+      responses:
+        "200":
+          description: Trees visible to the current user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AgentTree" }
+
+  /agenttrees/{tree}/endpoints:
+    get:
+      tags: [trees]
+      operationId: listEndpoints
+      summary: Deploy targets for replay
+      description: |
+        feature-spec.md:121: "GET /agenttrees/{tree}/endpoints (deploy targets
+        for replay)". Multi-selected in Run Config for turn re-fire
+        (feature-spec.md:67).
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "200":
+          description: Endpoints for this tree.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Endpoint" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------------------ agents
+  /agenttrees/{tree}/agents:
+    get:
+      tags: [agents]
+      operationId: listAgents
+      summary: Agent hierarchy for the tree view
+      description: |
+        feature-spec.md:28: "Data: GET /agenttrees/{tree}/agents (returns
+        hierarchy + version + tools per agent)". Node shows "agent name, live
+        instruction version, tools attached (icons), enabled state"
+        (feature-spec.md:25).
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "200":
+          description: Flat list of agents with parent links (root has parent_id null).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Agent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/agents/{agentId}/instructions:
+    get:
+      tags: [agents]
+      operationId: getInstructions
+      summary: Instruction versions for an agent
+      description: |
+        feature-spec.md:124: "GET/PUT /agenttrees/{tree}/agents/{id}/instructions
+        (versioned; carries format…)". Versions are append-only: "save = new
+        version, never overwrite. Diff view + rollback" (feature-spec.md:33).
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/agentId" }
+      responses:
+        "200":
+          description: Live version pointer plus full version history (for diff/rollback).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionHistory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [agents]
+      operationId: saveInstructions
+      summary: Save instructions as a NEW version (append-only)
+      description: |
+        Never overwrites (feature-spec.md:33). If snapshot_id is supplied, this
+        save promotes that draft snapshot: "On save, the snapshot is promoted to
+        the next version (e.g. v16) and all runs referencing that snapshot_id
+        relabel to v16" (feature-spec.md:86, API at :89 "snapshot promotion on
+        PUT /agents/{id}/instructions"). Rollback = PUT the old version's content
+        (creates a new version). format field per feature-spec.md:34; YAML
+        schema validation is Phase 2 and not part of this contract.
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/agentId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstructionSave" }
+      responses:
+        "201":
+          description: The newly created version (now live).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstructionVersion" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/agents/{agentId}/snapshots:
+    post:
+      tags: [agents]
+      operationId: createSnapshot
+      summary: Immutable draft snapshot (for Test in Runs)
+      description: |
+        feature-spec.md:89: "POST /agents/{id}/snapshots (immutable draft
+        snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
+        snapshotted immutably into the run config (snapshot_id), so the tested
+        text is exactly what ran even if editing continues… Unsaved snapshots
+        display as 'v15-draft (a3f2)'." Append-only invariant (loom-phases.md:160).
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/agentId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotCreate" }
+      responses:
+        "201":
+          description: The immutable snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/agents/{agentId}/last-selection:
+    get:
+      tags: [agents]
+      operationId: getLastSelection
+      summary: Last-used conversation selection for this agent
+      description: |
+        feature-spec.md:87: "the previous conversation set is remembered per
+        agent (GET/PUT /agents/{id}/last-selection). Repeat testing = Test in
+        Runs → Queue, two taps."
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/agentId" }
+      responses:
+        "200":
+          description: Remembered selection (empty items = first-time testing).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Selection" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [agents]
+      operationId: putLastSelection
+      summary: Remember the conversation selection for this agent
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/agentId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Selection" }
+      responses:
+        "200":
+          description: Stored selection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Selection" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ----------------------------------------------------------- conversations
+  /agenttrees/{tree}/conversations:
+    get:
+      tags: [conversations]
+      operationId: listConversations
+      summary: Conversations (paginated, searchable, fork-filterable)
+      description: |
+        feature-spec.md:125: "GET /agenttrees/{tree}/conversations (paginated,
+        ?search=, ?forks_of={id}, sorted by last activity; incl. turns; lineage
+        on forks)". Envelope rule (feature-spec.md:81): "envelope on turn
+        objects in GET …/conversations".
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: forks_of
+          in: query
+          description: Only forks of this conversation id (feature-spec.md:73).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Page of conversations, most recent activity first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/conversations/{conversationId}:
+    patch:
+      tags: [conversations]
+      operationId: updateConversation
+      summary: Rename a conversation
+      description: |
+        feature-spec.md:125 "PATCH/DELETE /agenttrees/{tree}/conversations/{id}";
+        action source: sidebar ⋯ menu "rename, delete" (feature-spec.md:6).
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/conversationId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+      responses:
+        "200":
+          description: Updated conversation (without turns).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [conversations]
+      operationId: deleteConversation
+      summary: Delete a conversation
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/conversationId" }
+      responses:
+        "204": { description: Deleted. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # -------------------------------------------------------------------- chat
+  /agenttrees/{tree}/chat:
+    post:
+      tags: [chat]
+      operationId: chat
+      summary: Send a message (SSE stream or single JSON, flag in body)
+      description: |
+        feature-spec.md:123: "POST /agenttrees/{tree}/chat (SSE; queued →
+        returns task_id), stop = DELETE /tasks/{task_id}".
+
+        Both modes on this one endpoint (loom-phases.md:43): "stream: true (SSE
+        token stream, the UI default) and stream: false (single JSON response,
+        for curl/scripts/backends that can't stream) — same endpoint, flag in
+        the request body".
+
+        stream=true → 200 text/event-stream with events:
+          - event: task   — data: ChatTaskEvent (first event; carries the
+            task_id used for stop = DELETE /tasks/{task_id}, plus conversation
+            and turn ids)
+          - event: token  — data: TokenEvent (one per streamed token/delta)
+          - event: done   — data: ChatDoneEvent (the completed assistant Turn,
+            envelope included — captured at generation, feature-spec.md:76)
+          - event: error  — data: Error
+        Trace spans do NOT stream here; they stream on GET /tasks/stream ("same
+        SSE channel as tasks", feature-spec.md:150).
+
+        stream=false → 200 application/json (ChatResponse) once generation
+        completes; still carries task_id for symmetry.
+
+        Session-scoped chat settings (model, temperature, system prompt) are
+        "sent with each /chat call" (feature-spec.md:278). Omitting
+        conversation_id starts a new conversation.
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatRequest" }
+      responses:
+        "200":
+          description: >
+            SSE stream (stream=true) or completed turn as JSON (stream=false).
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE frames; event payloads are ChatTaskEvent / TokenEvent / ChatDoneEvent / Error.
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /upload:
+    post:
+      tags: [chat]
+      operationId: upload
+      summary: Upload an attachment before send
+      description: |
+        feature-spec.md:123 "POST /upload"; composer flow (feature-spec.md:277,
+        dev prompt #4): "multipart upload to /upload before send".
+        Global (not tree-scoped) per the API section grouping.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Stored attachment; reference its id in ChatRequest.attachments.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attachment" }
+        "413": { $ref: "#/components/responses/Error" }
+
+  /feedback:
+    post:
+      tags: [chat]
+      operationId: postFeedback
+      summary: 👍/👎 on an assistant message
+      description: |
+        feature-spec.md:123: "POST /feedback (writes a type: human judgment —
+        single store with /eval/judgments)". Body per dev prompt #3
+        (feature-spec.md:276): "POST {message_id, rating} to
+        /feedback". Thumbs "also persist as lightweight judgments, type: human"
+        (feature-spec.md:60). Judgments are append-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackRequest" }
+      responses:
+        "201":
+          description: The appended human judgment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judgment" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # -------------------------------------------------------------------- runs
+  /agenttrees/{tree}/replay:
+    post:
+      tags: [runs]
+      operationId: replay
+      summary: Replay selected conversations/turns under a changed config
+      description: |
+        feature-spec.md:126: "POST /agenttrees/{tree}/replay". Engine
+        (feature-spec.md:41): "take stored conversations or individual turns,
+        re-execute them under a changed config, optionally judge them, queue the
+        work, compare outputs." Enqueued: "All backend work enqueued; every
+        request returns task_id" (feature-spec.md:106); batch = parent task +
+        child per unit (feature-spec.md:107).
+
+        Phase 1 context rule: replays always run frozen — "replay under each
+        turn's original envelope" (feature-spec.md:77); the context_policy /
+        context_override / tools_mode request fields are Phase 2
+        (feature-spec.md:82) and intentionally absent here.
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplayRequest" }
+      responses:
+        "202":
+          description: Work enqueued; run row appears immediately and fills incrementally.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplayAccepted" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/replay/turn:
+    post:
+      tags: [runs]
+      operationId: replayTurn
+      summary: Re-fire one turn against one or many endpoints (forks)
+      description: |
+        feature-spec.md:126: "POST /agenttrees/{tree}/replay/turn (endpoints[] →
+        task + conversation per endpoint)". Semantics (feature-spec.md:68):
+        "Each (turn × endpoint × config) forks a new conversation: original
+        history up to that turn is copied, the turn is re-generated by the
+        chosen endpoint, and the result is stored as a normal conversation."
+        Return shape (feature-spec.md:71): "returns one task_id + new
+        conversation_id per endpoint." Forks carry lineage metadata
+        (feature-spec.md:69).
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplayTurnRequest" }
+      responses:
+        "202":
+          description: One entry per requested endpoint.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplayTurnAccepted" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/runs:
+    get:
+      tags: [runs]
+      operationId: listRuns
+      summary: List runs
+      description: feature-spec.md:126 "GET /agenttrees/{tree}/runs".
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "200":
+          description: Runs, newest first (cells omitted; fetch a run for the grid).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RunSummaryItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/runs/{runId}:
+    get:
+      tags: [runs]
+      operationId: getRun
+      summary: Run detail — comparison grid data
+      description: |
+        feature-spec.md:126 "GET /agenttrees/{tree}/runs/{id}". Grid shape
+        (feature-spec.md:49): "baseline column + one column per run config, row
+        per turn." Cells fill incrementally as child tasks finish
+        (feature-spec.md:112); live fill arrives via GET /tasks/stream.
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Full run with columns and per-turn cells.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------------------- trace
+  /agenttrees/{tree}/turns/{turnId}/trace:
+    get:
+      tags: [trace]
+      operationId: getTrace
+      summary: Span tree for a turn
+      description: |
+        feature-spec.md:127: "GET /agenttrees/{tree}/turns/{turn_id}/trace".
+        Span model (feature-spec.md:144): "Span = {id, parent_id, type:
+        agent|llm|tool, name, start, end, tokens_in?, tokens_out?, cost?,
+        model?, status, payload_ref}". Header shows turn totals (wall time,
+        tokens in/out, cost) (feature-spec.md:147) and the turn's context
+        envelope (feature-spec.md:76 "shown in trace header"). Live spans
+        stream on GET /tasks/stream (feature-spec.md:150).
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - name: turnId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The trace (totals + flat span list with parent links).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trace" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /spans/{spanId}/payload:
+    get:
+      tags: [trace]
+      operationId: getSpanPayload
+      summary: Lazy-loaded span payload
+      description: |
+        feature-spec.md:127 / :151: "GET /spans/{id}/payload (lazy-loaded
+        prompt/response bodies)". Global per feature-spec.md:115 ("Global:
+        tasks, span payloads…"). Full prompt/response for LLM spans,
+        args/result for tool spans (feature-spec.md:149).
+      parameters:
+        - name: spanId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Payload bodies for the span.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpanPayload" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------------------- tasks
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: List tasks (polling fallback + sidebar badge)
+      description: |
+        feature-spec.md:135 "GET /tasks"; polling fallback for the SSE stream
+        (feature-spec.md:108); sidebar badge counts pending (feature-spec.md:111).
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, running, done, failed, cancelled]
+      responses:
+        "200":
+          description: Tasks, newest first. Parents only; expand via GET /tasks/{id}.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+
+  /tasks/stream:
+    get:
+      tags: [tasks]
+      operationId: streamTasks
+      summary: SSE — task status/progress + live trace spans
+      description: |
+        feature-spec.md:135: "GET /tasks/stream (SSE: status + progress)".
+        "Live updates via SSE: status changes and progress events push as they
+        happen — no refresh" (feature-spec.md:108). Also carries live trace
+        spans: "spans appear live while the turn is generating (same SSE channel
+        as tasks)" (feature-spec.md:150).
+
+        Events:
+          - event: task     — data: Task (status change; includes progress)
+          - event: progress — data: TaskProgressEvent (per-unit ticks, e.g.
+            "Conversation 3/10 · turn 2/6", feature-spec.md:109)
+          - event: span     — data: SpanEvent (a span for a generating turn)
+      responses:
+        "200":
+          description: SSE stream; payloads are Task / TaskProgressEvent / SpanEvent.
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /tasks/{taskId}:
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: Task detail including children
+      description: |
+        feature-spec.md:135 "GET /tasks/{id} (incl. children)". Task model
+        (feature-spec.md:107): "{id, type, status, progress: {done, total,
+        stage}, parent_id?, error?, created/started/finished_at}".
+      parameters: [{ $ref: "#/components/parameters/taskId" }]
+      responses:
+        "200":
+          description: Task with children populated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [tasks]
+      operationId: cancelTask
+      summary: Cancel a task (cascades to children); also stop-generation
+      description: |
+        feature-spec.md:135 "DELETE /tasks/{id} (cancel, cascades)"; parent
+        cancels children (feature-spec.md:110). Doubles as chat
+        stop-generation: "stop = DELETE /tasks/{task_id}" (feature-spec.md:123).
+      parameters: [{ $ref: "#/components/parameters/taskId" }]
+      responses:
+        "200":
+          description: The task, now cancelled (children cascaded).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskId}/retry-failed:
+    post:
+      tags: [tasks]
+      operationId: retryFailed
+      summary: Retry only the failed children of a batch
+      description: |
+        feature-spec.md:135 "POST /tasks/{id}/retry-failed". "Failed children
+        don't kill the batch — shown as partial failure with retry-failed
+        button" (feature-spec.md:110).
+      parameters: [{ $ref: "#/components/parameters/taskId" }]
+      responses:
+        "202":
+          description: Failed children re-enqueued; parent task returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # -------------------------------------------------------------------- eval
+  /eval/rubrics:
+    get:
+      tags: [eval]
+      operationId: listRubrics
+      summary: Rubrics (for the Run Config judge section)
+      description: |
+        feature-spec.md:132 "GET/POST /eval/rubrics" — Phase 1 ships GET only
+        (rubric editor = eval workbench = Phase 2, loom-phases.md:98); rubrics
+        come from seed data ("judgments across 2 rubrics",
+        feature-spec.md:168). Consumed by Runs · Configure
+        (feature-spec.md:230).
+      responses:
+        "200":
+          description: Latest version of each rubric.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Rubric" }
+
+  /eval/cases/{caseId}:
+    get:
+      tags: [eval]
+      operationId: getEvalCase
+      summary: One eval case (judgment drawer)
+      description: |
+        feature-spec.md:130 "GET /eval/cases/{id}". Model (feature-spec.md:54):
+        "EvalCase = {input, output, reference?}". Phase 1 cases are
+        auto-created from conversation turns during judging
+        (feature-spec.md:61); handcrafted CRUD/import is Phase 2 workbench.
+        Consumed by the judgment drawer (feature-spec.md:233).
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalCase" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/judge:
+    post:
+      tags: [eval]
+      operationId: judge
+      summary: Enqueue LLM judging
+      description: |
+        feature-spec.md:133: "POST /eval/judge ({set_id | case_ids | run_id,
+        judge_model, rubric_id} → enqueued), judgments append-only". Phase 1
+        accepts run_id ("Score this run… auto-creating cases from conversation
+        turns if none exist", feature-spec.md:61) or explicit case_ids; set_id
+        needs EvalSets (Phase 2 workbench) and is intentionally absent. Judge
+        prompt receives the case's envelope (feature-spec.md:81).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JudgeRequest" }
+      responses:
+        "202":
+          description: Judging enqueued (parent task + child per case).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskRef" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/judgments:
+    get:
+      tags: [eval]
+      operationId: listJudgments
+      summary: Judgment history (append-only)
+      description: |
+        feature-spec.md:134: "GET /eval/judgments?case_id=&run_id=&rubric_id=
+        (history)". Model (feature-spec.md:59): "Judgment (persisted forever,
+        never overwritten): {case_id, run_id?, judge_model, rubric_id+version,
+        score, reasoning, created_at}. Re-judging appends." Thumbs live here
+        too as type: human (feature-spec.md:60, :123).
+      parameters:
+        - name: case_id
+          in: query
+          schema: { type: string }
+        - name: run_id
+          in: query
+          schema: { type: string }
+        - name: rubric_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching judgments, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Judgment" }
+
+  /eval/runs/{runId}/summary:
+    get:
+      tags: [eval]
+      operationId: getRunScoreSummary
+      summary: Aggregate scores for a run
+      description: |
+        feature-spec.md:134: "GET /eval/runs/{run_id}/summary (aggregates)".
+        Feeds the grid's "summary header (mean, distribution sparkline)"
+        (feature-spec.md:49), updating live as judging tasks finish
+        (feature-spec.md:64).
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Aggregates per rubric.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunScoreSummary" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  parameters:
+    tree:
+      name: tree
+      in: path
+      required: true
+      description: Agent tree id, e.g. agent1 (feature-spec.md:115).
+      schema: { type: string }
+    agentId:
+      name: agentId
+      in: path
+      required: true
+      schema: { type: string }
+    conversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string }
+    taskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: Resource not found (or tree not permitted — unpermitted trees never render, feature-spec.md:32).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Error:
+      description: Request error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: not_found }
+        message: { type: string }
+
+    # ---------------------------------------------------------- identity/meta
+    Me:
+      type: object
+      required: [user, permissions]
+      properties:
+        user:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string }
+        permissions:
+          type: object
+          description: >
+            Per-tree permission flags (feature-spec.md:32 "Permissions per tree
+            (view / tune / evaluate)"), keyed by tree id.
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [view, tune, evaluate]
+
+    Health:
+      type: object
+      required: [status, version]
+      properties:
+        status: { type: string, enum: [ok] }
+        version: { type: string, description: Server version (feature-spec.md:159). }
+        seed:
+          type: string
+          nullable: true
+          description: Loaded seed dataset — mock only (feature-spec.md:159).
+
+    Model:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, example: claude-sonnet-5 }
+        name: { type: string }
+
+    # ------------------------------------------------------------------ trees
+    AgentTree:
+      type: object
+      required: [id, name, enabled]
+      properties:
+        id: { type: string, example: agent1 }
+        name: { type: string }
+        enabled:
+          type: boolean
+          description: Always true in Phase 1; disable toggle is Phase 2 (feature-spec.md:20).
+
+    Endpoint:
+      type: object
+      required: [id, name]
+      description: >
+        "endpoint = an agent deployment/backend target" (feature-spec.md:67).
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+
+    # ----------------------------------------------------------------- agents
+    Agent:
+      type: object
+      required: [id, name, parent_id, live_version, tools, enabled, format]
+      description: Node data for the tree view (feature-spec.md:25, :28).
+      properties:
+        id: { type: string }
+        name: { type: string }
+        parent_id:
+          type: string
+          nullable: true
+          description: null for the root agent.
+        live_version:
+          type: integer
+          description: Live instruction version number.
+        tools:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        format:
+          type: string
+          enum: [text, yaml]
+          description: >
+            Instruction format metadata (feature-spec.md:34). Phase 1 treats
+            both as plain text; YAML schema validation is Phase 2.
+
+    InstructionVersion:
+      type: object
+      required: [version, content, format, created_at]
+      properties:
+        version: { type: integer, example: 15 }
+        content: { type: string }
+        format: { type: string, enum: [text, yaml] }
+        created_at: { type: string, format: date-time }
+        promoted_from_snapshot_id:
+          type: string
+          nullable: true
+          description: Set when this version was a promoted draft snapshot (feature-spec.md:86).
+
+    InstructionHistory:
+      type: object
+      required: [agent_id, format, live_version, versions]
+      properties:
+        agent_id: { type: string }
+        format: { type: string, enum: [text, yaml] }
+        live_version: { type: integer }
+        versions:
+          type: array
+          description: All versions, ascending — append-only (feature-spec.md:33).
+          items: { $ref: "#/components/schemas/InstructionVersion" }
+
+    InstructionSave:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        format: { type: string, enum: [text, yaml] }
+        snapshot_id:
+          type: string
+          nullable: true
+          description: >
+            Promote this draft snapshot to the new version; runs referencing it
+            relabel (feature-spec.md:86, :89).
+
+    SnapshotCreate:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, description: "The draft text, frozen verbatim." }
+        base_version:
+          type: integer
+          nullable: true
+          description: Version the draft was edited from — feeds the "v15-draft (a3f2)" label.
+
+    Snapshot:
+      type: object
+      required: [snapshot_id, agent_id, label, created_at]
+      properties:
+        snapshot_id: { type: string, example: a3f2 }
+        agent_id: { type: string }
+        label:
+          type: string
+          example: v15-draft (a3f2)
+          description: Display label until promoted (feature-spec.md:86).
+        created_at: { type: string, format: date-time }
+
+    Selection:
+      type: object
+      required: [items]
+      description: Conversation/turn selection remembered per agent (feature-spec.md:87).
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SelectionItem" }
+
+    SelectionItem:
+      type: object
+      required: [conversation_id]
+      properties:
+        conversation_id: { type: string }
+        turn_ids:
+          type: array
+          nullable: true
+          description: Absent/null = whole conversation; present = just these turns (feature-spec.md:44).
+          items: { type: string }
+
+    # ---------------------------------------------------------- conversations
+    ContextEnvelope:
+      type: object
+      required: [system_date, timezone, region, locale]
+      description: >
+        Captured at generation, never reconstructed (feature-spec.md:76):
+        "{system_date, timezone, region, locale, user_profile_ref?}". Phase 1
+        replays always run under this frozen envelope (feature-spec.md:77, :82).
+      properties:
+        system_date: { type: string, format: date, example: "2026-08-02" }
+        timezone: { type: string, example: Europe/London }
+        region: { type: string, example: GB }
+        locale: { type: string, example: en-GB }
+        user_profile_ref: { type: string, nullable: true }
+
+    Attachment:
+      type: object
+      required: [id, filename, content_type, size]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        content_type: { type: string }
+        size: { type: integer }
+        url: { type: string, nullable: true }
+
+    Turn:
+      type: object
+      required: [id, role, content, created_at]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string, description: Markdown (feature-spec.md:10). }
+        created_at: { type: string, format: date-time }
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/Attachment" }
+        envelope:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: >
+            Present on every generated (assistant) turn (feature-spec.md:76);
+            on turn objects in conversation listings (feature-spec.md:81).
+
+    Lineage:
+      type: object
+      required: [parent_conversation_id, fork_turn_id]
+      description: >
+        feature-spec.md:69: "Forks carry lineage metadata: parent conversation
+        id, fork turn, endpoint + config used."
+      properties:
+        parent_conversation_id: { type: string }
+        fork_turn_id: { type: string }
+        endpoint_id: { type: string, nullable: true }
+        config:
+          allOf: [{ $ref: "#/components/schemas/RunConfig" }]
+          nullable: true
+
+    Conversation:
+      type: object
+      required: [id, tree_id, title, created_at, last_activity_at]
+      properties:
+        id: { type: string }
+        tree_id: { type: string }
+        title: { type: string }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: string, format: date-time }
+        lineage:
+          allOf: [{ $ref: "#/components/schemas/Lineage" }]
+          nullable: true
+          description: Present iff this conversation is a fork.
+        fork_count:
+          type: integer
+          description: Number of direct forks — drives the "N forks" chip (feature-spec.md:5).
+        turns:
+          type: array
+          description: Included in listings (feature-spec.md:125 "incl. turns").
+          items: { $ref: "#/components/schemas/Turn" }
+
+    ConversationPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Conversation" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    # ------------------------------------------------------------------- chat
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        conversation_id:
+          type: string
+          nullable: true
+          description: Omit to start a new conversation.
+        message: { type: string }
+        attachments:
+          type: array
+          description: Attachment ids from POST /upload.
+          items: { type: string }
+        model: { type: string, nullable: true }
+        temperature: { type: number, nullable: true }
+        system_prompt:
+          type: string
+          nullable: true
+          description: Session-scoped chat settings, sent per call (feature-spec.md:7, :278).
+        stream:
+          type: boolean
+          default: true
+          description: >
+            true = SSE token stream (UI default); false = single JSON response
+            (loom-phases.md:43).
+
+    ChatResponse:
+      type: object
+      required: [task_id, conversation_id, turn]
+      description: stream=false response — the completed assistant turn.
+      properties:
+        task_id: { type: string }
+        conversation_id: { type: string }
+        turn: { $ref: "#/components/schemas/Turn" }
+
+    ChatTaskEvent:
+      type: object
+      required: [task_id, conversation_id, user_turn_id, assistant_turn_id]
+      description: First SSE event; task_id enables stop = DELETE /tasks/{task_id} (feature-spec.md:123).
+      properties:
+        task_id: { type: string }
+        conversation_id: { type: string }
+        user_turn_id: { type: string }
+        assistant_turn_id: { type: string }
+
+    TokenEvent:
+      type: object
+      required: [delta]
+      properties:
+        delta: { type: string }
+
+    ChatDoneEvent:
+      type: object
+      required: [turn]
+      properties:
+        turn: { $ref: "#/components/schemas/Turn" }
+
+    FeedbackRequest:
+      type: object
+      required: [message_id, rating]
+      properties:
+        message_id: { type: string }
+        rating: { type: string, enum: [up, down] }
+
+    # ------------------------------------------------------------------- runs
+    RunConfig:
+      type: object
+      description: >
+        Run Config drawer fields (feature-spec.md:46-48): "Agent tree +
+        instruction version · Model, temperature · Judge (optional…)".
+        instruction_version XOR snapshot_id — a snapshot is an untested draft
+        (feature-spec.md:86). endpoint_ids only applies to turn re-fire
+        (feature-spec.md:67).
+      properties:
+        agent_id: { type: string, nullable: true }
+        instruction_version: { type: integer, nullable: true }
+        snapshot_id: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        temperature: { type: number, nullable: true }
+        endpoint_ids:
+          type: array
+          nullable: true
+          items: { type: string }
+        judge:
+          allOf: [{ $ref: "#/components/schemas/JudgeConfig" }]
+          nullable: true
+
+    JudgeConfig:
+      type: object
+      required: [judge_model, rubric_id]
+      description: Judge section, collapsed by default (feature-spec.md:48).
+      properties:
+        judge_model: { type: string }
+        rubric_id: { type: string }
+
+    ReplayRequest:
+      type: object
+      required: [selection, config]
+      properties:
+        selection:
+          type: array
+          minItems: 1
+          description: >
+            Conversations, optionally narrowed to individual turns
+            (feature-spec.md:44 "expandable to pick individual turns").
+          items: { $ref: "#/components/schemas/SelectionItem" }
+        config: { $ref: "#/components/schemas/RunConfig" }
+
+    ReplayAccepted:
+      type: object
+      required: [task_id, run_id]
+      description: Every request returns task_id (feature-spec.md:106).
+      properties:
+        task_id: { type: string, description: Parent task; children per conversation/turn (feature-spec.md:107). }
+        run_id: { type: string, description: "Fetch via GET /agenttrees/{tree}/runs/{id} for the grid." }
+
+    ReplayTurnRequest:
+      type: object
+      required: [conversation_id, turn_id, endpoints]
+      properties:
+        conversation_id: { type: string }
+        turn_id: { type: string }
+        endpoints:
+          type: array
+          minItems: 1
+          description: feature-spec.md:71 "body includes endpoints[]".
+          items: { type: string }
+        config:
+          allOf: [{ $ref: "#/components/schemas/RunConfig" }]
+          nullable: true
+
+    ReplayTurnAccepted:
+      type: object
+      required: [results]
+      description: feature-spec.md:71 "returns one task_id + new conversation_id per endpoint".
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [endpoint_id, task_id, conversation_id]
+            properties:
+              endpoint_id: { type: string }
+              task_id: { type: string }
+              conversation_id: { type: string, description: The new fork (lineage attached). }
+
+    RunSummaryItem:
+      type: object
+      required: [id, tree_id, status, created_at, task_id]
+      properties:
+        id: { type: string }
+        tree_id: { type: string }
+        status: { type: string, enum: [queued, running, done, failed, cancelled] }
+        created_at: { type: string, format: date-time }
+        task_id: { type: string }
+        label: { type: string, nullable: true }
+
+    Run:
+      type: object
+      required: [id, tree_id, status, created_at, task_id, columns, rows]
+      description: >
+        Comparison-grid data: "baseline column + one column per run config, row
+        per turn" (feature-spec.md:49).
+      properties:
+        id: { type: string }
+        tree_id: { type: string }
+        status: { type: string, enum: [queued, running, done, failed, cancelled] }
+        created_at: { type: string, format: date-time }
+        task_id: { type: string }
+        columns:
+          type: array
+          description: Index 0 = baseline. Column labels relabel when a snapshot promotes (feature-spec.md:86).
+          items:
+            type: object
+            required: [label, config]
+            properties:
+              label: { type: string, example: v15-draft (a3f2) }
+              config: { $ref: "#/components/schemas/RunConfig" }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [source, cells]
+            properties:
+              source:
+                type: object
+                required: [conversation_id, turn_id]
+                properties:
+                  conversation_id: { type: string }
+                  turn_id: { type: string }
+              cells:
+                type: array
+                description: One per column, same order; fills incrementally (feature-spec.md:112).
+                items: { $ref: "#/components/schemas/RunCell" }
+
+    RunCell:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, running, done, failed] }
+        content: { type: string, nullable: true, description: The (re)generated assistant output. }
+        conversation_id: { type: string, nullable: true, description: "Fork holding this result, when applicable." }
+        turn_id: { type: string, nullable: true, description: Replayed turn id — trace entry point (feature-spec.md:145). }
+        task_id: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+
+    # ------------------------------------------------------------------ trace
+    Span:
+      type: object
+      required: [id, parent_id, type, name, start, end, status, payload_ref]
+      description: >
+        feature-spec.md:144: "Span = {id, parent_id, type: agent|llm|tool, name,
+        start, end, tokens_in?, tokens_out?, cost?, model?, status, payload_ref}".
+      properties:
+        id: { type: string }
+        parent_id: { type: string, nullable: true }
+        type: { type: string, enum: [agent, llm, tool] }
+        name: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time, nullable: true }
+        tokens_in: { type: integer, nullable: true }
+        tokens_out: { type: integer, nullable: true }
+        cost: { type: number, nullable: true }
+        model: { type: string, nullable: true }
+        status: { type: string, enum: [ok, error, running] }
+        payload_ref: { type: string, description: "Id for GET /spans/{id}/payload." }
+
+    Trace:
+      type: object
+      required: [turn_id, totals, spans]
+      properties:
+        turn_id: { type: string }
+        envelope:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: Shown in the trace header (feature-spec.md:76).
+        totals:
+          type: object
+          description: Turn totals — wall time, total tokens in/out, cost (feature-spec.md:147).
+          required: [wall_time_ms, tokens_in, tokens_out, cost]
+          properties:
+            wall_time_ms: { type: integer }
+            tokens_in: { type: integer }
+            tokens_out: { type: integer }
+            cost: { type: number }
+        spans:
+          type: array
+          items: { $ref: "#/components/schemas/Span" }
+
+    SpanPayload:
+      type: object
+      required: [span_id]
+      description: LLM spans carry prompt/response; tool spans carry args/result (feature-spec.md:149).
+      properties:
+        span_id: { type: string }
+        prompt: { type: string, nullable: true }
+        response: { type: string, nullable: true }
+        args: { nullable: true }
+        result: { nullable: true }
+
+    # ------------------------------------------------------------------ tasks
+    Task:
+      type: object
+      required: [id, type, status, progress, created_at]
+      description: >
+        feature-spec.md:107: "Task model: {id, type, status, progress: {done,
+        total, stage}, parent_id?, error?, created/started/finished_at}. Batch
+        work = parent task + child task per unit."
+      properties:
+        id: { type: string }
+        type: { type: string, example: replay, description: "e.g. chat, replay, replay_turn, judge." }
+        status: { type: string, enum: [queued, running, done, failed, cancelled] }
+        progress: { $ref: "#/components/schemas/TaskProgress" }
+        parent_id: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        children:
+          type: array
+          nullable: true
+          description: Populated on GET /tasks/{id} (feature-spec.md:135).
+          items: { $ref: "#/components/schemas/Task" }
+
+    TaskProgress:
+      type: object
+      required: [done, total]
+      properties:
+        done: { type: integer }
+        total: { type: integer }
+        stage:
+          type: string
+          nullable: true
+          example: "Conversation 3/10 · turn 2/6"
+          description: Stage label shown next to the bar (feature-spec.md:109).
+
+    TaskRef:
+      type: object
+      required: [task_id]
+      properties:
+        task_id: { type: string }
+
+    TaskProgressEvent:
+      type: object
+      required: [task_id, progress]
+      properties:
+        task_id: { type: string }
+        progress: { $ref: "#/components/schemas/TaskProgress" }
+
+    SpanEvent:
+      type: object
+      required: [turn_id, span]
+      description: Live trace span on the tasks channel (feature-spec.md:150).
+      properties:
+        turn_id: { type: string }
+        span: { $ref: "#/components/schemas/Span" }
+
+    # ------------------------------------------------------------------- eval
+    Rubric:
+      type: object
+      required: [id, name, version, prompt, created_at]
+      description: Versioned; save = new version (feature-spec.md:132) — editing is Phase 2.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        prompt: { type: string }
+        created_at: { type: string, format: date-time }
+
+    EvalCase:
+      type: object
+      required: [id, input, output]
+      description: >
+        feature-spec.md:54-58: "EvalCase = {input, output, reference?}" —
+        input "prompt + context (frozen)", reference nullable (reference-free
+        rubrics allowed).
+      properties:
+        id: { type: string }
+        input:
+          type: object
+          required: [prompt]
+          properties:
+            prompt: { type: string }
+            envelope:
+              allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+              nullable: true
+              description: The judge prompt receives the case's envelope (feature-spec.md:81).
+        output: { type: string, description: Candidate response. }
+        reference: { type: string, nullable: true }
+        source:
+          type: object
+          nullable: true
+          description: >-
+            Set when auto-created from a conversation turn (feature-spec.md:130
+            "source: {tree, conversation_id, turn_id}").
+          properties:
+            tree: { type: string }
+            conversation_id: { type: string }
+            turn_id: { type: string }
+        created_at: { type: string, format: date-time }
+
+    JudgeRequest:
+      type: object
+      required: [judge_model, rubric_id]
+      description: >
+        Exactly one of run_id / case_ids (feature-spec.md:133). run_id =
+        "Score this run", auto-creating cases from turns if none exist
+        (feature-spec.md:61). set_id is Phase 2 (EvalSets ship with the
+        workbench).
+      properties:
+        run_id: { type: string, nullable: true }
+        case_ids:
+          type: array
+          nullable: true
+          items: { type: string }
+        judge_model: { type: string }
+        rubric_id: { type: string }
+
+    Judgment:
+      type: object
+      required: [id, case_id, rubric_id, rubric_version, score, type, created_at]
+      description: >
+        Append-only, never overwritten (feature-spec.md:59; invariant
+        loom-phases.md:160). type: human = thumbs via POST /feedback
+        (feature-spec.md:60, :123).
+      properties:
+        id: { type: string }
+        case_id: { type: string }
+        run_id: { type: string, nullable: true }
+        type: { type: string, enum: [llm, human] }
+        judge_model: { type: string, nullable: true, description: null for type human. }
+        rubric_id: { type: string }
+        rubric_version: { type: integer }
+        score:
+          type: number
+          description: For type human, 1 = 👍 and 0 = 👎.
+        reasoning: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    RunScoreSummary:
+      type: object
+      required: [run_id, rubrics]
+      description: Feeds "summary header (mean, distribution sparkline)" (feature-spec.md:49).
+      properties:
+        run_id: { type: string }
+        rubrics:
+          type: array
+          items:
+            type: object
+            required: [rubric_id, rubric_version, mean, count, distribution]
+            properties:
+              rubric_id: { type: string }
+              rubric_version: { type: integer }
+              mean: { type: number }
+              count: { type: integer }
+              distribution:
+                type: array
+                description: Bucketed score counts for the sparkline.
+                items: { type: integer }
