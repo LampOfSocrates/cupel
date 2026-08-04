@@ -5,7 +5,7 @@
 ## Phase 1 — serial spine
 - [x] P1-T00 OpenAPI contract draft (all Phase-1 endpoints, /agenttrees/{tree}, envelope on turns, chat stream true/false)
 - [x] P1-T18b Mock server core (FastAPI, SSE chat+tasks, SQLite, task lifecycle, both chat modes)  [deps: T00]
-- [ ] P1-T01 App shell + sidebar conversation list  [deps: T18b]
+- [x] P1-T01 App shell + sidebar conversation list  [deps: T18b]
 
 ## Phase 1 — track A (chat)
 - [ ] P1-T02 Chat page SSE streaming  [deps: T01]
