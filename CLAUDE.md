@@ -4,7 +4,7 @@ Read these before any work, in order:
 2. loom-phases.md — we build phase by phase; NEVER build ahead of the current phase
 3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
-Current phase: 1. Current task: P1-T09 Shared components (Picker/RunConfig/Comparison/Queue-panel/RunsList) (contract = openapi.yaml v0.2.0).
+Current phase: 1. Current task: P1-T10 Agent tree view (contract = openapi.yaml v0.2.0).
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.

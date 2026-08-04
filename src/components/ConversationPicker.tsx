@@ -1,0 +1,219 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  Button,
+  Checkbox,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
+import { api } from "../api/client";
+import type { Conversation, SelectionItem, Turn } from "../api/types";
+
+// Runs step 1 — "ConversationPicker: search/filter/multi-select conversations,
+// expandable to pick individual turns within a conversation (checkbox per
+// turn)" (feature-spec.md:44; sketch 02). Emits SelectionItem[] per contract
+// (openapi.yaml:1250-1259): "Absent/null = whole conversation; present = just
+// these turns".
+//
+// Data flow: the picker fetches via the existing client (api.conversations)
+// rather than taking a list prop, because search must be SERVER-side per the
+// contract (?search=, openapi.yaml:352-354; annotated sketch 02 tags the
+// search box "GET /agenttrees/agent1/conversations?search=") and both
+// consumers (Runs Select step, Test-in-Runs prefilter) want identical
+// fetch/search/paging behaviour. Turns ride along on the listing
+// (openapi.yaml:1374-1377 "Included in listings").
+//
+// Selection semantics: only the conversation checkbox produces a
+// whole-conversation item (turn_ids absent); individually ticking every turn
+// still emits explicit turn_ids — the contract distinguishes the two shapes,
+// so the picker never silently promotes one to the other.
+
+type ConvSelection = "all" | Set<string>;
+
+interface Props {
+  tree: string;
+  onSelectionChange: (items: SelectionItem[]) => void;
+}
+
+function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
+  const items: SelectionItem[] = [];
+  for (const [conversation_id, sel] of selected) {
+    if (sel === "all") items.push({ conversation_id });
+    else if (sel.size > 0) items.push({ conversation_id, turn_ids: [...sel] });
+  }
+  return items;
+}
+
+// "assistant turns selectable per the Runs semantics" — the grid re-generates
+// assistant outputs ("row per turn" of regenerated output, feature-spec.md:49),
+// so only assistant turns carry checkboxes; user turns render as dimmed context.
+const assistantTurns = (conv: Conversation): Turn[] =>
+  (conv.turns ?? []).filter((t) => t.role === "assistant");
+
+export function ConversationPicker({ tree, onSelectionChange }: Props) {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 250);
+  const [items, setItems] = useState<Conversation[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Map<string, ConvSelection>>(new Map());
+
+  const load = useCallback(
+    async (pageNum: number, append: boolean) => {
+      setLoading(true);
+      try {
+        const data = await api.conversations(tree, {
+          search: debouncedSearch || undefined,
+          page: pageNum,
+        });
+        setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+        setTotal(data.total);
+        setPage(data.page);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tree, debouncedSearch],
+  );
+
+  useEffect(() => {
+    void load(1, false);
+  }, [load]);
+
+  const update = (mutate: (next: Map<string, ConvSelection>) => void) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      mutate(next);
+      onSelectionChange(toItems(next));
+      return next;
+    });
+  };
+
+  const toggleConversation = (conv: Conversation, checked: boolean) => {
+    update((next) => {
+      if (checked) next.set(conv.id, "all");
+      else next.delete(conv.id);
+    });
+  };
+
+  const toggleTurn = (conv: Conversation, turnId: string, checked: boolean) => {
+    update((next) => {
+      const current = next.get(conv.id);
+      // Unticking a turn while the whole conversation is selected narrows to
+      // an explicit turn list (all assistant turns minus this one).
+      const set =
+        current === "all"
+          ? new Set(assistantTurns(conv).map((t) => t.id))
+          : new Set(current ?? []);
+      if (checked) set.add(turnId);
+      else set.delete(turnId);
+      if (set.size === 0) next.delete(conv.id);
+      else next.set(conv.id, set);
+    });
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Footer summary (sketch 02: "2 conversations · 1 turn").
+  let wholeCount = 0;
+  let turnCount = 0;
+  for (const sel of selected.values()) {
+    if (sel === "all") wholeCount++;
+    else turnCount += sel.size;
+  }
+
+  return (
+    <Stack gap={4}>
+      <TextInput
+        size="xs"
+        placeholder="Search conversations"
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+      />
+      {items.map((conv) => {
+        const sel = selected.get(conv.id);
+        const partial = sel instanceof Set && sel.size > 0;
+        const turns = conv.turns ?? [];
+        return (
+          <div key={conv.id} data-testid={`picker-conv-${conv.id}`}>
+            <Group gap={6} wrap="nowrap">
+              <Checkbox
+                size="xs"
+                aria-label={`Select ${conv.title}`}
+                checked={sel === "all"}
+                indeterminate={partial}
+                onChange={(e) => toggleConversation(conv, e.currentTarget.checked)}
+              />
+              <UnstyledButton
+                onClick={() => turns.length > 0 && toggleExpanded(conv.id)}
+                style={{ flex: 1, minWidth: 0 }}
+                aria-label={`Toggle turns of ${conv.title}`}
+              >
+                <Group justify="space-between" wrap="nowrap" gap={4}>
+                  <Text size="xs" truncate>
+                    {conv.title}
+                  </Text>
+                  <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                    {turns.length > 0 ? `${turns.length}t ${expanded.has(conv.id) ? "▴" : "▸"}` : ""}
+                  </Text>
+                </Group>
+              </UnstyledButton>
+            </Group>
+            {expanded.has(conv.id) && (
+              <Stack gap={2} ml="lg" my={2}>
+                {turns.map((turn) =>
+                  turn.role === "assistant" ? (
+                    <Checkbox
+                      key={turn.id}
+                      size="xs"
+                      aria-label={`Select turn ${turn.id}`}
+                      label={
+                        <Text size="xs" truncate>
+                          {turn.content.slice(0, 60)}
+                        </Text>
+                      }
+                      checked={sel === "all" || (sel instanceof Set && sel.has(turn.id))}
+                      onChange={(e) => toggleTurn(conv, turn.id, e.currentTarget.checked)}
+                    />
+                  ) : (
+                    <Text key={turn.id} size="xs" c="dimmed" truncate pl={26}>
+                      {turn.content.slice(0, 60)}
+                    </Text>
+                  ),
+                )}
+              </Stack>
+            )}
+          </div>
+        );
+      })}
+      {loading && <Loader size="xs" mx="auto" my={4} />}
+      {!loading && items.length === 0 && (
+        <Text size="xs" c="dimmed" ta="center" my="sm">
+          {debouncedSearch ? "No matches" : "No conversations"}
+        </Text>
+      )}
+      {!loading && items.length < total && (
+        <Button variant="subtle" size="compact-xs" onClick={() => void load(page + 1, true)}>
+          Load more
+        </Button>
+      )}
+      <Text size="xs" c="dimmed" data-testid="picker-summary">
+        {wholeCount} conversation{wholeCount === 1 ? "" : "s"} · {turnCount} turn
+        {turnCount === 1 ? "" : "s"}
+      </Text>
+    </Stack>
+  );
+}

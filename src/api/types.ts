@@ -181,6 +181,108 @@ export interface JudgmentListParams {
   page_size?: number;
 }
 
+// openapi.yaml:1250 SelectionItem — ":1258 Absent/null = whole conversation;
+// present = just these turns (feature-spec.md:44)".
+export interface SelectionItem {
+  conversation_id: string;
+  turn_ids?: string[] | null;
+}
+
+// openapi.yaml:1130 Endpoint — "an agent deployment/backend target"
+// (feature-spec.md:67).
+export interface Endpoint {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
+// openapi.yaml:1141 Agent — tree-view node data; Phase 1 treats both formats
+// as plain text (openapi.yaml:1163-1164).
+export interface Agent {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  live_version: number;
+  tools: string[];
+  enabled: boolean;
+  format: "text" | "yaml";
+}
+
+// openapi.yaml:1807 Rubric — versioned, save = new version (feature-spec.md:132).
+export interface Rubric {
+  id: string;
+  name: string;
+  version: number;
+  prompt: string;
+  created_at: string;
+}
+
+// openapi.yaml:1508 JudgeConfig — "Judge section, collapsed by default
+// (feature-spec.md:48)".
+export interface JudgeConfig {
+  judge_model: string;
+  rubric_id: string;
+}
+
+// openapi.yaml:1483 RunConfig — ":1488-1489 instruction_version XOR
+// snapshot_id — a snapshot is an untested draft (feature-spec.md:86);
+// neither = the live version. endpoint_ids only applies to turn re-fire."
+export interface RunConfig {
+  agent_id?: string | null;
+  instruction_version?: number | null;
+  snapshot_id?: string | null;
+  model?: string | null;
+  temperature?: number | null;
+  endpoint_ids?: string[] | null;
+  judge?: JudgeConfig | null;
+}
+
+// openapi.yaml:1596 RunSummaryItem — GET /agenttrees/{tree}/runs listing.
+export interface RunSummaryItem {
+  id: string;
+  tree_id: string;
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
+  created_at: string;
+  task_id: string;
+  label?: string | null;
+}
+
+// openapi.yaml:1645 RunCell — ":1642 One per column, same order; fills
+// incrementally (feature-spec.md:112)".
+export interface RunCell {
+  status: "pending" | "running" | "done" | "failed";
+  content?: string | null;
+  conversation_id?: string | null;
+  turn_id?: string | null;
+  task_id?: string | null;
+  case_id?: string | null;
+  latest_score?: number | null;
+  error?: string | null;
+}
+
+// openapi.yaml:1607 Run — comparison-grid data: "baseline column + one column
+// per run config, row per turn" (feature-spec.md:49); ":1621 Index 0 =
+// baseline. Column labels relabel when a snapshot promotes."
+export interface RunColumn {
+  label: string;
+  config: RunConfig;
+}
+
+export interface RunRow {
+  source: { conversation_id: string; turn_id: string };
+  cells: RunCell[];
+}
+
+export interface Run {
+  id: string;
+  tree_id: string;
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
+  created_at: string;
+  task_id: string;
+  columns: RunColumn[];
+  rows: RunRow[];
+}
+
 // openapi.yaml:1763 TaskProgress
 export interface TaskProgress {
   done: number;
