@@ -217,6 +217,51 @@ export interface AgentCreate {
   format?: "text" | "yaml";
 }
 
+// openapi.yaml:1181 InstructionVersion — ":1189-1192 promoted_from_snapshot_id
+// set when this version was a promoted draft snapshot (feature-spec.md:86)".
+export interface InstructionVersion {
+  version: number;
+  content: string;
+  format: "text" | "yaml";
+  created_at: string;
+  promoted_from_snapshot_id?: string | null;
+}
+
+// openapi.yaml:1194 InstructionHistory — ":1201-1203 versions: All versions,
+// ascending — append-only (feature-spec.md:33)".
+export interface InstructionHistory {
+  agent_id: string;
+  format: "text" | "yaml";
+  live_version: number;
+  versions: InstructionVersion[];
+}
+
+// openapi.yaml:1206 InstructionSave — ":1212-1217 snapshot_id: Promote this
+// draft snapshot to the new version; runs referencing it relabel
+// (feature-spec.md:86, :89)".
+export interface InstructionSave {
+  content: string;
+  format?: "text" | "yaml";
+  snapshot_id?: string | null;
+}
+
+// openapi.yaml:1219 SnapshotCreate — ":1223 content: The draft text, frozen
+// verbatim; :1224-1227 base_version: Version the draft was edited from —
+// feeds the 'v15-draft (a3f2)' label".
+export interface SnapshotCreate {
+  content: string;
+  base_version?: number | null;
+}
+
+// openapi.yaml:1229 Snapshot — ":1235-1238 label example 'v15-draft (a3f2)',
+// display label until promoted (feature-spec.md:86)".
+export interface Snapshot {
+  snapshot_id: string;
+  agent_id: string;
+  label: string;
+  created_at: string;
+}
+
 // openapi.yaml:1807 Rubric — versioned, save = new version (feature-spec.md:132).
 export interface Rubric {
   id: string;

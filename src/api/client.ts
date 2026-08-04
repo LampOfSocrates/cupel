@@ -16,10 +16,15 @@ import type {
   ConversationPage,
   ErrorBody,
   FeedbackRequest,
+  InstructionHistory,
+  InstructionSave,
+  InstructionVersion,
   Judgment,
   JudgmentListParams,
   Me,
   Model,
+  Snapshot,
+  SnapshotCreate,
   Task,
   TokenEvent,
 } from "./types";
@@ -138,6 +143,30 @@ export const api = {
   // (:215).
   createAgent: (tree: string, body: AgentCreate) =>
     request<Agent>(`/agenttrees/${tree}/agents`, { method: "POST", body }),
+
+  // GET /agenttrees/{tree}/agents/{agentId}/instructions (openapi.yaml:221-239)
+  // — "Live version pointer plus full version history (for diff/rollback)"
+  // (:235).
+  instructions: (tree: string, agentId: string) =>
+    request<InstructionHistory>(`/agenttrees/${tree}/agents/${agentId}/instructions`),
+
+  // PUT — "Save instructions as a NEW version (append-only)" (openapi.yaml:
+  // 243); 201 = "The newly created version (now live)" (:262). snapshot_id
+  // promotes a draft snapshot (:245-249); "Rollback = PUT the old version's
+  // content (creates a new version)" (:249-250).
+  saveInstructions: (tree: string, agentId: string, body: InstructionSave) =>
+    request<InstructionVersion>(`/agenttrees/${tree}/agents/${agentId}/instructions`, {
+      method: "PUT",
+      body,
+    }),
+
+  // POST /agenttrees/{tree}/agents/{agentId}/snapshots (openapi.yaml:268-293)
+  // — "Immutable draft snapshot (for Test in Runs)" (:272); 201 → Snapshot.
+  createSnapshot: (tree: string, agentId: string, body: SnapshotCreate) =>
+    request<Snapshot>(`/agenttrees/${tree}/agents/${agentId}/snapshots`, {
+      method: "POST",
+      body,
+    }),
 
   // GET /agenttrees/{tree}/conversations (openapi.yaml:335)
   conversations: (tree: string, params: ConversationListParams = {}) =>

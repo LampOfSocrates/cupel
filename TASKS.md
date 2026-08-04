@@ -16,7 +16,7 @@
 ## Phase 1 — track B (runs/agents)
 - [x] P1-T09 Shared components (Picker/RunConfig/Comparison/Queue-panel/RunsList)  [deps: T01]
 - [x] P1-T10 Agent tree view  [deps: T09]
-- [ ] P1-T10b Instruction editor (versions/diff/snapshots)  [deps: T09]
+- [x] P1-T10b Instruction editor (versions/diff/snapshots)  [deps: T09]
 - [ ] P1-T11a Context envelope capture + frozen replay default  [deps: T18b]
 - [ ] P1-T11 Runs 3-step flow  [deps: T09, T11a]
 - [ ] P1-T13 Turn forks + Open in Chat  [deps: T11, T02]
