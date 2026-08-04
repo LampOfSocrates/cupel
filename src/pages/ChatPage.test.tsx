@@ -13,6 +13,7 @@ import {
   feedbackRequests,
   judgmentRequests,
   mockJudgments,
+  modelsRequests,
   pushHumanJudgment,
   uploadConfig,
   uploadRequests,
@@ -127,7 +128,7 @@ describe("ChatPage streaming", () => {
     const user = userEvent.setup();
     // Full App: real boot (/me + /agenttrees), Shell sidebar + ChatPage.
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/chat"]}>
           <App />
         </MemoryRouter>
@@ -383,5 +384,136 @@ describe("Turn actions", () => {
     // the completed turn gets its action row immediately
     expect(screen.getAllByRole("button", { name: "Thumbs up" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Copy message" })).toHaveLength(2);
+  });
+});
+
+// P1-T05 — chat settings submenu. Spec: "Chat has its own Settings submenu
+// (model, temperature, system prompt — session-scoped)" (feature-spec.md:7);
+// "session-scoped, sent with each /chat call" (feature-spec.md:278); model
+// dropdown fed by GET /models (feature-spec.md:122). Contract: ChatRequest
+// model/temperature/system_prompt are nullable — untouched settings are
+// OMITTED from the body, never sent as null (openapi.yaml:1425-1430).
+describe("Chat settings", () => {
+  async function openSettings(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Chat settings" }));
+  }
+
+  // Role queries, not label queries: Mantine associates the label with the
+  // visible input AND the hidden form input; the dropdown also mounts async.
+  async function pickModel(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(await screen.findByRole("combobox", { name: "Model" }));
+    await user.click(await screen.findByRole("option", { name }));
+  }
+
+  it("sends exactly the settings the user set on the next chat call", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await openSettings(user);
+    await pickModel(user, "Claude Haiku 4.5");
+    await user.type(screen.getByRole("textbox", { name: "Temperature" }), "0.7");
+    await user.type(screen.getByRole("textbox", { name: "System prompt" }), "Be terse.");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "hi{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].model).toBe("claude-haiku-4-5");
+    expect(chatRequests[0].temperature).toBe(0.7);
+    expect(chatRequests[0].system_prompt).toBe("Be terse.");
+  });
+
+  it("untouched settings are absent from the body — not null (openapi.yaml:1425-1430)", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await openSettings(user);
+    await pickModel(user, "DeepSeek V3");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "model only{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].model).toBe("deepseek-v3");
+    // chatRequests holds the JSON-parsed wire body: absent means never sent
+    expect("temperature" in chatRequests[0]).toBe(false);
+    expect("system_prompt" in chatRequests[0]).toBe(false);
+  });
+
+  it("settings persist across conversation switches within the session", async () => {
+    const user = userEvent.setup();
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/chat/c1"]}>
+          <App />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    await screen.findByText("How do refunds work?");
+    await screen.findByText("Billing dispute"); // sidebar loaded
+
+    await openSettings(user);
+    await pickModel(user, "Claude Haiku 4.5");
+    // deviation indication: summary appears next to the gear (annotated
+    // 01-chat.svg shows "model · temp" beside "⚙")
+    expect(screen.getByTestId("chat-settings-summary")).toHaveTextContent("Claude Haiku 4.5");
+
+    // switch conversation via the sidebar — settings are session-scoped,
+    // not per-conversation (feature-spec.md:7)
+    await user.click(screen.getByText("Billing dispute"));
+    await waitFor(() =>
+      expect(screen.getByText("Send a message to start the conversation.")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("chat-settings-summary")).toHaveTextContent("Claude Haiku 4.5");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "still custom{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].conversation_id).toBe("c2");
+    expect(chatRequests[0].model).toBe("claude-haiku-4-5");
+  });
+
+  it("reset to defaults clears settings from the next request and hides the indication", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await openSettings(user);
+    await pickModel(user, "Gemini Flash");
+    await user.type(screen.getByRole("textbox", { name: "Temperature" }), "1.5");
+    await user.type(screen.getByPlaceholderText("Message…"), "custom{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].model).toBe("gemini-flash");
+    expect(chatRequests[0].temperature).toBe(1.5);
+
+    await openSettings(user);
+    await user.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("chat-settings-summary")).not.toBeInTheDocument(),
+    );
+
+    await user.type(screen.getByPlaceholderText("Message…"), "default again{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(2));
+    expect("model" in chatRequests[1]).toBe(false);
+    expect("temperature" in chatRequests[1]).toBe(false);
+    expect("system_prompt" in chatRequests[1]).toBe(false);
+  });
+
+  it("GET /models is fetched once and cached for the session", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await openSettings(user);
+    expect(await screen.findByRole("combobox", { name: "Model" })).toBeInTheDocument();
+    await waitFor(() => expect(modelsRequests).toHaveLength(1));
+    // close by clicking outside the popover
+    await user.click(screen.getByText("How do refunds work?"));
+    await waitFor(() =>
+      expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument(),
+    );
+
+    await openSettings(user);
+    // options served from the context cache — no second request
+    await user.click(await screen.findByRole("combobox", { name: "Model" }));
+    expect(await screen.findByRole("option", { name: "Claude Sonnet 5" })).toBeInTheDocument();
+    expect(modelsRequests).toHaveLength(1);
   });
 });

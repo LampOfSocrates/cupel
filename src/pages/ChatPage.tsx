@@ -4,13 +4,18 @@ import {
   ActionIcon,
   Alert,
   Badge,
+  Button,
   Center,
   CloseButton,
   CopyButton,
   FileButton,
   Group,
+  Indicator,
   Loader,
+  NumberInput,
   Paper,
+  Popover,
+  Select,
   Stack,
   Text,
   Textarea,
@@ -18,7 +23,7 @@ import {
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
 import type { Attachment, Judgment, Turn } from "../api/types";
-import { useApp } from "../AppContext";
+import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
 
@@ -71,7 +76,7 @@ function deriveThumbs(judgments: Judgment[]): Record<string, Rating> {
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { tree, refreshConversations } = useApp();
+  const { tree, refreshConversations, chatSettings } = useApp();
   const navigate = useNavigate();
 
   const [turns, setTurns] = useState<Turn[] | null>(conversationId ? null : []);
@@ -245,6 +250,11 @@ export function ChatPage() {
           conversation_id: conversationId,
           stream: true,
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+          // P1-T05: session-scoped settings "sent with each /chat call"
+          // (feature-spec.md:278). ChatSettings keys mirror ChatRequest
+          // (openapi.yaml:1425-1430) and unset keys are absent, so the spread
+          // sends only what the user set — never null for untouched fields.
+          ...chatSettings,
         },
         { signal: abort.signal },
       );
@@ -326,7 +336,13 @@ export function ChatPage() {
 
   return (
     <Stack gap="sm" maw={760} mx="auto" h="calc(100vh - 2 * var(--mantine-spacing-md))">
-      <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
+      {/* Header per sketches: title left, settings affordance right —
+          clean/01-chat.svg header shows a bare "⚙" at the right edge;
+          annotated 01-chat.svg shows "model · temp ⚙" in the same spot. */}
+      <Group justify="space-between" wrap="nowrap">
+        <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
+        <ChatSettingsMenu />
+      </Group>
       <div
         ref={scrollRef}
         style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
@@ -478,6 +494,123 @@ export function ChatPage() {
         </Group>
       </div>
     </Stack>
+  );
+}
+
+// P1-T05 — chat settings submenu. "Chat has its own Settings submenu (model,
+// temperature, system prompt — session-scoped)" (feature-spec.md:7); "sent
+// with each /chat call" (feature-spec.md:278). Model options from GET /models
+// (feature-spec.md:122), fetched once on first open and cached in AppContext.
+// Placement per the sketches' chat header (title left, "⚙" top-right;
+// annotated 01-chat.svg shows a "model · temp" summary beside the gear — we
+// render that summary only when settings deviate from defaults, doubling as
+// the visible "custom settings active" indication alongside the dot badge).
+// The annotated sketch tags this "GET/PUT /settings", but /settings is
+// deferred to Phase 2 (openapi.yaml:38-40) — Phase 1 keeps the values in
+// React state only: they persist across conversation switches within the
+// session, not across reloads. Unset = absent key = omitted from ChatRequest.
+function ChatSettingsMenu() {
+  const { models, ensureModels, chatSettings, setChatSettings } = useApp();
+  const [opened, setOpened] = useState(false);
+  // NumberInput emits partial strings mid-typing ("0.") — keep the raw value
+  // locally so typing isn't clobbered; only committed numbers reach context.
+  const [tempRaw, setTempRaw] = useState<number | string>(chatSettings.temperature ?? "");
+
+  const dirty = Object.values(chatSettings).some((v) => v !== undefined);
+  const patch = (p: Partial<ChatSettings>) =>
+    setChatSettings((prev) => {
+      const next = { ...prev, ...p };
+      for (const k of Object.keys(next) as (keyof ChatSettings)[]) {
+        if (next[k] === undefined) delete next[k];
+      }
+      return next;
+    });
+  const reset = () => {
+    setChatSettings({});
+    setTempRaw("");
+  };
+
+  const modelName =
+    models?.find((m) => m.id === chatSettings.model)?.name ?? chatSettings.model;
+  const summary = [
+    modelName,
+    chatSettings.temperature !== undefined ? `temp ${chatSettings.temperature}` : undefined,
+    chatSettings.system_prompt !== undefined ? "sys prompt" : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Group gap={6} wrap="nowrap">
+      {dirty && (
+        <Text size="xs" c="dimmed" data-testid="chat-settings-summary">
+          {summary}
+        </Text>
+      )}
+      <Popover opened={opened} onChange={setOpened} position="bottom-end" shadow="md">
+        <Popover.Target>
+          <Indicator disabled={!dirty} color="blue" size={8} offset={2}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              aria-label="Chat settings"
+              onClick={() => {
+                ensureModels();
+                setTempRaw(chatSettings.temperature ?? "");
+                setOpened((o) => !o);
+              }}
+            >
+              &#x2699;
+            </ActionIcon>
+          </Indicator>
+        </Popover.Target>
+        <Popover.Dropdown>
+          <Stack gap="xs" w={260}>
+            {/* Model dropdown fed by GET /models (feature-spec.md:122);
+                clearable back to the backend default. Combobox kept inside
+                the popover DOM so option clicks don't count as outside. */}
+            <Select
+              label="Model"
+              placeholder="Default"
+              data={models?.map((m) => ({ value: m.id, label: m.name })) ?? []}
+              value={chatSettings.model ?? null}
+              onChange={(value) => patch({ model: value ?? undefined })}
+              clearable
+              comboboxProps={{ withinPortal: false }}
+            />
+            {/* Number input over slider: the sketch header is dense and a
+                slider cannot represent "unset"; bounds 0-2, empty = unset. */}
+            <NumberInput
+              label="Temperature"
+              placeholder="Default"
+              min={0}
+              max={2}
+              step={0.1}
+              decimalScale={2}
+              value={tempRaw}
+              onChange={(value) => {
+                setTempRaw(value);
+                patch({ temperature: typeof value === "number" ? value : undefined });
+              }}
+            />
+            <Textarea
+              label="System prompt"
+              placeholder="Default"
+              autosize
+              minRows={2}
+              maxRows={6}
+              value={chatSettings.system_prompt ?? ""}
+              onChange={(e) =>
+                patch({ system_prompt: e.currentTarget.value || undefined })
+              }
+            />
+            <Button variant="default" size="xs" onClick={reset} disabled={!dirty}>
+              Reset to defaults
+            </Button>
+          </Stack>
+        </Popover.Dropdown>
+      </Popover>
+    </Group>
   );
 }
 

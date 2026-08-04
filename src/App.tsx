@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Alert, Center, Loader } from "@mantine/core";
 import { api } from "./api/client";
-import type { AgentTree, Me } from "./api/types";
-import { AppContext } from "./AppContext";
+import type { AgentTree, Me, Model } from "./api/types";
+import { AppContext, type ChatSettings } from "./AppContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
 import { RunsPage } from "./pages/RunsPage";
@@ -22,6 +22,23 @@ export function App() {
   const refreshConversations = useCallback(() => {
     setConversationsVersion((v) => v + 1);
   }, []);
+
+  // P1-T05: GET /models fetched lazily on first settings-menu open, once per
+  // session (feature-spec.md:122). Ref guards a duplicate in-flight fetch;
+  // cleared on failure so a later open can retry.
+  const [models, setModels] = useState<Model[] | null>(null);
+  const modelsRequested = useRef(false);
+  const ensureModels = useCallback(() => {
+    if (modelsRequested.current) return;
+    modelsRequested.current = true;
+    api.models().then(setModels).catch(() => {
+      modelsRequested.current = false;
+    });
+  }, []);
+
+  // Session-scoped chat settings (feature-spec.md:7, :278) — plain React
+  // state, so they persist across conversation switches but not reloads.
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +79,17 @@ export function App() {
 
   return (
     <AppContext.Provider
-      value={{ me, trees, tree, conversationsVersion, refreshConversations }}
+      value={{
+        me,
+        trees,
+        tree,
+        conversationsVersion,
+        refreshConversations,
+        models,
+        ensureModels,
+        chatSettings,
+        setChatSettings,
+      }}
     >
       <Routes>
         <Route element={<Shell />}>

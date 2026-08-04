@@ -17,6 +17,7 @@ import type {
   Judgment,
   JudgmentListParams,
   Me,
+  Model,
   Task,
   TokenEvent,
 } from "./types";
@@ -120,6 +121,10 @@ export const api = {
 
   // GET /agenttrees (openapi.yaml:115)
   agentTrees: () => request<AgentTree[]>("/agenttrees"),
+
+  // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
+  // (feature-spec.md:122). Fetched once and cached in AppContext.
+  models: () => request<Model[]>("/models"),
 
   // GET /agenttrees/{tree}/conversations (openapi.yaml:335)
   conversations: (tree: string, params: ConversationListParams = {}) =>

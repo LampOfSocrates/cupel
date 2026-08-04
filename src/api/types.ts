@@ -13,6 +13,13 @@ export interface AgentTree {
   enabled: boolean;
 }
 
+// openapi.yaml:1102 Model — GET /models feeds the chat model dropdown
+// (feature-spec.md:122 "GET /models (chat/run/judge model dropdowns)").
+export interface Model {
+  id: string;
+  name: string;
+}
+
 // openapi.yaml:1262 ContextEnvelope
 export interface ContextEnvelope {
   system_date: string;

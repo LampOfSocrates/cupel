@@ -1,5 +1,5 @@
 // MSW handlers derived from openapi.yaml v0.2.0 — reused by later tasks.
-// Covers: GET /me (openapi.yaml:62), GET /agenttrees (:115),
+// Covers: GET /me (openapi.yaml:62), GET /agenttrees (:115), GET /models (:98),
 // GET /agenttrees/{tree}/conversations (:335, params search/page/page_size/
 // forks_of/agent_id/origin), GET/PATCH/DELETE .../conversations/{id} (:387),
 // POST /agenttrees/{tree}/chat (:452-521, SSE task/token/done/error + JSON
@@ -17,6 +17,7 @@ import type {
   FeedbackRequest,
   Judgment,
   Me,
+  Model,
   Task,
   Turn,
 } from "../../api/types";
@@ -30,6 +31,17 @@ export const mockTrees: AgentTree[] = [
   { id: "agent1", name: "Agent 1", enabled: true },
   { id: "agent2", name: "Agent 2", enabled: true },
 ];
+
+// GET /models (openapi.yaml:98-112, Model :1102-1107) — mirrors the real
+// mock's list (mock/config.py:6-11). Tests count fetches via modelsRequests
+// to prove the context fetches once and caches (P1-T05).
+export const mockModels: Model[] = [
+  { id: "claude-sonnet-5", name: "Claude Sonnet 5" },
+  { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
+  { id: "deepseek-v3", name: "DeepSeek V3" },
+  { id: "gemini-flash", name: "Gemini Flash" },
+];
+export const modelsRequests: string[] = [];
 
 const envelope = {
   system_date: "2026-08-02",
@@ -185,6 +197,7 @@ const initialRoots = [...mockRoots];
 
 export function resetHandlerState() {
   conversationRequests.length = 0;
+  modelsRequests.length = 0;
   uploadRequests.length = 0;
   attachmentCounter = 0;
   uploadConfig.maxBytes = 5 * 1024 * 1024;
@@ -211,6 +224,13 @@ export const handlers = [
   http.get(`${BASE}/me`, () => HttpResponse.json(mockMe)),
 
   http.get(`${BASE}/agenttrees`, () => HttpResponse.json(mockTrees)),
+
+  // GET /models (openapi.yaml:98-112) — model dropdown source
+  // (feature-spec.md:122).
+  http.get(`${BASE}/models`, () => {
+    modelsRequests.push("models");
+    return HttpResponse.json(mockModels);
+  }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations`, ({ request }) => {
     const url = new URL(request.url);
