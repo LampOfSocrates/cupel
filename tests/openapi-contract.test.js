@@ -97,4 +97,82 @@ describe("P1-T00 OpenAPI contract", () => {
   it("/me is defined — always called, both auth modes (feature-spec.md:120)", () => {
     expect(doc.paths["/me"].get).toBeDefined();
   });
+
+  it("no auth anywhere — Phase 1 has no security schemes (loom-phases.md:10)", () => {
+    expect(doc.security).toBeUndefined();
+    expect(doc.components.securitySchemes).toBeUndefined();
+    for (const [p, methods] of Object.entries(doc.paths)) {
+      for (const [method, op] of Object.entries(methods)) {
+        expect(op.security, `${method.toUpperCase()} ${p} must not declare security`).toBeUndefined();
+      }
+    }
+  });
+
+  it("SSE endpoints declare machine-checkable event schemas (x-sse-events)", () => {
+    const sse = [
+      doc.paths["/agenttrees/{tree}/chat"].post.responses["200"].content["text/event-stream"],
+      doc.paths["/tasks/stream"].get.responses["200"].content["text/event-stream"],
+    ];
+    for (const stream of sse) {
+      expect(stream["x-sse-events"]).toBeDefined();
+      expect(stream.schema.oneOf.length).toBeGreaterThan(0);
+      for (const ref of Object.values(stream["x-sse-events"])) {
+        const name = ref.replace("#/components/schemas/", "");
+        expect(doc.components.schemas[name], `${ref} must resolve`).toBeDefined();
+      }
+    }
+    expect(Object.keys(sse[1]["x-sse-events"]).sort()).toEqual(["judgment", "progress", "span", "task"]);
+  });
+
+  it("no orphan schemas — every component is referenced", () => {
+    const raw = readFileSync("openapi.yaml", "utf8");
+    for (const name of Object.keys(doc.components.schemas)) {
+      const refs = raw.split(`#/components/schemas/${name}`).length - 1;
+      expect(refs, `schema ${name} must be $ref'd at least once`).toBeGreaterThan(0);
+    }
+  });
+
+  it("task lifecycle and result deep-links (loom-phases.md:43, feature-spec.md:107)", () => {
+    const task = doc.components.schemas.Task.properties;
+    expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
+    expect(task.type.enum).toEqual(["chat", "replay", "replay_turn", "judge"]);
+    expect(task.result.properties.run_id).toBeDefined();
+  });
+
+  it("envelope is required on turns and shown in the trace header (feature-spec.md:76)", () => {
+    expect(doc.components.schemas.Turn.required).toContain("envelope");
+    expect(doc.components.schemas.Trace.properties.envelope).toBeDefined();
+  });
+
+  it("machine-originated conversations are first-class (origin/author/idempotency)", () => {
+    expect(doc.components.schemas.Conversation.required).toContain("origin");
+    expect(doc.components.schemas.Conversation.properties.origin.enum).toEqual(["interactive", "machine"]);
+    expect(doc.components.schemas.Turn.required).toContain("author");
+    expect(doc.components.schemas.ChatRequest.properties.client_message_id).toBeDefined();
+    const params = doc.paths["/agenttrees/{tree}/conversations"].get.parameters
+      .map((p) => p.name)
+      .filter(Boolean);
+    expect(params).toContain("origin");
+    expect(params).toContain("agent_id");
+  });
+
+  it("generator can seed structures via the public API (feature-spec.md:185, :188)", () => {
+    expect(doc.paths["/agenttrees"].post).toBeDefined();
+    expect(doc.paths["/agenttrees/{tree}/agents"].post).toBeDefined();
+    expect(doc.paths["/eval/rubrics"].post).toBeDefined();
+    expect(doc.paths["/agenttrees/{tree}/conversations/{conversationId}"].get).toBeDefined();
+  });
+
+  it("stop-generation has defined terminal semantics (feature-spec.md:13)", () => {
+    expect(doc.components.schemas.ChatDoneEvent.properties.status.enum).toEqual(["completed", "cancelled"]);
+    expect(doc.components.schemas.ChatDoneEvent.required).toContain("status");
+  });
+
+  it("frozen replay is pinned in the request schemas (feature-spec.md:77, :82)", () => {
+    for (const name of ["ReplayRequest", "ReplayTurnRequest"]) {
+      const policy = doc.components.schemas[name].properties.context_policy;
+      expect(policy.enum, `${name}.context_policy`).toEqual(["frozen"]);
+      expect(policy.default).toBe("frozen");
+    }
+  });
 });
