@@ -25,6 +25,10 @@ import type {
   Judgment,
   Me,
   Model,
+  ReplayAccepted,
+  ReplayRequest,
+  ReplayTurnAccepted,
+  ReplayTurnRequest,
   Snapshot,
   SnapshotCreate,
   Task,
@@ -281,6 +285,15 @@ export const chatConfig: {
   errorAfter: number | null;
 } = { tokens: ["Hello ", "streaming ", "**world**."], delayMs: 2, gate: null, errorAfter: null };
 
+// --------------------------------------------------------------- replay state
+// POST /agenttrees/{tree}/replay(/turn) (openapi.yaml:586-652) — P1-T11a rig,
+// reused by P1-T11's Runs flow tests. Both mirror the real mock's Phase-1 pin:
+// context_policy other than "frozen" → 422 (mock/main.py:528-529, :605-606;
+// openapi.yaml:1540-1546 enum [frozen]).
+export const replayRequests: Array<{ tree: string; body: ReplayRequest }> = [];
+export const replayTurnRequests: Array<{ tree: string; body: ReplayTurnRequest }> = [];
+let replayCounter = 0;
+
 export const chatRequests: ChatRequest[] = [];
 export const cancelRequests: string[] = []; // task ids seen by DELETE /tasks/{id}
 const cancelledTasks = new Set<string>();
@@ -297,6 +310,9 @@ export function resetHandlerState() {
   uploadConfig.gate = null;
   chatRequests.length = 0;
   cancelRequests.length = 0;
+  replayRequests.length = 0;
+  replayTurnRequests.length = 0;
+  replayCounter = 0;
   mockJudgments.length = 0;
   feedbackRequests.length = 0;
   judgmentRequests.length = 0;
@@ -637,6 +653,47 @@ export const handlers = [
     const page = Number(url.searchParams.get("page") ?? 1);
     const pageSize = Number(url.searchParams.get("page_size") ?? 50);
     return HttpResponse.json(items.slice((page - 1) * pageSize, page * pageSize));
+  }),
+
+  // POST /agenttrees/{tree}/replay/turn (openapi.yaml:623-652) → 202
+  // ReplayTurnAccepted: "one task_id + new conversation_id per endpoint"
+  // (feature-spec.md:71); registered before /replay for readability (MSW
+  // matches full paths, order is not load-bearing).
+  http.post(`${BASE}/agenttrees/:tree/replay/turn`, async ({ params, request }) => {
+    const body = (await request.json()) as ReplayTurnRequest;
+    replayTurnRequests.push({ tree: params.tree as string, body });
+    if ((body.context_policy ?? "frozen") !== "frozen") {
+      return HttpResponse.json(
+        { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1570-1574)." },
+        { status: 422 },
+      );
+    }
+    const n = ++replayCounter;
+    const accepted: ReplayTurnAccepted = {
+      run_id: `run-${n}`,
+      results: body.endpoints.map((endpoint_id, i) => ({
+        endpoint_id,
+        task_id: `task-fork-${n}-${i + 1}`,
+        conversation_id: `c-fork-${n}-${i + 1}`,
+      })),
+    };
+    return HttpResponse.json(accepted, { status: 202 });
+  }),
+
+  // POST /agenttrees/{tree}/replay (openapi.yaml:586-621) → 202 ReplayAccepted
+  // "Work enqueued; run row appears immediately" (openapi.yaml:617).
+  http.post(`${BASE}/agenttrees/:tree/replay`, async ({ params, request }) => {
+    const body = (await request.json()) as ReplayRequest;
+    replayRequests.push({ tree: params.tree as string, body });
+    if ((body.context_policy ?? "frozen") !== "frozen") {
+      return HttpResponse.json(
+        { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1540-1546)." },
+        { status: 422 },
+      );
+    }
+    const n = ++replayCounter;
+    const accepted: ReplayAccepted = { task_id: `task-replay-${n}`, run_id: `run-${n}` };
+    return HttpResponse.json(accepted, { status: 202 });
   }),
 
   // DELETE /tasks/{taskId} — cancel; doubles as chat stop-generation

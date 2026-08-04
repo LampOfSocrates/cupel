@@ -23,6 +23,10 @@ import type {
   JudgmentListParams,
   Me,
   Model,
+  ReplayAccepted,
+  ReplayRequest,
+  ReplayTurnAccepted,
+  ReplayTurnRequest,
   Snapshot,
   SnapshotCreate,
   Task,
@@ -239,6 +243,27 @@ export const api = {
   // Returns "The appended human judgment" (openapi.yaml:579).
   postFeedback: (body: FeedbackRequest) =>
     request<Judgment>("/feedback", { method: "POST", body }),
+
+  // POST /agenttrees/{tree}/replay (openapi.yaml:586-621) → 202 ReplayAccepted.
+  // context_policy is hard-set here, not a parameter (the Omit strips it from
+  // the signature): Phase 1 "replays always run under each turn's original
+  // envelope" (feature-spec.md:77, :82; openapi.yaml:1540-1546 enum [frozen]).
+  // The client pins the invariant so no caller can override it; Phase 2 widens
+  // the enum and reopens the field.
+  replay: (tree: string, req: Omit<ReplayRequest, "context_policy">) =>
+    request<ReplayAccepted>(`/agenttrees/${tree}/replay`, {
+      method: "POST",
+      body: { ...req, context_policy: "frozen" } satisfies ReplayRequest,
+    }),
+
+  // POST /agenttrees/{tree}/replay/turn (openapi.yaml:623-652) → 202
+  // ReplayTurnAccepted, "one task_id + new conversation_id per endpoint"
+  // (feature-spec.md:71). Same frozen pin as replay() (openapi.yaml:1570-1574).
+  replayTurn: (tree: string, req: Omit<ReplayTurnRequest, "context_policy">) =>
+    request<ReplayTurnAccepted>(`/agenttrees/${tree}/replay/turn`, {
+      method: "POST",
+      body: { ...req, context_policy: "frozen" } satisfies ReplayTurnRequest,
+    }),
 
   // GET /eval/judgments — "Judgment history (append-only) ... filter by
   // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...

@@ -517,3 +517,29 @@ describe("Chat settings", () => {
     expect(modelsRequests).toHaveLength(1);
   });
 });
+
+// P1-T11a — envelope affordance on turns. "every turn records its context
+// (date, timezone, region) at generation" (loom-phases.md:25); envelope on
+// turn objects in conversation listings (feature-spec.md:81). Sketch 01 shows
+// no envelope UI, so the surface is a hover tooltip on each turn's timestamp
+// showing the EnvelopeChip.
+describe("Turn envelope affordance", () => {
+  it("hovering a turn timestamp reveals the EnvelopeChip with the stored envelope", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    // fixture turn t2 created_at 2026-08-04T09:58:00Z; the timestamp text is
+    // locale-dependent, so target it via the transcript's meta rows.
+    const transcript = screen.getByTestId("transcript");
+    const timestamps = within(transcript)
+      .getAllByText(/2026|08|04/, { exact: false })
+      .filter((el) => el.style.cursor === "help");
+    expect(timestamps.length).toBeGreaterThan(0);
+
+    await user.hover(timestamps[0]);
+    const chip = await screen.findByTestId("envelope-chip");
+    // full fixture envelope: system_date · timezone · region · locale
+    expect(chip).toHaveTextContent("2026-08-02 · Europe/London · GB · en-GB");
+  });
+});

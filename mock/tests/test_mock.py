@@ -456,6 +456,110 @@ def test_replay_turn_forks_with_lineage():
     run(case())
 
 
+# ------------------------------------------------- context envelope (P1-T11a)
+# Invariants under test: "The server stamps assistant turns at generation and
+# inbound (user/machine) turns at receipt" (openapi.yaml:1323-1325); "Phase 1
+# pin — replays always run under each turn's original envelope
+# (feature-spec.md:77, :82)" with context_policy enum [frozen]
+# (openapi.yaml:1540-1546, :1570-1574).
+
+# Distinctive shape: if a replay freshly stamped instead of reusing the source
+# envelope, the patched stamp would leak into the new turn and fail equality.
+SENTINEL_ENVELOPE = {"system_date": "1999-01-01", "timezone": "UTC",
+                     "region": "US", "locale": "en-US", "user_profile_ref": None}
+
+
+def test_machine_origin_inbound_turn_envelope_stamped_at_receipt():
+    async def case():
+        async with client_pair() as c:
+            r = await c.post("/agenttrees/agent1/chat", json={
+                "message": "order #123 parsed", "stream": False,
+                "origin": "machine", "author": "mail-scanner"})
+            body = r.json()
+            await wait_task(c, body["task_id"])
+            conv = (await c.get(
+                f"/agenttrees/agent1/conversations/{body['conversation_id']}")).json()
+            inbound = conv["turns"][0]
+            assert inbound["author"] == "mail-scanner"
+            env = inbound["envelope"]
+            # all four required fields present and non-empty (openapi.yaml:1264)
+            assert all(env[k] for k in ("system_date", "timezone", "region", "locale"))
+    run(case())
+
+
+def test_replay_cell_turn_reuses_source_envelope(monkeypatch):
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=1)
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            source_env = conv["turns"][1]["envelope"]
+
+            # Any fresh stamp during regeneration would now be the sentinel.
+            monkeypatch.setattr("mock.engine.stamp_envelope", lambda: SENTINEL_ENVELOPE)
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "deepseek-v3"}],
+            })).json()
+            await wait_task(c, acc["task_id"])
+            run_ = (await c.get(f"/agenttrees/agent1/runs/{acc['run_id']}")).json()
+            cell = run_["rows"][0]["cells"][1]
+            trace = (await c.get(
+                f"/agenttrees/agent1/turns/{cell['turn_id']}/trace")).json()
+            assert trace["envelope"] == source_env  # frozen, not a fresh stamp
+            assert trace["envelope"] != SENTINEL_ENVELOPE
+    run(case())
+
+
+def test_replay_turn_fork_reuses_source_envelope(monkeypatch):
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=1)
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            fork_turn = conv["turns"][1]
+
+            monkeypatch.setattr("mock.engine.stamp_envelope", lambda: SENTINEL_ENVELOPE)
+            acc = (await c.post("/agenttrees/agent1/replay/turn", json={
+                "conversation_id": conv_id, "turn_id": fork_turn["id"],
+                "endpoints": ["ep_agent1_prod"],
+            })).json()
+            res = acc["results"][0]
+            await wait_task(c, res["task_id"])
+            fork = (await c.get(
+                f"/agenttrees/agent1/conversations/{res['conversation_id']}")).json()
+            regenerated = fork["turns"][-1]
+            assert regenerated["id"] != fork_turn["id"]
+            assert regenerated["envelope"] == fork_turn["envelope"]  # frozen
+            assert regenerated["envelope"] != SENTINEL_ENVELOPE
+    run(case())
+
+
+def test_replay_rejects_non_frozen_context_policy():
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=1)
+            r = await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "deepseek-v3"}],
+                "context_policy": "current",
+            })
+            assert r.status_code == 422
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            r = await c.post("/agenttrees/agent1/replay/turn", json={
+                "conversation_id": conv_id, "turn_id": conv["turns"][1]["id"],
+                "endpoints": ["ep_agent1_prod"], "context_policy": "custom",
+            })
+            assert r.status_code == 422
+            # explicit frozen is accepted (the enum's only member)
+            r = await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "deepseek-v3"}],
+                "context_policy": "frozen",
+            })
+            assert r.status_code == 202
+            await wait_task(c, r.json()["task_id"])
+    run(case())
+
+
 def test_cancel_cascades_to_children():
     async def case():
         async with client_pair() as c:

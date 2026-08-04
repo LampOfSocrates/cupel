@@ -291,6 +291,42 @@ export interface RunConfig {
   judge?: JudgeConfig | null;
 }
 
+// openapi.yaml:1516 ReplayRequest — ":1540-1546 context_policy: enum [frozen],
+// default frozen — 'Phase 1 pin — replays always run under each turn's
+// original envelope (feature-spec.md:77, :82)'. The client hard-sets it
+// (client.ts api.replay) — callers never pass it.
+export interface ReplayRequest {
+  selection: SelectionItem[];
+  configs: RunConfig[];
+  baseline_run_id?: string | null;
+  context_policy?: "frozen";
+}
+
+// openapi.yaml:1548 ReplayAccepted — "Every request returns task_id
+// (feature-spec.md:106)"; run_id feeds GET …/runs/{id} for the grid.
+export interface ReplayAccepted {
+  task_id: string;
+  run_id: string;
+}
+
+// openapi.yaml:1556 ReplayTurnRequest — ":1565 feature-spec.md:71 'body
+// includes endpoints[]'"; context_policy pinned as on ReplayRequest (:1570-1574).
+export interface ReplayTurnRequest {
+  conversation_id: string;
+  turn_id: string;
+  endpoints: string[];
+  config?: RunConfig | null;
+  context_policy?: "frozen";
+}
+
+// openapi.yaml:1576 ReplayTurnAccepted — "returns one task_id + new
+// conversation_id per endpoint" (feature-spec.md:71); run_id backs the
+// fork-comparison pivot (:1581-1585).
+export interface ReplayTurnAccepted {
+  run_id: string;
+  results: Array<{ endpoint_id: string; task_id: string; conversation_id: string }>;
+}
+
 // openapi.yaml:1596 RunSummaryItem — GET /agenttrees/{tree}/runs listing.
 export interface RunSummaryItem {
   id: string;

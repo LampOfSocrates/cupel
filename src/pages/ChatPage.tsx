@@ -20,9 +20,11 @@ import {
   Text,
   Textarea,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
 import type { Attachment, Judgment, Turn } from "../api/types";
+import { EnvelopeChip } from "../components";
 import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
@@ -636,9 +638,20 @@ function TurnBubble({
         <Text size="xs" c="dimmed">
           {turn.author}
         </Text>
-        <Text size="xs" c="dimmed">
-          {new Date(turn.created_at).toLocaleString()}
-        </Text>
+        {/* P1-T11a envelope affordance. loom-phases.md:25: "every turn records
+            its context (date, timezone, region) at generation". Sketch 01
+            shows no envelope UI, so the surface is deliberately minimal — a
+            hover tooltip on the timestamp (dotted underline = discoverable),
+            showing the EnvelopeChip reused later by the T16 trace header. */}
+        <Tooltip label={<EnvelopeChip envelope={turn.envelope} />} p={4}>
+          <Text
+            size="xs"
+            c="dimmed"
+            style={{ cursor: "help", textDecoration: "underline dotted" }}
+          >
+            {new Date(turn.created_at).toLocaleString()}
+          </Text>
+        </Tooltip>
       </Group>
       {/* Stored attachments render as filename chips (Turn.attachments,
           openapi.yaml:1313-1315; url is null in Phase 1 so no link). */}

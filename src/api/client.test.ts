@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { api, ApiError, buildUrl, type ChatStreamEvent } from "./client";
 import { BASE } from "./base";
-import { chatRequests, conversationRequests } from "../test/msw/handlers";
+import {
+  chatRequests,
+  conversationRequests,
+  replayRequests,
+  replayTurnRequests,
+} from "../test/msw/handlers";
 
 describe("buildUrl", () => {
   it("prefixes BASE and appends query params", () => {
@@ -84,5 +89,43 @@ describe("api client", () => {
       expect(last.data.status).toBe("completed");
       expect(last.data.turn.content).toBe("Hello streaming **world**.");
     }
+  });
+});
+
+// P1-T11a — frozen-pinned replay layer. "Phase 1 pin — replays always run
+// under each turn's original envelope (feature-spec.md:77, :82)"
+// (openapi.yaml:1544-1546); the client hard-sets context_policy so callers
+// cannot override it (it is stripped from the function signatures).
+describe("replay client", () => {
+  it("replay() always sends context_policy frozen and parses 202 ReplayAccepted", async () => {
+    const accepted = await api.replay("agent1", {
+      selection: [{ conversation_id: "c1" }, { conversation_id: "c2", turn_ids: ["t9"] }],
+      configs: [{ model: "deepseek-v3" }, { instruction_version: 2 }],
+    });
+    expect(accepted.task_id).toBe("task-replay-1");
+    expect(accepted.run_id).toBe("run-1");
+    const seen = replayRequests.at(-1)!;
+    expect(seen.tree).toBe("agent1");
+    expect(seen.body.context_policy).toBe("frozen");
+    expect(seen.body.selection).toHaveLength(2);
+    expect(seen.body.configs).toHaveLength(2);
+  });
+
+  it("replayTurn() pins frozen and parses one result per endpoint (feature-spec.md:71)", async () => {
+    const accepted = await api.replayTurn("agent1", {
+      conversation_id: "c2",
+      turn_id: "t9",
+      endpoints: ["ep_agent1_prod", "ep_agent1_staging"],
+    });
+    expect(accepted.run_id).toBe("run-1");
+    expect(accepted.results.map((r) => r.endpoint_id)).toEqual([
+      "ep_agent1_prod",
+      "ep_agent1_staging",
+    ]);
+    for (const result of accepted.results) {
+      expect(result.task_id).toBeTruthy();
+      expect(result.conversation_id).toBeTruthy();
+    }
+    expect(replayTurnRequests.at(-1)!.body.context_policy).toBe("frozen");
   });
 });
