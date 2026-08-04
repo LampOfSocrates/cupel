@@ -10,6 +10,7 @@ import { http, HttpResponse } from "msw";
 import { BASE } from "../../api/base";
 import type {
   AgentTree,
+  Attachment,
   ChatRequest,
   ChatResponse,
   Conversation,
@@ -62,6 +63,17 @@ export const mockRoots: Conversation[] = [
         content: "How do refunds work?",
         created_at: "2026-08-04T09:57:00Z",
         envelope,
+        // Stored attachment rendered on the user turn (openapi.yaml:1313-1315;
+        // url null in Phase 1 per openapi.yaml:1284).
+        attachments: [
+          {
+            id: "att-fixture",
+            filename: "spec.pdf",
+            content_type: "application/pdf",
+            size: 12345,
+            url: null,
+          },
+        ],
       },
       {
         id: "t2",
@@ -140,6 +152,19 @@ export function pushHumanJudgment(
   return judgment;
 }
 
+// -------------------------------------------------------------- upload state
+// POST /upload knobs (openapi.yaml:523-554). maxBytes mirrors the real mock's
+// Phase-1 limit (mock/config.py:15 MAX_UPLOAD_BYTES = 5 MiB) — tests shrink it
+// to simulate 413 without building multi-MB files. `gate` (when set) is
+// awaited before responding so tests can observe the uploading state.
+export const uploadConfig: {
+  maxBytes: number;
+  gate: (() => Promise<void>) | null;
+} = { maxBytes: 5 * 1024 * 1024, gate: null };
+
+export const uploadRequests: Array<{ filename: string; size: number }> = [];
+let attachmentCounter = 0;
+
 // ---------------------------------------------------------------- chat state
 // Knobs for the chat SSE handler. `gate` (when set) is awaited before each
 // token and before done — tests use it to step the stream deterministically.
@@ -160,6 +185,10 @@ const initialRoots = [...mockRoots];
 
 export function resetHandlerState() {
   conversationRequests.length = 0;
+  uploadRequests.length = 0;
+  attachmentCounter = 0;
+  uploadConfig.maxBytes = 5 * 1024 * 1024;
+  uploadConfig.gate = null;
   chatRequests.length = 0;
   cancelRequests.length = 0;
   mockJudgments.length = 0;
@@ -302,6 +331,41 @@ export const handlers = [
     return new HttpResponse(stream, {
       headers: { "Content-Type": "text/event-stream" },
     });
+  }),
+
+  // POST /upload (openapi.yaml:523-554): multipart {file} → 201 Attachment
+  // (url null in Phase 1); oversize → 413 Error, "the UI surfaces the message"
+  // (openapi.yaml:535-536). Message mirrors mock/main.py:478-479.
+  http.post(`${BASE}/upload`, async ({ request }) => {
+    const form = await request.formData();
+    const file = form.get("file");
+    // No instanceof File: the parsed value is undici's File while the jsdom
+    // test env's global File is jsdom's — different classes.
+    if (!file || typeof file === "string") {
+      return HttpResponse.json(
+        { code: "bad_request", message: "multipart field 'file' is required" },
+        { status: 400 },
+      );
+    }
+    uploadRequests.push({ filename: file.name, size: file.size });
+    await uploadConfig.gate?.();
+    if (file.size > uploadConfig.maxBytes) {
+      return HttpResponse.json(
+        {
+          code: "too_large",
+          message: `File exceeds the ${Math.floor(uploadConfig.maxBytes / (1024 * 1024))} MB upload limit.`,
+        },
+        { status: 413 },
+      );
+    }
+    const attachment: Attachment = {
+      id: `att-${++attachmentCounter}`,
+      filename: file.name,
+      content_type: file.type || "application/octet-stream",
+      size: file.size,
+      url: null,
+    };
+    return HttpResponse.json(attachment, { status: 201 });
   }),
 
   // POST /feedback (openapi.yaml:556-583): appends a type:human Judgment

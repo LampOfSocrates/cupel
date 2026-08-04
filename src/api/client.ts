@@ -4,6 +4,7 @@ import { BASE } from "./base";
 import { parseSseStream } from "./sse";
 import type {
   AgentTree,
+  Attachment,
   ChatDoneEvent,
   ChatRequest,
   ChatResponse,
@@ -166,6 +167,19 @@ export const api = {
       throw new ApiError(res.status, "empty_stream", "SSE response had no body");
     }
     return { kind: "stream", events: chatEvents(res.body) };
+  },
+
+  // POST /upload — "multipart upload to /upload before send" (openapi.yaml:
+  // 528-530); 201 → Attachment, "reference its id in ChatRequest.attachments"
+  // (openapi.yaml:550). Oversize → 413 Error and "the UI surfaces the message"
+  // (openapi.yaml:535-536). No Content-Type header: the browser sets the
+  // multipart boundary itself.
+  upload: async (file: File): Promise<Attachment> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(buildUrl("/upload"), { method: "POST", body: form });
+    if (!res.ok) throw await errorFromResponse(res);
+    return (await res.json()) as Attachment;
   },
 
   // DELETE /tasks/{taskId} — "Cancel a task ... Doubles as chat

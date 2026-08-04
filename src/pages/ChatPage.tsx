@@ -3,9 +3,11 @@ import { useNavigate, useParams } from "react-router";
 import {
   ActionIcon,
   Alert,
-  Button,
+  Badge,
   Center,
+  CloseButton,
   CopyButton,
+  FileButton,
   Group,
   Loader,
   Paper,
@@ -15,8 +17,9 @@ import {
   Title,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
-import type { Judgment, Turn } from "../api/types";
+import type { Attachment, Judgment, Turn } from "../api/types";
 import { useApp } from "../AppContext";
+import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
 
 // P1-T02: live chat page.
@@ -34,6 +37,21 @@ import { Markdown } from "../lib/markdown";
 interface StreamState {
   draft: string;
   taskId: string | null; // null until the `task` event arrives
+}
+
+// P1-T04: one composer chip per picked file. Files upload immediately on pick
+// ("multipart upload to /upload before send", feature-spec.md:277); a 413/415
+// leaves the chip in state "error" with the server's message and its file is
+// never referenced in ChatRequest.attachments ("the UI surfaces the message",
+// openapi.yaml:535-536).
+interface PendingUpload {
+  key: number;
+  filename: string;
+  size: number;
+  status: "uploading" | "done" | "error";
+  attachment?: Attachment; // set when status === "done"
+  error?: string; // server message when status === "error"
+  previewUrl?: string; // object URL for image/* (client-side only — url is null in Phase 1, openapi.yaml:1284)
 }
 
 type Rating = "up" | "down";
@@ -63,6 +81,8 @@ export function ChatPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [thumbs, setThumbs] = useState<Record<string, Rating>>({});
+  const [pending, setPending] = useState<PendingUpload[]>([]);
+  const pendingKeyRef = useRef(0);
 
   // Conversation id whose turns the local state already holds — set when a
   // send attaches to it (via the SSE `task` event) or when a GET completes.
@@ -91,6 +111,11 @@ export function ChatPage() {
     abortRef.current?.abort();
     setStream(null);
     setSendError(null);
+    // Pending composer chips belong to the conversation being left.
+    setPending((prev) => {
+      for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      return [];
+    });
     if (!conversationId) {
       attachedConvRef.current = null;
       setTurns([]);
@@ -132,11 +157,70 @@ export function ChatPage() {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const streaming = stream !== null;
+  const uploading = pending.some((p) => p.status === "uploading");
+
+  // Attach flow: picker or drag-drop → immediate POST /upload per file
+  // ("multipart upload to /upload before send", feature-spec.md:277). Chips
+  // are removable before send (feature-spec.md:12 "attachment chips,
+  // removable before send").
+  const addFiles = (files: File[]) => {
+    for (const file of files) {
+      const key = ++pendingKeyRef.current;
+      // Tiny client-side thumbnail for images; guarded because jsdom lacks
+      // createObjectURL. Contract url stays null in Phase 1 (openapi.yaml:1284).
+      const previewUrl =
+        file.type.startsWith("image/") && typeof URL.createObjectURL === "function"
+          ? URL.createObjectURL(file)
+          : undefined;
+      setPending((prev) => [
+        ...prev,
+        { key, filename: file.name, size: file.size, status: "uploading", previewUrl },
+      ]);
+      api
+        .upload(file)
+        .then((attachment) => {
+          setPending((prev) =>
+            prev.map((p) => (p.key === key ? { ...p, status: "done", attachment } : p)),
+          );
+        })
+        .catch((e: unknown) => {
+          // 413/oversize etc: surface the server's message on the chip; the
+          // file is not added (openapi.yaml:535-536).
+          const message = e instanceof Error ? e.message : String(e);
+          setPending((prev) =>
+            prev.map((p) => (p.key === key ? { ...p, status: "error", error: message } : p)),
+          );
+        });
+    }
+  };
+
+  const removePending = (key: number) => {
+    setPending((prev) => {
+      const found = prev.find((p) => p.key === key);
+      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl);
+      return prev.filter((p) => p.key !== key);
+    });
+  };
+
+  const clearPending = () => {
+    setPending((prev) => {
+      for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      return [];
+    });
+  };
 
   const send = async () => {
     const text = input.trim();
-    if (!text || streaming) return;
+    // Design choice: send is DISABLED until in-flight uploads settle (rather
+    // than queued) — the spec sequences "upload to /upload before send"
+    // (feature-spec.md:277) and disabling is the simplest state users can see.
+    if (!text || streaming || uploading) return;
+    // Only successfully uploaded ids go out (openapi.yaml:1423 "Attachment ids
+    // from POST /upload"); error chips are dropped with the rest on send.
+    const uploaded = pending.filter((p) => p.status === "done" && p.attachment);
+    const attachmentIds = uploaded.map((p) => p.attachment!.id);
     setInput("");
+    clearPending();
     setSendError(null);
     const optimistic: Turn = {
       id: `local-${Date.now()}`,
@@ -144,6 +228,9 @@ export function ChatPage() {
       author: "user",
       content: text,
       created_at: new Date().toISOString(),
+      // Render the user turn's chips immediately, same shape the server will
+      // store on Turn.attachments (openapi.yaml:1313-1315).
+      attachments: uploaded.map((p) => p.attachment!),
       envelope: null,
     };
     setTurns((prev) => [...(prev ?? []), optimistic]);
@@ -153,7 +240,12 @@ export function ChatPage() {
     try {
       const result = await api.chat(
         tree,
-        { message: text, conversation_id: conversationId, stream: true },
+        {
+          message: text,
+          conversation_id: conversationId,
+          stream: true,
+          ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+        },
         { signal: abort.signal },
       );
       if (result.kind === "json") {
@@ -279,41 +371,112 @@ export function ChatPage() {
           </Stack>
         )}
       </div>
-      {/* Minimal composer — polished version (attachments, uploads) is P1-T04.
-          Enter = send, Shift+Enter = newline (feature-spec.md:12). */}
-      <Group align="flex-end" gap="xs">
-        <Textarea
-          placeholder="Message…"
-          value={input}
-          onChange={(e) => setInput(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          autosize
-          minRows={1}
-          maxRows={6}
-          style={{ flex: 1 }}
-        />
-        {streaming ? (
-          <ActionIcon
-            size="lg"
-            variant="filled"
-            color="red"
-            aria-label="Stop generation"
-            onClick={stop}
-            disabled={!stream?.taskId}
-          >
-            &#x25A0;
-          </ActionIcon>
-        ) : (
-          <Button onClick={() => void send()} disabled={!input.trim()}>
-            Send
-          </Button>
+      {/* P1-T04 composer per sketches/clean/01-chat.svg: pending chips row
+          ("📎 spec.pdf ✕") above the input row "+ Message… ↑"; stop replaces
+          send in the same slot while streaming. Enter = send, Shift+Enter =
+          newline (feature-spec.md:12). Drag-drop uses native handlers — no
+          dropzone dependency is installed (package.json has no
+          @mantine/dropzone). */}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          addFiles(Array.from(e.dataTransfer.files));
+        }}
+      >
+        {pending.length > 0 && (
+          <Group gap={6} mb={6} data-testid="pending-attachments">
+            {pending.map((p) => (
+              <Paper
+                key={p.key}
+                px={8}
+                py={2}
+                radius="sm"
+                withBorder
+                style={p.status === "error" ? { borderColor: "var(--mantine-color-red-6)" } : undefined}
+              >
+                <Group gap={6} wrap="nowrap">
+                  {p.previewUrl ? (
+                    <img
+                      src={p.previewUrl}
+                      alt=""
+                      height={18}
+                      style={{ borderRadius: 3, maxWidth: 32, objectFit: "cover" }}
+                    />
+                  ) : (
+                    <Text size="xs">&#x1F4CE;</Text>
+                  )}
+                  <Text size="xs" c={p.status === "error" ? "red" : undefined}>
+                    {p.filename} ({formatBytes(p.size)})
+                  </Text>
+                  {p.status === "uploading" && <Loader size={12} data-testid="chip-uploading" />}
+                  {p.status === "error" && (
+                    <Text size="xs" c="red">
+                      {p.error}
+                    </Text>
+                  )}
+                  <CloseButton
+                    size="xs"
+                    aria-label={`Remove ${p.filename}`}
+                    onClick={() => removePending(p.key)}
+                  />
+                </Group>
+              </Paper>
+            ))}
+          </Group>
         )}
-      </Group>
+        <Group align="flex-end" gap="xs">
+          <FileButton multiple onChange={addFiles} inputProps={{ "aria-label": "Attach files input" }}>
+            {({ onClick }) => (
+              <ActionIcon
+                size="lg"
+                variant="default"
+                aria-label="Attach files"
+                onClick={onClick}
+              >
+                +
+              </ActionIcon>
+            )}
+          </FileButton>
+          <Textarea
+            placeholder="Message…"
+            value={input}
+            onChange={(e) => setInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            autosize
+            minRows={1}
+            maxRows={6}
+            style={{ flex: 1 }}
+          />
+          {streaming ? (
+            <ActionIcon
+              size="lg"
+              variant="filled"
+              color="red"
+              aria-label="Stop generation"
+              onClick={stop}
+              disabled={!stream?.taskId}
+            >
+              &#x25A0;
+            </ActionIcon>
+          ) : (
+            <ActionIcon
+              size="lg"
+              variant="filled"
+              aria-label="Send"
+              onClick={() => void send()}
+              disabled={!input.trim() || uploading}
+            >
+              &#x2191;
+            </ActionIcon>
+          )}
+        </Group>
+      </div>
     </Stack>
   );
 }
@@ -344,6 +507,17 @@ function TurnBubble({
           {new Date(turn.created_at).toLocaleString()}
         </Text>
       </Group>
+      {/* Stored attachments render as filename chips (Turn.attachments,
+          openapi.yaml:1313-1315; url is null in Phase 1 so no link). */}
+      {turn.attachments && turn.attachments.length > 0 && (
+        <Group gap={4} mb={4}>
+          {turn.attachments.map((a) => (
+            <Badge key={a.id} variant="light" color="gray" radius="sm" tt="none">
+              &#x1F4CE; {a.filename}
+            </Badge>
+          ))}
+        </Group>
+      )}
       {turn.role === "assistant" ? (
         <Markdown content={turn.content} />
       ) : (

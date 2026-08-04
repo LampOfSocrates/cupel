@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { MantineProvider } from "@mantine/core";
@@ -14,6 +14,8 @@ import {
   judgmentRequests,
   mockJudgments,
   pushHumanJudgment,
+  uploadConfig,
+  uploadRequests,
 } from "../test/msw/handlers";
 
 // Contract under test (openapi.yaml:466-476): SSE events task/token/done/
@@ -144,6 +146,117 @@ describe("ChatPage streaming", () => {
     );
     // sidebar reflects the new conversation: "Hi there" as user bubble + list row
     await waitFor(() => expect(screen.getAllByText("Hi there")).toHaveLength(2));
+  });
+});
+
+// P1-T04 — composer attachments. Contract: POST /upload multipart {file} →
+// 201 Attachment, "reference its id in ChatRequest.attachments"
+// (openapi.yaml:550, :1421-1424); oversize → 413 and "the UI surfaces the
+// message" (openapi.yaml:535-536); UI spec: "attach images and files
+// (attachment chips, removable before send)" (feature-spec.md:12);
+// "multipart upload to /upload before send" (feature-spec.md:277).
+describe("Composer attachments", () => {
+  // Picks files via the hidden FileButton input (display:none, so
+  // fireEvent.change instead of userEvent.upload's visibility-checked click).
+  function pickFiles(files: File[]) {
+    fireEvent.change(screen.getByLabelText("Attach files input"), {
+      target: { files },
+    });
+  }
+
+  // Global File/FormData are patched to fetch-realm classes in
+  // src/test/setup.ts so multipart bodies survive Node's fetch.
+  const makeFile = (content: string, name: string, type: string) =>
+    new File([content], name, { type });
+
+  it("attach uploads immediately, shows a chip with filename+size, and gates send until settled", async () => {
+    const gates: Array<() => void> = [];
+    uploadConfig.gate = () => new Promise<void>((r) => gates.push(r));
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    pickFiles([makeFile("hello", "notes.txt", "text/plain")]);
+    // upload fired immediately on pick — before any send
+    await waitFor(() => expect(uploadRequests).toHaveLength(1));
+    expect(uploadRequests[0]).toEqual({ filename: "notes.txt", size: 5 });
+    // pending chip: filename + human size, uploading spinner
+    const chips = await screen.findByTestId("pending-attachments");
+    expect(chips).toHaveTextContent("notes.txt (5 B)");
+    expect(within(chips).getByTestId("chip-uploading")).toBeInTheDocument();
+
+    // send disabled until the in-flight upload settles (design choice:
+    // disabled, not queued — spec sequences upload BEFORE send)
+    await user.type(screen.getByPlaceholderText("Message…"), "See attachment");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+
+    gates.shift()!(); // server responds 201
+    await waitFor(() =>
+      expect(within(chips).queryByTestId("chip-uploading")).not.toBeInTheDocument(),
+    );
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeEnabled();
+    await user.click(send);
+
+    // ChatRequest.attachments = uploaded ids (openapi.yaml:1423)
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].attachments).toEqual(["att-1"]);
+    // chips cleared after send; the user turn bubble renders the chip instead
+    expect(screen.queryByTestId("pending-attachments")).not.toBeInTheDocument();
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).getByText(/notes\.txt/)).toBeInTheDocument();
+  });
+
+  it("multi-file: removing one chip excludes its id from the send", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    // sequential picks → deterministic ids: a.txt = att-1, b.txt = att-2
+    pickFiles([makeFile("aa", "a.txt", "text/plain")]);
+    await waitFor(() => expect(uploadRequests).toHaveLength(1));
+    pickFiles([makeFile("bbb", "b.txt", "text/plain")]);
+    await waitFor(() => expect(uploadRequests).toHaveLength(2));
+    const chips = screen.getByTestId("pending-attachments");
+    await waitFor(() =>
+      expect(within(chips).queryByTestId("chip-uploading")).not.toBeInTheDocument(),
+    );
+
+    // remove a.txt before send (feature-spec.md:12 "removable before send")
+    await user.click(screen.getByRole("button", { name: "Remove a.txt" }));
+    expect(within(chips).queryByText(/a\.txt/)).not.toBeInTheDocument();
+    expect(within(chips).getByText(/b\.txt/)).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Message…"), "just b{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].attachments).toEqual(["att-2"]);
+  });
+
+  it("413 surfaces the server message on the chip and the file is never sent", async () => {
+    uploadConfig.maxBytes = 10; // simulate the server-side Phase-1 limit
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    pickFiles([makeFile("x".repeat(50), "big.bin", "application/octet-stream")]);
+    // the server's error message, verbatim (openapi.yaml:535-536)
+    expect(
+      await screen.findByText("File exceeds the 0 MB upload limit."),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Message…"), "oversize{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    // no attachments key at all — the failed file was never added
+    expect(chatRequests[0].attachments).toBeUndefined();
+    expect(screen.queryByTestId("pending-attachments")).not.toBeInTheDocument();
+  });
+
+  it("renders stored attachments on a user turn from Turn.attachments", async () => {
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+    // fixture turn t1 carries spec.pdf (openapi.yaml:1313-1315)
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).getByText(/spec\.pdf/)).toBeInTheDocument();
   });
 });
 
