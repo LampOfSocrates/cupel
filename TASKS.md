@@ -28,9 +28,11 @@
 - [ ] P1-T08 Task queue (SSE progress, cancel, retry)  [deps: T18b, T01]
 - [ ] P1-T18 Generator seed + basic drip  [deps: T18b]
 - [ ] P1-T16 Trace view  [deps: T18b, T02]
+- [ ] P1-T18c Live-LLM BYOK mode (OpenRouter passthrough in mock; X-LLM-Key/X-LLM-Model headers; key never persisted or logged; max_tokens cap + rate limit; see docs/deployment.md)  [deps: T18b]
 
 ## Phase 1 — close
 - [ ] P1-T15 Tune/Evaluate presets  [deps: T11]
+- [ ] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md)  [deps: T18b, T01, T02]
 - [ ] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
 
 ## Phase 2 (order per loom-phases.md build order — expand when Phase 1 is green)
