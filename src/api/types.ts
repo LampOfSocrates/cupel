@@ -138,6 +138,42 @@ export interface ChatDoneEvent {
   status: "completed" | "cancelled";
 }
 
+// openapi.yaml:1475 FeedbackRequest — "message_id = Turn.id (spec wording per
+// feature-spec.md:276)".
+export interface FeedbackRequest {
+  message_id: string;
+  rating: "up" | "down";
+}
+
+// openapi.yaml:1881 Judgment — "Append-only, never overwritten"; "type human =
+// thumbs via POST /feedback ... keyed by turn_id/conversation_id instead — a
+// thumb has no rubric or case"; ":1905 For type human, 1 = 👍 and 0 = 👎."
+export interface Judgment {
+  id: string;
+  case_id?: string | null;
+  run_id?: string | null;
+  turn_id?: string | null;
+  conversation_id?: string | null;
+  type: "llm" | "human";
+  judge_model?: string | null;
+  rubric_id?: string | null;
+  rubric_version?: number | null;
+  score: number;
+  reasoning?: string | null;
+  created_at: string;
+}
+
+// openapi.yaml:970-991 listJudgments query params.
+export interface JudgmentListParams {
+  case_id?: string;
+  run_id?: string;
+  rubric_id?: string;
+  turn_id?: string;
+  conversation_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
 // openapi.yaml:1763 TaskProgress
 export interface TaskProgress {
   done: number;

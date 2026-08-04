@@ -9,7 +9,7 @@
 
 ## Phase 1 — track A (chat)
 - [x] P1-T02 Chat page SSE streaming  [deps: T01]
-- [ ] P1-T03 Turn actions (feedback/copy)  [deps: T02]
+- [x] P1-T03 Turn actions (feedback/copy)  [deps: T02]
 - [ ] P1-T04 Composer + uploads  [deps: T02]
 - [ ] P1-T05 Chat settings submenu  [deps: T02]
 

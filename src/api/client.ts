@@ -12,6 +12,9 @@ import type {
   ConversationListParams,
   ConversationPage,
   ErrorBody,
+  FeedbackRequest,
+  Judgment,
+  JudgmentListParams,
   Me,
   Task,
   TokenEvent,
@@ -169,4 +172,16 @@ export const api = {
   // stop-generation: 'stop = DELETE /tasks/{task_id}'" (openapi.yaml:832-839).
   cancelTask: (taskId: string) =>
     request<Task>(`/tasks/${taskId}`, { method: "DELETE" }),
+
+  // POST /feedback — "👍/👎 on an assistant message ... writes a type: human
+  // judgment — single store with /eval/judgments" (openapi.yaml:556-583).
+  // Returns "The appended human judgment" (openapi.yaml:579).
+  postFeedback: (body: FeedbackRequest) =>
+    request<Judgment>("/feedback", { method: "POST", body }),
+
+  // GET /eval/judgments — "Judgment history (append-only) ... filter by
+  // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...
+  // Matching judgments, newest first" (openapi.yaml:956-994).
+  judgments: (params: JudgmentListParams = {}) =>
+    request<Judgment[]>("/eval/judgments", { query: params as Query }),
 };

@@ -3,7 +3,9 @@
 // GET /agenttrees/{tree}/conversations (:335, params search/page/page_size/
 // forks_of/agent_id/origin), GET/PATCH/DELETE .../conversations/{id} (:387),
 // POST /agenttrees/{tree}/chat (:452-521, SSE task/token/done/error + JSON
-// mode), DELETE /tasks/{taskId} (:832-847, stop-generation).
+// mode), DELETE /tasks/{taskId} (:832-847, stop-generation),
+// POST /feedback (:556-583, appends a type:human Judgment),
+// GET /eval/judgments (:956-999, filters + newest first; P1-T12b extends).
 import { http, HttpResponse } from "msw";
 import { BASE } from "../../api/base";
 import type {
@@ -11,6 +13,8 @@ import type {
   ChatRequest,
   ChatResponse,
   Conversation,
+  FeedbackRequest,
+  Judgment,
   Me,
   Task,
   Turn,
@@ -101,6 +105,41 @@ export const mockForks: Record<string, Conversation[]> = {
 // Requests seen by the conversations handler — tests assert query params here.
 export const conversationRequests: URL[] = [];
 
+// ---------------------------------------------------------- judgments state
+// Append-only store, held newest-first (openapi.yaml:994 "Matching judgments,
+// newest first") — POST /feedback unshifts; fixtures seed via pushHumanJudgment
+// (oldest first, so the newest ends up in front). P1-T12b adds llm judgments.
+export const mockJudgments: Judgment[] = [];
+export const feedbackRequests: FeedbackRequest[] = [];
+export const judgmentRequests: URL[] = [];
+let judgmentCounter = 0;
+
+export function pushHumanJudgment(
+  turn_id: string,
+  conversation_id: string,
+  rating: "up" | "down",
+  created_at: string,
+): Judgment {
+  // Judgment type human: rubric/case fields null; score 1 = 👍, 0 = 👎
+  // (openapi.yaml:1881-1907).
+  const judgment: Judgment = {
+    id: `j-${++judgmentCounter}`,
+    case_id: null,
+    run_id: null,
+    turn_id,
+    conversation_id,
+    type: "human",
+    judge_model: null,
+    rubric_id: null,
+    rubric_version: null,
+    score: rating === "up" ? 1 : 0,
+    reasoning: null,
+    created_at,
+  };
+  mockJudgments.unshift(judgment);
+  return judgment;
+}
+
 // ---------------------------------------------------------------- chat state
 // Knobs for the chat SSE handler. `gate` (when set) is awaited before each
 // token and before done — tests use it to step the stream deterministically.
@@ -123,6 +162,10 @@ export function resetHandlerState() {
   conversationRequests.length = 0;
   chatRequests.length = 0;
   cancelRequests.length = 0;
+  mockJudgments.length = 0;
+  feedbackRequests.length = 0;
+  judgmentRequests.length = 0;
+  judgmentCounter = 0;
   cancelledTasks.clear();
   newConvCounter = 0;
   chatConfig.tokens = ["Hello ", "streaming ", "**world**."];
@@ -259,6 +302,48 @@ export const handlers = [
     return new HttpResponse(stream, {
       headers: { "Content-Type": "text/event-stream" },
     });
+  }),
+
+  // POST /feedback (openapi.yaml:556-583): appends a type:human Judgment
+  // ("message_id = Turn.id"; append-only — no delete/un-vote endpoint exists).
+  http.post(`${BASE}/feedback`, async ({ request }) => {
+    const body = (await request.json()) as FeedbackRequest;
+    feedbackRequests.push(body);
+    const all = [...mockRoots, ...Object.values(mockForks).flat()];
+    const owner = all.find((c) => c.turns?.some((t) => t.id === body.message_id));
+    const judgment: Judgment = {
+      id: `j-fb-${++judgmentCounter}`,
+      case_id: null,
+      run_id: null,
+      turn_id: body.message_id,
+      // Streamed turns aren't in the fixtures' turn lists — accept them with a
+      // null conversation_id rather than 404ing (the real mock enforces 404).
+      conversation_id: owner?.id ?? null,
+      type: "human",
+      judge_model: null,
+      rubric_id: null,
+      rubric_version: null,
+      score: body.rating === "up" ? 1 : 0,
+      reasoning: null,
+      created_at: new Date().toISOString(),
+    };
+    mockJudgments.unshift(judgment);
+    return HttpResponse.json(judgment, { status: 201 });
+  }),
+
+  // GET /eval/judgments (openapi.yaml:956-999): equality filters, paginated,
+  // newest first (store order).
+  http.get(`${BASE}/eval/judgments`, ({ request }) => {
+    const url = new URL(request.url);
+    judgmentRequests.push(url);
+    let items = mockJudgments;
+    for (const key of ["case_id", "run_id", "rubric_id", "turn_id", "conversation_id"] as const) {
+      const value = url.searchParams.get(key);
+      if (value) items = items.filter((j) => j[key] === value);
+    }
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("page_size") ?? 50);
+    return HttpResponse.json(items.slice((page - 1) * pageSize, page * pageSize));
   }),
 
   // DELETE /tasks/{taskId} — cancel; doubles as chat stop-generation
