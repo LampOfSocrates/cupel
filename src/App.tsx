@@ -7,6 +7,7 @@ import { AppContext, type ChatSettings } from "./AppContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
 import { RunsPage } from "./pages/RunsPage";
+import { RunDetailPage } from "./pages/RunDetailPage";
 import { QueuePage } from "./pages/QueuePage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { EditorPage } from "./pages/EditorPage";
@@ -99,6 +100,8 @@ export function App() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/runs" element={<RunsPage />} />
+          {/* Step 3 Results — also the detail route for stored runs (P1-T11). */}
+          <Route path="/runs/:runId" element={<RunDetailPage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"

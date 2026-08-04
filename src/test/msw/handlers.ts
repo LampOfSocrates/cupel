@@ -29,6 +29,9 @@ import type {
   ReplayRequest,
   ReplayTurnAccepted,
   ReplayTurnRequest,
+  Run,
+  RunConfig,
+  RunSummaryItem,
   Snapshot,
   SnapshotCreate,
   Task,
@@ -294,6 +297,110 @@ export const replayRequests: Array<{ tree: string; body: ReplayRequest }> = [];
 export const replayTurnRequests: Array<{ tree: string; body: ReplayTurnRequest }> = [];
 let replayCounter = 0;
 
+// ----------------------------------------------------------------- runs state
+// GET /agenttrees/{tree}/runs (openapi.yaml:654-669, "Runs, newest first") +
+// GET …/runs/{runId} (:671-693, Run schema :1607-1643). Stored runs carry a
+// label for the SUMMARY shape only (RunSummaryItem :1605 has label; Run does
+// not) — the detail handler strips it. Fixtures are MUTABLE: live-fill tests
+// mark cells done / flip status, then poke the /tasks/stream rig below;
+// resetHandlerState reseeds.
+type StoredRun = Run & { label?: string | null };
+
+function seedRuns(): StoredRun[] {
+  return [
+    {
+      id: "run-old-1",
+      tree_id: "agent1",
+      status: "done",
+      created_at: "2026-08-03T12:00:00Z",
+      task_id: "task-run-old-1",
+      label: "Replay · 1 config(s)",
+      columns: [
+        { label: "baseline", config: {} },
+        { label: "v3", config: { instruction_version: 3 } },
+      ],
+      rows: [
+        {
+          source: { conversation_id: "c1", turn_id: "t2" },
+          cells: [
+            { status: "done", content: "Approved refunds land in 3-5 days." },
+            { status: "done", content: "Refunds arrive within 3 business days." },
+          ],
+        },
+      ],
+    },
+  ];
+}
+export const mockRuns: StoredRun[] = seedRuns();
+export const runListRequests: string[] = []; // tree ids seen by GET runs
+export const runDetailRequests: string[] = []; // run ids seen by GET run
+
+// Column label mirror of the real mock (mock/main.py:110-119 config_label).
+function configLabel(cfg: RunConfig, index: number): string {
+  if (cfg.snapshot_id) return `snapshot ${cfg.snapshot_id}`;
+  if (cfg.instruction_version != null) return `v${cfg.instruction_version}`;
+  if (cfg.model) return cfg.model;
+  return `config ${index + 1}`;
+}
+
+// Grid rows from a selection: one row per assistant turn (feature-spec.md:49),
+// baseline cell done with the stored content, one pending cell per config
+// (mirrors mock/main.py:144-157 assistant_rows + :570-577 cell insert).
+function runRowsFromSelection(selection: ReplayRequest["selection"], configCount: number) {
+  const all = [...mockRoots, ...Object.values(mockForks).flat()];
+  const rows: Run["rows"] = [];
+  for (const item of selection) {
+    const found = all.find((c) => c.id === item.conversation_id);
+    for (const turn of found?.turns ?? []) {
+      if (turn.role !== "assistant") continue;
+      if (item.turn_ids != null && !item.turn_ids.includes(turn.id)) continue;
+      rows.push({
+        source: { conversation_id: item.conversation_id, turn_id: turn.id },
+        cells: [
+          { status: "done", content: turn.content },
+          ...Array.from({ length: configCount }, () => ({ status: "pending" as const })),
+        ],
+      });
+    }
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------- task stream rig
+// GET /tasks/stream (openapi.yaml:777-813) — controllable SSE: tests call
+// taskStreamRig.emit("progress"|"task", data) to push frames to every open
+// subscriber (same streaming pattern as the T02 chat handler, but held open
+// until the client aborts). clients counts open subscriptions so tests can
+// await the subscribe before emitting.
+const taskStreamClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const sseEncoder = new TextEncoder();
+
+export const taskStreamRig = {
+  emit(event: "task" | "progress" | "span" | "judgment", data: unknown) {
+    const frame = sseEncoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    for (const client of [...taskStreamClients]) {
+      try {
+        client.enqueue(frame);
+      } catch {
+        taskStreamClients.delete(client); // consumer already gone
+      }
+    }
+  },
+  closeAll() {
+    for (const client of [...taskStreamClients]) {
+      try {
+        client.close();
+      } catch {
+        // already closed by abort
+      }
+    }
+    taskStreamClients.clear();
+  },
+  get clients() {
+    return taskStreamClients.size;
+  },
+};
+
 export const chatRequests: ChatRequest[] = [];
 export const cancelRequests: string[] = []; // task ids seen by DELETE /tasks/{id}
 const cancelledTasks = new Set<string>();
@@ -335,6 +442,11 @@ export function resetHandlerState() {
   snapshotCounter = 0;
   for (const key of Object.keys(mockInstructions)) delete mockInstructions[key];
   Object.assign(mockInstructions, seedInstructions());
+  mockRuns.length = 0;
+  mockRuns.push(...seedRuns());
+  runListRequests.length = 0;
+  runDetailRequests.length = 0;
+  taskStreamRig.closeAll();
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -693,7 +805,70 @@ export const handlers = [
     }
     const n = ++replayCounter;
     const accepted: ReplayAccepted = { task_id: `task-replay-${n}`, run_id: `run-${n}` };
+    // "run row appears immediately and fills incrementally" (openapi.yaml:617)
+    // — materialize the run so the detail route can GET it straight after 202:
+    // baseline cells done (stored originals), config cells pending.
+    mockRuns.unshift({
+      id: accepted.run_id,
+      tree_id: params.tree as string,
+      status: "running",
+      created_at: new Date().toISOString(),
+      task_id: accepted.task_id,
+      label: `Replay · ${body.configs.length} config(s)`,
+      columns: [
+        { label: "baseline", config: {} },
+        ...body.configs.map((cfg, i) => ({ label: configLabel(cfg, i), config: cfg })),
+      ],
+      rows: runRowsFromSelection(body.selection, body.configs.length),
+    });
     return HttpResponse.json(accepted, { status: 202 });
+  }),
+
+  // GET /agenttrees/{tree}/runs (openapi.yaml:654-669) — "Runs, newest first
+  // (cells omitted; fetch a run for the grid)".
+  http.get(`${BASE}/agenttrees/:tree/runs`, ({ params }) => {
+    runListRequests.push(params.tree as string);
+    const items: RunSummaryItem[] = mockRuns
+      .filter((r) => r.tree_id === params.tree)
+      .map(({ id, tree_id, status, created_at, task_id, label }) => ({
+        id,
+        tree_id,
+        status,
+        created_at,
+        task_id,
+        label: label ?? null,
+      }));
+    return HttpResponse.json(items);
+  }),
+
+  // GET /agenttrees/{tree}/runs/{runId} (openapi.yaml:671-693) — full grid.
+  http.get(`${BASE}/agenttrees/:tree/runs/:runId`, ({ params }) => {
+    runDetailRequests.push(params.runId as string);
+    const found = mockRuns.find((r) => r.id === params.runId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+    }
+    const { label: _label, ...run } = found; // label is summary-only (openapi.yaml:1605 vs :1607-1618)
+    return HttpResponse.json(run);
+  }),
+
+  // GET /tasks/stream (openapi.yaml:777-813) — held open until the client
+  // aborts; frames pushed via taskStreamRig.emit.
+  http.get(`${BASE}/tasks/stream`, () => {
+    let ctrl: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        ctrl = controller;
+        taskStreamClients.add(controller);
+        controller.enqueue(sseEncoder.encode(": connected\n\n"));
+      },
+      cancel() {
+        taskStreamClients.delete(ctrl);
+      },
+    });
+    return new HttpResponse(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+    });
   }),
 
   // DELETE /tasks/{taskId} — cancel; doubles as chat stop-generation

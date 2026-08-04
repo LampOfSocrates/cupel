@@ -18,7 +18,7 @@
 - [x] P1-T10 Agent tree view  [deps: T09]
 - [x] P1-T10b Instruction editor (versions/diff/snapshots)  [deps: T09]
 - [x] P1-T11a Context envelope capture + frozen replay default  [deps: T18b]
-- [ ] P1-T11 Runs 3-step flow  [deps: T09, T11a]
+- [x] P1-T11 Runs 3-step flow  [deps: T09, T11a]
 - [ ] P1-T13 Turn forks + Open in Chat  [deps: T11, T02]
 - [ ] P1-T14 Fork comparison pivot  [deps: T13]
 - [ ] P1-T12b Basic eval (judge toggle, judgments, drawer)  [deps: T11]

@@ -52,6 +52,11 @@ interface Props {
   rubrics?: Rubric[];
   /** Pivot flag: endpoints multi-select is only for turn re-fire. */
   showEndpoints?: boolean;
+  /**
+   * Scope flag: false keeps the judge section dormant entirely (P1-T11 uses
+   * this — judge WIRING is P1-T12b; the section itself was built in T09).
+   */
+  showJudge?: boolean;
   /** Display label for value.snapshot_id, e.g. "v15-draft (a3f2)" (feature-spec.md:86). */
   snapshotLabel?: string;
 }
@@ -92,6 +97,7 @@ export function RunConfigPanel({
   endpoints = [],
   rubrics = [],
   showEndpoints = false,
+  showJudge = true,
   snapshotLabel,
 }: Props) {
   // Judge draft: JudgeConfig requires BOTH judge_model and rubric_id
@@ -205,6 +211,7 @@ export function RunConfigPanel({
           />
         </Field>
       )}
+      {showJudge && (
       <Field changed={changed.judge}>
         <Switch
           size="xs"
@@ -233,6 +240,7 @@ export function RunConfigPanel({
           </Group>
         )}
       </Field>
+      )}
     </Stack>
   );
 }

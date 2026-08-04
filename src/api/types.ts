@@ -380,6 +380,13 @@ export interface TaskProgress {
   stage?: string;
 }
 
+// openapi.yaml:1781 TaskProgressEvent — `progress` frame on GET /tasks/stream
+// (openapi.yaml:791-792: "per-unit ticks, e.g. 'Conversation 3/10 · turn 2/6'").
+export interface TaskProgressEvent {
+  task_id: string;
+  progress: TaskProgress;
+}
+
 // openapi.yaml:1726 Task — returned by DELETE /tasks/{taskId}
 // (openapi.yaml:832-847 "Cancel a task ... also stop-generation").
 export interface Task {

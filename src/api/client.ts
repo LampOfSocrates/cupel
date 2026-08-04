@@ -27,9 +27,12 @@ import type {
   ReplayRequest,
   ReplayTurnAccepted,
   ReplayTurnRequest,
+  Run,
+  RunSummaryItem,
   Snapshot,
   SnapshotCreate,
   Task,
+  TaskProgressEvent,
   TokenEvent,
 } from "./types";
 
@@ -93,6 +96,16 @@ export type ChatStreamEvent =
   | { event: "token"; data: TokenEvent }
   | { event: "done"; data: ChatDoneEvent }
   | { event: "error"; data: ErrorBody };
+
+// SSE events of GET /tasks/stream (openapi.yaml:789-796: "task — data: Task
+// (status change) · progress — data: TaskProgressEvent (per-unit ticks) ·
+// span — data: SpanEvent · judgment — data: JudgmentEvent"). Phase-1 consumers
+// (run live fill T11, queue panel T08) need task + progress only; span (trace,
+// T16) and judgment (eval, T12b) frames are skipped here until their tasks
+// add the types.
+export type TaskStreamEvent =
+  | { event: "task"; data: Task }
+  | { event: "progress"; data: TaskProgressEvent };
 
 // One send call covers both modes (loom-phases.md:43: "stream: true (SSE token
 // stream, the UI default) and stream: false (single JSON response ...) — same
@@ -264,6 +277,37 @@ export const api = {
       method: "POST",
       body: { ...req, context_policy: "frozen" } satisfies ReplayTurnRequest,
     }),
+
+  // GET /agenttrees/{tree}/runs (openapi.yaml:654-669) — "Runs, newest first
+  // (cells omitted; fetch a run for the grid)" (:663).
+  runs: (tree: string) => request<RunSummaryItem[]>(`/agenttrees/${tree}/runs`),
+
+  // GET /agenttrees/{tree}/runs/{runId} (openapi.yaml:671-693) — "Full run
+  // with columns and per-turn cells" (:689); "Cells fill incrementally as
+  // child tasks finish; live fill arrives via GET /tasks/stream" (:679-680).
+  run: (tree: string, runId: string) =>
+    request<Run>(`/agenttrees/${tree}/runs/${runId}`),
+
+  // GET /tasks/stream (openapi.yaml:777-813) — SSE read off a fetch body via
+  // the shared parser (sse.ts works for GET too); abort the signal to
+  // unsubscribe. Yields task/progress frames (see TaskStreamEvent).
+  taskStream: async function* (
+    opts: { signal?: AbortSignal } = {},
+  ): AsyncGenerator<TaskStreamEvent, void> {
+    const res = await fetch(buildUrl("/tasks/stream"), { signal: opts.signal });
+    if (!res.ok) throw await errorFromResponse(res);
+    if (!res.body) {
+      throw new ApiError(res.status, "empty_stream", "SSE response had no body");
+    }
+    for await (const msg of parseSseStream(res.body)) {
+      if (msg.event === "task") {
+        yield { event: "task", data: JSON.parse(msg.data) as Task };
+      } else if (msg.event === "progress") {
+        yield { event: "progress", data: JSON.parse(msg.data) as TaskProgressEvent };
+      }
+      // span/judgment frames: consumers arrive in T16/T12b — ignored here.
+    }
+  },
 
   // GET /eval/judgments — "Judgment history (append-only) ... filter by
   // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...

@@ -117,6 +117,11 @@ describe("RunConfigPanel", () => {
     expect(onChange).toHaveBeenLastCalledWith({ judge: null });
   });
 
+  it("showJudge=false keeps the judge section fully dormant (P1-T11 scope guard)", () => {
+    renderPanel({ showJudge: false });
+    expect(screen.queryByRole("switch", { name: "⚖ Judge" })).not.toBeInTheDocument();
+  });
+
   it("endpoints multi-select renders only when showEndpoints is set", () => {
     renderPanel({});
     expect(screen.queryByRole("combobox", { name: "Endpoints" })).not.toBeInTheDocument();

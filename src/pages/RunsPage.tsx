@@ -1,6 +1,251 @@
-import { Title } from "@mantine/core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Stepper,
+  Text,
+  Title,
+} from "@mantine/core";
+import { api } from "../api/client";
+import type { Agent, RunConfig, RunSummaryItem, SelectionItem } from "../api/types";
+import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
+import { useApp } from "../AppContext";
 
-// Placeholder — Runs 3-step flow is P1-T11.
+// P1-T11 — Runs 3-step flow (loom-phases.md:19): "Replay stored conversations
+// — or a single turn — under a different instruction version, model, or
+// endpoint — using the Runs stepper: pick (sketch 02), configure (sketch 03),
+// compare (sketch 04)". Engine (feature-spec.md:41): "take stored
+// conversations or individual turns, re-execute them under a changed config…
+// queue the work, compare outputs."
+//
+// Landing = RunsList of GET /agenttrees/{tree}/runs ("Runs, newest first",
+// openapi.yaml:663) + "New run" opening the stepper; row click → the run
+// detail route (RunDetailPage — step 3 doubles as the results view for old
+// runs).
+//
+// Step 2 supports MULTIPLE configs because the grid is "baseline column + one
+// column per run config" (feature-spec.md:49; ReplayRequest.configs[] "One
+// grid column per config", openapi.yaml:1527-1533). Sketch 03 shows a single
+// config drawer, so the UI is one panel per config + an "Add config"
+// affordance that duplicates the previous config (documented deviation:
+// minimum 1 config, matching the sketch's single-drawer density).
+//
+// Scope guards (never build ahead, loom-phases.md:158):
+// - judge section dormant via showJudge={false} — judge WIRING is P1-T12b.
+// - endpoints hidden (showEndpoints defaults false) — turn re-fire is P1-T13.
+// - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
+//   … · prefilled" caption, no picker — baseline = the stored originals.
+// - no queue UI here — the queue PANEL is P1-T08.
+
+const emptyConfig = (): RunConfig => ({});
+
 export function RunsPage() {
-  return <Title order={3}>Runs</Title>;
+  const { tree, models, ensureModels } = useApp();
+  const navigate = useNavigate();
+
+  const [runs, setRuns] = useState<RunSummaryItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"list" | "stepper">("list");
+
+  // Stepper state — step 0 = Select, 1 = Configure; step 2 (Results) lives on
+  // the run-detail route, entered by Queue's navigate.
+  const [step, setStep] = useState(0);
+  const [selection, setSelection] = useState<SelectionItem[]>([]);
+  const [configs, setConfigs] = useState<RunConfig[]>([emptyConfig()]);
+  const [agents, setAgents] = useState<Agent[] | null>(null);
+  const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
+  const versionsRequested = useRef(new Set<string>());
+  const [queueing, setQueueing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .runs(tree)
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tree]);
+
+  // Configure-step dropdown data (feature-spec.md:230 "Runs · 2 Configure |
+  // GET …/agents/{id}/instructions, GET /models"): agents + models fetched on
+  // entering the step; models come from the session cache (AppContext).
+  useEffect(() => {
+    if (mode !== "stepper" || step !== 1) return;
+    ensureModels();
+    if (agents == null) {
+      api.agents(tree).then(setAgents).catch((e: Error) => setError(e.message));
+    }
+  }, [mode, step, agents, tree, ensureModels]);
+
+  // Instruction versions per selected agent, fetched lazily on first pick
+  // (GET …/instructions, openapi.yaml:221-239 — versions ascending).
+  const ensureVersions = useCallback(
+    (agentId: string) => {
+      if (versionsRequested.current.has(agentId)) return;
+      versionsRequested.current.add(agentId);
+      api
+        .instructions(tree, agentId)
+        .then((h) =>
+          setVersionsByAgent((prev) => ({
+            ...prev,
+            [agentId]: h.versions.map((v) => v.version),
+          })),
+        )
+        .catch(() => {
+          versionsRequested.current.delete(agentId);
+        });
+    },
+    [tree],
+  );
+
+  const startStepper = () => {
+    setMode("stepper");
+    setStep(0);
+    setSelection([]);
+    setConfigs([emptyConfig()]);
+  };
+
+  const queueRun = async () => {
+    setQueueing(true);
+    try {
+      // POST /agenttrees/{tree}/replay → "202: Work enqueued; run row appears
+      // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
+      // straight to the detail route, which owns the live fill.
+      const accepted = await api.replay(tree, { selection, configs });
+      navigate(`/runs/${accepted.run_id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setQueueing(false);
+    }
+  };
+
+  if (mode === "list") {
+    return (
+      <Stack gap="sm" p="md" maw={640}>
+        <Group justify="space-between">
+          <Title order={3}>Runs</Title>
+          <Button size="xs" onClick={startStepper}>
+            New run
+          </Button>
+        </Group>
+        {error && (
+          <Alert color="red" title="Error">
+            {error}
+          </Alert>
+        )}
+        {runs == null ? (
+          <Loader size="sm" mx="auto" my="md" />
+        ) : (
+          <RunsList runs={runs} onOpen={(run) => navigate(`/runs/${run.id}`)} />
+        )}
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="sm" p="md" maw={640}>
+      <Stepper active={step} size="xs">
+        <Stepper.Step label="Select" />
+        <Stepper.Step label="Configure" />
+        <Stepper.Step label="Results" />
+      </Stepper>
+      {error && (
+        <Alert color="red" title="Error" withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {step === 0 && (
+        <>
+          {/* Step 1 Select (feature-spec.md:44): "ConversationPicker:
+              search/filter/multi-select conversations, expandable to pick
+              individual turns" — server-side search inside the picker. */}
+          <ConversationPicker tree={tree} onSelectionChange={setSelection} />
+          <Group justify="space-between">
+            <Button variant="default" size="xs" onClick={() => setMode("list")}>
+              Cancel
+            </Button>
+            <Button
+              size="xs"
+              disabled={selection.length === 0}
+              onClick={() => setStep(1)}
+            >
+              Configure ▸
+            </Button>
+          </Group>
+        </>
+      )}
+
+      {step === 1 && (
+        <>
+          {/* Step 2 Configure (feature-spec.md:45): "Run Config drawer …
+              prefilled from the baseline so changing one axis = one field".
+              baseline = {} = the stored originals / live version
+              (openapi.yaml:1489 "neither = the live version"). */}
+          <Text size="xs" c="dimmed">
+            baseline: stored originals · prefilled
+          </Text>
+          {configs.map((cfg, i) => (
+            <Paper key={i} withBorder p="sm" data-testid={`config-${i}`}>
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" fw={600}>
+                  Config {i + 1}
+                </Text>
+                {configs.length > 1 && (
+                  <Button
+                    variant="subtle"
+                    color="red"
+                    size="compact-xs"
+                    onClick={() =>
+                      setConfigs((prev) => prev.filter((_, j) => j !== i))
+                    }
+                  >
+                    Remove
+                  </Button>
+                )}
+              </Group>
+              <RunConfigPanel
+                value={cfg}
+                onChange={(next) => {
+                  setConfigs((prev) => prev.map((c, j) => (j === i ? next : c)));
+                  if (next.agent_id) ensureVersions(next.agent_id);
+                }}
+                baseline={emptyConfig()}
+                agents={agents ?? []}
+                versions={cfg.agent_id ? (versionsByAgent[cfg.agent_id] ?? []) : []}
+                models={models ?? []}
+                showJudge={false}
+              />
+            </Paper>
+          ))}
+          <Button
+            variant="light"
+            size="compact-xs"
+            onClick={() => setConfigs((prev) => [...prev, { ...prev[prev.length - 1] }])}
+          >
+            + Add config
+          </Button>
+          <Group justify="flex-end">
+            <Button variant="default" size="xs" onClick={() => setStep(0)}>
+              Back
+            </Button>
+            <Button size="xs" loading={queueing} onClick={() => void queueRun()}>
+              Queue
+            </Button>
+          </Group>
+        </>
+      )}
+    </Stack>
+  );
 }
