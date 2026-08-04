@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "mock": "python -m uvicorn mock.main:app --port 4010",
+    "test:mock": "python -m pytest mock/tests -q"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
