@@ -1,10 +1,20 @@
 // MSW handlers derived from openapi.yaml v0.2.0 — reused by later tasks.
 // Covers: GET /me (openapi.yaml:62), GET /agenttrees (:115),
 // GET /agenttrees/{tree}/conversations (:335, params search/page/page_size/
-// forks_of/agent_id/origin), GET/PATCH/DELETE .../conversations/{id} (:387).
+// forks_of/agent_id/origin), GET/PATCH/DELETE .../conversations/{id} (:387),
+// POST /agenttrees/{tree}/chat (:452-521, SSE task/token/done/error + JSON
+// mode), DELETE /tasks/{taskId} (:832-847, stop-generation).
 import { http, HttpResponse } from "msw";
 import { BASE } from "../../api/base";
-import type { AgentTree, Conversation, Me } from "../../api/types";
+import type {
+  AgentTree,
+  ChatRequest,
+  ChatResponse,
+  Conversation,
+  Me,
+  Task,
+  Turn,
+} from "../../api/types";
 
 export const mockMe: Me = {
   user: { id: "dev", name: "Dev User", email: "dev@example.com" },
@@ -91,9 +101,39 @@ export const mockForks: Record<string, Conversation[]> = {
 // Requests seen by the conversations handler — tests assert query params here.
 export const conversationRequests: URL[] = [];
 
+// ---------------------------------------------------------------- chat state
+// Knobs for the chat SSE handler. `gate` (when set) is awaited before each
+// token and before done — tests use it to step the stream deterministically.
+// `errorAfter` emits an `error` frame after N tokens instead of finishing.
+export const chatConfig: {
+  tokens: string[];
+  delayMs: number;
+  gate: (() => Promise<void>) | null;
+  errorAfter: number | null;
+} = { tokens: ["Hello ", "streaming ", "**world**."], delayMs: 2, gate: null, errorAfter: null };
+
+export const chatRequests: ChatRequest[] = [];
+export const cancelRequests: string[] = []; // task ids seen by DELETE /tasks/{id}
+const cancelledTasks = new Set<string>();
+let newConvCounter = 0;
+
+const initialRoots = [...mockRoots];
+
 export function resetHandlerState() {
   conversationRequests.length = 0;
+  chatRequests.length = 0;
+  cancelRequests.length = 0;
+  cancelledTasks.clear();
+  newConvCounter = 0;
+  chatConfig.tokens = ["Hello ", "streaming ", "**world**."];
+  chatConfig.delayMs = 2;
+  chatConfig.gate = null;
+  chatConfig.errorAfter = null;
+  mockRoots.length = 0;
+  mockRoots.push(...initialRoots);
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const handlers = [
   http.get(`${BASE}/me`, () => HttpResponse.json(mockMe)),
@@ -138,4 +178,102 @@ export const handlers = [
   http.delete(`${BASE}/agenttrees/:tree/conversations/:id`, () =>
     new HttpResponse(null, { status: 204 }),
   ),
+
+  // POST /agenttrees/{tree}/chat (openapi.yaml:452-521): stream=true → SSE
+  // frames task/token/done/error; stream=false → single JSON ChatResponse.
+  // Omitting conversation_id starts a new conversation (openapi.yaml:488).
+  http.post(`${BASE}/agenttrees/:tree/chat`, async ({ request }) => {
+    const body = (await request.json()) as ChatRequest;
+    chatRequests.push(body);
+    const isNew = !body.conversation_id;
+    const convId = body.conversation_id ?? `c-new-${++newConvCounter}`;
+    const taskId = `task-${convId}`;
+    if (isNew) {
+      mockRoots.unshift(
+        conv({
+          id: convId,
+          title: body.message.slice(0, 40),
+          last_activity_at: new Date().toISOString(),
+        }),
+      );
+    }
+    const assistantTurn = (content: string): Turn => ({
+      id: `t-a-${taskId}`,
+      role: "assistant",
+      author: "assistant",
+      content,
+      created_at: new Date().toISOString(),
+      envelope,
+    });
+
+    if (body.stream === false) {
+      const response: ChatResponse = {
+        task_id: taskId,
+        conversation_id: convId,
+        turn: assistantTurn(chatConfig.tokens.join("")),
+      };
+      return HttpResponse.json(response);
+    }
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const frame = (event: string, data: unknown) =>
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+          );
+        frame("task", {
+          task_id: taskId,
+          conversation_id: convId,
+          user_turn_id: `t-u-${taskId}`,
+          assistant_turn_id: `t-a-${taskId}`,
+        });
+        let sent = "";
+        let count = 0;
+        for (const token of chatConfig.tokens) {
+          await (chatConfig.gate?.() ?? sleep(chatConfig.delayMs));
+          if (cancelledTasks.has(taskId)) {
+            // done(cancelled) carries the persisted partial content
+            // (openapi.yaml:1470).
+            frame("done", { status: "cancelled", turn: assistantTurn(sent) });
+            controller.close();
+            return;
+          }
+          if (chatConfig.errorAfter !== null && count >= chatConfig.errorAfter) {
+            frame("error", { code: "generation_failed", message: "model exploded" });
+            controller.close();
+            return;
+          }
+          sent += token;
+          count++;
+          frame("token", { delta: token });
+        }
+        await (chatConfig.gate?.() ?? sleep(chatConfig.delayMs));
+        frame("done", {
+          status: cancelledTasks.has(taskId) ? "cancelled" : "completed",
+          turn: assistantTurn(sent),
+        });
+        controller.close();
+      },
+    });
+    return new HttpResponse(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }),
+
+  // DELETE /tasks/{taskId} — cancel; doubles as chat stop-generation
+  // (openapi.yaml:832-847).
+  http.delete(`${BASE}/tasks/:taskId`, ({ params }) => {
+    const id = params.taskId as string;
+    cancelRequests.push(id);
+    cancelledTasks.add(id);
+    const task: Task = {
+      id,
+      type: "chat",
+      status: "cancelled",
+      progress: { done: 0, total: 1 },
+      created_at: new Date().toISOString(),
+    };
+    return HttpResponse.json(task);
+  }),
 ];

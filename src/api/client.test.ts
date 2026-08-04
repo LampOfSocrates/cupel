@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { api, ApiError, buildUrl } from "./client";
+import { api, ApiError, buildUrl, type ChatStreamEvent } from "./client";
 import { BASE } from "./base";
-import { conversationRequests } from "../test/msw/handlers";
+import { chatRequests, conversationRequests } from "../test/msw/handlers";
 
 describe("buildUrl", () => {
   it("prefixes BASE and appends query params", () => {
@@ -43,5 +43,46 @@ describe("api client", () => {
 
   it("DELETE resolves on 204 with no body", async () => {
     await expect(api.deleteConversation("agent1", "c3")).resolves.toBeUndefined();
+  });
+
+  // Both chat modes on one endpoint, flag in the body (loom-phases.md:43;
+  // openapi.yaml:461-464).
+  it("chat() with stream:false returns the single JSON ChatResponse", async () => {
+    const result = await api.chat("agent1", { message: "hi", stream: false });
+    expect(result.kind).toBe("json");
+    if (result.kind !== "json") throw new Error("expected json result");
+    expect(result.response.task_id).toBe("task-c-new-1");
+    expect(result.response.conversation_id).toBe("c-new-1");
+    expect(result.response.turn.content).toBe("Hello streaming **world**.");
+    expect(chatRequests[0].stream).toBe(false);
+  });
+
+  it("chat() with stream:true yields typed task/token/done events off the SSE body", async () => {
+    const result = await api.chat("agent1", {
+      message: "hi",
+      conversation_id: "c1",
+      stream: true,
+    });
+    expect(result.kind).toBe("stream");
+    if (result.kind !== "stream") throw new Error("expected stream result");
+    const events: ChatStreamEvent[] = [];
+    for await (const ev of result.events) events.push(ev);
+
+    // task first (openapi.yaml:467-469 "first event; carries the task_id")
+    expect(events[0].event).toBe("task");
+    if (events[0].event === "task") {
+      expect(events[0].data.task_id).toBe("task-c1");
+      expect(events[0].data.conversation_id).toBe("c1");
+    }
+    const deltas = events
+      .filter((e): e is Extract<ChatStreamEvent, { event: "token" }> => e.event === "token")
+      .map((e) => e.data.delta);
+    expect(deltas).toEqual(["Hello ", "streaming ", "**world**."]);
+    const last = events.at(-1)!;
+    expect(last.event).toBe("done");
+    if (last.event === "done") {
+      expect(last.data.status).toBe("completed");
+      expect(last.data.turn.content).toBe("Hello streaming **world**.");
+    }
   });
 });

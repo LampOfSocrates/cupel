@@ -17,6 +17,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
 import type { Conversation } from "../api/types";
 import { relativeTime } from "../lib/relativeTime";
+import { useApp } from "../AppContext";
 
 // Sidebar recent list (feature-spec.md:5-6, sketch 07):
 // "title + relative time, search, infinite scroll. Forked conversations nest
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function ConversationList({ tree }: Props) {
+  const { conversationsVersion } = useApp();
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [items, setItems] = useState<Conversation[]>([]);
@@ -57,10 +59,12 @@ export function ConversationList({ tree }: Props) {
     [tree, debouncedSearch],
   );
 
+  // conversationsVersion: chat sends bump it so new/updated conversations
+  // appear without a manual reload (P1-T02).
   useEffect(() => {
     setForks({});
     void load(1, false);
-  }, [load]);
+  }, [load, conversationsVersion]);
 
   const toggleForks = async (conv: Conversation) => {
     if (forks[conv.id]) {

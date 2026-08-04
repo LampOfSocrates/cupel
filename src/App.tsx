@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Alert, Center, Loader } from "@mantine/core";
 import { api } from "./api/client";
@@ -18,6 +18,10 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [trees, setTrees] = useState<AgentTree[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [conversationsVersion, setConversationsVersion] = useState(0);
+  const refreshConversations = useCallback(() => {
+    setConversationsVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +61,9 @@ export function App() {
     : (trees[0]?.id ?? DEFAULT_TREE);
 
   return (
-    <AppContext.Provider value={{ me, trees, tree }}>
+    <AppContext.Provider
+      value={{ me, trees, tree, conversationsVersion, refreshConversations }}
+    >
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<Navigate to="/chat" replace />} />

@@ -26,6 +26,13 @@ class ResizeObserverMock {
 window.ResizeObserver = window.ResizeObserver ?? (ResizeObserverMock as unknown as typeof ResizeObserver);
 window.HTMLElement.prototype.scrollIntoView =
   window.HTMLElement.prototype.scrollIntoView ?? (() => {});
+// Mantine Textarea autosize listens on document.fonts (Autosize.mjs:132) —
+// jsdom has no FontFaceSet.
+if (!document.fonts) {
+  Object.defineProperty(document, "fonts", {
+    value: { addEventListener: () => {}, removeEventListener: () => {} },
+  });
+}
 
 // Unhandled request = a call outside the single client / contract — fail loud.
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

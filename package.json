@@ -30,6 +30,8 @@
   "dependencies": {
     "@mantine/core": "^9.5.1",
     "@mantine/hooks": "^9.5.1",
+    "dompurify": "^3.4.13",
+    "marked": "^18.0.9",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0"

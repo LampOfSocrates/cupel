@@ -5,6 +5,10 @@ export interface AppState {
   me: Me;
   trees: AgentTree[];
   tree: string; // current tree id — defaults to agent1
+  // Sidebar refresh signal: chat sends that create/update conversations bump
+  // the version so ConversationList reloads (feature-spec.md:5 recent list).
+  conversationsVersion: number;
+  refreshConversations: () => void;
 }
 
 export const AppContext = createContext<AppState | null>(null);

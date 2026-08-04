@@ -1,12 +1,20 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
 // anywhere else (feature-spec.md:158).
 import { BASE } from "./base";
+import { parseSseStream } from "./sse";
 import type {
   AgentTree,
+  ChatDoneEvent,
+  ChatRequest,
+  ChatResponse,
+  ChatTaskEvent,
   Conversation,
   ConversationListParams,
   ConversationPage,
+  ErrorBody,
   Me,
+  Task,
+  TokenEvent,
 } from "./types";
 
 export type Query = Record<string, string | number | undefined>;
@@ -33,6 +41,21 @@ export function buildUrl(path: string, query?: Query): string {
   return url.toString();
 }
 
+async function errorFromResponse(res: Response): Promise<ApiError> {
+  let code = "unknown";
+  let message = `${res.status} ${res.statusText}`;
+  try {
+    const err = await res.json();
+    if (err && typeof err === "object") {
+      code = err.code ?? code;
+      message = err.message ?? message;
+    }
+  } catch {
+    // non-JSON error body — keep the status fallback
+  }
+  return new ApiError(res.status, code, message);
+}
+
 async function request<T>(
   path: string,
   opts: { method?: string; query?: Query; body?: unknown } = {},
@@ -42,22 +65,49 @@ async function request<T>(
     headers: opts.body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
-  if (!res.ok) {
-    let code = "unknown";
-    let message = `${res.status} ${res.statusText}`;
-    try {
-      const err = await res.json();
-      if (err && typeof err === "object") {
-        code = err.code ?? code;
-        message = err.message ?? message;
-      }
-    } catch {
-      // non-JSON error body — keep the status fallback
-    }
-    throw new ApiError(res.status, code, message);
-  }
+  if (!res.ok) throw await errorFromResponse(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+// SSE events of POST /agenttrees/{tree}/chat, typed per the contract
+// (openapi.yaml:466-476: "task ... token ... done ... error").
+export type ChatStreamEvent =
+  | { event: "task"; data: ChatTaskEvent }
+  | { event: "token"; data: TokenEvent }
+  | { event: "done"; data: ChatDoneEvent }
+  | { event: "error"; data: ErrorBody };
+
+// One send call covers both modes (loom-phases.md:43: "stream: true (SSE token
+// stream, the UI default) and stream: false (single JSON response ...) — same
+// endpoint, flag in the request body"). The kind is decided by the response
+// Content-Type, so a backend that can't stream degrades gracefully to "json".
+export type ChatSendResult =
+  | { kind: "stream"; events: AsyncGenerator<ChatStreamEvent, void> }
+  | { kind: "json"; response: ChatResponse };
+
+async function* chatEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<ChatStreamEvent, void> {
+  for await (const msg of parseSseStream(body)) {
+    switch (msg.event) {
+      case "task":
+        yield { event: "task", data: JSON.parse(msg.data) as ChatTaskEvent };
+        break;
+      case "token":
+        yield { event: "token", data: JSON.parse(msg.data) as TokenEvent };
+        break;
+      case "done":
+        yield { event: "done", data: JSON.parse(msg.data) as ChatDoneEvent };
+        break;
+      case "error":
+        yield { event: "error", data: JSON.parse(msg.data) as ErrorBody };
+        break;
+      default:
+        // keepalives / unknown events — ignore
+        break;
+    }
+  }
 }
 
 export const api = {
@@ -89,4 +139,34 @@ export const api = {
     request<void>(`/agenttrees/${tree}/conversations/${id}`, {
       method: "DELETE",
     }),
+
+  // POST /agenttrees/{tree}/chat (openapi.yaml:452-521) — SSE stream or single
+  // JSON, flag in body. "Omitting conversation_id starts a new conversation"
+  // (openapi.yaml:488).
+  chat: async (
+    tree: string,
+    req: ChatRequest,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<ChatSendResult> => {
+    const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+      signal: opts.signal,
+    });
+    if (!res.ok) throw await errorFromResponse(res);
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      return { kind: "json", response: (await res.json()) as ChatResponse };
+    }
+    if (!res.body) {
+      throw new ApiError(res.status, "empty_stream", "SSE response had no body");
+    }
+    return { kind: "stream", events: chatEvents(res.body) };
+  },
+
+  // DELETE /tasks/{taskId} — "Cancel a task ... Doubles as chat
+  // stop-generation: 'stop = DELETE /tasks/{task_id}'" (openapi.yaml:832-839).
+  cancelTask: (taskId: string) =>
+    request<Task>(`/tasks/${taskId}`, { method: "DELETE" }),
 };
