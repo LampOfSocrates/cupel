@@ -3,6 +3,8 @@
 import { BASE } from "./base";
 import { parseSseStream } from "./sse";
 import type {
+  Agent,
+  AgentCreate,
   AgentTree,
   Attachment,
   ChatDoneEvent,
@@ -125,6 +127,17 @@ export const api = {
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
   // (feature-spec.md:122). Fetched once and cached in AppContext.
   models: () => request<Model[]>("/models"),
+
+  // GET /agenttrees/{tree}/agents (openapi.yaml:175-194) — "Flat list of
+  // agents with parent links (root has parent_id null)" (:188); the tree view
+  // builds the hierarchy client-side.
+  agents: (tree: string) => request<Agent[]>(`/agenttrees/${tree}/agents`),
+
+  // POST /agenttrees/{tree}/agents (openapi.yaml:195-219) — add sub-agent /
+  // new root; 201 = "The created agent (live_version 0 until v1 is saved)"
+  // (:215).
+  createAgent: (tree: string, body: AgentCreate) =>
+    request<Agent>(`/agenttrees/${tree}/agents`, { method: "POST", body }),
 
   // GET /agenttrees/{tree}/conversations (openapi.yaml:335)
   conversations: (tree: string, params: ConversationListParams = {}) =>

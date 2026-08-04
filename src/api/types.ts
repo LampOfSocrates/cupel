@@ -208,6 +208,15 @@ export interface Agent {
   format: "text" | "yaml";
 }
 
+// openapi.yaml:1166 AgentCreate — ":1169 Add an agent under a node
+// (feature-spec.md:26); null parent_id = new root"; format default text (:1179).
+export interface AgentCreate {
+  name: string;
+  parent_id?: string | null;
+  tools?: string[];
+  format?: "text" | "yaml";
+}
+
 // openapi.yaml:1807 Rubric — versioned, save = new version (feature-spec.md:132).
 export interface Rubric {
   id: string;

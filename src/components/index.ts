@@ -6,4 +6,5 @@ export { RunConfigPanel } from "./RunConfigPanel";
 export { ComparisonView, type CellContext } from "./ComparisonView";
 export { TaskQueue, formatElapsed } from "./TaskQueue";
 export { RunsList } from "./RunsList";
+export { TreeNode, TreeBranch, type TreeNodeKind } from "./TreeNode";
 export { STATUS_COLOR, type LifecycleStatus } from "./status";

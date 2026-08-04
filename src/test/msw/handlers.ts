@@ -5,10 +5,13 @@
 // POST /agenttrees/{tree}/chat (:452-521, SSE task/token/done/error + JSON
 // mode), DELETE /tasks/{taskId} (:832-847, stop-generation),
 // POST /feedback (:556-583, appends a type:human Judgment),
-// GET /eval/judgments (:956-999, filters + newest first; P1-T12b extends).
+// GET /eval/judgments (:956-999, filters + newest first; P1-T12b extends),
+// GET/POST /agenttrees/{tree}/agents (:175-219, tree view + add sub-agent).
 import { http, HttpResponse } from "msw";
 import { BASE } from "../../api/base";
 import type {
+  Agent,
+  AgentCreate,
   AgentTree,
   Attachment,
   ChatRequest,
@@ -43,6 +46,27 @@ export const mockModels: Model[] = [
 ];
 export const modelsRequests: string[] = [];
 
+// GET/POST /agenttrees/{tree}/agents (openapi.yaml:175-219, Agent :1141-1164).
+// Fixtures mirror the real mock's bootstrap hierarchy (mock/seed.py:19-34):
+// agent1 Concierge → Refunds/Shipping, agent2 Ops → Deploys. Tests may mutate
+// (e.g. flip enabled) — resetHandlerState restores from the factory.
+function seedAgents(): Record<string, Agent[]> {
+  return {
+    agent1: [
+      { id: "ag_concierge", name: "Concierge", parent_id: null, live_version: 3, tools: ["search_kb"], enabled: true, format: "text" },
+      { id: "ag_refunds", name: "Refunds", parent_id: "ag_concierge", live_version: 1, tools: ["lookup_order", "refund"], enabled: true, format: "text" },
+      { id: "ag_shipping", name: "Shipping", parent_id: "ag_concierge", live_version: 1, tools: ["track_parcel"], enabled: true, format: "text" },
+    ],
+    agent2: [
+      { id: "ag_ops", name: "Ops", parent_id: null, live_version: 2, tools: ["run_query"], enabled: true, format: "text" },
+      { id: "ag_deploys", name: "Deploys", parent_id: "ag_ops", live_version: 1, tools: ["rollout_status"], enabled: true, format: "text" },
+    ],
+  };
+}
+export const mockAgents: Record<string, Agent[]> = seedAgents();
+export const agentCreateRequests: AgentCreate[] = [];
+let agentCounter = 0;
+
 const envelope = {
   system_date: "2026-08-02",
   timezone: "Europe/London",
@@ -66,6 +90,7 @@ export const mockRoots: Conversation[] = [
   conv({
     id: "c1",
     title: "Refund escalation",
+    agent_id: "ag_refunds",
     last_activity_at: "2026-08-04T09:58:00Z",
     turns: [
       {
@@ -97,8 +122,8 @@ export const mockRoots: Conversation[] = [
       },
     ],
   }),
-  conv({ id: "c2", title: "Billing dispute", fork_count: 2, last_activity_at: "2026-08-04T09:00:00Z" }),
-  conv({ id: "c3", title: "Onboarding help", last_activity_at: "2026-08-01T10:00:00Z" }),
+  conv({ id: "c2", title: "Billing dispute", agent_id: "ag_concierge", fork_count: 2, last_activity_at: "2026-08-04T09:00:00Z" }),
+  conv({ id: "c3", title: "Onboarding help", agent_id: "ag_concierge", last_activity_at: "2026-08-01T10:00:00Z" }),
 ];
 
 export const mockForks: Record<string, Conversation[]> = {
@@ -216,6 +241,10 @@ export function resetHandlerState() {
   chatConfig.errorAfter = null;
   mockRoots.length = 0;
   mockRoots.push(...initialRoots);
+  agentCreateRequests.length = 0;
+  agentCounter = 0;
+  for (const key of Object.keys(mockAgents)) delete mockAgents[key];
+  Object.assign(mockAgents, seedAgents());
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -232,6 +261,39 @@ export const handlers = [
     return HttpResponse.json(mockModels);
   }),
 
+  // GET /agenttrees/{tree}/agents — "Flat list of agents with parent links
+  // (root has parent_id null)" (openapi.yaml:188).
+  http.get(`${BASE}/agenttrees/:tree/agents`, ({ params }) => {
+    const agents = mockAgents[params.tree as string];
+    if (!agents) {
+      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
+    }
+    return HttpResponse.json(agents);
+  }),
+
+  // POST /agenttrees/{tree}/agents — 201 "The created agent (live_version 0
+  // until v1 is saved)" (openapi.yaml:215); null parent_id = new root
+  // (openapi.yaml:1169).
+  http.post(`${BASE}/agenttrees/:tree/agents`, async ({ params, request }) => {
+    const body = (await request.json()) as AgentCreate;
+    agentCreateRequests.push(body);
+    const agents = mockAgents[params.tree as string];
+    if (!agents) {
+      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
+    }
+    const agent: Agent = {
+      id: `ag-new-${++agentCounter}`,
+      name: body.name,
+      parent_id: body.parent_id ?? null,
+      live_version: 0,
+      tools: body.tools ?? [],
+      enabled: true,
+      format: body.format ?? "text",
+    };
+    agents.push(agent);
+    return HttpResponse.json(agent, { status: 201 });
+  }),
+
   http.get(`${BASE}/agenttrees/:tree/conversations`, ({ request }) => {
     const url = new URL(request.url);
     conversationRequests.push(url);
@@ -241,6 +303,10 @@ export const handlers = [
     const pageSize = Number(url.searchParams.get("page_size") ?? 20);
 
     let items = forksOf ? (mockForks[forksOf] ?? []) : mockRoots;
+    // ?agent_id= — "view recent conversations for this agent"
+    // (openapi.yaml:365-371).
+    const agentId = url.searchParams.get("agent_id");
+    if (agentId) items = items.filter((c) => c.agent_id === agentId);
     if (search) items = items.filter((c) => c.title.toLowerCase().includes(search));
     const total = items.length;
     items = items.slice((page - 1) * pageSize, page * pageSize);

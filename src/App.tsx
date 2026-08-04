@@ -9,6 +9,8 @@ import { ChatPage } from "./pages/ChatPage";
 import { RunsPage } from "./pages/RunsPage";
 import { QueuePage } from "./pages/QueuePage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { EditorPage } from "./pages/EditorPage";
+import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 
 const DEFAULT_TREE = "agent1";
 
@@ -99,6 +101,10 @@ export function App() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          {/* Editor route target for node click / "Edit instructions"
+              (feature-spec.md:26) — placeholder page until P1-T10b. */}
+          <Route path="/agents/:agentId/editor" element={<EditorPage />} />
+          <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
         </Route>
       </Routes>
     </AppContext.Provider>
