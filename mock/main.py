@@ -103,7 +103,16 @@ async def body_json(request: Request) -> dict:
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
                step_delay: float | None = None, static_dir: str | None = None) -> FastAPI:
-    app = FastAPI(title="Skein mock", version=config.VERSION, openapi_url=None, docs_url=None)
+    # P2-READY (skein-phases.md:98): the mock "ships its own OpenAPI file —
+    # which the readiness script validates against Skein's contract as the
+    # first conformance test". FastAPI auto-generates the spec from the
+    # routes; handlers have no response_model, so schemas are loose ({}) and
+    # conformance sees path/method/param presence (documented in
+    # docs/readiness.md). Docs UI stays off. When DEMO_TOKEN is set the gate
+    # covers /openapi.json like every other endpoint (only /healthz is open)
+    # — skein-ready reaches it via --header "X-Demo-Token: ...".
+    app = FastAPI(title="Skein mock", version=config.VERSION,
+                  openapi_url="/openapi.json", docs_url=None, redoc_url=None)
     # Gate first, CORS second: add_middleware prepends, so CORS stays outermost
     # (preflight answered before the gate; 401s still carry CORS headers).
     app.add_middleware(DemoTokenGate)
@@ -453,8 +462,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         db.run("UPDATE conversations SET deleted = 1 WHERE id = ?", (conv["id"],))
         return Response(status_code=204)
 
+    # Generated-spec truth for the two SSE endpoints (P2-READY): both really
+    # serve text/event-stream, which FastAPI cannot infer from StreamingResponse.
+    # Without this the mock's own OpenAPI failed conformance on /tasks/stream
+    # (contract openapi.yaml:1207 declares text/event-stream only).
+    SSE_RESPONSES = {200: {"content": {"text/event-stream": {}}}}
+
     # ---------------------------------------------------------------- chat
-    @app.post("/agenttrees/{tree}/chat")
+    @app.post("/agenttrees/{tree}/chat", responses=SSE_RESPONSES)
     async def chat(tree: str, request: Request):
         need_tree(tree)
         body = await body_json(request)
@@ -853,7 +868,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             [*params, min(max(1, limit), 200)])
         return [task_dict(t) for t in rows]
 
-    @app.get("/tasks/stream")
+    @app.get("/tasks/stream", responses=SSE_RESPONSES)
     async def stream_tasks():
         async def gen():
             q = broker.subscribe()

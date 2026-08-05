@@ -1,0 +1,143 @@
+"""P2-READY: the mock ships its own OpenAPI (/openapi.json) and the readiness
+script validates it against contract v0.3.0 as the FIRST conformance test
+(skein-phases.md:98). Run: npm run test:mock.
+
+Test-shape choice (documented per task): pytest fetches /openapi.json from the
+app in-process (no uvicorn boot, no ports) and drives the Node CLI as a
+subprocess with --json; the comparator's unit layer lives in
+tests/skein-ready.test.js (vitest, fixture specs).
+"""
+
+import asyncio
+import json
+import subprocess
+from pathlib import Path
+
+import httpx
+import pytest
+
+from mock.main import create_app
+
+ROOT = Path(__file__).resolve().parents[2]
+TOKEN = "t0k-ready"
+
+
+def make_client(**kwargs):
+    app = create_app(db_path=":memory:", token_delay=0, step_delay=0,
+                     static_dir="__no_dist__")
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                             base_url="http://t", **kwargs)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+@pytest.fixture(autouse=True)
+def _no_gate(monkeypatch):
+    monkeypatch.delenv("DEMO_TOKEN", raising=False)
+
+
+@pytest.fixture()
+def spec_path(tmp_path):
+    """The mock's own OpenAPI, fetched through the real route."""
+    async def case():
+        async with make_client() as c:
+            r = await c.get("/openapi.json")
+            assert r.status_code == 200
+            return r.json()
+    spec = run(case())
+    path = tmp_path / "mock-openapi.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    return path
+
+
+def skein_ready(*args):
+    proc = subprocess.run(
+        ["node", str(ROOT / "scripts" / "skein-ready.mjs"), *args],
+        capture_output=True, text=True, cwd=ROOT)
+    return proc
+
+
+# ------------------------------------------------------- /openapi.json route
+def test_openapi_served_docs_stay_off():
+    async def case():
+        async with make_client() as c:
+            r = await c.get("/openapi.json")
+            assert r.status_code == 200
+            spec = r.json()
+            assert spec["info"]["title"] == "Skein mock"
+            assert "/agenttrees/{tree}/chat" in spec["paths"]
+            # docs UIs remain disabled (openapi exposure only)
+            assert (await c.get("/docs")).status_code == 404
+            assert (await c.get("/redoc")).status_code == 404
+    run(case())
+
+
+def test_openapi_gated_like_other_endpoints(monkeypatch):
+    """DEMO_TOKEN set -> /openapi.json is behind the gate (only /healthz is
+    open); skein-ready reaches it via --header X-Demo-Token."""
+    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
+
+    async def case():
+        async with make_client() as c:
+            assert (await c.get("/openapi.json")).status_code == 401
+            r = await c.get("/openapi.json", headers={"X-Demo-Token": TOKEN})
+            assert r.status_code == 200 and "paths" in r.json()
+    run(case())
+
+
+# ------------------------------------------------- first conformance runs
+def test_phase1_conformance_passes(spec_path):
+    """--phase1-only must report FULL conformance: the mock implements the
+    whole v0.2.0 surface, so any gap here is a real mock bug (one was found
+    and fixed during P2-READY: /tasks/stream didn't declare its
+    text/event-stream content type — see SSE_RESPONSES in mock/main.py)."""
+    proc = skein_ready(str(spec_path), "--phase1-only", "--json")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads(proc.stdout)
+    assert report["ok"] is True
+    assert report["missing"] == []
+    assert report["mismatched"] == []
+    assert report["checked"] == report["conformant"] > 0
+
+
+def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
+    """Default (full v0.3.0) run: the missing set is the not-yet-implemented
+    Phase-2 surface. Tolerant by design: later Phase-2 tasks (P2-T07 auth,
+    P2-T12 workbench, ...) implement these endpoints one by one, and this
+    test must keep passing as the missing set SHRINKS — so we assert subset
+    of the known Phase-2 surface plus a few sentinels that exist TODAY,
+    not an exact list."""
+    proc = skein_ready(str(spec_path), "--json")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    report = json.loads(proc.stdout)
+    assert report["ok"] is False
+    # Nothing the mock DOES implement may be mismatched — Phase-1 stays green.
+    assert report["mismatched"] == []
+
+    phase2_paths = set(report["contract_paths"]) - set(report["phase1_paths"])
+    missing_paths = {m["path"] for m in report["missing"]}
+    assert missing_paths, "expected Phase-2 endpoints to be missing today"
+    # Subset (not equality): implemented-later endpoints simply drop out.
+    assert missing_paths <= phase2_paths | {"/eval/cases/{caseId}"}  # P2 PUT on a P1 path
+    # Sentinels that are certainly unimplemented at P2-READY time.
+    for sentinel in ("/auth/token", "/settings", "/casebooks",
+                     "/agenttrees/{tree}/memory", "/admin/users"):
+        assert sentinel in missing_paths, f"{sentinel} should be missing today"
+
+
+def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
+    """--prefix remaps contract paths before lookup (skein-phases.md:75):
+    against the unprefixed mock spec everything goes missing under a bogus
+    prefix — proving the remap is applied — and --header parses k:v pairs."""
+    proc = skein_ready(str(spec_path), "--prefix", "/nabu-service",
+                       "--phase1-only", "--json")
+    assert proc.returncode == 1
+    report = json.loads(proc.stdout)
+    assert report["prefix"] == "/nabu-service"
+    assert report["conformant"] == 0  # nothing matches under the prefix
+
+    bad = skein_ready(str(spec_path), "--header", "no-colon-here")
+    assert bad.returncode == 2
+    assert "--header expects" in bad.stderr

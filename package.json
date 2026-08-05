@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "skein-ready": "scripts/skein-ready.mjs"
+  },
   "scripts": {
+    "ready": "node scripts/skein-ready.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
