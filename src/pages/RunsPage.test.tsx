@@ -3,7 +3,14 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { renderApp } from "../test/render";
-import { replayRequests, runListRequests } from "../test/msw/handlers";
+import {
+  judgeRequests,
+  mockRuns,
+  replayRequests,
+  rubricRequests,
+  runListRequests,
+  taskStreamRig,
+} from "../test/msw/handlers";
 import { RunsPage } from "./RunsPage";
 import { RunDetailPage } from "./RunDetailPage";
 
@@ -85,8 +92,10 @@ describe("RunsPage — stepper", () => {
     await user.click(within(config2).getByRole("combobox", { name: "Model" }));
     await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
 
-    // judge section dormant in this task (wiring is P1-T12b)
-    expect(screen.queryByRole("switch", { name: "⚖ Judge" })).not.toBeInTheDocument();
+    // judge section live since T12b, one collapsed toggle per config
+    // (feature-spec.md:48 "Judge (optional, collapsed by default)") — left
+    // untouched here, so the queued configs carry no judge key.
+    expect(screen.getAllByRole("switch", { name: "⚖ Judge" })).toHaveLength(2);
     // endpoints hidden — turn re-fire is P1-T13
     expect(screen.queryByRole("combobox", { name: "Endpoints" })).not.toBeInTheDocument();
 
@@ -111,5 +120,59 @@ describe("RunsPage — stepper", () => {
     // column labels: config-derived ("config 1" fallback, model id)
     expect(screen.getByText("config 1")).toBeInTheDocument();
     expect(screen.getByText("claude-haiku-4-5")).toBeInTheDocument();
+  });
+
+  // P1-T12b judge trigger — the contract's judging path is POST /eval/judge
+  // (openapi.yaml:931-954); the queued replay config carries `judge` as the
+  // UI's intent (JudgeConfig, openapi.yaml:1508-1514) and the CLIENT fires
+  // the judge once the run detail page observes the run reach 'done'
+  // (feature-spec.md:61 "'Score this run' on any finished run").
+  it("judge config on the queued run fires POST /eval/judge once the run reaches done", async () => {
+    const user = userEvent.setup();
+    renderRuns();
+    await user.click(await screen.findByRole("button", { name: "New run" }));
+    await screen.findByText("Refund escalation");
+    await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
+    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
+
+    // "toggle on → judge model + rubric fields appear" (feature-spec.md:48);
+    // rubric options come from GET /eval/rubrics (feature-spec.md:230).
+    await user.click(await screen.findByRole("switch", { name: "⚖ Judge" }));
+    await user.click(screen.getByRole("combobox", { name: "Judge model" }));
+    await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
+    await user.click(screen.getByRole("combobox", { name: "Rubric" }));
+    await user.click(await screen.findByRole("option", { name: "helpfulness v2" }));
+    expect(rubricRequests.length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Queue" }));
+    await screen.findByText("Run run-1");
+    // the queued config records the judge intent…
+    expect(replayRequests[0].body.configs).toEqual([
+      { judge: { judge_model: "claude-haiku-4-5", rubric_id: "rub-help" } },
+    ]);
+    // …but nothing judges until the replay is done
+    expect(judgeRequests).toHaveLength(0);
+
+    // run completes server-side → task frame → refetch observes the done
+    // transition → judge fired exactly once with the contract body
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+    const run = mockRuns.find((r) => r.id === "run-1")!;
+    run.status = "done";
+    taskStreamRig.emit("task", {
+      id: run.task_id,
+      type: "replay",
+      status: "done",
+      progress: { done: 1, total: 1 },
+      created_at: "2026-08-04T10:00:00Z",
+    });
+
+    await waitFor(() => expect(judgeRequests).toHaveLength(1));
+    expect(judgeRequests[0]).toEqual({
+      run_id: "run-1",
+      judge_model: "claude-haiku-4-5",
+      rubric_id: "rub-help",
+    });
+    // 202 task_id → subtle judging state on the run header (no queue UI — T08)
+    await screen.findByTestId("judging-badge");
   });
 });

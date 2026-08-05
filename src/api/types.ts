@@ -278,6 +278,59 @@ export interface JudgeConfig {
   rubric_id: string;
 }
 
+// openapi.yaml:1825 EvalCase — ":1829-1831 'EvalCase = {input, output,
+// reference?}' — input 'prompt + context (frozen)', reference nullable
+// (reference-free rubrics allowed)"; source ":1848-1850 set when auto-created
+// from a conversation turn".
+export interface EvalCase {
+  id: string;
+  input: { prompt: string; envelope?: ContextEnvelope | null };
+  output: string;
+  reference?: string | null;
+  source?: { tree?: string; conversation_id?: string; turn_id?: string } | null;
+  created_at?: string;
+}
+
+// openapi.yaml:1857 JudgeRequest — ":1861-1864 Exactly one of run_id /
+// case_ids … run_id = 'Score this run', auto-creating cases from turns if
+// none exist (feature-spec.md:61)"; rubric_version ":1876-1879 Pin a specific
+// rubric version; omit for latest".
+export interface JudgeRequest {
+  run_id?: string | null;
+  case_ids?: string[] | null;
+  judge_model: string;
+  rubric_id: string;
+  rubric_version?: number | null;
+}
+
+// openapi.yaml:1775 TaskRef — 202 body of POST /eval/judge (:949-953).
+export interface TaskRef {
+  task_id: string;
+}
+
+// openapi.yaml:1796 JudgmentEvent — "A judgment appended by a finished judging
+// task — 'scores stream into the grid live' (feature-spec.md:64). Join keys
+// (case_id/run_id/turn_id) are on the judgment itself."
+export interface JudgmentEvent {
+  judgment: Judgment;
+}
+
+// openapi.yaml:1909 RunScoreSummary — "Feeds 'summary header (mean,
+// distribution sparkline)' (feature-spec.md:49)"; distribution ":1925-1928
+// Bucketed score counts for the sparkline".
+export interface RubricScoreSummary {
+  rubric_id: string;
+  rubric_version: number;
+  mean: number;
+  count: number;
+  distribution: number[];
+}
+
+export interface RunScoreSummary {
+  run_id: string;
+  rubrics: RubricScoreSummary[];
+}
+
 // openapi.yaml:1483 RunConfig — ":1488-1489 instruction_version XOR
 // snapshot_id — a snapshot is an untested draft (feature-spec.md:86);
 // neither = the live version. endpoint_ids only applies to turn re-fire."

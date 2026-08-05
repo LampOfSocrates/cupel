@@ -12,7 +12,7 @@ import {
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Agent, RunConfig, RunSummaryItem, SelectionItem } from "../api/types";
+import type { Agent, Rubric, RunConfig, RunSummaryItem, SelectionItem } from "../api/types";
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { useApp } from "../AppContext";
 
@@ -35,8 +35,14 @@ import { useApp } from "../AppContext";
 // affordance that duplicates the previous config (documented deviation:
 // minimum 1 config, matching the sketch's single-drawer density).
 //
+// P1-T12b: judge section live (feature-spec.md:48 "Judge (optional, collapsed
+// by default): toggle on → judge model + rubric fields appear") — rubric
+// dropdown fed by GET /eval/rubrics (feature-spec.md:230 "Runs · 2 Configure |
+// … GET /eval/rubrics"), judge model from the session models cache. The judge
+// FIRES from RunDetailPage when the run reaches done (see its judge-trigger
+// note) — queueing here only records the intent in the config.
+//
 // Scope guards (never build ahead, loom-phases.md:158):
-// - judge section dormant via showJudge={false} — judge WIRING is P1-T12b.
 // - endpoints hidden (showEndpoints defaults false) — turn re-fire is P1-T13.
 // - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
@@ -58,6 +64,7 @@ export function RunsPage() {
   const [selection, setSelection] = useState<SelectionItem[]>([]);
   const [configs, setConfigs] = useState<RunConfig[]>([emptyConfig()]);
   const [agents, setAgents] = useState<Agent[] | null>(null);
+  const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
   const versionsRequested = useRef(new Set<string>());
   const [queueing, setQueueing] = useState(false);
@@ -78,15 +85,19 @@ export function RunsPage() {
   }, [tree]);
 
   // Configure-step dropdown data (feature-spec.md:230 "Runs · 2 Configure |
-  // GET …/agents/{id}/instructions, GET /models"): agents + models fetched on
-  // entering the step; models come from the session cache (AppContext).
+  // GET …/agents/{id}/instructions, GET /models, GET /eval/rubrics"): agents +
+  // rubrics + models fetched on entering the step; models come from the
+  // session cache (AppContext).
   useEffect(() => {
     if (mode !== "stepper" || step !== 1) return;
     ensureModels();
     if (agents == null) {
       api.agents(tree).then(setAgents).catch((e: Error) => setError(e.message));
     }
-  }, [mode, step, agents, tree, ensureModels]);
+    if (rubrics == null) {
+      api.rubrics().then(setRubrics).catch((e: Error) => setError(e.message));
+    }
+  }, [mode, step, agents, rubrics, tree, ensureModels]);
 
   // Instruction versions per selected agent, fetched lazily on first pick
   // (GET …/instructions, openapi.yaml:221-239 — versions ascending).
@@ -225,7 +236,7 @@ export function RunsPage() {
                 agents={agents ?? []}
                 versions={cfg.agent_id ? (versionsByAgent[cfg.agent_id] ?? []) : []}
                 models={models ?? []}
-                showJudge={false}
+                rubrics={rubrics ?? []}
               />
             </Paper>
           ))}

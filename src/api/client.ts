@@ -16,11 +16,14 @@ import type {
   ConversationPage,
   Endpoint,
   ErrorBody,
+  EvalCase,
   FeedbackRequest,
   InstructionHistory,
   InstructionSave,
   InstructionVersion,
+  JudgeRequest,
   Judgment,
+  JudgmentEvent,
   JudgmentListParams,
   Me,
   Model,
@@ -28,12 +31,15 @@ import type {
   ReplayRequest,
   ReplayTurnAccepted,
   ReplayTurnRequest,
+  Rubric,
   Run,
+  RunScoreSummary,
   RunSummaryItem,
   Snapshot,
   SnapshotCreate,
   Task,
   TaskProgressEvent,
+  TaskRef,
   TokenEvent,
 } from "./types";
 
@@ -100,13 +106,14 @@ export type ChatStreamEvent =
 
 // SSE events of GET /tasks/stream (openapi.yaml:789-796: "task — data: Task
 // (status change) · progress — data: TaskProgressEvent (per-unit ticks) ·
-// span — data: SpanEvent · judgment — data: JudgmentEvent"). Phase-1 consumers
-// (run live fill T11, queue panel T08) need task + progress only; span (trace,
-// T16) and judgment (eval, T12b) frames are skipped here until their tasks
-// add the types.
+// span — data: SpanEvent · judgment — data: JudgmentEvent"). judgment frames
+// added in T12b ("scores stream into the grid live as judging tasks finish
+// (SSE)", feature-spec.md:64); span (trace, T16) frames are still skipped
+// until that task adds the type.
 export type TaskStreamEvent =
   | { event: "task"; data: Task }
-  | { event: "progress"; data: TaskProgressEvent };
+  | { event: "progress"; data: TaskProgressEvent }
+  | { event: "judgment"; data: JudgmentEvent };
 
 // One send call covers both modes (loom-phases.md:43: "stream: true (SSE token
 // stream, the UI default) and stream: false (single JSON response ...) — same
@@ -310,10 +317,35 @@ export const api = {
         yield { event: "task", data: JSON.parse(msg.data) as Task };
       } else if (msg.event === "progress") {
         yield { event: "progress", data: JSON.parse(msg.data) as TaskProgressEvent };
+      } else if (msg.event === "judgment") {
+        yield { event: "judgment", data: JSON.parse(msg.data) as JudgmentEvent };
       }
-      // span/judgment frames: consumers arrive in T16/T12b — ignored here.
+      // span frames: consumer arrives in T16 (trace) — ignored here.
     }
   },
+
+  // GET /eval/rubrics (openapi.yaml:868-886) — "Rubrics (for the Run Config
+  // judge section) … Latest version of each rubric" (:872, :881). Rubric
+  // EDITOR UI is Phase 2 (:874-875).
+  rubrics: () => request<Rubric[]>("/eval/rubrics"),
+
+  // GET /eval/cases/{caseId} (openapi.yaml:907-929) — "One eval case (judgment
+  // drawer) … Phase 1 cases are auto-created from conversation turns during
+  // judging (feature-spec.md:61)".
+  evalCase: (caseId: string) => request<EvalCase>(`/eval/cases/${caseId}`),
+
+  // POST /eval/judge (openapi.yaml:931-954) — "Enqueue LLM judging …
+  // {set_id | case_ids | run_id, judge_model, rubric_id} → enqueued),
+  // judgments append-only"; 202 → TaskRef "(parent task + child per case)".
+  judge: (body: JudgeRequest) =>
+    request<TaskRef>("/eval/judge", { method: "POST", body }),
+
+  // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — "Aggregate
+  // scores for a run … Feeds the grid's 'summary header (mean, distribution
+  // sparkline)' (feature-spec.md:49), updating live as judging tasks finish
+  // (feature-spec.md:64)".
+  runSummary: (runId: string) =>
+    request<RunScoreSummary>(`/eval/runs/${runId}/summary`),
 
   // GET /eval/judgments — "Judgment history (append-only) ... filter by
   // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...

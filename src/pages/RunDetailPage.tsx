@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ActionIcon,
   Alert,
   Anchor,
   Badge,
+  Box,
   Button,
   Group,
   Loader,
+  Paper,
+  Select,
   Stack,
   Text,
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Run } from "../api/types";
-import { ComparisonView, ForkModal, STATUS_COLOR } from "../components";
+import type { JudgeConfig, Rubric, Run, RunScoreSummary } from "../api/types";
+import {
+  ComparisonView,
+  ForkModal,
+  JudgmentDrawer,
+  ScoreChip,
+  STATUS_COLOR,
+} from "../components";
 import { useApp } from "../AppContext";
 
 // Runs step 3 — Results, and the detail route for old runs (feature-spec.md:49:
@@ -26,6 +35,18 @@ import { useApp } from "../AppContext";
 // the run status is terminal (refetch-on-event is the documented baseline;
 // cell patching is only an optimization). Unsubscribes on unmount/terminal.
 //
+// P1-T12b eval layer (feature-spec.md:49 "If judge on: score column + summary
+// header (mean, distribution sparkline), drill-in per turn for judge
+// reasoning"; :64 "scores stream into the grid live as judging tasks finish
+// (SSE) … summary header (mean + distribution) updates live"):
+// - summary header from GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022)
+// - score chips via the grid's renderAnnotation slot on judged cells
+//   (RunCell.case_id + latest_score, openapi.yaml:1654-1664); tap → drawer
+// - judgment frames on /tasks/stream (openapi.yaml:1796-1804) refetch run +
+//   summary on the same debounce
+// - the stream stays subscribed past run-terminal WHILE a judging task is in
+//   flight; judgments fired elsewhere (e.g. curl) appear on reload only.
+//
 // Cancel = DELETE /tasks/{task_id} on the run's parent task (openapi.yaml:
 // 832-839 "Cancel a task … cancels queued/running children") — a small
 // affordance only; the queue PANEL is P1-T08.
@@ -34,11 +55,13 @@ const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
 const REFETCH_DEBOUNCE_MS = 300;
 
 export function RunDetailPage() {
-  const { tree } = useApp();
+  const { tree, models, ensureModels } = useApp();
   const { runId = "" } = useParams();
   const navigate = useNavigate();
 
   const [run, setRun] = useState<Run | null>(null);
+  const [summary, setSummary] = useState<RunScoreSummary | null>(null);
+  const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Latest progress stage text off the stream ("Conversation 3/10 · turn 2/6",
   // openapi.yaml:791-792; feature-spec.md:109).
@@ -50,10 +73,24 @@ export function RunDetailPage() {
     conversation_id: string;
     turn_id: string;
   } | null>(null);
+  // T12b: in-flight judging parent task (POST /eval/judge 202 TaskRef,
+  // openapi.yaml:949-953) — non-null shows the subtle "judging…" state on the
+  // header until the task's terminal frame arrives (no queue UI — T08).
+  const [judgeTaskId, setJudgeTaskId] = useState<string | null>(null);
+  const [judgeFormOpen, setJudgeFormOpen] = useState(false);
+  const [judgeDraft, setJudgeDraft] = useState<Partial<JudgeConfig>>({});
+  // Chip tap target — "Tap a badge → judgment drawer" (feature-spec.md:64).
+  const [drawerCaseId, setDrawerCaseId] = useState<string | null>(null);
+  // Auto-judge bookkeeping (see the judge-trigger note below).
+  const prevStatus = useRef<Run["status"] | null>(null);
+  const judgeFired = useRef(false);
 
   const load = useCallback(async () => {
     try {
       setRun(await api.run(tree, runId));
+      // Summary rides the same (debounced) tick — "summary header … updates
+      // live" (feature-spec.md:64).
+      setSummary(await api.runSummary(runId));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -61,20 +98,77 @@ export function RunDetailPage() {
 
   useEffect(() => {
     setRun(null);
+    setSummary(null);
     setError(null);
     setStage(null);
+    setJudgeTaskId(null);
+    setJudgeFormOpen(false);
+    setDrawerCaseId(null);
+    prevStatus.current = null;
+    judgeFired.current = false;
     void load();
   }, [load]);
 
+  // Rubrics label the summary header + feed the manual judge form; models feed
+  // its judge-model select (feature-spec.md:122 "chat/run/judge model
+  // dropdowns" — session cache). Missing rubric names degrade to raw ids.
+  useEffect(() => {
+    ensureModels();
+    api.rubrics().then(setRubrics).catch(() => {});
+  }, [ensureModels]);
+
+  const fireJudge = useCallback(
+    async (judge_model: string, rubric_id: string) => {
+      try {
+        // POST /eval/judge {run_id, judge_model, rubric_id} → 202 "Judging
+        // enqueued (parent task + child per case)" (openapi.yaml:931-954);
+        // run_id "auto-creating cases from conversation turns if none exist"
+        // (feature-spec.md:61).
+        const ref = await api.judge({ run_id: runId, judge_model, rubric_id });
+        setJudgeTaskId(ref.task_id);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [runId],
+  );
+
+  // T12b judge trigger. The contract's judging path is POST /eval/judge —
+  // replay configs carry `judge` (JudgeConfig, openapi.yaml:1508-1514) as the
+  // UI's recorded intent, and the CLIENT fires the judge once it observes this
+  // run transition into terminal 'done'. SIMPLIFICATIONS (documented):
+  // - the judge is taken from the FIRST config that has one — one judging pass
+  //   per run (per-config judges would need per-column case partitioning the
+  //   Phase-1 contract doesn't model);
+  // - only a LIVE transition fires (prevStatus non-terminal → done), so
+  //   reopening an already-done run never re-judges; leaving the page before
+  //   the run finishes skips the auto-fire — the manual "Judge this run" form
+  //   below covers both.
+  useEffect(() => {
+    if (!run) return;
+    const prev = prevStatus.current;
+    prevStatus.current = run.status;
+    if (prev == null || TERMINAL.has(prev) || run.status !== "done") return;
+    const judge = run.columns
+      .map((c) => c.config.judge)
+      .find((j): j is JudgeConfig => j != null);
+    if (!judge || judgeFired.current) return;
+    judgeFired.current = true;
+    void fireJudge(judge.judge_model, judge.rubric_id);
+  }, [run, fireJudge]);
+
   const taskId = run?.task_id;
   const terminal = run != null && TERMINAL.has(run.status);
+  const judging = judgeTaskId != null;
 
   // Live fill subscription. Family membership: `task` frames are Task objects
-  // — the parent itself (id) or its children (parent_id); `progress` frames
-  // carry the parent's task_id (batch progress = parent ticks,
-  // feature-spec.md:107). Terminal status flips `terminal` → cleanup aborts.
+  // — the parent itself (id) or its children (parent_id), for the run's task
+  // AND any in-flight judging task; `progress` frames carry the parent's
+  // task_id (batch progress = parent ticks, feature-spec.md:107); `judgment`
+  // frames join by judgment.run_id (openapi.yaml:1800-1802). Subscribed while
+  // the run is live OR judging is in flight; terminal + idle → cleanup aborts.
   useEffect(() => {
-    if (!taskId || terminal) return;
+    if (!taskId || (terminal && !judging)) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
@@ -85,10 +179,29 @@ export function RunDetailPage() {
     void (async () => {
       try {
         for await (const ev of api.taskStream({ signal: controller.signal })) {
-          const belongs =
-            ev.event === "task"
-              ? ev.data.id === taskId || ev.data.parent_id === taskId
-              : ev.data.task_id === taskId;
+          let belongs: boolean;
+          if (ev.event === "judgment") {
+            belongs = ev.data.judgment.run_id === runId;
+          } else if (ev.event === "task") {
+            belongs =
+              ev.data.id === taskId ||
+              ev.data.parent_id === taskId ||
+              (judgeTaskId != null &&
+                (ev.data.id === judgeTaskId || ev.data.parent_id === judgeTaskId));
+            if (
+              ev.data.id === judgeTaskId &&
+              ev.data.status !== "queued" &&
+              ev.data.status !== "running"
+            ) {
+              // Judging finished — clear the badge and refetch immediately
+              // (not debounced: this effect is about to unsubscribe, which
+              // would drop a pending timer).
+              setJudgeTaskId(null);
+              void load();
+            }
+          } else {
+            belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
+          }
           if (!belongs) continue;
           if (ev.event === "progress" && ev.data.progress.stage) {
             setStage(ev.data.progress.stage);
@@ -107,7 +220,7 @@ export function RunDetailPage() {
       controller.abort();
       if (timer != null) clearTimeout(timer);
     };
-  }, [taskId, terminal, load]);
+  }, [taskId, terminal, judging, judgeTaskId, runId, load]);
 
   const cancel = async () => {
     if (!run) return;
@@ -133,6 +246,8 @@ export function RunDetailPage() {
     return <Loader size="sm" mx="auto" my="xl" display="block" />;
   }
 
+  const rubricName = (id: string) => rubrics.find((r) => r.id === id)?.name ?? id;
+
   return (
     <Stack gap="sm" p="md">
       <Group justify="space-between">
@@ -144,26 +259,118 @@ export function RunDetailPage() {
           <Badge size="sm" variant="light" color={STATUS_COLOR[run.status]}>
             {run.status}
           </Badge>
+          {judging && (
+            <Badge size="sm" variant="light" color="grape" data-testid="judging-badge">
+              judging…
+            </Badge>
+          )}
           {stage != null && !terminal && (
             <Text size="xs" c="dimmed" data-testid="run-stage">
               {stage}
             </Text>
           )}
         </Group>
-        {(run.status === "queued" || run.status === "running") && (
-          <Button
-            size="compact-xs"
-            variant="light"
-            color="red"
-            loading={cancelling}
-            onClick={() => void cancel()}
-          >
-            Cancel
-          </Button>
-        )}
+        <Group gap="xs">
+          {/* "'Score this run' on any finished run" (feature-spec.md:61) —
+              after-the-fact judging via the same POST /eval/judge. */}
+          {run.status === "done" && !judging && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              onClick={() => setJudgeFormOpen((o) => !o)}
+            >
+              ⚖ Judge this run
+            </Button>
+          )}
+          {(run.status === "queued" || run.status === "running") && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              color="red"
+              loading={cancelling}
+              onClick={() => void cancel()}
+            >
+              Cancel
+            </Button>
+          )}
+        </Group>
       </Group>
+
+      {judgeFormOpen && (
+        <Paper withBorder p="sm" maw={480} data-testid="judge-form">
+          <Group grow>
+            <Select
+              size="xs"
+              label="Judge model"
+              placeholder="Judge model"
+              data={(models ?? []).map((m) => ({ value: m.id, label: m.name }))}
+              value={judgeDraft.judge_model ?? null}
+              onChange={(v) => setJudgeDraft((d) => ({ ...d, judge_model: v ?? undefined }))}
+            />
+            <Select
+              size="xs"
+              label="Rubric"
+              placeholder="Rubric"
+              data={rubrics.map((r) => ({ value: r.id, label: `${r.name} v${r.version}` }))}
+              value={judgeDraft.rubric_id ?? null}
+              onChange={(v) => setJudgeDraft((d) => ({ ...d, rubric_id: v ?? undefined }))}
+            />
+          </Group>
+          <Group justify="flex-end" mt="xs">
+            <Button
+              size="compact-xs"
+              disabled={!judgeDraft.judge_model || !judgeDraft.rubric_id}
+              onClick={() => {
+                setJudgeFormOpen(false);
+                void fireJudge(judgeDraft.judge_model!, judgeDraft.rubric_id!);
+              }}
+            >
+              Judge
+            </Button>
+          </Group>
+        </Paper>
+      )}
+
+      {/* Summary header — "summary header (mean, distribution sparkline)"
+          (feature-spec.md:49), per rubric (RunScoreSummary.rubrics,
+          openapi.yaml:1915-1928). Distribution = tiny inline CSS bars over the
+          bucketed counts — deliberately no chart lib. */}
+      {summary != null && summary.rubrics.length > 0 && (
+        <Group gap="xl" data-testid="run-summary">
+          {summary.rubrics.map((r) => {
+            const max = Math.max(...r.distribution, 1);
+            return (
+              <Group key={`${r.rubric_id}-v${r.rubric_version}`} gap={8} wrap="nowrap">
+                <Text size="xs" fw={600}>
+                  {rubricName(r.rubric_id)} v{r.rubric_version}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  mean {r.mean.toFixed(2)} · n={r.count}
+                </Text>
+                <Group
+                  gap={2}
+                  align="flex-end"
+                  h={16}
+                  data-testid={`dist-${r.rubric_id}-v${r.rubric_version}`}
+                >
+                  {r.distribution.map((n, i) => (
+                    <Box
+                      key={i}
+                      w={5}
+                      h={2 + (n / max) * 14}
+                      bg={n > 0 ? "blue.4" : "gray.3"}
+                      style={{ borderRadius: 1 }}
+                    />
+                  ))}
+                </Group>
+              </Group>
+            );
+          })}
+        </Group>
+      )}
+
       {/* Cell ⑂ via the cell-action slot (separate from renderAnnotation,
-          which is reserved for T12b score badges). Done cells only — the slot
+          which T12b now fills with score chips). Done cells only — the slot
           is invoked for status done; every row carries its source turn
           (Run.rows[].source, openapi.yaml:1607-1643). Sketch 04: "+ Re-run
           this turn with… POST …/replay/turn".
@@ -179,9 +386,25 @@ export function RunDetailPage() {
           (RunCell.conversation_id, openapi.yaml:1651) and the baseline cell
           carries the ORIGINAL conversation + turn (mock/main.py:643-646), so
           one rule links baseline → original and forks → their conversations.
-          Cells without a conversation_id (plain replay configs) get no link. */}
+          Cells without a conversation_id (plain replay configs) get no link.
+
+          T12b score chips: "score column reads latest judgment per (case,
+          rubric)" (feature-spec.md:62) — the server denormalizes that into
+          RunCell.latest_score, joined to its case by RunCell.case_id
+          (openapi.yaml:1654-1664); chip tap opens the judgment drawer. */}
       <ComparisonView
         run={run}
+        renderAnnotation={(cell, ctx) =>
+          cell.latest_score != null ? (
+            <ScoreChip
+              score={cell.latest_score}
+              testId={`score-chip-${ctx.rowIndex}-${ctx.columnIndex}`}
+              onClick={
+                cell.case_id != null ? () => setDrawerCaseId(cell.case_id!) : undefined
+              }
+            />
+          ) : null
+        }
         renderCellAction={(cell, ctx) => (
           <Group justify="space-between" mt={2} wrap="nowrap">
             {cell.conversation_id ? (
@@ -213,6 +436,14 @@ export function RunDetailPage() {
           turnId={forkSource.turn_id}
           opened
           onClose={() => setForkSource(null)}
+        />
+      )}
+      {drawerCaseId != null && (
+        <JudgmentDrawer
+          caseId={drawerCaseId}
+          rubrics={rubrics}
+          opened
+          onClose={() => setDrawerCaseId(null)}
         />
       )}
     </Stack>

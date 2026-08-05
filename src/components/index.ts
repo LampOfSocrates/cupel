@@ -9,4 +9,6 @@ export { RunsList } from "./RunsList";
 export { TreeNode, TreeBranch, type TreeNodeKind } from "./TreeNode";
 export { EnvelopeChip, envelopeSummary } from "./EnvelopeChip";
 export { ForkModal } from "./ForkModal";
+export { ScoreChip, scoreColor } from "./ScoreChip";
+export { JudgmentDrawer } from "./JudgmentDrawer";
 export { STATUS_COLOR, type LifecycleStatus } from "./status";

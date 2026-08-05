@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes, useParams } from "react-router";
 import { renderApp } from "../test/render";
 import {
   cancelRequests,
+  evalCaseRequests,
+  judgeRequests,
+  judgmentRequests,
   mockRuns,
+  mockRunSummaries,
+  pushLlmJudgment,
   replayTurnRequests,
   runDetailRequests,
   taskStreamRig,
@@ -228,5 +233,192 @@ describe("RunDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     await sleep(50);
     expect(taskStreamRig.clients).toBe(0);
+  });
+});
+
+// P1-T12b — eval layer. Contract under test:
+// - GET /eval/runs/{runId}/summary "Aggregates per rubric" feeding the
+//   "summary header (mean, distribution sparkline)" (openapi.yaml:1001-1022;
+//   feature-spec.md:49), "updates live" (feature-spec.md:64)
+// - RunCell.case_id + latest_score — "the join key for 'score column reads
+//   latest judgment per (case, rubric)' and the judgment drawer"
+//   (openapi.yaml:1654-1664; feature-spec.md:62)
+// - judgment frames on /tasks/stream (JudgmentEvent, openapi.yaml:1796-1804)
+// - drawer endpoints: "GET /eval/judgments?case_id=, GET /eval/cases/{id}"
+//   (feature-spec.md:233); history append-only (feature-spec.md:59 "persisted
+//   forever, never overwritten … Re-judging appends")
+// - POST /eval/judge {run_id, judge_model, rubric_id} → 202 TaskRef
+//   (openapi.yaml:931-954).
+describe("RunDetailPage — eval (P1-T12b)", () => {
+  it("renders the summary header: per-rubric mean + count + inline distribution", async () => {
+    mockRunSummaries["run-old-1"] = {
+      run_id: "run-old-1",
+      rubrics: [
+        { rubric_id: "rub-help", rubric_version: 2, mean: 0.74, count: 2, distribution: [0, 0, 1, 0, 1] },
+        { rubric_id: "rub-acc", rubric_version: 1, mean: 0.5, count: 2, distribution: [0, 1, 0, 1, 0] },
+      ],
+    };
+    renderDetail("run-old-1");
+    const summary = await screen.findByTestId("run-summary");
+    // rubric NAMES resolved via GET /eval/rubrics (ids until it lands)
+    await waitFor(() => expect(summary).toHaveTextContent("helpfulness v2"));
+    expect(summary).toHaveTextContent("mean 0.74 · n=2");
+    expect(summary).toHaveTextContent("accuracy v1");
+    expect(summary).toHaveTextContent("mean 0.50 · n=2");
+    // distribution: one CSS bar per bucket — no chart lib
+    expect(screen.getByTestId("dist-rub-help-v2").children).toHaveLength(5);
+  });
+
+  it("unjudged runs render no summary header and no chips", async () => {
+    renderDetail("run-old-1");
+    await screen.findByText("Run run-old-1");
+    expect(screen.queryByTestId("run-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("score-chip-0-1")).not.toBeInTheDocument();
+  });
+
+  it("score chip renders latest_score on judged cells; click opens the drawer with case + append-only history", async () => {
+    const user = userEvent.setup();
+    const run = mockRuns.find((r) => r.id === "run-old-1")!;
+    Object.assign(run.rows[0].cells[1], { case_id: "case-1", latest_score: 0.87 });
+    // Two judgments for the SAME case — a re-judge appended, both kept
+    // (feature-spec.md:59). Pushed oldest-first; served newest-first.
+    pushLlmJudgment({
+      case_id: "case-1", run_id: "run-old-1", score: 0.61, rubric_version: 1,
+      reasoning: "Adequate but thin.", created_at: "2026-08-03T12:10:00Z",
+    });
+    pushLlmJudgment({
+      case_id: "case-1", run_id: "run-old-1", score: 0.87, rubric_version: 2,
+      reasoning: "Cites supporting detail.", created_at: "2026-08-04T09:00:00Z",
+    });
+
+    renderDetail("run-old-1");
+    await screen.findByText("Run run-old-1");
+    const chip = screen.getByTestId("score-chip-0-1");
+    expect(chip).toHaveTextContent("0.87"); // denormalized latest score
+    expect(screen.queryByTestId("score-chip-0-0")).not.toBeInTheDocument(); // baseline unjudged
+
+    await user.click(chip);
+    const drawer = await screen.findByRole("dialog");
+    // case doc (GET /eval/cases/case-1): input prompt + frozen envelope + output
+    expect(within(drawer).getByText("How do refunds work?")).toBeInTheDocument();
+    expect(within(drawer).getByTestId("envelope-chip")).toHaveTextContent("2026-08-02 · Europe/London");
+    expect(within(drawer).getByText("Refunds arrive within 3 business days.")).toBeInTheDocument();
+    expect(evalCaseRequests).toEqual(["case-1"]);
+
+    // history (GET /eval/judgments?case_id=case-1): newest first, BOTH kept
+    const entries = await within(drawer).findAllByTestId("judgment-entry");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toHaveTextContent("0.87");
+    expect(entries[0]).toHaveTextContent("claude-haiku-4-5 · helpfulness v2");
+    expect(entries[0]).toHaveTextContent("Cites supporting detail.");
+    expect(entries[1]).toHaveTextContent("0.61");
+    expect(entries[1]).toHaveTextContent("helpfulness v1");
+    expect(within(drawer).getByTestId("judgment-history-heading")).toHaveTextContent("append-only");
+    expect(judgmentRequests.at(-1)?.searchParams.get("case_id")).toBe("case-1");
+  });
+
+  it("manual 'Judge this run' POSTs /eval/judge and streams scores + summary live until the judge task finishes", async () => {
+    const user = userEvent.setup();
+    renderDetail("run-old-1");
+    await screen.findByText("Run run-old-1");
+    // done run, nothing judging → no stream subscription
+    expect(taskStreamRig.clients).toBe(0);
+
+    await user.click(screen.getByRole("button", { name: "⚖ Judge this run" }));
+    const form = await screen.findByTestId("judge-form");
+    const judgeBtn = within(form).getByRole("button", { name: "Judge" });
+    expect(judgeBtn).toBeDisabled(); // JudgeRequest requires judge_model + rubric_id
+    await user.click(within(form).getByRole("combobox", { name: "Judge model" }));
+    await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
+    await user.click(within(form).getByRole("combobox", { name: "Rubric" }));
+    await user.click(await screen.findByRole("option", { name: "helpfulness v2" }));
+    await user.click(judgeBtn);
+
+    await waitFor(() =>
+      expect(judgeRequests).toEqual([
+        { run_id: "run-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" },
+      ]),
+    );
+    // 202 task_id → judging badge + a stream subscription for its family
+    await screen.findByTestId("judging-badge");
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+
+    // a judging child finished server-side: cell scored + summary aggregated,
+    // then the judgment frame ticks ("scores stream into the grid live",
+    // feature-spec.md:64)
+    const run = mockRuns.find((r) => r.id === "run-old-1")!;
+    Object.assign(run.rows[0].cells[1], { case_id: "case-1", latest_score: 0.87 });
+    mockRunSummaries["run-old-1"] = {
+      run_id: "run-old-1",
+      rubrics: [
+        { rubric_id: "rub-help", rubric_version: 2, mean: 0.87, count: 1, distribution: [0, 0, 0, 0, 1] },
+      ],
+    };
+    taskStreamRig.emit("judgment", {
+      judgment: {
+        id: "j-live", case_id: "case-1", run_id: "run-old-1", turn_id: "t2",
+        conversation_id: "c1", type: "llm", judge_model: "claude-haiku-4-5",
+        rubric_id: "rub-help", rubric_version: 2, score: 0.87,
+        reasoning: "Cites supporting detail.", created_at: "2026-08-04T10:00:00Z",
+      },
+    });
+
+    // debounced refetch repaints chip + live summary header
+    await screen.findByTestId("score-chip-0-1");
+    await waitFor(() =>
+      expect(screen.getByTestId("run-summary")).toHaveTextContent("mean 0.87 · n=1"),
+    );
+
+    // judge parent task terminal → judging state clears
+    taskStreamRig.emit("task", {
+      id: "task-judge-1", type: "judge", status: "done",
+      progress: { done: 1, total: 1 }, created_at: "2026-08-04T10:00:00Z",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("judging-badge")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("judgment frames from OTHER runs don't trigger a refetch", async () => {
+    const user = userEvent.setup();
+    renderDetail("run-old-1");
+    await screen.findByText("Run run-old-1");
+    // subscribe by starting a judge (only live path that opens the stream here)
+    await user.click(screen.getByRole("button", { name: "⚖ Judge this run" }));
+    const form = await screen.findByTestId("judge-form");
+    await user.click(within(form).getByRole("combobox", { name: "Judge model" }));
+    await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
+    await user.click(within(form).getByRole("combobox", { name: "Rubric" }));
+    await user.click(await screen.findByRole("option", { name: "helpfulness v2" }));
+    await user.click(within(form).getByRole("button", { name: "Judge" }));
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+
+    const fetches = runDetailRequests.length;
+    taskStreamRig.emit("judgment", {
+      judgment: {
+        id: "j-other", case_id: "case-x", run_id: "run-someone-else", turn_id: null,
+        conversation_id: null, type: "llm", judge_model: "claude-haiku-4-5",
+        rubric_id: "rub-help", rubric_version: 2, score: 0.5,
+        reasoning: null, created_at: "2026-08-04T10:00:00Z",
+      },
+    });
+    await sleep(400); // > debounce window
+    expect(runDetailRequests.length).toBe(fetches);
+  });
+
+  it("a finished run without judge config never calls POST /eval/judge", async () => {
+    const run = seedRunningRun(); // configs carry no judge
+    renderDetail("run-live");
+    await screen.findByText("Run run-live");
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+
+    run.status = "done";
+    taskStreamRig.emit("task", {
+      id: "task-live", type: "replay", status: "done",
+      progress: { done: 2, total: 2 }, created_at: "2026-08-04T10:00:00Z",
+    });
+    await screen.findByText("done");
+    await sleep(100);
+    expect(judgeRequests).toHaveLength(0);
   });
 });

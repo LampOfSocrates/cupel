@@ -5,7 +5,10 @@
 // POST /agenttrees/{tree}/chat (:452-521, SSE task/token/done/error + JSON
 // mode), DELETE /tasks/{taskId} (:832-847, stop-generation),
 // POST /feedback (:556-583, appends a type:human Judgment),
-// GET /eval/judgments (:956-999, filters + newest first; P1-T12b extends),
+// GET /eval/judgments (:956-999, filters + newest first),
+// P1-T12b eval: GET /eval/rubrics (:868-886), GET /eval/cases/{id} (:907-929),
+// POST /eval/judge (:931-954, 202 TaskRef + capture),
+// GET /eval/runs/{id}/summary (:1001-1022),
 // GET/POST /agenttrees/{tree}/agents (:175-219, tree view + add sub-agent),
 // GET/PUT .../agents/{id}/instructions + POST .../snapshots (:221-293,
 // append-only versions + immutable draft snapshots, P1-T10b).
@@ -20,9 +23,11 @@ import type {
   ChatResponse,
   Conversation,
   Endpoint,
+  EvalCase,
   FeedbackRequest,
   InstructionHistory,
   InstructionSave,
+  JudgeRequest,
   Judgment,
   Me,
   Model,
@@ -30,8 +35,10 @@ import type {
   ReplayRequest,
   ReplayTurnAccepted,
   ReplayTurnRequest,
+  Rubric,
   Run,
   RunConfig,
+  RunScoreSummary,
   RunSummaryItem,
   Snapshot,
   SnapshotCreate,
@@ -367,6 +374,82 @@ export function pushHumanJudgment(
   return judgment;
 }
 
+// P1-T12b seed helper — type llm judgment: "case_id, rubric_id and
+// rubric_version are non-null (the judge always runs a rubric against a
+// case)" (openapi.yaml:1886-1887). Push OLDEST first: unshift keeps the store
+// newest-first (openapi.yaml:994).
+export function pushLlmJudgment(
+  fields: Partial<Judgment> & Pick<Judgment, "case_id" | "score">,
+): Judgment {
+  const judgment: Judgment = {
+    id: `j-${++judgmentCounter}`,
+    run_id: null,
+    turn_id: null,
+    conversation_id: null,
+    type: "llm",
+    judge_model: "claude-haiku-4-5",
+    rubric_id: "rub-help",
+    rubric_version: 2,
+    reasoning: null,
+    created_at: new Date().toISOString(),
+    ...fields,
+  };
+  mockJudgments.unshift(judgment);
+  return judgment;
+}
+
+// ------------------------------------------------------------- eval fixtures
+// GET /eval/rubrics (openapi.yaml:868-886) — "Latest version of each rubric";
+// versioned append-only, editor UI is Phase 2 (:874-875, :890).
+function seedRubrics(): Rubric[] {
+  return [
+    {
+      id: "rub-help",
+      name: "helpfulness",
+      version: 2,
+      prompt: "Score 0-1 how helpfully the response resolves the user's request.",
+      created_at: "2026-07-10T10:00:00Z",
+    },
+    {
+      id: "rub-acc",
+      name: "accuracy",
+      version: 1,
+      prompt: "Score 0-1 the factual accuracy of the response.",
+      created_at: "2026-07-12T10:00:00Z",
+    },
+  ];
+}
+export const mockRubrics: Rubric[] = seedRubrics();
+export const rubricRequests: string[] = [];
+
+// GET /eval/cases/{caseId} (openapi.yaml:907-929) — "EvalCase = {input,
+// output, reference?}" (feature-spec.md:54); case-1 mirrors what judging
+// run-old-1 would auto-create from its v3 cell (source c1/t2).
+function seedEvalCases(): Record<string, EvalCase> {
+  return {
+    "case-1": {
+      id: "case-1",
+      input: { prompt: "How do refunds work?", envelope },
+      output: "Refunds arrive within 3 business days.",
+      reference: null,
+      source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+      created_at: "2026-08-03T12:05:00Z",
+    },
+  };
+}
+export const mockEvalCases: Record<string, EvalCase> = seedEvalCases();
+export const evalCaseRequests: string[] = [];
+
+// POST /eval/judge (openapi.yaml:931-954) — 202 TaskRef; the judging WORK is
+// driven by tests (fixture mutation + taskStreamRig), like run live fill.
+export const judgeRequests: JudgeRequest[] = [];
+let judgeCounter = 0;
+
+// GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — mutable per-run
+// summaries; unset runs answer the empty aggregate (no judgments yet).
+export const mockRunSummaries: Record<string, RunScoreSummary> = {};
+export const summaryRequests: string[] = [];
+
 // -------------------------------------------------------------- upload state
 // POST /upload knobs (openapi.yaml:523-554). maxBytes mirrors the real mock's
 // Phase-1 limit (mock/config.py:15 MAX_UPLOAD_BYTES = 5 MiB) — tests shrink it
@@ -599,6 +682,16 @@ export function resetHandlerState() {
   mockRuns.push(...seedRuns());
   runListRequests.length = 0;
   runDetailRequests.length = 0;
+  mockRubrics.length = 0;
+  mockRubrics.push(...seedRubrics());
+  rubricRequests.length = 0;
+  for (const key of Object.keys(mockEvalCases)) delete mockEvalCases[key];
+  Object.assign(mockEvalCases, seedEvalCases());
+  evalCaseRequests.length = 0;
+  judgeRequests.length = 0;
+  judgeCounter = 0;
+  for (const key of Object.keys(mockRunSummaries)) delete mockRunSummaries[key];
+  summaryRequests.length = 0;
   taskStreamRig.closeAll();
 }
 
@@ -929,6 +1022,56 @@ export const handlers = [
     const page = Number(url.searchParams.get("page") ?? 1);
     const pageSize = Number(url.searchParams.get("page_size") ?? 50);
     return HttpResponse.json(items.slice((page - 1) * pageSize, page * pageSize));
+  }),
+
+  // GET /eval/rubrics (openapi.yaml:868-886) — "Latest version of each rubric".
+  http.get(`${BASE}/eval/rubrics`, () => {
+    rubricRequests.push("rubrics");
+    return HttpResponse.json(mockRubrics);
+  }),
+
+  // GET /eval/cases/{caseId} (openapi.yaml:907-929) — judgment-drawer case doc.
+  http.get(`${BASE}/eval/cases/:caseId`, ({ params }) => {
+    const id = params.caseId as string;
+    evalCaseRequests.push(id);
+    const found = mockEvalCases[id];
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
+    }
+    return HttpResponse.json(found);
+  }),
+
+  // POST /eval/judge (openapi.yaml:931-954) — 202 TaskRef "(parent task +
+  // child per case)". oneOf run_id/case_ids enforced like the real mock
+  // (mock/main.py:841-842); judging results are test-driven via fixture
+  // mutation + taskStreamRig, mirroring the live-fill pattern.
+  http.post(`${BASE}/eval/judge`, async ({ request }) => {
+    const body = (await request.json()) as JudgeRequest;
+    judgeRequests.push(body);
+    if (!body.judge_model || !body.rubric_id) {
+      return HttpResponse.json(
+        { code: "invalid", message: "judge_model and rubric_id are required." },
+        { status: 422 },
+      );
+    }
+    if (Boolean(body.run_id) === Boolean(body.case_ids)) {
+      return HttpResponse.json(
+        { code: "invalid", message: "Exactly one of run_id / case_ids is required (openapi.yaml:1865-1867)." },
+        { status: 422 },
+      );
+    }
+    return HttpResponse.json({ task_id: `task-judge-${++judgeCounter}` }, { status: 202 });
+  }),
+
+  // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — per-rubric
+  // aggregates; a run with no judgments answers empty rubrics.
+  http.get(`${BASE}/eval/runs/:runId/summary`, ({ params }) => {
+    const id = params.runId as string;
+    summaryRequests.push(id);
+    if (!mockRuns.some((r) => r.id === id)) {
+      return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+    }
+    return HttpResponse.json(mockRunSummaries[id] ?? { run_id: id, rubrics: [] });
   }),
 
   // POST /agenttrees/{tree}/replay/turn (openapi.yaml:623-652) → 202

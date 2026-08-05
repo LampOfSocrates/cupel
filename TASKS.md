@@ -21,7 +21,7 @@
 - [x] P1-T11 Runs 3-step flow  [deps: T09, T11a]
 - [x] P1-T13 Turn forks + Open in Chat  [deps: T11, T02]
 - [x] P1-T14 Fork comparison pivot  [deps: T13]
-- [ ] P1-T12b Basic eval (judge toggle, judgments, drawer)  [deps: T11]
+- [x] P1-T12b Basic eval (judge toggle, judgments, drawer)  [deps: T11]
 - [ ] P1-T20b Test in Runs (snapshot, last-selection)  [deps: T10b, T11]
 
 ## Phase 1 — track C (platform)
