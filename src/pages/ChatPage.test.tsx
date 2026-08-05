@@ -620,3 +620,32 @@ function ForksProbe() {
   const { parentId, turnId } = useParams();
   return <div>forks-probe {parentId} {turnId}</div>;
 }
+
+// P1-T16 — "⌁ trace icon on every turn — in Chat, results grid cells, and
+// drill-in" (feature-spec.md:145). Chat surface: sketch 01's action row
+// (👍👎⧉⑂⌁) exists on assistant turns only, so ⌁ ships there (user turns'
+// traces are empty-span per the contract — no affordance).
+describe("Turn trace entry (P1-T16)", () => {
+  it("⌁ on an assistant turn routes to /trace/{turn_id}", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      <Routes>
+        <Route path="/chat/:conversationId" element={<ChatPage />} />
+        <Route path="/trace/:turnId" element={<TraceProbe />} />
+      </Routes>,
+      { route: "/chat/c1" },
+    );
+    await screen.findByText("Approved refunds land in 3-5 days.");
+
+    // only the assistant turn (t2) carries the action row → exactly one ⌁
+    const traceButtons = screen.getAllByRole("button", { name: "Open trace" });
+    expect(traceButtons).toHaveLength(1);
+    await user.click(traceButtons[0]);
+    await screen.findByText("trace-probe t2");
+  });
+});
+
+function TraceProbe() {
+  const { turnId } = useParams();
+  return <div>trace-probe {turnId}</div>;
+}

@@ -458,6 +458,12 @@ export function ChatPage() {
                 // new chat gains the id (and the affordance) after the first
                 // send navigates to /chat/{id}.
                 onFork={conversationId ? () => setForkTurnId(turn.id) : undefined}
+                // P1-T16 ⌁ — sketch 01's action row (👍👎⧉⑂⌁). The contract
+                // gives user turns traces too (empty spans), but the action
+                // row exists on assistant turns only (TurnBubble renders it
+                // per feature-spec.md:11), so ⌁ ships there — documented
+                // design choice matching the sketch.
+                onTrace={() => navigate(`/trace/${turn.id}`)}
               />
             ))}
             {stream && (
@@ -722,11 +728,13 @@ function TurnBubble({
   thumb,
   onRate,
   onFork,
+  onTrace,
 }: {
   turn: Turn;
   thumb?: Rating;
   onRate: (rating: Rating) => void;
   onFork?: () => void;
+  onTrace?: () => void;
 }) {
   return (
     <Paper
@@ -825,6 +833,20 @@ function TurnBubble({
               onClick={onFork}
             >
               ⑂
+            </ActionIcon>
+          )}
+          {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results grid
+              cells, and drill-in" (feature-spec.md:145); routes to the trace
+              view (sketch 08). */}
+          {onTrace && (
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              aria-label="Open trace"
+              onClick={onTrace}
+            >
+              ⌁
             </ActionIcon>
           )}
         </Group>

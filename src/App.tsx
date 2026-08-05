@@ -14,6 +14,7 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { EditorPage } from "./pages/EditorPage";
 import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 import { ForkComparePage } from "./pages/ForkComparePage";
+import { TracePage } from "./pages/TracePage";
 
 const DEFAULT_TREE = "agent1";
 
@@ -112,6 +113,10 @@ export function App() {
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}
           <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
+          {/* P1-T16 trace — one route for every ⌁ entry ("Works on originals,
+              forks, and replays alike", feature-spec.md:145); tree from
+              context like all pages. */}
+          <Route path="/trace/:turnId" element={<TracePage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"

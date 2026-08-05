@@ -433,6 +433,59 @@ export interface Run {
   rows: RunRow[];
 }
 
+// openapi.yaml:1668 Span — "Span = {id, parent_id, type: agent|llm|tool, name,
+// start, end, tokens_in?, tokens_out?, cost?, model?, status, payload_ref}"
+// (feature-spec.md:144); error ":1686-1689 Error message when status is error
+// — 'Errors mark the span red'"; payload_ref ":1690 Id for GET
+// /spans/{id}/payload".
+export interface Span {
+  id: string;
+  parent_id: string | null;
+  type: "agent" | "llm" | "tool";
+  name: string;
+  start: string;
+  end: string | null;
+  tokens_in?: number | null;
+  tokens_out?: number | null;
+  cost?: number | null;
+  model?: string | null;
+  status: "ok" | "error" | "running";
+  error?: string | null;
+  payload_ref: string;
+}
+
+// openapi.yaml:1692 Trace — envelope ":1700 Shown in the trace header
+// (feature-spec.md:76)"; totals ":1703 Turn totals — wall time, total tokens
+// in/out, cost (feature-spec.md:147)".
+export interface Trace {
+  turn_id: string;
+  envelope: ContextEnvelope | null;
+  totals: {
+    wall_time_ms: number;
+    tokens_in: number;
+    tokens_out: number;
+    cost: number;
+  };
+  spans: Span[];
+}
+
+// openapi.yaml:1714 SpanPayload — "LLM spans carry prompt/response; tool spans
+// carry args/result (feature-spec.md:149)"; lazy-loaded (openapi.yaml:729-730).
+export interface SpanPayload {
+  span_id: string;
+  prompt?: string | null;
+  response?: string | null;
+  args?: unknown;
+  result?: unknown;
+}
+
+// openapi.yaml:1788 SpanEvent — "Live trace span on the tasks channel
+// (feature-spec.md:150)"; `span` frame on GET /tasks/stream (openapi.yaml:793).
+export interface SpanEvent {
+  turn_id: string;
+  span: Span;
+}
+
 // openapi.yaml:1763 TaskProgress
 export interface TaskProgress {
   done: number;

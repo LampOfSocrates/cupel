@@ -199,8 +199,10 @@ export function RunDetailPage() {
               setJudgeTaskId(null);
               void load();
             }
-          } else {
+          } else if (ev.event === "progress") {
             belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
+          } else {
+            belongs = false; // span frames: trace-view scope (P1-T16)
           }
           if (!belongs) continue;
           if (ev.event === "progress" && ev.data.progress.stage) {
@@ -418,15 +420,34 @@ export function RunDetailPage() {
             ) : (
               <span />
             )}
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              color="gray"
-              aria-label={`Re-run turn ${ctx.source.turn_id} with…`}
-              onClick={() => setForkSource(ctx.source)}
-            >
-              ⑂
-            </ActionIcon>
+            <Group gap={2} wrap="nowrap">
+              {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results
+                  grid cells, and drill-in. Works on originals, forks, and
+                  replays alike" (feature-spec.md:145): done cells that carry
+                  the produced turn's id (RunCell.turn_id, openapi.yaml:1652)
+                  route to its trace — the baseline cell to the original
+                  turn's, endpoint cells to the fork replays'. */}
+              {cell.turn_id && (
+                <ActionIcon
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`Open trace for turn ${cell.turn_id}`}
+                  onClick={() => navigate(`/trace/${cell.turn_id}`)}
+                >
+                  ⌁
+                </ActionIcon>
+              )}
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                color="gray"
+                aria-label={`Re-run turn ${ctx.source.turn_id} with…`}
+                onClick={() => setForkSource(ctx.source)}
+              >
+                ⑂
+              </ActionIcon>
+            </Group>
           </Group>
         )}
       />

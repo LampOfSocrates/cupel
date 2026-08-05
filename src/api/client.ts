@@ -38,11 +38,14 @@ import type {
   Selection,
   Snapshot,
   SnapshotCreate,
+  SpanEvent,
+  SpanPayload,
   Task,
   TaskListParams,
   TaskProgressEvent,
   TaskRef,
   TokenEvent,
+  Trace,
 } from "./types";
 
 export type Query = Record<string, string | number | undefined>;
@@ -110,11 +113,13 @@ export type ChatStreamEvent =
 // (status change) · progress — data: TaskProgressEvent (per-unit ticks) ·
 // span — data: SpanEvent · judgment — data: JudgmentEvent"). judgment frames
 // added in T12b ("scores stream into the grid live as judging tasks finish
-// (SSE)", feature-spec.md:64); span (trace, T16) frames are still skipped
-// until that task adds the type.
+// (SSE)", feature-spec.md:64); span frames added in T16 — "spans appear live
+// while the turn is generating (same SSE channel as tasks)"
+// (feature-spec.md:150), consumed by the trace view's scoped subscription.
 export type TaskStreamEvent =
   | { event: "task"; data: Task }
   | { event: "progress"; data: TaskProgressEvent }
+  | { event: "span"; data: SpanEvent }
   | { event: "judgment"; data: JudgmentEvent };
 
 // One send call covers both modes (loom-phases.md:43: "stream: true (SSE token
@@ -355,12 +360,25 @@ export const api = {
         yield { event: "task", data: JSON.parse(msg.data) as Task };
       } else if (msg.event === "progress") {
         yield { event: "progress", data: JSON.parse(msg.data) as TaskProgressEvent };
+      } else if (msg.event === "span") {
+        yield { event: "span", data: JSON.parse(msg.data) as SpanEvent };
       } else if (msg.event === "judgment") {
         yield { event: "judgment", data: JSON.parse(msg.data) as JudgmentEvent };
       }
-      // span frames: consumer arrives in T16 (trace) — ignored here.
     }
   },
+
+  // GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721) —
+  // "Span tree for a turn … The trace (totals + flat span list with parent
+  // links)" (:700, :717); header totals + envelope (openapi.yaml:705-708).
+  trace: (tree: string, turnId: string) =>
+    request<Trace>(`/agenttrees/${tree}/turns/${turnId}/trace`),
+
+  // GET /spans/{spanId}/payload (openapi.yaml:723-744) — "Lazy-loaded span
+  // payload … Full prompt/response for LLM spans, args/result for tool spans
+  // (feature-spec.md:149)". spanId = Span.payload_ref (openapi.yaml:1690).
+  spanPayload: (spanId: string) =>
+    request<SpanPayload>(`/spans/${spanId}/payload`),
 
   // GET /eval/rubrics (openapi.yaml:868-886) — "Rubrics (for the Run Config
   // judge section) … Latest version of each rubric" (:872, :881). Rubric

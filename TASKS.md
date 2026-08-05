@@ -27,7 +27,7 @@
 ## Phase 1 — track C (platform)
 - [x] P1-T08 Task queue (SSE progress, cancel, retry)  [deps: T18b, T01]
 - [x] P1-T18 Generator seed + basic drip  [deps: T18b]
-- [ ] P1-T16 Trace view  [deps: T18b, T02]
+- [x] P1-T16 Trace view  [deps: T18b, T02]
 - [ ] P1-T18c Live-LLM BYOK mode (OpenRouter passthrough in mock; X-LLM-Key/X-LLM-Model headers; key never persisted or logged; max_tokens cap + rate limit; see docs/deployment.md)  [deps: T18b]
 
 ## Phase 1 — close

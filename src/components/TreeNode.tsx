@@ -26,6 +26,10 @@ interface TreeNodeProps {
   kind?: TreeNodeKind;
   /** Disabled/unpermitted styling (feature-spec.md:25). */
   dimmed?: boolean;
+  /** Trace call-tree selection highlight (P1-T16 — synced with the waterfall). */
+  selected?: boolean;
+  /** "Errors mark the span red in both views" (feature-spec.md:149). */
+  error?: boolean;
   /** Badge row inside the card (agent view: version + tools + enabled state). */
   badges?: ReactNode;
   /** Rendered outside the clickable card (agent view: ⋯ menu). */
@@ -38,6 +42,8 @@ export function TreeNode({
   meta,
   kind = "agent",
   dimmed = false,
+  selected = false,
+  error = false,
   badges,
   actions,
   onClick,
@@ -48,13 +54,19 @@ export function TreeNode({
       <UnstyledButton
         onClick={onClick}
         aria-label={`Open ${label}`}
+        data-selected={selected || undefined}
+        data-error={error || undefined}
         px={10}
         py={6}
         style={{
           background: style.bg,
-          border: `1px solid ${style.border}`,
+          border: error
+            ? "2px solid var(--mantine-color-red-7)"
+            : `1px solid ${style.border}`,
           borderRadius: 8,
           opacity: dimmed ? 0.5 : 1,
+          outline: selected ? "2px solid var(--mantine-color-blue-5)" : undefined,
+          outlineOffset: selected ? 1 : undefined,
         }}
       >
         <Text size="sm" fw={600} c={style.title}>

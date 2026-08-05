@@ -58,6 +58,12 @@ function ChatProbe() {
   return <div>chat-probe {conversationId}</div>;
 }
 
+// Navigation probe for cell ⌁ trace targets (P1-T16).
+function TraceProbe() {
+  const { turnId } = useParams();
+  return <div>trace-probe {turnId}</div>;
+}
+
 function renderDetail(runId: string) {
   return renderApp(
     <Routes>
@@ -225,6 +231,36 @@ describe("RunDetailPage", () => {
     renderDetail("run-old-1");
     await screen.findByText("Run run-old-1");
     expect(screen.queryByText("Open in Chat ↗")).not.toBeInTheDocument();
+  });
+
+  // P1-T16 — "⌁ trace icon on every turn — in Chat, results grid cells, and
+  // drill-in. Works on originals, forks, and replays alike"
+  // (feature-spec.md:145): done cells that carry the produced turn's id
+  // (RunCell.turn_id) route to that turn's trace — endpoint cells to the fork
+  // replay's turn, the baseline cell to the ORIGINAL turn.
+  it("done cells with a turn_id expose ⌁ routing to that turn's trace", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/trace/:turnId" element={<TraceProbe />} />
+      </Routes>,
+      { route: "/runs/run-refire-1" },
+    );
+    await screen.findByText("Run run-refire-1");
+
+    // all 3 cells of the re-fire fixture carry a turn_id → 3 ⌁ (original + 2 forks)
+    expect(screen.getAllByRole("button", { name: /Open trace for turn/ })).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: "Open trace for turn c2f1-t9" }));
+    await screen.findByText("trace-probe c2f1-t9");
+  });
+
+  it("cells without a turn_id get no ⌁", async () => {
+    renderDetail("run-old-1"); // plain replay fixture — cells carry no turn_id
+    await screen.findByText("Run run-old-1");
+    expect(
+      screen.queryByRole("button", { name: /Open trace for turn/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("terminal stored runs render without a cancel affordance or subscription", async () => {
