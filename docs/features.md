@@ -13,7 +13,7 @@
 - ✅ Bring your own LLM key (OpenRouter) so replies come from a real model — the key stays in your browser, is never stored or logged server-side
 - ✅ Find any past conversation by search or recency; rename or delete it
 - ✅ See forked conversations nested under their parent
-- ⏳ Share a link to a conversation or a single turn — the receiver sees exactly that spot, or logs in first
+- ✅ Share a link to a conversation or a single turn — the receiver sees exactly that spot, or logs in first
 
 ## The studio half — build and trust your agents
 

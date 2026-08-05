@@ -4,6 +4,7 @@ import {
   ActionIcon,
   Badge,
   Button,
+  CopyButton,
   Group,
   Loader,
   Menu,
@@ -17,6 +18,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
 import type { Conversation } from "../api/types";
 import { relativeTime } from "../lib/relativeTime";
+import { conversationShareUrl } from "../lib/shareLink";
 import { useApp } from "../AppContext";
 
 // Sidebar recent list (feature-spec.md:5-6, sketch 07):
@@ -195,6 +197,18 @@ function ConversationRow({
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item onClick={onRename}>Rename</Menu.Item>
+          {/* P2-SHARE — "Copy link" joins rename/delete in the ⋯ menu
+              (feature-spec.md:5-6). Same CopyButton affordance as the turn
+              action row, so the confirmation reads identically; the menu is
+              held open (closeMenuOnClick=false) precisely so that
+              confirmation is visible. */}
+          <CopyButton value={conversationShareUrl(conv.id)} timeout={1500}>
+            {({ copied, copy }) => (
+              <Menu.Item closeMenuOnClick={false} onClick={copy}>
+                {copied ? "Link copied" : "Copy link"}
+              </Menu.Item>
+            )}
+          </CopyButton>
           <Menu.Item color="red" onClick={onDelete}>
             Delete
           </Menu.Item>

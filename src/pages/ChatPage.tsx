@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
   ActionIcon,
   Alert,
@@ -34,6 +34,7 @@ import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
+import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 
 // P1-T02: live chat page.
 // Contract (openapi.yaml:466-476): "stream=true → 200 text/event-stream with
@@ -86,6 +87,11 @@ export function ChatPage() {
   const { conversationId } = useParams();
   const { tree, refreshConversations, chatSettings } = useApp();
   const navigate = useNavigate();
+  // P2-SHARE — a received turn link: /chat/{id}?turn={turnId}. Read-only here;
+  // the param is never written back, so the URL a receiver shares onward is
+  // byte-identical to the one they got.
+  const [searchParams] = useSearchParams();
+  const sharedTurnId = searchParams.get(TURN_PARAM);
 
   const [turns, setTurns] = useState<Turn[] | null>(conversationId ? null : []);
   const [title, setTitle] = useState<string | null>(null);
@@ -99,7 +105,7 @@ export function ChatPage() {
   const [parent, setParent] = useState<{ title: string } | "deleted" | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -121,6 +127,33 @@ export function ChatPage() {
     const el = scrollRef.current;
     if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
   }, [turns, stream?.draft]);
+
+  // P2-SHARE highlight. Design (documented choice): the targeted turn keeps a
+  // PERSISTENT left accent marker (data-share-target) for the whole visit —
+  // a receiver who scrolls away can still find the spot — plus a brief ring
+  // that fades after ~2.5s so the eye catches it on arrival. Nothing about
+  // the transcript is mutated, so the rest of the page behaves normally.
+  const sharedRef = useRef<HTMLDivElement | null>(null);
+  const sharedTurnIdRef = useRef<string | null>(sharedTurnId);
+  sharedTurnIdRef.current = sharedTurnId;
+  const [sharedFlash, setSharedFlash] = useState(false);
+  const sharedHandledRef = useRef<string | null>(null);
+  // Unknown turn id → no target at all: the conversation just renders normally
+  // (task rule: ignore gracefully, never an error).
+  const sharedTurnPresent =
+    sharedTurnId !== null && (turns?.some((t) => t.id === sharedTurnId) ?? false);
+  useEffect(() => {
+    if (!sharedTurnPresent || sharedHandledRef.current === sharedTurnId) return;
+    sharedHandledRef.current = sharedTurnId;
+    // The explicit target owns the initial scroll position — beat the
+    // bottom-pin for this load (the pin re-arms as soon as the user scrolls
+    // back down, via the container's onScroll below).
+    pinnedRef.current = false;
+    sharedRef.current?.scrollIntoView({ block: "center" });
+    setSharedFlash(true);
+    const timer = setTimeout(() => setSharedFlash(false), 2500);
+    return () => clearTimeout(timer);
+  }, [sharedTurnPresent, sharedTurnId]);
 
   // History via GET conversation on route entry (openapi.yaml:387); streaming
   // appends to it.
@@ -152,6 +185,10 @@ export function ChatPage() {
     setTurns(null);
     setTitle(null);
     setThumbs({});
+    // P2-SHARE: arriving on a ?turn= deep link, do NOT pin to the bottom for
+    // this load — the highlight effect above places the viewport instead.
+    pinnedRef.current = sharedTurnIdRef.current === null;
+    sharedHandledRef.current = null;
     let cancelled = false;
     api
       .conversation(tree, conversationId)
@@ -163,8 +200,8 @@ export function ChatPage() {
         setLineage(data.lineage ?? null);
         setAgentId(data.agent_id ?? null);
       })
-      .catch((e: ApiError) => {
-        if (!cancelled) setLoadError(e.message);
+      .catch((e: Error) => {
+        if (!cancelled) setLoadError(e);
       });
     // Re-render 👍/👎 from judgment history — one call for the whole
     // transcript via the conversation_id filter (openapi.yaml:966-968,
@@ -380,7 +417,24 @@ export function ChatPage() {
   };
 
   if (loadError) {
-    return <Alert color="red" title="Could not load conversation">{loadError}</Alert>;
+    // P2-SHARE no-access state. The contract makes "deleted" and "you may not
+    // see this conversation" INDISTINGUISHABLE — both answer 404
+    // (openapi.yaml:1948 NotFound) — so one friendly state covers both and
+    // deliberately says nothing about which. Any other failure keeps the
+    // existing red error surface carrying the backend's message.
+    if (loadError instanceof ApiError && loadError.status === 404) {
+      return (
+        <Stack gap="sm" maw={420} mx="auto" mt="xl" data-testid="conversation-unavailable">
+          <Alert color="gray" title="This conversation isn't available">
+            It may have been deleted, or you may not have access.
+          </Alert>
+          <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
+            Start a new chat
+          </Button>
+        </Stack>
+      );
+    }
+    return <Alert color="red" title="Could not load conversation">{loadError.message}</Alert>;
   }
 
   return (
@@ -477,6 +531,12 @@ export function ChatPage() {
                 // per feature-spec.md:11), so ⌁ ships there — documented
                 // design choice matching the sketch.
                 onTrace={() => navigate(`/trace/${turn.id}`)}
+                // P2-SHARE — the 🔗 action copies this turn's deep link.
+                // Needs a persisted conversation, like ⑂.
+                shareUrl={conversationId ? turnShareUrl(conversationId, turn.id) : undefined}
+                shareTarget={sharedTurnPresent && turn.id === sharedTurnId}
+                shareFlash={sharedFlash}
+                shareRef={turn.id === sharedTurnId ? sharedRef : undefined}
               />
             ))}
             {stream && (
@@ -823,21 +883,39 @@ function TurnBubble({
   onRate,
   onFork,
   onTrace,
+  shareUrl,
+  shareTarget = false,
+  shareFlash = false,
+  shareRef,
 }: {
   turn: Turn;
   thumb?: Rating;
   onRate: (rating: Rating) => void;
   onFork?: () => void;
   onTrace?: () => void;
+  shareUrl?: string;
+  shareTarget?: boolean;
+  shareFlash?: boolean;
+  shareRef?: RefObject<HTMLDivElement | null>;
 }) {
   return (
     <Paper
+      ref={shareRef}
       p="sm"
       radius="md"
       withBorder={turn.role === "assistant"}
       bg={turn.role === "user" ? "blue.0" : undefined}
       ml={turn.role === "user" ? "20%" : 0}
       mr={turn.role === "assistant" ? "10%" : 0}
+      // P2-SHARE arrival marker: persistent left accent for the whole visit,
+      // plus a ring that fades ~2.5s after landing.
+      data-share-target={shareTarget ? "true" : undefined}
+      style={{
+        borderLeft: shareTarget ? "3px solid var(--mantine-color-blue-6)" : undefined,
+        boxShadow: shareFlash && shareTarget ? "0 0 0 2px var(--mantine-color-blue-3)" : undefined,
+        transition: "box-shadow 700ms ease",
+        scrollMarginBlock: 16,
+      }}
     >
       <Group justify="space-between" mb={4}>
         <Text size="xs" c="dimmed">
@@ -916,6 +994,26 @@ function TurnBubble({
               </ActionIcon>
             )}
           </CopyButton>
+          {/* P2-SHARE 🔗 — "share a link to … a turn". Sits next to ⧉ because
+              it is the same gesture (put something on the clipboard), keeping
+              the row's copy affordances together and its density unchanged.
+              Free tier = an in-app deep link; anonymous public links are
+              PRO-2 (TASKS.md:67). */}
+          {shareUrl && (
+            <CopyButton value={shareUrl} timeout={1500}>
+              {({ copied, copy }) => (
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  color={copied ? "teal" : "gray"}
+                  aria-label={copied ? "Link copied" : "Copy link to turn"}
+                  onClick={copy}
+                >
+                  {copied ? "✓" : "🔗"}
+                </ActionIcon>
+              )}
+            </CopyButton>
+          )}
           {/* P1-T13 ⑂ — sketch 01 action row "👍👎 ⑂ ⌁" with the fork glyph
               tagged "POST …/replay/turn"; trace ⌁ remains P1-T16. */}
           {onFork && (

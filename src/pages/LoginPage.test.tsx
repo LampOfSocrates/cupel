@@ -54,6 +54,18 @@ describe("LoginPage (P2-T07)", () => {
     expect(getAuthToken("mock")).toBe(MOCK_JWT);
   });
 
+  // P2-SHARE verification: the whole query string must survive the round trip
+  // intact, INCLUDING an encoded "&" — if return_to were left unencoded the
+  // second param would split off into the login URL and the receiver would
+  // land on the conversation with the target lost.
+  it("preserves the full query string of a deep link, encoded ampersand included", async () => {
+    const deepLink = "/chat/c1?turn=t2&highlight=1";
+    renderLogin(`/login?return_to=${encodeURIComponent(deepLink)}`);
+    await signIn();
+
+    await waitFor(() => expect(screen.getByTestId("loc").textContent).toBe(deepLink));
+  });
+
   it("falls back to / when return_to is absent or not same-origin-relative", async () => {
     renderLogin("/login?return_to=http%3A%2F%2Fevil.example%2Fchat");
     await signIn();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useParams } from "react-router";
@@ -741,6 +741,102 @@ describe("Live LLM (BYOK) settings", () => {
     expect(localStorage.getItem("skein.byok.key")).toBeNull();
     expect(localStorage.getItem("skein.byok.model")).toBeNull();
     expect(screen.queryByTestId("live-badge")).not.toBeInTheDocument();
+  });
+});
+
+// P2-SHARE — copy-link sharing. Deliberately contract-neutral: the links are
+// the app's own routes and ride the existing GET conversation endpoint. A
+// received ?turn= scrolls + marks that turn; an unknown one is ignored; a
+// conversation the receiver can't see is 404 for BOTH "deleted" and
+// "unpermitted" (openapi.yaml:1948) and renders one friendly state.
+// Anonymous tokenized public links are PRO-2 — not built.
+describe("Share links (P2-SHARE)", () => {
+  it("🔗 on an assistant turn copies the conversation URL plus ?turn={id}", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+
+    // only the assistant turn (t2) carries the action row → exactly one 🔗
+    const shareButtons = screen.getAllByRole("button", { name: "Copy link to turn" });
+    expect(shareButtons).toHaveLength(1);
+    await user.click(shareButtons[0]);
+
+    expect(await navigator.clipboard.readText()).toBe(
+      `${window.location.origin}/chat/c1?turn=t2`,
+    );
+    // Same confirmation grammar as the existing ⧉ copy affordance.
+    expect(await screen.findByRole("button", { name: "Link copied" })).toBeInTheDocument();
+  });
+
+  it("no 🔗 on a brand-new chat — there is no conversation to link to yet", async () => {
+    renderChat("/chat");
+    await screen.findByText("Send a message to start the conversation.");
+    expect(screen.queryByRole("button", { name: "Copy link to turn" })).not.toBeInTheDocument();
+  });
+
+  it("opening /chat/{id}?turn={id} scrolls that turn into view and marks it", async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    renderChat("/chat/c1?turn=t2");
+    const transcript = await screen.findByTestId("transcript");
+
+    await waitFor(() =>
+      expect(transcript.querySelectorAll('[data-share-target="true"]')).toHaveLength(1),
+    );
+    const marked = transcript.querySelector('[data-share-target="true"]')!;
+    // the RIGHT bubble: t2, not the user turn t1
+    expect(marked).toHaveTextContent("Approved refunds land in 3-5 days.");
+    expect(marked).not.toHaveTextContent("How do refunds work?");
+    // the explicit target owns the initial viewport, overriding the bottom pin
+    expect(scrollIntoView).toHaveBeenCalled();
+    scrollIntoView.mockRestore();
+  });
+
+  it("a ?turn= pointing at the user turn marks that bubble instead", async () => {
+    renderChat("/chat/c1?turn=t1");
+    const transcript = await screen.findByTestId("transcript");
+    await waitFor(() =>
+      expect(transcript.querySelectorAll('[data-share-target="true"]')).toHaveLength(1),
+    );
+    expect(transcript.querySelector('[data-share-target="true"]')).toHaveTextContent(
+      "How do refunds work?",
+    );
+  });
+
+  it("an unknown turn id is ignored — the conversation loads normally, no error", async () => {
+    renderChat("/chat/c1?turn=does-not-exist");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    const transcript = screen.getByTestId("transcript");
+    expect(transcript).toHaveTextContent("How do refunds work?");
+    expect(transcript.querySelector("[data-share-target]")).toBeNull();
+    expect(screen.queryByTestId("conversation-unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Could not load conversation")).not.toBeInTheDocument();
+  });
+
+  it("a 404 conversation (deleted OR unpermitted) shows the friendly no-access state", async () => {
+    renderChat("/chat/c-nope?turn=t2");
+
+    expect(await screen.findByTestId("conversation-unavailable")).toBeInTheDocument();
+    expect(screen.getByText("This conversation isn't available")).toBeInTheDocument();
+    expect(
+      screen.getByText("It may have been deleted, or you may not have access."),
+    ).toBeInTheDocument();
+    // Not a crash, not a blank transcript, and no raw backend message leaking
+    // which of the two reasons applied.
+    expect(screen.queryByTestId("transcript")).not.toBeInTheDocument();
+    expect(screen.queryByText("conversation not found")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
+  });
+
+  it("a non-404 load failure keeps the existing red error surface", async () => {
+    server.use(
+      http.get(`${BASE}/agenttrees/:tree/conversations/:id`, () =>
+        HttpResponse.json({ code: "server_error", message: "boom" }, { status: 500 }),
+      ),
+    );
+    renderChat("/chat/c1");
+    expect(await screen.findByText("Could not load conversation")).toBeInTheDocument();
+    expect(screen.getByText("boom")).toBeInTheDocument();
+    expect(screen.queryByTestId("conversation-unavailable")).not.toBeInTheDocument();
   });
 });
 

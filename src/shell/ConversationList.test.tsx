@@ -50,4 +50,22 @@ describe("ConversationList", () => {
     expect(await screen.findByText("ep_agent1_prod · v15")).toBeInTheDocument();
     expect(screen.getByText("ep_agent1_staging · v15")).toBeInTheDocument();
   });
+
+  // P2-SHARE — "Copy link" joins rename/delete in the ⋯ menu
+  // (feature-spec.md:5-6). No endpoint is involved: the link is the app's own
+  // /chat/{id} route made absolute against the current origin.
+  it("⋯ Copy link writes the conversation's absolute URL to the clipboard and confirms", async () => {
+    const user = userEvent.setup();
+    renderApp(<ConversationList tree="agent1" />);
+    await screen.findByText("Refund escalation");
+
+    await user.click(screen.getByRole("button", { name: "Actions for Refund escalation" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Copy link" }));
+
+    const copied = await navigator.clipboard.readText();
+    expect(copied).toBe(`${window.location.origin}/chat/c1`);
+    expect(copied).toMatch(/^https?:\/\//); // absolute — pasteable anywhere
+    // Confirmation stays visible: the item deliberately does not close the menu.
+    expect(await screen.findByRole("menuitem", { name: "Link copied" })).toBeInTheDocument();
+  });
 });

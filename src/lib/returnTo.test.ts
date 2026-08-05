@@ -12,6 +12,17 @@ describe("loginPath", () => {
     );
   });
 
+  // P2-SHARE: a multi-param deep link must survive as ONE return_to value —
+  // an unencoded "&" would split the second param off into the login URL.
+  it("encodes the query so a second param cannot leak out of return_to", () => {
+    const encoded = loginPath({ pathname: "/chat/c1", search: "?turn=t2&highlight=1" });
+    expect(encoded).toBe("/login?return_to=%2Fchat%2Fc1%3Fturn%3Dt2%26highlight%3D1");
+    const parsed = new URLSearchParams(encoded.slice("/login?".length));
+    expect(parsed.get("return_to")).toBe("/chat/c1?turn=t2&highlight=1");
+    expect(parsed.get("highlight")).toBeNull();
+    expect(sanitizeReturnTo(parsed.get("return_to"))).toBe("/chat/c1?turn=t2&highlight=1");
+  });
+
   it("root and /login itself get a bare /login (no pointless return_to)", () => {
     expect(loginPath({ pathname: "/", search: "" })).toBe("/login");
     expect(loginPath({ pathname: "/login", search: "?return_to=%2Fchat" })).toBe("/login");

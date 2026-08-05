@@ -117,3 +117,48 @@ test("auth-on: login redirect → admin session → logout → restricted permis
   expect(forbidden.status()).toBe(403);
   expect((await forbidden.json()).code).toBe("forbidden");
 });
+
+// P2-SHARE — a turn deep link received by a logged-out user. The frontend has
+// no idea which auth mode the backend runs: the boot /me simply 401s here, the
+// central handler routes to /login?return_to=<path incl. query>, and login
+// navigates back to exactly that URL. In off-mode (the smoke run, and the
+// deployed demo) nothing 401s and the same link opens straight to the turn.
+test("auth-on: a turn deep link survives the login redirect and lands on the turn", async ({
+  page,
+  request,
+}) => {
+  // Create the shareable conversation through the API as admin (seeded users,
+  // mock/auth.py) — the link is what a sender would have copied.
+  await page.goto("/");
+  await page.waitForURL(/\/login/);
+  await signIn(page, "admin@demo");
+  await expect(page.getByRole("button", { name: "+ New chat" })).toBeVisible();
+  const adminToken = await page.evaluate(() =>
+    localStorage.getItem("skein.auth.token.mock"),
+  );
+  const chat = await request.post(`${MOCK}/agenttrees/agent1/chat`, {
+    data: { message: "Shared turn deep link", stream: false },
+    headers: { Authorization: `Bearer ${adminToken}` },
+    timeout: 60_000,
+  });
+  expect(chat.ok()).toBeTruthy();
+  const { conversation_id: conversationId, turn } = await chat.json();
+  const deepLink = `/chat/${conversationId}?turn=${turn.id}`;
+
+  // --- Receiver is logged out: the deep link bounces through login ---
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(deepLink);
+  await page.waitForURL(/\/login/);
+  // the whole path INCLUDING ?turn= is carried as one encoded return_to
+  expect(new URL(page.url()).searchParams.get("return_to")).toBe(deepLink);
+  await expect(page.getByText("Sign in to continue")).toBeVisible();
+
+  // --- After signing in they land on that conversation, on that turn ---
+  await signIn(page, "admin@demo");
+  await page.waitForURL((url) => url.pathname + url.search === deepLink);
+  const target = page.getByTestId("transcript").locator('[data-share-target="true"]');
+  await expect(target).toHaveCount(1);
+  // It is the ASSISTANT bubble that was linked: only those carry the action
+  // row (and therefore the 🔗 that produced this link in the first place).
+  await expect(target.getByRole("button", { name: "Copy link to turn" })).toBeVisible();
+});
