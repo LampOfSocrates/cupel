@@ -85,14 +85,26 @@ export function RunDetailPage() {
   const prevStatus = useRef<Run["status"] | null>(null);
   const judgeFired = useRef(false);
 
+  // Out-of-order guard (found by the P1-TE2E DoD walk): loads overlap (mount
+  // double-fetch, debounced refetches, judge handler) and a SLOW stale
+  // response resolving after a newer one would overwrite terminal state with
+  // "still running" — with no further frames due, the grid froze there. Only
+  // the latest load may apply.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
-      setRun(await api.run(tree, runId));
       // Summary rides the same (debounced) tick — "summary header … updates
       // live" (feature-spec.md:64).
-      setSummary(await api.runSummary(runId));
+      const [runData, summaryData] = await Promise.all([
+        api.run(tree, runId),
+        api.runSummary(runId),
+      ]);
+      if (seq !== loadSeq.current) return; // superseded by a newer load
+      setRun(runData);
+      setSummary(summaryData);
     } catch (e) {
-      setError((e as Error).message);
+      if (seq === loadSeq.current) setError((e as Error).message);
     }
   }, [tree, runId]);
 
@@ -177,44 +189,62 @@ export function RunDetailPage() {
       void load();
     };
     void (async () => {
-      try {
-        for await (const ev of api.taskStream({ signal: controller.signal })) {
-          let belongs: boolean;
-          if (ev.event === "judgment") {
-            belongs = ev.data.judgment.run_id === runId;
-          } else if (ev.event === "task") {
-            belongs =
-              ev.data.id === taskId ||
-              ev.data.parent_id === taskId ||
-              (judgeTaskId != null &&
-                (ev.data.id === judgeTaskId || ev.data.parent_id === judgeTaskId));
-            if (
-              ev.data.id === judgeTaskId &&
-              ev.data.status !== "queued" &&
-              ev.data.status !== "running"
-            ) {
-              // Judging finished — clear the badge and refetch immediately
-              // (not debounced: this effect is about to unsubscribe, which
-              // would drop a pending timer).
-              setJudgeTaskId(null);
-              void load();
+      // Reconnect loop (found by the P1-TE2E DoD walk): the page-scoped
+      // stream can drop mid-run (connection reuse/proxy/server close) and a
+      // single-shot subscription then freezes the fill forever. On a
+      // non-abort exit: reconcile immediately (frames emitted while
+      // disconnected are gone for good), pause briefly, resubscribe — same
+      // philosophy as QueueProvider's reconnect, scoped minimally.
+      while (!stopped && !controller.signal.aborted) {
+        try {
+          for await (const ev of api.taskStream({
+            signal: controller.signal,
+            // Reconcile on every (re)connect — frames published before the
+            // subscription opened (or while disconnected) are gone for good,
+            // so a run that finished in that gap would otherwise never
+            // refetch (same rule as QueueProvider's onOpen).
+            onOpen: () => void load(),
+          })) {
+            let belongs: boolean;
+            if (ev.event === "judgment") {
+              belongs = ev.data.judgment.run_id === runId;
+            } else if (ev.event === "task") {
+              belongs =
+                ev.data.id === taskId ||
+                ev.data.parent_id === taskId ||
+                (judgeTaskId != null &&
+                  (ev.data.id === judgeTaskId || ev.data.parent_id === judgeTaskId));
+              if (
+                ev.data.id === judgeTaskId &&
+                ev.data.status !== "queued" &&
+                ev.data.status !== "running"
+              ) {
+                // Judging finished — clear the badge and refetch immediately
+                // (not debounced: this effect is about to unsubscribe, which
+                // would drop a pending timer).
+                setJudgeTaskId(null);
+                void load();
+              }
+            } else if (ev.event === "progress") {
+              belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
+            } else {
+              belongs = false; // span frames: trace-view scope (P1-T16)
             }
-          } else if (ev.event === "progress") {
-            belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
-          } else {
-            belongs = false; // span frames: trace-view scope (P1-T16)
+            if (!belongs) continue;
+            if (ev.event === "progress" && ev.data.progress.stage) {
+              setStage(ev.data.progress.stage);
+            }
+            // Trailing debounce: first event schedules the refetch, bursts
+            // within the window coalesce into that one GET.
+            if (timer == null && !stopped) timer = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
           }
-          if (!belongs) continue;
-          if (ev.event === "progress" && ev.data.progress.stage) {
-            setStage(ev.data.progress.stage);
-          }
-          // Trailing debounce: first event schedules the refetch, bursts
-          // within the window coalesce into that one GET.
-          if (timer == null && !stopped) timer = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
+        } catch {
+          // Aborted on unmount/terminal, or stream errored — the loop guard
+          // below decides between exit and reconnect.
         }
-      } catch {
-        // Aborted on unmount/terminal, or stream dropped — the polling
-        // fallback (feature-spec.md:108) is queue-panel scope (P1-T08).
+        if (stopped || controller.signal.aborted) return;
+        void load();
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     })();
     return () => {

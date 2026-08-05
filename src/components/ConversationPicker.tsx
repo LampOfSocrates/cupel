@@ -105,13 +105,15 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
     void load(1, false);
   }, [load]);
 
+  // Compute from current state, not inside the setSelected updater: calling
+  // the parent's onSelectionChange from an updater is setState-during-render
+  // (React warning surfaced by the P1-TE2E DoD walk). Checkbox events are
+  // discrete, so reading `selected` directly is equivalent.
   const update = (mutate: (next: Map<string, ConvSelection>) => void) => {
-    setSelected((prev) => {
-      const next = new Map(prev);
-      mutate(next);
-      onSelectionChange(toItems(next));
-      return next;
-    });
+    const next = new Map(selected);
+    mutate(next);
+    setSelected(next);
+    onSelectionChange(toItems(next));
   };
 
   const toggleConversation = (conv: Conversation, checked: boolean) => {

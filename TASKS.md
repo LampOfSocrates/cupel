@@ -35,7 +35,7 @@
 - [x] P1-T15 Tune/Evaluate presets  [deps: T11]
 - [x] P1-TEXPORT Editor: download version history to file (free-tier export; no contract change)  [deps: T10b]
 - [x] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md) (live Render service created from main session)  [deps: T18b, T01, T02]
-- [ ] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
+- [x] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
 
 ## Phase 2 (order per skein-phases.md build order — expand when Phase 1 is green)
 - [ ] P2-CONFIG agentic.config.ts + single API client
