@@ -15,6 +15,7 @@ import {
   mockJudgments,
   modelsRequests,
   pushHumanJudgment,
+  replayTurnRequests,
   uploadConfig,
   uploadRequests,
 } from "../test/msw/handlers";
@@ -541,5 +542,59 @@ describe("Turn envelope affordance", () => {
     const chip = await screen.findByTestId("envelope-chip");
     // full fixture envelope: system_date · timezone · region · locale
     expect(chip).toHaveTextContent("2026-08-02 · Europe/London · GB · en-GB");
+  });
+});
+
+// P1-T13 — turn forks. "🔀 fork action on any turn in Chat itself"
+// (feature-spec.md:72) fires POST /agenttrees/{tree}/replay/turn
+// (openapi.yaml:623-652); "Forks carry lineage metadata … Shown as a
+// badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"
+// (feature-spec.md:6); deleted parent → "the parent link renders as deleted"
+// (openapi.yaml:441-443).
+describe("Turn forks (P1-T13)", () => {
+  it("⑂ on an assistant turn opens the fork modal and fires with that conversation/turn", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    // only the assistant turn (t2) carries the action row → exactly one ⑂
+    await user.click(screen.getByRole("button", { name: "Fork turn" }));
+    await user.click(await screen.findByRole("combobox", { name: "Endpoints" }));
+    await user.click(await screen.findByRole("option", { name: "staging" }));
+    await user.click(screen.getByRole("button", { name: "Fork ⑂" }));
+
+    await waitFor(() => expect(replayTurnRequests).toHaveLength(1));
+    expect(replayTurnRequests[0].body).toEqual({
+      conversation_id: "c1",
+      turn_id: "t2",
+      endpoints: ["ep_agent1_staging"],
+      context_policy: "frozen",
+    });
+  });
+
+  it("lineage banner renders for a fork; Open parent navigates to the parent", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c2f1"); // fork fixture: parent c2, turn t9, endpoint prod
+
+    const banner = await screen.findByTestId("lineage-banner");
+    // parent title resolves via GET …/conversations/c2
+    await waitFor(() => expect(banner).toHaveTextContent("fork of Billing dispute"));
+    expect(banner).toHaveTextContent("@ t9");
+    expect(banner).toHaveTextContent("via prod");
+
+    await user.click(screen.getByText("Open parent"));
+    // c2 is not a fork → banner gone once the parent conversation loads
+    await waitFor(() =>
+      expect(screen.queryByTestId("lineage-banner")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("deleted parent: lineage survives, link renders disabled as 'parent deleted'", async () => {
+    renderChat("/chat/c-orphan"); // fixture parent c-gone → GET 404s
+
+    const banner = await screen.findByTestId("lineage-banner");
+    await screen.findByText("parent deleted");
+    expect(banner).toHaveTextContent("fork of c-gone"); // id fallback, no title
+    expect(screen.queryByText("Open parent")).not.toBeInTheDocument();
   });
 });

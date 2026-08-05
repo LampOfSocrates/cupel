@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Text, Title } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Anchor,
+  Badge,
+  Button,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
 import { api } from "../api/client";
 import type { Run } from "../api/types";
-import { ComparisonView, STATUS_COLOR } from "../components";
+import { ComparisonView, ForkModal, STATUS_COLOR } from "../components";
 import { useApp } from "../AppContext";
 
 // Runs step 3 — Results, and the detail route for old runs (feature-spec.md:49:
@@ -33,6 +44,12 @@ export function RunDetailPage() {
   // openapi.yaml:791-792; feature-spec.md:109).
   const [stage, setStage] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // P1-T13 cell re-fire target — the ⑂ modal is seeded with the CELL's source
+  // turn (feature-spec.md:72 "'re-run this turn with…' on any results cell").
+  const [forkSource, setForkSource] = useState<{
+    conversation_id: string;
+    turn_id: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -145,7 +162,35 @@ export function RunDetailPage() {
           </Button>
         )}
       </Group>
-      <ComparisonView run={run} />
+      {/* Cell ⑂ via the cell-action slot (separate from renderAnnotation,
+          which is reserved for T12b score badges). Done cells only — the slot
+          is invoked for status done; every row carries its source turn
+          (Run.rows[].source, openapi.yaml:1607-1643). Sketch 04: "+ Re-run
+          this turn with… POST …/replay/turn". */}
+      <ComparisonView
+        run={run}
+        renderCellAction={(_cell, ctx) => (
+          <Group justify="flex-end" mt={2}>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="gray"
+              aria-label={`Re-run turn ${ctx.source.turn_id} with…`}
+              onClick={() => setForkSource(ctx.source)}
+            >
+              ⑂
+            </ActionIcon>
+          </Group>
+        )}
+      />
+      {forkSource && (
+        <ForkModal
+          conversationId={forkSource.conversation_id}
+          turnId={forkSource.turn_id}
+          opened
+          onClose={() => setForkSource(null)}
+        />
+      )}
     </Stack>
   );
 }

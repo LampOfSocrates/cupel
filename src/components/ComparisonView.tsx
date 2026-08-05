@@ -24,16 +24,25 @@ export interface CellContext {
 interface Props {
   run: Run;
   renderAnnotation?: (cell: RunCell, ctx: CellContext) => ReactNode;
+  // P1-T13 cell-action slot, separate from renderAnnotation on purpose: the
+  // annotation slot is reserved for thumbs/score badges (T03-style/T12b), the
+  // action slot for per-cell affordances — first user is the ⑂ re-fire on
+  // done cells (sketch 04 "+ Re-run this turn with… POST …/replay/turn";
+  // feature-spec.md:72 "'re-run this turn with…' on any results cell").
+  // Invoked for DONE cells only, like renderAnnotation.
+  renderCellAction?: (cell: RunCell, ctx: CellContext) => ReactNode;
 }
 
 function CellContent({
   cell,
   ctx,
   renderAnnotation,
+  renderCellAction,
 }: {
   cell: RunCell;
   ctx: CellContext;
   renderAnnotation?: Props["renderAnnotation"];
+  renderCellAction?: Props["renderCellAction"];
 }) {
   switch (cell.status) {
     case "pending":
@@ -59,12 +68,13 @@ function CellContent({
         <>
           <Markdown content={cell.content ?? ""} />
           {renderAnnotation?.(cell, ctx)}
+          {renderCellAction?.(cell, ctx)}
         </>
       );
   }
 }
 
-export function ComparisonView({ run, renderAnnotation }: Props) {
+export function ComparisonView({ run, renderAnnotation, renderCellAction }: Props) {
   return (
     <Table.ScrollContainer minWidth={400}>
       <Table verticalSpacing="xs" data-testid="comparison-grid">
@@ -106,6 +116,7 @@ export function ComparisonView({ run, renderAnnotation }: Props) {
                     cell={cell}
                     ctx={{ rowIndex, columnIndex, source: row.source }}
                     renderAnnotation={renderAnnotation}
+                    renderCellAction={renderCellAction}
                   />
                 </Table.Td>
               ))}

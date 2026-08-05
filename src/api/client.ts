@@ -14,6 +14,7 @@ import type {
   Conversation,
   ConversationListParams,
   ConversationPage,
+  Endpoint,
   ErrorBody,
   FeedbackRequest,
   InstructionHistory,
@@ -149,6 +150,11 @@ export const api = {
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
   // (feature-spec.md:122). Fetched once and cached in AppContext.
   models: () => request<Model[]>("/models"),
+
+  // GET /agenttrees/{tree}/endpoints (openapi.yaml:154-172) — "Deploy targets
+  // for replay … Multi-selected in Run Config for turn re-fire
+  // (feature-spec.md:67)".
+  endpoints: (tree: string) => request<Endpoint[]>(`/agenttrees/${tree}/endpoints`),
 
   // GET /agenttrees/{tree}/agents (openapi.yaml:175-194) — "Flat list of
   // agents with parent links (root has parent_id null)" (:188); the tree view

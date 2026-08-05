@@ -6,6 +6,7 @@ import { renderApp } from "../test/render";
 import {
   cancelRequests,
   mockRuns,
+  replayTurnRequests,
   runDetailRequests,
   taskStreamRig,
 } from "../test/msw/handlers";
@@ -134,6 +135,33 @@ describe("RunDetailPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(cancelRequests).toEqual(["task-live"]));
+  });
+
+  // P1-T13 — "'re-run this turn with…' on any results cell"
+  // (feature-spec.md:72; sketch 04 "+ Re-run this turn with…
+  // POST …/replay/turn"): done cells expose ⑂ seeded with the CELL's source
+  // conversation/turn, reusing the same ForkModal as Chat.
+  it("done cell ⑂ re-fires seeded with that cell's source conversation/turn", async () => {
+    const user = userEvent.setup();
+    renderDetail("run-old-1"); // done fixture — row source c1/t2, both cells done
+    await screen.findByText("Run run-old-1");
+
+    // one ⑂ per done cell (baseline + v3), both carrying the row's source
+    const forkButtons = screen.getAllByRole("button", { name: "Re-run turn t2 with…" });
+    expect(forkButtons).toHaveLength(2);
+    await user.click(forkButtons[0]);
+
+    await user.click(await screen.findByRole("combobox", { name: "Endpoints" }));
+    await user.click(await screen.findByRole("option", { name: "prod" }));
+    await user.click(screen.getByRole("button", { name: "Fork ⑂" }));
+
+    await waitFor(() => expect(replayTurnRequests).toHaveLength(1));
+    expect(replayTurnRequests[0].body).toEqual({
+      conversation_id: "c1",
+      turn_id: "t2",
+      endpoints: ["ep_agent1_prod"],
+      context_policy: "frozen",
+    });
   });
 
   it("terminal stored runs render without a cancel affordance or subscription", async () => {

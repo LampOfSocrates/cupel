@@ -8,4 +8,5 @@ export { TaskQueue, formatElapsed } from "./TaskQueue";
 export { RunsList } from "./RunsList";
 export { TreeNode, TreeBranch, type TreeNodeKind } from "./TreeNode";
 export { EnvelopeChip, envelopeSummary } from "./EnvelopeChip";
+export { ForkModal } from "./ForkModal";
 export { STATUS_COLOR, type LifecycleStatus } from "./status";

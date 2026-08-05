@@ -19,6 +19,7 @@ import type {
   ChatRequest,
   ChatResponse,
   Conversation,
+  Endpoint,
   FeedbackRequest,
   InstructionHistory,
   InstructionSave,
@@ -47,6 +48,18 @@ export const mockTrees: AgentTree[] = [
   { id: "agent1", name: "Agent 1", enabled: true },
   { id: "agent2", name: "Agent 2", enabled: true },
 ];
+
+// GET /agenttrees/{tree}/endpoints (openapi.yaml:154-172, Endpoint :1130-1138
+// "an agent deployment/backend target") — ids/names mirror the real mock's
+// seed (mock/seed.py:15-18, :28-30).
+export const mockEndpoints: Record<string, Endpoint[]> = {
+  agent1: [
+    { id: "ep_agent1_prod", name: "prod", description: "Production deployment" },
+    { id: "ep_agent1_staging", name: "staging", description: "Staging deployment" },
+  ],
+  agent2: [{ id: "ep_agent2_prod", name: "prod", description: "Production deployment" }],
+};
+export const endpointsRequests: string[] = []; // tree ids seen by GET endpoints
 
 // GET /models (openapi.yaml:98-112, Model :1102-1107) — mirrors the real
 // mock's list (mock/config.py:6-11). Tests count fetches via modelsRequests
@@ -161,7 +174,10 @@ function conv(partial: Partial<Conversation> & Pick<Conversation, "id" | "title"
 }
 
 // Roots (lineage null) — sorted by last activity, server-side (openapi.yaml:381).
-export const mockRoots: Conversation[] = [
+// Factory-seeded: the replay/turn handler mutates forks + fork_count, so
+// resetHandlerState must rebuild fresh objects, not restore references.
+function seedRoots(): Conversation[] {
+  return [
   conv({
     id: "c1",
     title: "Refund escalation",
@@ -199,9 +215,12 @@ export const mockRoots: Conversation[] = [
   }),
   conv({ id: "c2", title: "Billing dispute", agent_id: "ag_concierge", fork_count: 2, last_activity_at: "2026-08-04T09:00:00Z" }),
   conv({ id: "c3", title: "Onboarding help", agent_id: "ag_concierge", last_activity_at: "2026-08-01T10:00:00Z" }),
-];
+  ];
+}
+export const mockRoots: Conversation[] = seedRoots();
 
-export const mockForks: Record<string, Conversation[]> = {
+function seedForks(): Record<string, Conversation[]> {
+  return {
   c2: [
     conv({
       id: "c2f1",
@@ -224,7 +243,23 @@ export const mockForks: Record<string, Conversation[]> = {
       },
     }),
   ],
-};
+  // Orphan: parent c-gone was soft-deleted — lineage survives and "the parent
+  // link renders as deleted" (openapi.yaml:441-443). GET /conversations/c-gone
+  // 404s; the fork itself still loads.
+  "c-gone": [
+    conv({
+      id: "c-orphan",
+      title: "Orphan fork",
+      lineage: {
+        parent_conversation_id: "c-gone",
+        fork_turn_id: "t1",
+        endpoint_id: "ep_agent1_staging",
+      },
+    }),
+  ],
+  };
+}
+export const mockForks: Record<string, Conversation[]> = seedForks();
 
 // Requests seen by the conversations handler — tests assert query params here.
 export const conversationRequests: URL[] = [];
@@ -406,10 +441,9 @@ export const cancelRequests: string[] = []; // task ids seen by DELETE /tasks/{i
 const cancelledTasks = new Set<string>();
 let newConvCounter = 0;
 
-const initialRoots = [...mockRoots];
-
 export function resetHandlerState() {
   conversationRequests.length = 0;
+  endpointsRequests.length = 0;
   modelsRequests.length = 0;
   uploadRequests.length = 0;
   attachmentCounter = 0;
@@ -431,7 +465,9 @@ export function resetHandlerState() {
   chatConfig.gate = null;
   chatConfig.errorAfter = null;
   mockRoots.length = 0;
-  mockRoots.push(...initialRoots);
+  mockRoots.push(...seedRoots());
+  for (const key of Object.keys(mockForks)) delete mockForks[key];
+  Object.assign(mockForks, seedForks());
   agentCreateRequests.length = 0;
   agentCounter = 0;
   for (const key of Object.keys(mockAgents)) delete mockAgents[key];
@@ -455,6 +491,17 @@ export const handlers = [
   http.get(`${BASE}/me`, () => HttpResponse.json(mockMe)),
 
   http.get(`${BASE}/agenttrees`, () => HttpResponse.json(mockTrees)),
+
+  // GET /agenttrees/{tree}/endpoints — "Deploy targets for replay"
+  // (openapi.yaml:158; feature-spec.md:121).
+  http.get(`${BASE}/agenttrees/:tree/endpoints`, ({ params }) => {
+    const endpoints = mockEndpoints[params.tree as string];
+    if (!endpoints) {
+      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
+    }
+    endpointsRequests.push(params.tree as string);
+    return HttpResponse.json(endpoints);
+  }),
 
   // GET /models (openapi.yaml:98-112) — model dropdown source
   // (feature-spec.md:122).
@@ -789,6 +836,34 @@ export const handlers = [
         conversation_id: `c-fork-${n}-${i + 1}`,
       })),
     };
+    // Materialize the forks like the real mock (mock/main.py:651-660): history
+    // copied up to the re-fired turn, lineage attached (feature-spec.md:68-69).
+    // The regenerated turn is NOT present yet — forks generate asynchronously,
+    // so Open in Chat first shows just the copied history.
+    const all = [...mockRoots, ...Object.values(mockForks).flat()];
+    const parent = all.find((c) => c.id === body.conversation_id);
+    if (parent) {
+      const turns = parent.turns ?? [];
+      const forkIndex = turns.findIndex((t) => t.id === body.turn_id);
+      const copied = forkIndex >= 0 ? turns.slice(0, forkIndex) : turns;
+      const forks = (mockForks[parent.id] ??= []);
+      for (const r of accepted.results) {
+        forks.push(
+          conv({
+            id: r.conversation_id,
+            title: parent.title,
+            turns: copied,
+            lineage: {
+              parent_conversation_id: parent.id,
+              fork_turn_id: body.turn_id,
+              endpoint_id: r.endpoint_id,
+              config: body.config ?? null,
+            },
+          }),
+        );
+      }
+      parent.fork_count += accepted.results.length;
+    }
     return HttpResponse.json(accepted, { status: 202 });
   }),
 

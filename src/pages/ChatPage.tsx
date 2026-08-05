@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Center,
@@ -23,8 +24,8 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
-import type { Attachment, Judgment, Turn } from "../api/types";
-import { EnvelopeChip } from "../components";
+import type { Attachment, Judgment, Lineage, Turn } from "../api/types";
+import { EnvelopeChip, ForkModal } from "../components";
 import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
@@ -83,6 +84,16 @@ export function ChatPage() {
 
   const [turns, setTurns] = useState<Turn[] | null>(conversationId ? null : []);
   const [title, setTitle] = useState<string | null>(null);
+  // P1-T13: lineage + agent off the loaded Conversation. Lineage is "Present
+  // iff this conversation is a fork" (openapi.yaml:1369) and drives the header
+  // banner; agent_id seeds the fork modal's optional version select.
+  const [lineage, setLineage] = useState<Lineage | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  // Parent link state: title when it loads, "deleted" on 404 — "forks keep
+  // their lineage (the parent link renders as deleted)" (openapi.yaml:441-443).
+  const [parent, setParent] = useState<{ title: string } | "deleted" | null>(null);
+  // ⑂ target — assistant turn id the fork modal is open for (null = closed).
+  const [forkTurnId, setForkTurnId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -123,6 +134,9 @@ export function ChatPage() {
       for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
       return [];
     });
+    setLineage(null);
+    setAgentId(null);
+    setForkTurnId(null);
     if (!conversationId) {
       attachedConvRef.current = null;
       setTurns([]);
@@ -141,6 +155,8 @@ export function ChatPage() {
         attachedConvRef.current = conversationId;
         setTurns(data.turns ?? []);
         setTitle(data.title);
+        setLineage(data.lineage ?? null);
+        setAgentId(data.agent_id ?? null);
       })
       .catch((e: ApiError) => {
         if (!cancelled) setLoadError(e.message);
@@ -162,6 +178,27 @@ export function ChatPage() {
 
   // Abort an in-flight stream when the page unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // P1-T13: resolve the parent's title for the lineage banner. Delete is a
+  // tombstone (openapi.yaml:438-443) — a 404 here means the parent was
+  // deleted; the link renders disabled as "parent deleted", never broken.
+  const parentId = lineage?.parent_conversation_id;
+  useEffect(() => {
+    setParent(null);
+    if (!parentId) return;
+    let cancelled = false;
+    api
+      .conversation(tree, parentId)
+      .then((data) => {
+        if (!cancelled) setParent({ title: data.title });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled && e instanceof ApiError && e.status === 404) setParent("deleted");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tree, parentId]);
 
   const streaming = stream !== null;
   const uploading = pending.some((p) => p.status === "uploading");
@@ -345,6 +382,40 @@ export function ChatPage() {
         <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
         <ChatSettingsMenu />
       </Group>
+      {/* P1-T13 fork identity banner — "Forks carry lineage metadata: parent
+          conversation id, fork turn, endpoint + config used. Shown as a
+          badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"
+          (feature-spec.md:6). */}
+      {lineage && (
+        <Group gap={8} wrap="nowrap" data-testid="lineage-banner">
+          <Badge size="xs" variant="light" color="grape">
+            ⑂ fork
+          </Badge>
+          <Text size="xs" c="dimmed" style={{ minWidth: 0 }} truncate>
+            fork of{" "}
+            {parent === "deleted" || parent == null
+              ? lineage.parent_conversation_id
+              : parent.title}
+            {" @ "}
+            {lineage.fork_turn_id}
+            {/* endpoint_id shown verbatim — mapping ids to display names would
+                cost a GET /endpoints per fork open; acceptable Phase-1 density. */}
+            {lineage.endpoint_id ? ` · via ${lineage.endpoint_id}` : ""}
+          </Text>
+          {parent === "deleted" ? (
+            <Text size="xs" c="dimmed" fs="italic">
+              parent deleted
+            </Text>
+          ) : (
+            <Anchor
+              size="xs"
+              onClick={() => navigate(`/chat/${lineage.parent_conversation_id}`)}
+            >
+              Open parent
+            </Anchor>
+          )}
+        </Group>
+      )}
       <div
         ref={scrollRef}
         style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
@@ -370,6 +441,10 @@ export function ChatPage() {
                 turn={turn}
                 thumb={thumbs[turn.id]}
                 onRate={(rating) => rate(turn.id, rating)}
+                // ⑂ needs a persisted conversation to re-fire against; a brand
+                // new chat gains the id (and the affordance) after the first
+                // send navigates to /chat/{id}.
+                onFork={conversationId ? () => setForkTurnId(turn.id) : undefined}
               />
             ))}
             {stream && (
@@ -495,6 +570,19 @@ export function ChatPage() {
           )}
         </Group>
       </div>
+      {/* P1-T13 — "🔀 fork action on any turn in Chat itself"
+          (feature-spec.md:72); sketch 01 tags the ⑂ glyph with
+          "POST …/replay/turn". Modal is mounted once, keyed by the target
+          turn; agentId enables its optional version select. */}
+      {conversationId && forkTurnId != null && (
+        <ForkModal
+          conversationId={conversationId}
+          turnId={forkTurnId}
+          agentId={agentId}
+          opened
+          onClose={() => setForkTurnId(null)}
+        />
+      )}
     </Stack>
   );
 }
@@ -620,10 +708,12 @@ function TurnBubble({
   turn,
   thumb,
   onRate,
+  onFork,
 }: {
   turn: Turn;
   thumb?: Rating;
   onRate: (rating: Rating) => void;
+  onFork?: () => void;
 }) {
   return (
     <Paper
@@ -711,6 +801,19 @@ function TurnBubble({
               </ActionIcon>
             )}
           </CopyButton>
+          {/* P1-T13 ⑂ — sketch 01 action row "👍👎 ⑂ ⌁" with the fork glyph
+              tagged "POST …/replay/turn"; trace ⌁ remains P1-T16. */}
+          {onFork && (
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              aria-label="Fork turn"
+              onClick={onFork}
+            >
+              ⑂
+            </ActionIcon>
+          )}
         </Group>
       )}
     </Paper>
