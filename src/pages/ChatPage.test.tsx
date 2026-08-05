@@ -12,6 +12,7 @@ import {
   chatRequests,
   feedbackRequests,
   judgmentRequests,
+  llmHeaderCaptures,
   mockJudgments,
   modelsRequests,
   pushHumanJudgment,
@@ -649,3 +650,70 @@ function TraceProbe() {
   const { turnId } = useParams();
   return <div>trace-probe {turnId}</div>;
 }
+
+// P1-T18c — "Live LLM (BYOK)" section of the chat settings popover. Hard
+// rules (docs/deployment.md:24-27): "Client pastes key in UI → browser
+// localStorage only" (the specced override of the P1-T05 no-persistence
+// note); "Sent per request: X-LLM-Key + X-LLM-Model headers"; visible live
+// indicator near the settings gear while a key is active.
+describe("Live LLM (BYOK) settings", () => {
+  const KEY = "sk-or-test-ui-key";
+
+  async function openSettings(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Chat settings" }));
+  }
+
+  it("saves the key to localStorage, shows the live badge, and offers the curated live models", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+    expect(screen.queryByTestId("live-badge")).not.toBeInTheDocument();
+
+    await openSettings(user);
+    await user.type(screen.getByLabelText("OpenRouter key"), KEY);
+    await user.click(screen.getByRole("button", { name: "Save key" }));
+
+    // localStorage ONLY (docs/deployment.md:25)
+    expect(localStorage.getItem("loom.byok.key")).toBe(KEY);
+    expect(await screen.findByTestId("live-badge")).toHaveTextContent("live");
+    // /models refetched WITH the key header → curated list in the select
+    await waitFor(() =>
+      expect(
+        llmHeaderCaptures.some((c) => c.path === "/models" && c.key === KEY),
+      ).toBe(true),
+    );
+    await user.click(await screen.findByRole("combobox", { name: "Live model" }));
+    await user.click(await screen.findByRole("option", { name: "DeepSeek Chat" }));
+    expect(localStorage.getItem("loom.byok.model")).toBe("deepseek/deepseek-chat");
+  });
+
+  it("sends chat with X-LLM-Key + X-LLM-Model when a key is stored", async () => {
+    localStorage.setItem("loom.byok.key", KEY);
+    localStorage.setItem("loom.byok.model", "deepseek/deepseek-chat");
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "go live{enter}");
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    const capture = llmHeaderCaptures.find((c) => c.path.endsWith("/chat"))!;
+    expect(capture.key).toBe(KEY);
+    expect(capture.model).toBe("deepseek/deepseek-chat");
+    expect(capture.url).not.toContain(KEY); // never in URLs
+  });
+
+  it("clear key wipes localStorage and hides the badge", async () => {
+    localStorage.setItem("loom.byok.key", KEY);
+    localStorage.setItem("loom.byok.model", "deepseek/deepseek-chat");
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+    expect(screen.getByTestId("live-badge")).toBeInTheDocument();
+
+    await openSettings(user);
+    await user.click(screen.getByRole("button", { name: "Clear key" }));
+    expect(localStorage.getItem("loom.byok.key")).toBeNull();
+    expect(localStorage.getItem("loom.byok.model")).toBeNull();
+    expect(screen.queryByTestId("live-badge")).not.toBeInTheDocument();
+  });
+});

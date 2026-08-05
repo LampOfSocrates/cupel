@@ -87,6 +87,31 @@ export const mockModels: Model[] = [
 ];
 export const modelsRequests: string[] = [];
 
+// P1-T18c BYOK: X-LLM-Key/X-LLM-Model captures on the generation-adjacent
+// endpoints (chat/replay/judge/models). The headers are transport-level BY
+// DESIGN — outside openapi.yaml (docs/deployment.md:26). Curated live list
+// mirrors mock/config.py LIVE_MODELS ("/models is populated from a curated
+// cheap-model list in live mode", docs/deployment.md:22-23).
+export const mockLiveModels: Model[] = [
+  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat" },
+  { id: "google/gemini-flash-1.5", name: "Gemini Flash 1.5" },
+  { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5" },
+];
+export const llmHeaderCaptures: Array<{
+  path: string;
+  url: string; // full URL — tests assert the key is NEVER in it
+  key: string | null;
+  model: string | null;
+}> = [];
+function captureLlmHeaders(request: Request) {
+  llmHeaderCaptures.push({
+    path: new URL(request.url).pathname,
+    url: request.url,
+    key: request.headers.get("x-llm-key"),
+    model: request.headers.get("x-llm-model"),
+  });
+}
+
 // GET/POST /agenttrees/{tree}/agents (openapi.yaml:175-219, Agent :1141-1164).
 // Fixtures mirror the real mock's bootstrap hierarchy (mock/seed.py:19-34):
 // agent1 Concierge → Refunds/Shipping, agent2 Ops → Deploys. Tests may mutate
@@ -837,6 +862,7 @@ export function resetHandlerState() {
   conversationRequests.length = 0;
   endpointsRequests.length = 0;
   modelsRequests.length = 0;
+  llmHeaderCaptures.length = 0;
   uploadRequests.length = 0;
   attachmentCounter = 0;
   uploadConfig.maxBytes = 5 * 1024 * 1024;
@@ -919,10 +945,12 @@ export const handlers = [
   }),
 
   // GET /models (openapi.yaml:98-112) — model dropdown source
-  // (feature-spec.md:122).
-  http.get(`${BASE}/models`, () => {
+  // (feature-spec.md:122). With X-LLM-Key (P1-T18c) the curated live list
+  // answers instead, mirroring the real mock.
+  http.get(`${BASE}/models`, ({ request }) => {
+    captureLlmHeaders(request);
     modelsRequests.push("models");
-    return HttpResponse.json(mockModels);
+    return HttpResponse.json(request.headers.get("x-llm-key") ? mockLiveModels : mockModels);
   }),
 
   // GET /agenttrees/{tree}/agents — "Flat list of agents with parent links
@@ -1097,6 +1125,7 @@ export const handlers = [
   // frames task/token/done/error; stream=false → single JSON ChatResponse.
   // Omitting conversation_id starts a new conversation (openapi.yaml:488).
   http.post(`${BASE}/agenttrees/:tree/chat`, async ({ request }) => {
+    captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ChatRequest;
     chatRequests.push(body);
     const isNew = !body.conversation_id;
@@ -1274,6 +1303,7 @@ export const handlers = [
   // (mock/main.py:841-842); judging results are test-driven via fixture
   // mutation + taskStreamRig, mirroring the live-fill pattern.
   http.post(`${BASE}/eval/judge`, async ({ request }) => {
+    captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as JudgeRequest;
     judgeRequests.push(body);
     if (!body.judge_model || !body.rubric_id) {
@@ -1307,6 +1337,7 @@ export const handlers = [
   // (feature-spec.md:71); registered before /replay for readability (MSW
   // matches full paths, order is not load-bearing).
   http.post(`${BASE}/agenttrees/:tree/replay/turn`, async ({ params, request }) => {
+    captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ReplayTurnRequest;
     replayTurnRequests.push({ tree: params.tree as string, body });
     if ((body.context_policy ?? "frozen") !== "frozen") {
@@ -1394,6 +1425,7 @@ export const handlers = [
   // POST /agenttrees/{tree}/replay (openapi.yaml:586-621) → 202 ReplayAccepted
   // "Work enqueued; run row appears immediately" (openapi.yaml:617).
   http.post(`${BASE}/agenttrees/:tree/replay`, async ({ params, request }) => {
+    captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ReplayRequest;
     replayRequests.push({ tree: params.tree as string, body });
     if ((body.context_policy ?? "frozen") !== "frozen") {

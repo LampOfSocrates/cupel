@@ -17,4 +17,35 @@ MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 TOKEN_DELAY = float(os.environ.get("MOCK_TOKEN_DELAY", "0.02"))
 STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 
+# --- Live-LLM BYOK mode (P1-T18c, docs/deployment.md:17-31) ---------------
+# "Mock stays the backend of record ...; only the generation call inside
+# chat/replay/judge goes to a real provider when a key is present."
+# Headers X-LLM-Key / X-LLM-Model are transport-level by design — deliberately
+# OUTSIDE the openapi.yaml v0.2.0 contract (no /settings endpoint, Phase 2).
+
+
+def live_disabled() -> bool:
+    """MOCK_LIVE_DISABLED=1 kills the feature entirely (deployment defense).
+    Read per-call, not at import, so deployments/tests can flip it."""
+    return os.environ.get("MOCK_LIVE_DISABLED") == "1"
+
+
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+LIVE_DEFAULT_MODEL = "deepseek/deepseek-chat"
+# "Cost control: server-side max_tokens cap + simple rate limit so
+# drip/replay can't burn the client's credit" (docs/deployment.md:29-30).
+LIVE_MAX_TOKENS = 512
+LIVE_RATE_LIMIT = 20  # generations per window per key hash
+LIVE_RATE_WINDOW_S = 60.0
+
+# "/models is populated from a curated cheap-model list in live mode"
+# (docs/deployment.md:22-23) — OpenRouter model ids.
+LIVE_MODELS = [
+    {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat"},
+    {"id": "google/gemini-flash-1.5", "name": "Gemini Flash 1.5"},
+    {"id": "anthropic/claude-haiku-4.5", "name": "Claude Haiku 4.5"},
+    {"id": "meta-llama/llama-3.1-8b-instruct", "name": "Llama 3.1 8B"},
+    {"id": "mistralai/mistral-small", "name": "Mistral Small"},
+]
+
 DB_PATH = os.environ.get("LOOM_MOCK_DB") or str(Path(__file__).with_name("loom-mock.sqlite"))

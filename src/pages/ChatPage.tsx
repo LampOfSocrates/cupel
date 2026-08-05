@@ -9,12 +9,14 @@ import {
   Center,
   CloseButton,
   CopyButton,
+  Divider,
   FileButton,
   Group,
   Indicator,
   Loader,
   NumberInput,
   Paper,
+  PasswordInput,
   Popover,
   Select,
   Stack,
@@ -24,7 +26,8 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
-import type { Attachment, Judgment, Lineage, Turn } from "../api/types";
+import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
+import type { Attachment, Judgment, Lineage, Model, Turn } from "../api/types";
 import { EnvelopeChip, ForkModal } from "../components";
 import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
@@ -625,6 +628,39 @@ function ChatSettingsMenu() {
   // locally so typing isn't clobbered; only committed numbers reach context.
   const [tempRaw, setTempRaw] = useState<number | string>(chatSettings.temperature ?? "");
 
+  // P1-T18c "Live LLM (BYOK)". Hard rule (docs/deployment.md:25): the key
+  // lives in "browser localStorage only" — llmKey.ts is the single store;
+  // this state MIRRORS it for rendering (badge, section) and never goes to
+  // any other sink. deployment.md overrides P1-T05's no-persistence note for
+  // this key specifically.
+  const [liveKey, setLiveKeyState] = useState<string | null>(() => getLlmKey());
+  const [keyDraft, setKeyDraft] = useState("");
+  const [byokModel, setByokModelState] = useState<string | null>(() => getLlmModel());
+  // Curated live list — refetched via GET /models WITH the key header (the
+  // client attaches it centrally once the key is stored), "populated from a
+  // curated cheap-model list in live mode" (docs/deployment.md:22-23).
+  const [liveModels, setLiveModels] = useState<Model[] | null>(null);
+
+  const saveKey = () => {
+    const key = keyDraft.trim();
+    if (!key) return;
+    setLlmKey(key); // localStorage only (docs/deployment.md:25)
+    setLiveKeyState(key);
+    setKeyDraft("");
+    api.models().then(setLiveModels).catch(() => setLiveModels(null));
+  };
+  const clearKey = () => {
+    setLlmKey(null);
+    setLlmModel(null);
+    setLiveKeyState(null);
+    setByokModelState(null);
+    setLiveModels(null);
+  };
+  const pickByokModel = (value: string | null) => {
+    setLlmModel(value);
+    setByokModelState(value);
+  };
+
   const dirty = Object.values(chatSettings).some((v) => v !== undefined);
   const patch = (p: Partial<ChatSettings>) =>
     setChatSettings((prev) => {
@@ -656,6 +692,13 @@ function ChatSettingsMenu() {
           {summary}
         </Text>
       )}
+      {/* Visible "live" indicator while a BYOK key is active (P1-T18c) —
+          generation is going to a real provider, not the canned mock. */}
+      {liveKey && (
+        <Badge size="xs" color="green" variant="light" data-testid="live-badge">
+          live
+        </Badge>
+      )}
       <Popover opened={opened} onChange={setOpened} position="bottom-end" shadow="md">
         <Popover.Target>
           <Indicator disabled={!dirty} color="blue" size={8} offset={2}>
@@ -665,6 +708,9 @@ function ChatSettingsMenu() {
               aria-label="Chat settings"
               onClick={() => {
                 ensureModels();
+                if (liveKey && !liveModels) {
+                  api.models().then(setLiveModels).catch(() => {});
+                }
                 setTempRaw(chatSettings.temperature ?? "");
                 setOpened((o) => !o);
               }}
@@ -716,6 +762,44 @@ function ChatSettingsMenu() {
             <Button variant="default" size="xs" onClick={reset} disabled={!dirty}>
               Reset to defaults
             </Button>
+            {/* P1-T18c — "Live LLM (BYOK)". Key → localStorage ONLY
+                (docs/deployment.md:25); sent per request as X-LLM-Key
+                (+ X-LLM-Model) by the api client, never in URLs, never
+                logged (docs/deployment.md:26-27). */}
+            <Divider label="Live LLM (BYOK)" labelPosition="left" my={2} />
+            {liveKey ? (
+              <>
+                <Group gap={6} wrap="nowrap">
+                  <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+                    OpenRouter key active (stored in this browser only).
+                  </Text>
+                  <Button size="xs" color="red" variant="light" onClick={clearKey}>
+                    Clear key
+                  </Button>
+                </Group>
+                <Select
+                  label="Live model"
+                  placeholder="Provider default"
+                  data={liveModels?.map((m) => ({ value: m.id, label: m.name })) ?? []}
+                  value={byokModel}
+                  onChange={pickByokModel}
+                  clearable
+                  comboboxProps={{ withinPortal: false }}
+                />
+              </>
+            ) : (
+              <>
+                <PasswordInput
+                  label="OpenRouter key"
+                  placeholder="sk-or-…"
+                  value={keyDraft}
+                  onChange={(e) => setKeyDraft(e.currentTarget.value)}
+                />
+                <Button size="xs" variant="default" onClick={saveKey} disabled={!keyDraft.trim()}>
+                  Save key
+                </Button>
+              </>
+            )}
           </Stack>
         </Popover.Dropdown>
       </Popover>

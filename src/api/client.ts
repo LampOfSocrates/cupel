@@ -1,6 +1,7 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
 // anywhere else (feature-spec.md:158).
 import { BASE } from "./base";
+import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
 import type {
   Agent,
@@ -87,13 +88,26 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
+// P1-T18c: BYOK headers attach CENTRALLY here, and only on the calls whose
+// generation can go live — chat/replay/judge/models (docs/deployment.md:
+// 18-20, :26 "Sent per request: X-LLM-Key + X-LLM-Model headers"). The key
+// never appears in URLs and is never logged.
+const LIVE_PATHS = /(\/chat|\/replay|\/replay\/turn)$|^\/eval\/judge$|^\/models$/;
+
+function liveHeaders(path: string): Record<string, string> {
+  return LIVE_PATHS.test(path) ? llmHeaders() : {};
+}
+
 async function request<T>(
   path: string,
   opts: { method?: string; query?: Query; body?: unknown } = {},
 ): Promise<T> {
   const res = await fetch(buildUrl(path, opts.query), {
     method: opts.method ?? "GET",
-    headers: opts.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...liveHeaders(path),
+    },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   if (!res.ok) throw await errorFromResponse(res);
@@ -254,7 +268,9 @@ export const api = {
   ): Promise<ChatSendResult> => {
     const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // llmHeaders(): BYOK X-LLM-Key/X-LLM-Model when a key is stored
+      // (P1-T18c, docs/deployment.md:26).
+      headers: { "Content-Type": "application/json", ...llmHeaders() },
       body: JSON.stringify(req),
       signal: opts.signal,
     });

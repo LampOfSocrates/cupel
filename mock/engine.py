@@ -4,7 +4,7 @@ SSE broker for GET /tasks/stream, and canned generation with trace spans."""
 import asyncio
 import json
 
-from . import config
+from . import config, llm
 from .db import Db, j, unj
 from .util import canned_reply, det_hash, new_id, now_iso, stamp_envelope, tokenize
 
@@ -87,6 +87,14 @@ class Engine:
         self.token_delay = config.TOKEN_DELAY if token_delay is None else token_delay
         self.step_delay = config.STEP_DELAY if step_delay is None else step_delay
         self._bg: set[asyncio.Task] = set()
+        # P1-T18c: BYOK key for batch children (replay/judge run server-side,
+        # detached from the request that carried X-LLM-Key). Held IN-MEMORY
+        # ONLY, keyed by parent task id — NEVER written to the tasks.payload
+        # DB column or anywhere else (docs/deployment.md:27 "NEVER persisted").
+        # Entries are popped when the parent reaches a terminal status; a
+        # server restart loses them, so orphaned children fall back to canned
+        # content — acceptable and documented for Phase 1.
+        self.live_keys: dict[str, dict] = {}  # task_id -> {"key", "model"}
 
     def spawn(self, coro):
         t = asyncio.get_running_loop().create_task(coro)
@@ -132,6 +140,9 @@ class Engine:
             sets.append("done = total")
         params.append(task_id)
         self.db.run(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params)
+        if status in ("done", "failed", "cancelled"):
+            # BYOK key lifetime ends with the task (docs/deployment.md:27).
+            self.live_keys.pop(task_id, None)
         self.broker.publish("task", task_dict(self.get_task(task_id)))
 
     def tick(self, task_id: str, stage: str | None = None):
@@ -190,8 +201,14 @@ class Engine:
         span = self.db.one("SELECT * FROM spans WHERE id = ?", (span_id,))
         self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)})
 
-    def _emit_trace(self, *, turn_id, agent, model, prompt_full, content, span_timing):
-        """Persist the agent→(tool)→llm span tree for one generated turn."""
+    def _emit_trace(self, *, turn_id, agent, model, prompt_full, content, span_timing,
+                    note=None):
+        """Persist the agent→(tool)→llm span tree for one generated turn.
+
+        `note` (P1-T18c): live-provider fallback annotation on the llm span —
+        stored in the span's error field while status STAYS "ok" (the turn
+        succeeded with canned content; docs/deployment.md provider-error
+        policy). Notes are built by mock/llm.py and never contain the key."""
         start, end = span_timing
         tokens_in = max(1, len(prompt_full) // 4)
         tokens_out = max(1, len(tokenize(content)))
@@ -210,7 +227,7 @@ class Engine:
             turn_id=turn_id, parent_id=root["id"], type_="llm", name=model or "claude-sonnet-5",
             start=start, end=end, tokens_in=tokens_in, tokens_out=tokens_out,
             cost=cost, model=model or "claude-sonnet-5", status="ok",
-            prompt=prompt_full, response=content,
+            error=note, prompt=prompt_full, response=content,
         )
 
     # --------------------------------------------------------------- chat
@@ -223,18 +240,54 @@ class Engine:
         task_id = ctx["task_id"]
         self.set_status(task_id, "running", stage="generating…")
         start = now_iso()
-        full = canned_reply(ctx["prompt"], ctx["agent"], ctx.get("model"), salt=ctx.get("salt", ""))
         prompt_full = (ctx.get("system_prompt") or "") + ("\n\n" if ctx.get("system_prompt") else "") + ctx["prompt"]
-        acc, cancelled = "", False
-        for chunk in tokenize(full):
-            if self.is_cancelled(task_id):
-                cancelled = True
-                break
-            acc += chunk
-            if streaming:
-                yield ("token", chunk)
-                if self.token_delay:
-                    await asyncio.sleep(self.token_delay)
+        acc, cancelled, live_note = "", False, None
+
+        # P1-T18c live path (docs/deployment.md:18-20: "only the generation
+        # call ... goes to a real provider when a key is present"). The key
+        # exists only in ctx for this request — never persisted or logged.
+        key = ctx.get("llm_key")
+        live_model = (ctx.get("llm_model") or config.LIVE_DEFAULT_MODEL) if key else None
+        served_live = False
+        if key:
+            try:
+                if streaming:
+                    async for delta in llm.stream(
+                            key, live_model, ctx["prompt"],
+                            system_prompt=ctx.get("system_prompt"),
+                            temperature=ctx.get("temperature")):
+                        if self.is_cancelled(task_id):
+                            cancelled = True
+                            break
+                        acc += delta
+                        yield ("token", delta)
+                else:
+                    acc = await llm.complete(
+                        key, live_model, ctx["prompt"],
+                        system_prompt=ctx.get("system_prompt"),
+                        temperature=ctx.get("temperature"))
+                served_live = True
+            except llm.LiveUnavailable as exc:
+                # Provider errors / rate limit never crash the turn: fall back
+                # to canned; note lands on the llm span, status stays ok.
+                live_note = f"live generation unavailable ({exc}); served canned fallback"
+                # Mid-stream failure keeps the partial live content already
+                # streamed to the client; failure before any delta → full
+                # canned reply below.
+                served_live = bool(acc)
+
+        if not served_live and not cancelled:
+            full = canned_reply(ctx["prompt"], ctx["agent"], ctx.get("model"),
+                                salt=ctx.get("salt", ""))
+            for chunk in tokenize(full):
+                if self.is_cancelled(task_id):
+                    cancelled = True
+                    break
+                acc += chunk
+                if streaming:
+                    yield ("token", chunk)
+                    if self.token_delay:
+                        await asyncio.sleep(self.token_delay)
         end = now_iso()
         self.db.run(
             "UPDATE turns SET content = ?, created_at = ? WHERE id = ?",
@@ -243,9 +296,11 @@ class Engine:
         if ctx.get("conversation_id"):
             self.db.run("UPDATE conversations SET last_activity_at = ? WHERE id = ?",
                         (end, ctx["conversation_id"]))
+        # Live turns record the live model on the llm span (docs/deployment.md
+        # scope: "spans still recorded (llm span model = the live model)").
         self._emit_trace(turn_id=ctx["assistant_turn_id"], agent=ctx["agent"],
-                         model=ctx.get("model"), prompt_full=prompt_full,
-                         content=acc, span_timing=(start, end))
+                         model=live_model or ctx.get("model"), prompt_full=prompt_full,
+                         content=acc, span_timing=(start, end), note=live_note)
         result = {"conversation_id": ctx.get("conversation_id"), "turn_id": ctx["assistant_turn_id"]}
         if not cancelled:
             self.set_status(task_id, "done", result=result, stage=None)
@@ -256,12 +311,16 @@ class Engine:
 
     # ------------------------------------------------------- regeneration
     def regenerate(self, *, tree_id, conversation_id, prompt, envelope, agent,
-                   model, salt, task_id=None) -> dict:
+                   model, salt, task_id=None, content=None, trace_note=None) -> dict:
         """One replayed/forked assistant turn. Frozen context: the new turn
-        reuses the source turn's envelope (openapi.yaml:1540-1546)."""
+        reuses the source turn's envelope (openapi.yaml:1540-1546).
+
+        P1-T18c: `content` (live-generated text) overrides the canned reply;
+        `trace_note` annotates the llm span on live fallback."""
         tid = new_id("turn")
         now = now_iso()
-        content = canned_reply(prompt, agent, model, salt=salt)
+        if content is None:
+            content = canned_reply(prompt, agent, model, salt=salt)
         self.db.run(
             "INSERT INTO turns (id, conversation_id, tree_id, invocation_id, role, author,"
             " content, content_type, created_at, envelope, task_id)"
@@ -273,7 +332,8 @@ class Engine:
             self.db.run("UPDATE conversations SET last_activity_at = ? WHERE id = ?",
                         (now, conversation_id))
         self._emit_trace(turn_id=tid, agent=agent, model=model,
-                         prompt_full=prompt, content=content, span_timing=(now, now_iso()))
+                         prompt_full=prompt, content=content,
+                         span_timing=(now, now_iso()), note=trace_note)
         return self.db.one("SELECT * FROM turns WHERE id = ?", (tid,))
 
     def _update_cell(self, run_id, row_idx, col_idx, **fields):
@@ -320,6 +380,22 @@ class Engine:
         except Exception as exc:  # child failure must not kill the batch (feature-spec.md:110)
             self.set_status(child["id"], "failed", error=str(exc))
 
+    async def _live_generation(self, parent_id, prompt, cfg):
+        """(content, model, note) for one batch child generation. The key is
+        looked up in self.live_keys (in-memory, parent task id) — a restart
+        loses it and this returns the canned path (None content), documented
+        in docs/deployment.md scope. Provider errors → canned + span note."""
+        live = self.live_keys.get(parent_id)
+        if not live:
+            return None, None, None
+        model = live.get("model") or config.LIVE_DEFAULT_MODEL
+        try:
+            text = await llm.complete(live["key"], model, prompt,
+                                      temperature=(cfg or {}).get("temperature"))
+            return text, model, None
+        except llm.LiveUnavailable as exc:
+            return None, model, f"live generation unavailable ({exc}); served canned fallback"
+
     async def _run_replay_unit(self, child, payload):
         run_id, col_idx = payload["run_id"], payload["col_idx"]
         rows, cfg = payload["rows"], payload.get("config") or {}
@@ -328,11 +404,14 @@ class Engine:
                 return
             self._update_cell(run_id, row["row_idx"], col_idx, status="running")
             await asyncio.sleep(self.step_delay)
+            content, live_model, note = await self._live_generation(
+                child["parent_id"], row["prompt"], cfg)
             turn = self.regenerate(
                 tree_id=payload["tree_id"], conversation_id=None,
                 prompt=row["prompt"], envelope=row.get("envelope"),
-                agent=payload["agent"], model=cfg.get("model"),
+                agent=payload["agent"], model=live_model or cfg.get("model"),
                 salt=f"{run_id}:{col_idx}", task_id=child["id"],
+                content=content, trace_note=note,
             )
             self._update_cell(run_id, row["row_idx"], col_idx,
                               status="done", content=turn["content"], turn_id=turn["id"],
@@ -351,11 +430,14 @@ class Engine:
         self._update_cell(run_id, payload["row_idx"], col_idx, status="running")
         await asyncio.sleep(self.step_delay)
         cfg = payload.get("config") or {}
+        content, live_model, note = await self._live_generation(
+            child["parent_id"], payload["prompt"], cfg)
         turn = self.regenerate(
             tree_id=payload["tree_id"], conversation_id=payload["fork_conversation_id"],
             prompt=payload["prompt"], envelope=payload.get("envelope"),
-            agent=payload["agent"], model=cfg.get("model"),
+            agent=payload["agent"], model=live_model or cfg.get("model"),
             salt=f"{run_id}:{payload['endpoint_id']}", task_id=child["id"],
+            content=content, trace_note=note,
         )
         self._update_cell(run_id, payload["row_idx"], col_idx,
                           status="done", content=turn["content"], turn_id=turn["id"],
@@ -381,6 +463,31 @@ class Engine:
             f"v{payload['rubric_version']}: the response addresses the prompt and "
             f"{'cites supporting detail' if h % 2 == 0 else 'stays on topic, with minor gaps'}."
         )
+        # P1-T18c: with a BYOK key on the parent judge task, the judge's
+        # GENERATION (its reasoning text) comes from the live provider
+        # (docs/deployment.md:18-20). The SCORE stays canned-deterministic —
+        # parsing scores out of arbitrary cheap models is unreliable and the
+        # append-only judgment store must stay well-formed. Provider errors →
+        # canned reasoning, never a failed task.
+        live = self.live_keys.get(child["parent_id"])
+        if live:
+            case = self.db.one("SELECT * FROM eval_cases WHERE id = ?", (case_id,))
+            rubric = self.db.one(
+                "SELECT prompt FROM rubrics WHERE id = ? AND version = ?",
+                (payload["rubric_id"], payload["rubric_version"]))
+            judge_prompt = (
+                f"You are a strict evaluator. Rubric: "
+                f"{rubric['prompt'] if rubric else payload['rubric_name']}\n\n"
+                f"Prompt:\n{case['prompt'] if case else ''}\n\n"
+                f"Response:\n{case['output'] if case else ''}\n\n"
+                "In 2-3 sentences, explain how well the response satisfies the rubric."
+            )
+            try:
+                reasoning = await llm.complete(
+                    live["key"], live.get("model") or config.LIVE_DEFAULT_MODEL,
+                    judge_prompt)
+            except llm.LiveUnavailable:
+                pass  # canned reasoning stands
         self.db.run(
             "INSERT INTO judgments (id, case_id, run_id, turn_id, conversation_id, type,"
             " judge_model, rubric_id, rubric_version, score, reasoning, created_at)"

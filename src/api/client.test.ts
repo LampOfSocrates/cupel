@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw";
 import { api, ApiError, buildUrl, type ChatStreamEvent } from "./client";
 import { BASE } from "./base";
+import { setLlmKey, setLlmModel } from "./llmKey";
+import { server } from "../test/msw/server";
 import {
   chatRequests,
   conversationRequests,
+  llmHeaderCaptures,
+  mockLiveModels,
+  mockMe,
+  mockModels,
   replayRequests,
   replayTurnRequests,
 } from "../test/msw/handlers";
@@ -127,5 +134,65 @@ describe("replay client", () => {
       expect(result.conversation_id).toBeTruthy();
     }
     expect(replayTurnRequests.at(-1)!.body.context_policy).toBe("frozen");
+  });
+});
+
+// P1-T18c — BYOK header attachment, central in the client. Hard rules
+// (docs/deployment.md:24-27): key from "browser localStorage only", "Sent per
+// request: X-LLM-Key + X-LLM-Model headers", never in URLs. The headers are
+// transport-level by design — openapi.yaml is untouched.
+describe("BYOK live-LLM headers", () => {
+  const KEY = "sk-or-test-vitest-key";
+
+  it("attaches X-LLM-Key/X-LLM-Model to models/chat/replay/judge when a key is stored", async () => {
+    setLlmKey(KEY);
+    setLlmModel("deepseek/deepseek-chat");
+    const models = await api.models();
+    // live mode: curated cheap-model list (docs/deployment.md:22-23)
+    expect(models).toEqual(mockLiveModels);
+    await api.chat("agent1", { message: "hi", stream: false });
+    await api.replay("agent1", { selection: [{ conversation_id: "c1" }], configs: [{}] });
+    await api.replayTurn("agent1", {
+      conversation_id: "c2",
+      turn_id: "t9",
+      endpoints: ["ep_agent1_prod"],
+    });
+    await api.judge({ run_id: "run-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" });
+    expect(llmHeaderCaptures.map((c) => c.path)).toEqual([
+      "/models",
+      "/agenttrees/agent1/chat",
+      "/agenttrees/agent1/replay",
+      "/agenttrees/agent1/replay/turn",
+      "/eval/judge",
+    ]);
+    for (const c of llmHeaderCaptures) {
+      expect(c.key).toBe(KEY);
+      expect(c.model).toBe("deepseek/deepseek-chat");
+      // the key is NEVER in the URL (docs/deployment.md hard rule)
+      expect(c.url).not.toContain(KEY);
+    }
+  });
+
+  it("attaches nothing when no key is stored — canned mode is the default", async () => {
+    const models = await api.models();
+    expect(models).toEqual(mockModels);
+    await api.chat("agent1", { message: "hi", stream: false });
+    for (const c of llmHeaderCaptures) {
+      expect(c.key).toBeNull();
+      expect(c.model).toBeNull();
+    }
+  });
+
+  it("non-generation endpoints never carry the key even when one is stored", async () => {
+    setLlmKey(KEY);
+    let seen: string | null = "unset";
+    server.use(
+      http.get(`${BASE}/me`, ({ request }) => {
+        seen = request.headers.get("x-llm-key");
+        return HttpResponse.json(mockMe);
+      }),
+    );
+    await api.me();
+    expect(seen).toBeNull();
   });
 });

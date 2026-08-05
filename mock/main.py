@@ -53,6 +53,27 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return JSONResponse({"code": "invalid", "message": str(exc)}, status_code=422)
 
     # ------------------------------------------------------------- helpers
+    def live_headers(request: Request) -> tuple[str | None, str | None]:
+        """P1-T18c: (key, model) from X-LLM-Key / X-LLM-Model. The headers are
+        transport-level BY DESIGN (docs/deployment.md:26) — deliberately
+        outside the openapi.yaml contract. The key is returned into the
+        caller's stack frame only: never stored on app.state or the DB, never
+        logged (docs/deployment.md:27). MOCK_LIVE_DISABLED=1 kills the
+        feature entirely."""
+        if config.live_disabled():
+            return None, None
+        return (request.headers.get("x-llm-key") or None,
+                request.headers.get("x-llm-model") or None)
+
+    def register_live(parent_id: str, request: Request) -> None:
+        """Replay/judge children run server-side, detached from this request,
+        so the key is held on the engine's in-memory dict for the lifetime of
+        the enqueued work only — never in the tasks.payload DB column; cleared
+        when the parent task terminates (see Engine.live_keys)."""
+        key, model = live_headers(request)
+        if key:
+            engine.live_keys[parent_id] = {"key": key, "model": model}
+
     def need_tree(tree: str) -> dict:
         row = db.one("SELECT * FROM trees WHERE id = ?", (tree,))
         if not row:
@@ -170,8 +191,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return {"status": "ok", "version": config.VERSION, "seed": app.state.seed}
 
     @app.get("/models")
-    async def models():
-        return config.MODELS
+    async def models(request: Request):
+        # "/models is populated from a curated cheap-model list in live mode"
+        # (docs/deployment.md:22-23); without a key, the static list as before.
+        key, _ = live_headers(request)
+        return config.LIVE_MODELS if key else config.MODELS
 
     # --------------------------------------------------------------- trees
     @app.get("/agenttrees")
@@ -440,11 +464,16 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
              j(stamp_envelope()), task["id"]))
         db.run("UPDATE conversations SET last_activity_at = ? WHERE id = ?", (now, conv["id"]))
 
+        # P1-T18c: BYOK key rides in ctx for THIS request's generation only —
+        # never persisted, never logged (docs/deployment.md:26-27).
+        llm_key, llm_model = live_headers(request)
         ctx = {
             "task_id": task["id"], "conversation_id": conv["id"],
             "assistant_turn_id": assistant_turn_id, "prompt": message,
             "agent": agent_name, "model": body.get("model"),
             "system_prompt": body.get("system_prompt"),
+            "temperature": body.get("temperature"),
+            "llm_key": llm_key, "llm_model": llm_model,
         }
 
         if not stream:
@@ -557,6 +586,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         parent = engine.create_task("replay", total=len(units) * len(configs),
                                     payload={"result": None})
+        register_live(parent["id"], request)
         row_specs = []
         for conv, rows in units:
             for row in rows:
@@ -633,6 +663,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         columns = [{"label": "baseline", "config": {}}] + [
             {"label": ep["name"], "config": {**cfg, "endpoint_ids": [ep["id"]]}} for ep in ep_rows]
         parent = engine.create_task("replay_turn", total=len(ep_rows), payload={"result": None})
+        register_live(parent["id"], request)
         row = {"conversation_id": conv["id"], "turn_id": fork_turn["id"], "prompt": prompt,
                "envelope": unj(fork_turn["envelope"])}
         run_id = build_run(tree, parent["id"], f"Re-fire · {len(ep_rows)} endpoint(s)",
@@ -887,6 +918,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         parent = engine.create_task("judge", total=len(cases),
                                     payload={"result": {"run_id": run_id}})
+        register_live(parent["id"], request)
         for i, (case_id, rid_, turn_id, conversation_id) in enumerate(cases, start=1):
             engine.create_task("judge", parent_id=parent["id"], payload={
                 "kind": "judge_case", "case_id": case_id, "run_id": rid_,
