@@ -1,0 +1,19 @@
+# Build context = package manifests, src/, index.html, vite/ts config, mock/.
+node_modules/
+.git/
+dist/
+coverage/
+.pytest_cache/
+**/__pycache__/
+*.sqlite
+mock/tests/
+tests/
+sketches/
+docs/
+autorun/
+.claude/
+skein-starter.zip
+skein-run.sh
+*.md
+openapi.yaml
+vitest.config.ts

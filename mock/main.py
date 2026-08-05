@@ -5,21 +5,90 @@ Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 
 import asyncio
 import json
+import os
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from starlette.datastructures import MutableHeaders
 
 from . import config
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
+from .static import mount_spa, resolve_static_dir
 from .util import canned_title, new_id, now_iso, sse, stamp_envelope
 
 
 def err(status: int, code: str, message: str):
     raise HTTPException(status, {"code": code, "message": message})
+
+
+DEMO_COOKIE = "skein_demo_token"
+
+DENIED_PAGE = (
+    "<!doctype html><html><head><title>Skein demo</title></head><body>"
+    "<h1>Skein demo</h1><p>This demo needs an access token. Open the exact "
+    "link you were given &mdash; it ends in <code>?token=&hellip;</code>. "
+    "The token is remembered in a cookie afterwards.</p></body></html>"
+)
+
+
+class DemoTokenGate:
+    """P1-TDEPLOY shared-token gate (docs/deployment.md:11-12): "gate with an
+    unguessable URL + shared token checked by middleware (env var DEMO_TOKEN;
+    ?token= or X-Demo-Token header)". Transport-level like the BYOK headers —
+    deliberately OUTSIDE the openapi.yaml contract.
+
+    DEMO_TOKEN unset (local dev, tests) = fully open, zero behavior change.
+    When set, every request must carry the token via ?token= / X-Demo-Token /
+    the skein_demo_token cookie; a valid ?token= request ALSO sets that cookie
+    (httpOnly, SameSite=Lax, Secure behind HTTPS — Render terminates TLS and
+    forwards X-Forwarded-Proto) so the SPA and all its same-origin API/asset
+    requests pass with no client changes. /healthz stays open for Render's
+    health checks; OPTIONS passes so CORS preflight (which cannot carry
+    credentials) is never blocked. Pure ASGI middleware, not BaseHTTPMiddleware,
+    so SSE streaming/cancellation semantics are untouched.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        token = os.environ.get("DEMO_TOKEN")
+        if scope["type"] != "http" or not token:
+            return await self.app(scope, receive, send)
+        if scope["path"] == "/healthz" or scope["method"] == "OPTIONS":
+            return await self.app(scope, receive, send)
+
+        request = Request(scope)
+        query_token = request.query_params.get("token")
+        supplied = (query_token or request.headers.get("x-demo-token")
+                    or request.cookies.get(DEMO_COOKIE))
+        if supplied != token:
+            accepts_html = "text/html" in (request.headers.get("accept") or "")
+            if scope["method"] == "GET" and accepts_html:
+                response = HTMLResponse(DENIED_PAGE, status_code=401)
+            else:
+                response = JSONResponse(
+                    {"code": "unauthorized", "message": "Missing or invalid demo token."},
+                    status_code=401)
+            return await response(scope, receive, send)
+
+        if query_token:
+            secure = (request.headers.get("x-forwarded-proto") == "https"
+                      or scope.get("scheme") == "https")
+            cookie = (f"{DEMO_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"
+                      + ("; Secure" if secure else ""))
+
+            async def send_with_cookie(message):
+                if message["type"] == "http.response.start":
+                    MutableHeaders(scope=message).append("set-cookie", cookie)
+                await send(message)
+
+            return await self.app(scope, receive, send_with_cookie)
+        return await self.app(scope, receive, send)
 
 
 async def body_json(request: Request) -> dict:
@@ -33,8 +102,11 @@ async def body_json(request: Request) -> dict:
 
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
-               step_delay: float | None = None) -> FastAPI:
+               step_delay: float | None = None, static_dir: str | None = None) -> FastAPI:
     app = FastAPI(title="Skein mock", version=config.VERSION, openapi_url=None, docs_url=None)
+    # Gate first, CORS second: add_middleware prepends, so CORS stays outermost
+    # (preflight answered before the gate; 401s still carry CORS headers).
+    app.add_middleware(DemoTokenGate)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     db = Db(db_path or config.DB_PATH)
@@ -969,6 +1041,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                             "mean": round(g["mean"], 4), "count": g["count"],
                             "distribution": distribution})
         return {"run_id": runId, "rubrics": rubrics}
+
+    # ------------------------------------------------- static SPA (last!)
+    # P1-TDEPLOY: the built Vite bundle, when present, mounts AFTER every API
+    # route so API paths always win; absent dist/ = dev mode, no change.
+    static_root = resolve_static_dir(static_dir)
+    if static_root:
+        mount_spa(app, static_root)
 
     return app
 

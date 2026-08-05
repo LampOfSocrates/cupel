@@ -14,6 +14,35 @@
   demo data is wanted. AWS only if the client's org requires it, or for the
   Phase-2 Helm/k8s story.
 
+## How to deploy (P1-TDEPLOY)
+Everything ships in-repo: `Dockerfile` (stage 1 builds the Vite bundle, stage
+2 runs the FastAPI mock serving API + bundle), `render.yaml` (blueprint),
+`mock/entrypoint.py` (boot: serve → wait /healthz → seed).
+
+1. Push the repo to GitHub, then either:
+   - **Blueprint**: Render dashboard → New → Blueprint → pick the repo;
+     `render.yaml` creates one free Docker web service with health check
+     `/healthz`, `DEMO_TOKEN` auto-generated, `SKEIN_SEED_ON_BOOT=1`,
+     `SKEIN_SEED=42`; or
+   - **Manual**: New → Web Service → Docker runtime → free plan, health check
+     path `/healthz`, and set those three env vars yourself.
+2. On boot the container serves immediately and re-seeds itself
+   deterministically through the public API (generator seed mode; chats
+   dedupe on re-seed via client_message_id — runs/judgments may accrete
+   across warm restarts, acceptable since the DB is ephemeral and a cold
+   restart resets to seeded state).
+3. Token gate usage: copy `DEMO_TOKEN` from the service's env and share the
+   URL as `https://<app>.onrender.com/?token=<DEMO_TOKEN>`. The first
+   `?token=` visit sets an httpOnly `skein_demo_token` cookie, so the SPA and
+   all subsequent same-origin API/asset requests pass without the query
+   param. Machine callers send `X-Demo-Token: <DEMO_TOKEN>` instead
+   (e.g. `python -m mock.generator drip --base https://<app>.onrender.com
+   --token <DEMO_TOKEN>`). `/healthz` stays ungated for Render's checks.
+   Unset `DEMO_TOKEN` = fully open (local dev default).
+4. Local smoke without Docker: `npm run build`, then
+   `DEMO_TOKEN=x SKEIN_SEED_ON_BOOT=1 python -m mock.entrypoint` and open
+   `http://localhost:4010/?token=x`.
+
 ## Live-LLM BYOK mode (P1-T18c)
 Mock stays the backend of record (conversations, tasks, runs, SQLite, SSE);
 only the generation call inside chat/replay/judge goes to a real provider

@@ -64,7 +64,9 @@ export class ApiError extends Error {
 }
 
 export function buildUrl(path: string, query?: Query): string {
-  const url = new URL(BASE + path);
+  // Production BASE is "" (same-origin, P1-TDEPLOY) — relative URLs need the
+  // page origin as base; absolute BASE values ignore the second argument.
+  const url = new URL(BASE + path, globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));

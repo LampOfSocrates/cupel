@@ -395,6 +395,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=42,
                     help="drives ALL content choices; same seed = same dataset "
                          "(default %(default)s)")
+    ap.add_argument("--token", default=None,
+                    help="demo token sent as X-Demo-Token on every request — "
+                         "required when the server runs with DEMO_TOKEN set "
+                         "(P1-TDEPLOY gate; docs/deployment.md:11-12)")
     ap.add_argument("--interval", type=float, default=8.0,
                     help="seconds between drip actions (default %(default)s)")
     ap.add_argument("--iterations", type=int, default=None,
@@ -402,8 +406,14 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def auth_headers(token: str | None) -> dict:
+    """Headers for the P1-TDEPLOY token gate; {} when no token (open server)."""
+    return {"X-Demo-Token": token} if token else {}
+
+
 async def _amain(args) -> None:
-    async with httpx.AsyncClient(base_url=args.base, timeout=60.0) as client:
+    async with httpx.AsyncClient(base_url=args.base, timeout=60.0,
+                                 headers=auth_headers(args.token)) as client:
         try:
             (await client.get("/healthz")).raise_for_status()
         except httpx.HTTPError as exc:

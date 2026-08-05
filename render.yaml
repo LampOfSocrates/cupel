@@ -1,0 +1,21 @@
+# P1-TDEPLOY Render blueprint (docs/deployment.md "How to deploy").
+# One free-tier Docker web service: FastAPI mock + built Vite bundle,
+# deterministic re-seed on boot, shared-token gate.
+services:
+  - type: web
+    name: skein-demo
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      # Shared-token gate (docs/deployment.md:11-12). Render generates an
+      # unguessable value; share the URL as https://<app>.onrender.com/?token=<value>.
+      - key: DEMO_TOKEN
+        generateValue: true
+      # No persistent disk on free tier -> re-seed deterministically on boot
+      # (docs/deployment.md:8-10; mock/entrypoint.py).
+      - key: SKEIN_SEED_ON_BOOT
+        value: "1"
+      - key: SKEIN_SEED
+        value: "42"
