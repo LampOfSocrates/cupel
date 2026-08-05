@@ -3,7 +3,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes, useLocation } from "react-router";
 import { renderApp } from "../test/render";
-import { mockTasks, taskStreamRig } from "../test/msw/handlers";
+import { logoutRequests, mockTasks, taskStreamRig } from "../test/msw/handlers";
+import { getAuthToken, setAuthToken } from "../api/auth";
 import { Shell } from "./Shell";
 
 // Contract under test — "Sidebar badge: pending count; subtle spinner while
@@ -78,6 +79,32 @@ describe("Sidebar Settings entry", () => {
     renderShell();
     await user.click(screen.getByRole("link", { name: "Settings" }));
     expect(screen.getByTestId("loc")).toHaveTextContent("/settings|null");
+  });
+});
+
+// P2-T07 session row — user name from /me; "Sign out" shows EXACTLY when a
+// login token exists for the active target (no auth-mode branch: an off-mode
+// backend issues no token, so the dev user shows without sign-out).
+describe("Sidebar session row (P2-T07)", () => {
+  it("off-mode shape: dev user name, no Sign out (no token stored)", async () => {
+    renderShell();
+    expect(await screen.findByText("Dev User")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+  });
+
+  it("with a token: Sign out posts /auth/logout best-effort, clears the token, goes to /login", async () => {
+    setAuthToken("session-jwt");
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(logoutRequests).toHaveLength(1));
+    // The logout call itself carried the bearer (still held when fired).
+    expect(logoutRequests[0]).toBe("Bearer session-jwt");
+    expect(getAuthToken()).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/login"));
+    // Token gone → the affordance disappears (token presence is the signal).
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
   });
 });
 

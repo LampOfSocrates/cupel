@@ -3,6 +3,7 @@
 Conversations/runs/judgments are the generator's job (P1-T18), not the server's.
 """
 
+from .auth import ensure_users
 from .db import Db, j
 from .util import now_iso
 
@@ -48,6 +49,11 @@ def instruction_text(agent_name: str, version: int) -> str:
 
 
 def bootstrap(db: Db) -> str:
+    # P2-T07: seeded auth users, on fresh AND pre-existing DBs — ensure_users
+    # is INSERT OR IGNORE so it runs before the seed-label short-circuit
+    # (a pre-existing DB has the label but not the users). Also called on
+    # POST /auth/token as a defensive first-auth-request path (mock/auth.py).
+    ensure_users(db)
     row = db.one("SELECT value FROM meta WHERE key = 'seed'")
     if row:
         return row["value"]

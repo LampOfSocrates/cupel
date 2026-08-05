@@ -1,9 +1,28 @@
 // Hand-derived from openapi.yaml v0.2.0 (schema line refs in comments).
 
-// openapi.yaml:1069 Me
+// openapi.yaml:1993 Me — v0.3.0 adds optional roles (:2004-2012 "additive in
+// v0.3.0, not required — Phase-1 backends omit it"; admin gates Settings →
+// Members, inspect gates the Inspector).
 export interface Me {
   user: { id: string; name: string; email?: string };
+  roles?: Array<"admin" | "inspect">;
   permissions: Record<string, Array<"view" | "tune" | "evaluate">>;
+}
+
+// openapi.yaml:2976 AuthTokenRequest — "email + password" (feature-spec.md:18).
+export interface AuthTokenRequest {
+  email: string;
+  password: string;
+}
+
+// openapi.yaml:2987 AuthTokenResponse — "Real-shaped JWT ... plus the
+// authenticated user so the login screen can hydrate immediately — the app
+// still calls GET /me on every boot regardless" (:2990-2994).
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: "bearer";
+  expires_in?: number | null;
+  me: Me;
 }
 
 // openapi.yaml:1110 AgentTree

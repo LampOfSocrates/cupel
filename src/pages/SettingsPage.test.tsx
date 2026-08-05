@@ -126,7 +126,7 @@ describe("custom target (feature-spec.md:158 'custom Base URL field')", () => {
 });
 
 describe("prod auth token (feature-spec.md:161)", () => {
-  it("selecting Prod shows a masked token field stored device-locally, not sent anywhere", async () => {
+  it("selecting Prod shows a masked token field stored device-locally", async () => {
     // Prod is same-origin (baseUrl "") — answer its healthz so the on-select
     // check resolves.
     server.use(
@@ -145,8 +145,11 @@ describe("prod auth token (feature-spec.md:161)", () => {
     expect(token).toHaveAttribute("type", "password"); // masked
     await user.type(token, "sekrit-token");
     expect(localStorage.getItem(PROD_TOKEN_KEY)).toBe("sekrit-token");
-    // T07 pointer is visible next to the field.
-    expect(screen.getByText(/auth wiring lands with P2-T07/)).toBeInTheDocument();
+    // P2-T07: the field now documents that it IS sent as a Bearer token,
+    // with the signed-in session's JWT taking precedence (auth.ts).
+    expect(
+      screen.getByText(/sent as a Bearer token on this target/),
+    ).toBeInTheDocument();
   });
 });
 

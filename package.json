@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e:smoke": "playwright test",
+    "e2e:auth": "node scripts/e2e-auth.mjs",
     "mock": "python -m uvicorn mock.main:app --port 4010",
     "simulate": "python -m mock.generator simulate",
     "test:mock": "python -m pytest mock/tests -q"

@@ -45,6 +45,11 @@ export default defineConfig({
         // that the smoke test can observe tokens streaming before `done`.
         MOCK_TOKEN_DELAY: "0.01",
         MOCK_STEP_DELAY: "0.03",
+        // P2-T07: `npm run e2e:auth` (scripts/e2e-auth.mjs) sets AUTH_E2E=1,
+        // which boots THIS mock with AUTH_MODE=on and runs e2e/auth.spec.ts
+        // only; auth.spec skips itself otherwise, so the plain e2e:smoke run
+        // (and the deployed demo) stay off-mode and unchanged.
+        ...(process.env.AUTH_E2E === "1" ? { AUTH_MODE: "on" } : {}),
       },
     },
     {

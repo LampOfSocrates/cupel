@@ -3,9 +3,10 @@
 // device-local (not synced via /settings)"). try/catch mirrors llmKey.ts:
 // localStorage can throw (privacy mode) — prefs then fall back to defaults.
 
-// "Prod requires an auth token field" (feature-spec.md:161). STORED ONLY —
-// nothing attaches it to requests yet; token wiring is P2-T07 (auth). The
-// Settings UI says so next to the field.
+// "Prod requires an auth token field" (feature-spec.md:161). Since P2-T07 the
+// client attaches it as "Authorization: Bearer" on requiresToken targets —
+// but only when no login JWT exists for the target (precedence documented in
+// src/api/auth.ts authHeaders: the login JWT wins).
 export const PROD_TOKEN_KEY = "skein.backend.prodToken";
 
 export function getProdToken(): string {

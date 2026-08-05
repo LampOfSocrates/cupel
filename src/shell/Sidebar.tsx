@@ -1,6 +1,8 @@
 import { Fragment } from "react";
 import { NavLink as RouterNavLink, useNavigate } from "react-router";
 import { AppShell, Badge, Button, Divider, Group, Loader, NavLink, Stack, Text } from "@mantine/core";
+import { api } from "../api/client";
+import { clearAuthToken, useAuthToken } from "../api/auth";
 import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
 import { ConversationList } from "./ConversationList";
@@ -43,8 +45,26 @@ function QueueIndicator() {
 }
 
 export function Sidebar() {
-  const { tree } = useApp();
+  const { tree, me } = useApp();
   const navigate = useNavigate();
+
+  // P2-T07 session row: user name from /me; "Sign out" shows EXACTLY when a
+  // login token exists for the active target (the no-branch rule from the
+  // task: an off-mode backend issues no token on boot, so the dev user shows
+  // without a sign-out — the token's presence is the signal, never the
+  // auth mode). Sign out = best-effort POST /auth/logout (stateless JWTs:
+  // the mock 204s; a failure is ignored), then drop the token and go to
+  // /login (feature-spec.md:18 "Session shown ... with sign-out").
+  const authToken = useAuthToken();
+  const signOut = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // best-effort — the token is discarded regardless
+    }
+    clearAuthToken();
+    navigate("/login");
+  };
 
   return (
     <>
@@ -91,6 +111,16 @@ export function Sidebar() {
       <AppShell.Section>
         <Divider my="xs" />
         <NavLink component={RouterNavLink} to="/settings" label="Settings" />
+        <Group justify="space-between" wrap="nowrap" px={8} py={4}>
+          <Text size="xs" c="dimmed" truncate title={me.user.email ?? me.user.name}>
+            {me.user.name}
+          </Text>
+          {authToken && (
+            <Button variant="subtle" size="compact-xs" color="gray" onClick={signOut}>
+              Sign out
+            </Button>
+          )}
+        </Group>
       </AppShell.Section>
     </>
   );

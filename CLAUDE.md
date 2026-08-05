@@ -4,7 +4,7 @@ Read these before any work, in order:
 2. skein-phases.md — we build phase by phase; NEVER build ahead of the current phase
 3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
-Current phase: 2. Current task: P2-T07 Auth both AUTH_MODEs (mock JWT endpoints + seeded users, login screen, token handling/401s, /me both modes, no AUTH_MODE branches in components).
+Current phase: 2. Current task: P2-T07b/07c Admin — members permission matrix (view/tune/evaluate) + tree enable/disable (read-only history).
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.

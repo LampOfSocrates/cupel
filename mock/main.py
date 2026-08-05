@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import config
+from . import auth, config
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -91,6 +91,83 @@ class DemoTokenGate:
         return await self.app(scope, receive, send)
 
 
+class AuthGate:
+    """P2-T07 AUTH_MODE=on enforcement (openapi.yaml:21-36). Pure ASGI like
+    DemoTokenGate so SSE streaming/cancellation semantics are untouched.
+
+    AUTH_MODE unset/"off" (the default — local dev, tests, the deployed
+    Render demo): completely inert, zero behavior change. AUTH_MODE=on: a
+    valid bearer JWT (mock/auth.py) is required on API paths; the verified
+    users-table row is stashed in scope["state"]["skein_user"] for handlers
+    (/me) to read.
+
+    What is gated (decision, documented): only paths whose FIRST SEGMENT is a
+    known API root (API_ROOTS below). Everything else — the SPA catch-all
+    (/, /login, /chat/..., index.html), bundle assets, favicons — stays open
+    so the login screen can render before any token exists. Explicitly open
+    even within API roots: GET /healthz and POST /auth/token, the contract's
+    only two security:[] operations (openapi.yaml:23-25), plus OPTIONS (CORS
+    preflight carries no credentials). /openapi.json is not an API root and
+    thus open: it is the contract itself, probed by skein-ready/switcher
+    tooling before login, and carries no data. (The DemoTokenGate DOES gate
+    /openapi.json — that gate protects a whole deployment, this one protects
+    data; both can be active, see stacking note below.)
+
+    Tree permission enforcement is centralized HERE: /agenttrees/{tree}/...
+    without "view" on {tree} → 404 not_found — "unpermitted trees never
+    render" (openapi.yaml:1948 NotFound: "Resource not found (or tree not
+    permitted)"). Handlers keep their existing need_tree checks unchanged.
+
+    Stacking with DemoTokenGate (both env vars set): middleware order is
+    CORS → DemoTokenGate → AuthGate → app (add_middleware prepends; see
+    create_app), so the demo gate runs FIRST — a request must pass the
+    deployment's shared token before its JWT is even inspected.
+    """
+
+    OPEN_PATHS = {"/healthz", "/auth/token"}
+    API_ROOTS = {"me", "auth", "models", "agenttrees", "upload", "feedback",
+                 "tasks", "eval", "spans", "admin", "settings", "casebooks"}
+
+    def __init__(self, app, db: Db):
+        self.app = app
+        self.db = db
+
+    async def _reject(self, scope, receive, send, status, code, message):
+        response = JSONResponse({"code": code, "message": message},
+                                status_code=status)
+        await response(scope, receive, send)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not auth.auth_on():
+            return await self.app(scope, receive, send)
+        path = scope["path"]
+        segment = path.split("/", 2)[1] if "/" in path else ""
+        if (path in self.OPEN_PATHS or scope["method"] == "OPTIONS"
+                or segment not in self.API_ROOTS):
+            return await self.app(scope, receive, send)
+
+        header = dict(scope["headers"]).get(b"authorization", b"").decode()
+        token = header[7:] if header.lower().startswith("bearer ") else ""
+        claims = auth.decode_jwt(token) if token else None
+        user = auth.user_by_id(self.db, claims["sub"]) if claims else None
+        if not user:
+            return await self._reject(scope, receive, send, 401, "unauthorized",
+                                      "Missing, invalid or expired bearer token.")
+
+        parts = path.split("/")
+        if segment == "agenttrees" and len(parts) > 2 and parts[2]:
+            permissions = unj(user["permissions"], {})
+            if "view" not in permissions.get(parts[2], []):
+                # Unpermitted tree = not_found, indistinguishable from absent
+                # (openapi.yaml:1948) — message mirrors need_tree's.
+                return await self._reject(
+                    scope, receive, send, 404, "not_found",
+                    f"Agent tree '{parts[2]}' not found.")
+
+        scope.setdefault("state", {})["skein_user"] = user
+        return await self.app(scope, receive, send)
+
+
 async def body_json(request: Request) -> dict:
     try:
         body = await request.json()
@@ -113,12 +190,16 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # — skein-ready reaches it via --header "X-Demo-Token: ...".
     app = FastAPI(title="Skein mock", version=config.VERSION,
                   openapi_url="/openapi.json", docs_url=None, redoc_url=None)
-    # Gate first, CORS second: add_middleware prepends, so CORS stays outermost
-    # (preflight answered before the gate; 401s still carry CORS headers).
+    db = Db(db_path or config.DB_PATH)
+    # add_middleware PREPENDS, so registration order is inner→outer. Final
+    # stack: CORS (outermost — preflight answered first; every 401 still
+    # carries CORS headers) → DemoTokenGate (deployment shared token) →
+    # AuthGate (P2-T07 per-user JWT when AUTH_MODE=on) → app. Both gates can
+    # be active at once; the demo gate runs first (see AuthGate docstring).
+    app.add_middleware(AuthGate, db=db)
     app.add_middleware(DemoTokenGate)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-    db = Db(db_path or config.DB_PATH)
     seed_label = bootstrap(db)
     broker = Broker()
     engine = Engine(db, broker, token_delay=token_delay, step_delay=step_delay)
@@ -258,9 +339,52 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 })
         return rows
 
+    # ---------------------------------------------------------------- auth
+    def request_user(request: Request) -> dict | None:
+        """The AuthGate-verified users row (AUTH_MODE=on), else None —
+        handlers never read AUTH_MODE themselves."""
+        return request.scope.get("state", {}).get("skein_user")
+
+    @app.post("/auth/token")
+    async def create_token(request: Request):
+        """POST /auth/token (openapi.yaml:96-128): open endpoint (security: [])
+        — "a client cannot hold a token before logging in" (:105-106).
+        Credentials are validated against the seeded users in BOTH modes
+        ("With AUTH_MODE=off the endpoint still answers ... so the login flow
+        stays testable", :109-111); bad credentials → 401 invalid_credentials
+        (:124-125)."""
+        body = await body_json(request)
+        email, password = body.get("email"), body.get("password")
+        if not email or not password:
+            err(422, "invalid", "email and password are required.")
+        # First-auth-request seeding for pre-existing DBs (mock/auth.py).
+        auth.ensure_users(db)
+        user = auth.find_user(db, email)
+        if not user or not auth.verify_password(password, user["password_hash"]):
+            err(401, "invalid_credentials", "Invalid email or password.")
+        token, expires_in = auth.issue_token(user)
+        return {"access_token": token, "token_type": "bearer",
+                "expires_in": expires_in, "me": auth.me_payload(user)}
+
+    @app.post("/auth/logout", status_code=204)
+    async def logout():
+        """POST /auth/logout (openapi.yaml:130-144). The mock's JWTs are
+        STATELESS — there is no server-side session to invalidate, so this is
+        a 204 no-op in both modes; the endpoint exists for contract parity
+        and the client discards its token ("the client then drops it and
+        returns to login", :138-139). In auth-on mode the AuthGate already
+        401s a missing/invalid token before this handler runs."""
+        return Response(status_code=204)
+
     # ------------------------------------------------------- identity/meta
     @app.get("/me")
-    async def me():
+    async def me(request: Request):
+        """GET /me (openapi.yaml:147-166): "answers in both auth modes".
+        AUTH_MODE=on → the token's user with their roles+permissions;
+        off → the dev user, byte-for-byte as before P2-T07."""
+        user = request_user(request)
+        if user:
+            return auth.me_payload(user)
         trees = db.all("SELECT id FROM trees")
         return {
             "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
@@ -280,9 +404,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     # --------------------------------------------------------------- trees
     @app.get("/agenttrees")
-    async def list_trees():
+    async def list_trees(request: Request):
+        """GET /agenttrees (openapi.yaml:437-454): "Permitted agent trees".
+        AUTH_MODE=on filters to trees the token's user can view — "GET
+        /agent-trees returns only permitted trees; unpermitted trees never
+        render" (feature-spec.md:32). Off mode: all trees, as before."""
+        rows = db.all("SELECT * FROM trees ORDER BY rowid")
+        user = request_user(request)
+        if user:
+            permissions = unj(user["permissions"], {})
+            rows = [t for t in rows if "view" in permissions.get(t["id"], [])]
         return [{"id": t["id"], "name": t["name"], "enabled": bool(t["enabled"])}
-                for t in db.all("SELECT * FROM trees ORDER BY rowid")]
+                for t in rows]
 
     @app.post("/agenttrees", status_code=201)
     async def create_tree(request: Request):

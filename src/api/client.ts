@@ -3,6 +3,7 @@
 // target (agentic.config.ts via src/api/target.ts) — P2-CONFIG replaced the
 // old hand-edited BASE constant (src/api/base.ts, folded in here).
 import { getActiveTarget } from "./target";
+import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
 import type {
@@ -10,6 +11,7 @@ import type {
   AgentCreate,
   AgentTree,
   Attachment,
+  AuthTokenResponse,
   ChatDoneEvent,
   ChatRequest,
   ChatResponse,
@@ -81,7 +83,13 @@ export function buildUrl(path: string, query?: Query): string {
   return url.toString();
 }
 
-async function errorFromResponse(res: Response): Promise<ApiError> {
+// P2-T07 central 401 handling (feature-spec.md:18 "401 anywhere → back to
+// login"): every 401 clears the active target's login token and emits
+// auth-required — the router-level listener (App.tsx) navigates to
+// /login?return_to=<current path>. The one exception is POST /auth/token
+// itself: bad credentials are the login form's own error, not a session
+// expiry. No auth-mode branch — an off-mode backend simply never 401s.
+async function errorFromResponse(res: Response, path: string): Promise<ApiError> {
   let code = "unknown";
   let message = `${res.status} ${res.statusText}`;
   try {
@@ -92,6 +100,10 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
     }
   } catch {
     // non-JSON error body — keep the status fallback
+  }
+  if (res.status === 401 && path !== "/auth/token") {
+    clearAuthToken();
+    emitAuthRequired();
   }
   return new ApiError(res.status, code, message);
 }
@@ -112,13 +124,17 @@ async function request<T>(
 ): Promise<T> {
   const res = await fetch(buildUrl(path, opts.query), {
     method: opts.method ?? "GET",
+    // authHeaders(): login JWT for the active target, else the static prod
+    // token for requiresToken targets — precedence documented in auth.ts
+    // (P2-T07). Attached centrally; no caller passes tokens.
     headers: {
       ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...authHeaders(),
       ...liveHeaders(path),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
-  if (!res.ok) throw await errorFromResponse(res);
+  if (!res.ok) throw await errorFromResponse(res, path);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -177,6 +193,22 @@ async function* chatEvents(
 }
 
 export const api = {
+  // POST /auth/token (openapi.yaml:96-128) — "login screen (email + password
+  // ...) → POST /auth/token; token attached by the single API client"
+  // (feature-spec.md:18). The caller (LoginPage) stores access_token via
+  // setAuthToken; a 401 here is invalid_credentials, surfaced in the form
+  // (deliberately excluded from the central 401 redirect above).
+  login: (email: string, password: string) =>
+    request<AuthTokenResponse>("/auth/token", {
+      method: "POST",
+      body: { email, password },
+    }),
+
+  // POST /auth/logout (openapi.yaml:130-144) — called best-effort on sign-out
+  // ("clients call it unconditionally, never branching on the mode", :140-141);
+  // the client then clears its stored token regardless of the outcome.
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+
   // GET /me — always called on boot (skein-phases.md:160; openapi.yaml:62)
   me: () => request<Me>("/me"),
 
@@ -282,12 +314,12 @@ export const api = {
     const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
       method: "POST",
       // llmHeaders(): BYOK X-LLM-Key/X-LLM-Model when a key is stored
-      // (P1-T18c, docs/deployment.md:26).
-      headers: { "Content-Type": "application/json", ...llmHeaders() },
+      // (P1-T18c, docs/deployment.md:26). authHeaders(): P2-T07 bearer.
+      headers: { "Content-Type": "application/json", ...authHeaders(), ...llmHeaders() },
       body: JSON.stringify(req),
       signal: opts.signal,
     });
-    if (!res.ok) throw await errorFromResponse(res);
+    if (!res.ok) throw await errorFromResponse(res, `/agenttrees/${tree}/chat`);
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("text/event-stream")) {
       return { kind: "json", response: (await res.json()) as ChatResponse };
@@ -306,8 +338,12 @@ export const api = {
   upload: async (file: File): Promise<Attachment> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(buildUrl("/upload"), { method: "POST", body: form });
-    if (!res.ok) throw await errorFromResponse(res);
+    const res = await fetch(buildUrl("/upload"), {
+      method: "POST",
+      headers: authHeaders(),
+      body: form,
+    });
+    if (!res.ok) throw await errorFromResponse(res, "/upload");
     return (await res.json()) as Attachment;
   },
 
@@ -378,8 +414,11 @@ export const api = {
   taskStream: async function* (
     opts: { signal?: AbortSignal; onOpen?: () => void } = {},
   ): AsyncGenerator<TaskStreamEvent, void> {
-    const res = await fetch(buildUrl("/tasks/stream"), { signal: opts.signal });
-    if (!res.ok) throw await errorFromResponse(res);
+    const res = await fetch(buildUrl("/tasks/stream"), {
+      headers: authHeaders(),
+      signal: opts.signal,
+    });
+    if (!res.ok) throw await errorFromResponse(res, "/tasks/stream");
     if (!res.body) {
       throw new ApiError(res.status, "empty_stream", "SSE response had no body");
     }

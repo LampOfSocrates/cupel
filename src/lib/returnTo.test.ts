@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+import { loginPath, sanitizeReturnTo } from "./returnTo";
+
+// P2-T07 return_to round-trip — built for P2-SHARE deep links
+// (/chat/{id}?turn=...): 401 → /login?return_to=<full path incl. query>;
+// after login navigate back, SAME-ORIGIN RELATIVE PATHS ONLY.
+
+describe("loginPath", () => {
+  it("carries pathname + query as an encoded return_to", () => {
+    expect(loginPath({ pathname: "/chat/c1", search: "?turn=t2" })).toBe(
+      "/login?return_to=%2Fchat%2Fc1%3Fturn%3Dt2",
+    );
+  });
+
+  it("root and /login itself get a bare /login (no pointless return_to)", () => {
+    expect(loginPath({ pathname: "/", search: "" })).toBe("/login");
+    expect(loginPath({ pathname: "/login", search: "?return_to=%2Fchat" })).toBe("/login");
+  });
+});
+
+describe("sanitizeReturnTo — same-origin relative paths only", () => {
+  it("passes app-relative paths through, query intact (?turn= deep link)", () => {
+    expect(sanitizeReturnTo("/chat/c1?turn=t2")).toBe("/chat/c1?turn=t2");
+    expect(sanitizeReturnTo("/runs/run_1")).toBe("/runs/run_1");
+  });
+
+  it.each([
+    [null, "missing"],
+    ["", "empty"],
+    ["http://evil.example", "absolute URL"],
+    ["https://evil.example/chat", "absolute URL"],
+    ["//evil.example/chat", "protocol-relative"],
+    ["/\\evil.example", "backslash smuggling"],
+    ["chat/c1", "not rooted"],
+    ["javascript:alert(1)", "scheme"],
+    ["/login", "login loop"],
+    ["/login?return_to=%2F", "login loop with query"],
+  ])("rejects %s (%s) → /", (raw, _why) => {
+    expect(sanitizeReturnTo(raw)).toBe("/");
+  });
+});

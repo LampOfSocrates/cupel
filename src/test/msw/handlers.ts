@@ -81,6 +81,23 @@ export const mockMe: Me = {
   permissions: { agent1: ["view", "tune", "evaluate"], agent2: ["view"] },
 };
 
+// P2-T07 auth fixtures — POST /auth/token (openapi.yaml:96-128) + POST
+// /auth/logout (:130-144). Credentials mirror the real mock's seeded users
+// (mock/auth.py SEED_USERS: admin@demo / restricted@demo, password "demo");
+// the token is real-SHAPED (three dot-separated segments) — signature not
+// verified client-side, the client only stores and attaches it.
+export const mockAdminMe: Me = {
+  user: { id: "u_admin", name: "Admin", email: "admin@demo" },
+  roles: ["admin", "inspect"],
+  permissions: {
+    agent1: ["view", "tune", "evaluate"],
+    agent2: ["view", "tune", "evaluate"],
+  },
+};
+export const MOCK_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1X2FkbWluIn0.c2ln";
+export const authTokenRequests: Array<{ email: string; password: string }> = [];
+export const logoutRequests: string[] = []; // authorization header per hit
+
 export const mockTrees: AgentTree[] = [
   { id: "agent1", name: "Agent 1", enabled: true },
   { id: "agent2", name: "Agent 2", enabled: true },
@@ -881,6 +898,8 @@ const cancelledTasks = new Set<string>();
 let newConvCounter = 0;
 
 export function resetHandlerState() {
+  authTokenRequests.length = 0;
+  logoutRequests.length = 0;
   healthConfig.status = 200;
   healthConfig.body = { status: "ok", version: "0.2.0", seed: "demo-agent1" };
   healthzRequests.length = 0;
@@ -956,6 +975,32 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const handlers = [
   http.get(`${BASE}/me`, () => HttpResponse.json(mockMe)),
+
+  // POST /auth/token — 200 AuthTokenResponse for the seeded credentials,
+  // 401 invalid_credentials otherwise (openapi.yaml:124-125).
+  http.post(`${BASE}/auth/token`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; password: string };
+    authTokenRequests.push(body);
+    if (body.email !== "admin@demo" || body.password !== "demo") {
+      return HttpResponse.json(
+        { code: "invalid_credentials", message: "Invalid email or password." },
+        { status: 401 },
+      );
+    }
+    return HttpResponse.json({
+      access_token: MOCK_JWT,
+      token_type: "bearer",
+      expires_in: 43200,
+      me: mockAdminMe,
+    });
+  }),
+
+  // POST /auth/logout — stateless 204 (openapi.yaml:139-141); the header
+  // capture lets tests assert the sign-out call carried the bearer.
+  http.post(`${BASE}/auth/logout`, ({ request }) => {
+    logoutRequests.push(request.headers.get("authorization") ?? "");
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   // GET /healthz (openapi.yaml:80-96) — status/version/seed; latency is
   // client-measured (openapi.yaml:88), so none here.

@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS spans (
   status TEXT NOT NULL, error TEXT,
   prompt TEXT, response TEXT, args TEXT, result TEXT);
 
+-- P2-T07 seeded users (auth-on credentials, feature-spec.md:21). Part of the
+-- IF NOT EXISTS schema, which runs on EVERY Db open — pre-existing DBs gain
+-- the table additively; rows are seeded via auth.ensure_users (INSERT OR
+-- IGNORE, migration-safe).
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+  password_hash TEXT NOT NULL, roles TEXT NOT NULL DEFAULT '[]',
+  permissions TEXT NOT NULL DEFAULT '{}',
+  invited INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+
 -- Append-only: (id, version) rows accumulate, same id across versions.
 CREATE TABLE IF NOT EXISTS rubrics (
   id TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,

@@ -7,7 +7,12 @@ import { http, HttpResponse } from "msw";
 import { agenticConfig } from "../agentic.config";
 import { App } from "./App";
 import { server } from "./test/msw/server";
-import { healthzRequests, localBaseRequests } from "./test/msw/handlers";
+import {
+  healthzRequests,
+  localBaseRequests,
+  mockAdminMe,
+  mockTrees,
+} from "./test/msw/handlers";
 
 // P2-T17 live switch — "switch between mock/local/staging/prod live"
 // (skein-phases.md:73). Design under test (App.tsx): the boot fetch is keyed
@@ -81,5 +86,61 @@ describe("live target switch (P2-T17)", () => {
     await user.click(screen.getByRole("button", { name: "Switch back to Mock" }));
     await screen.findByTestId("env-banner");
     expect(screen.getByTestId("env-banner")).toHaveTextContent("MOCK BACKEND");
+  });
+});
+
+// P2-T07 boot flow: "/me is always called" stays the boot (invariant,
+// skein-phases.md:160); an auth-on backend answers 401 → the LOGIN SCREEN
+// renders instead of the error screen, the deep link rides along as
+// return_to, and a successful login re-runs the boot with the token. Against
+// an off-mode backend (the deployed demo) none of this fires — /me succeeds
+// and the app boots straight in, zero UI change (all other App tests).
+describe("boot auth (P2-T07)", () => {
+  const BASE = agenticConfig.targets.find((t) => t.id === "mock")!.baseUrl;
+  const unauthorized = () =>
+    HttpResponse.json(
+      { code: "unauthorized", message: "Missing, invalid or expired bearer token." },
+      { status: 401 },
+    );
+
+  it("boot 401 → login screen; login → boots at the preserved deep link with a session row", async () => {
+    // Auth-on shape: /me and /agenttrees 401 without a bearer, answer with it.
+    server.use(
+      http.get(`${BASE}/me`, ({ request }) =>
+        request.headers.get("authorization")
+          ? HttpResponse.json(mockAdminMe)
+          : unauthorized(),
+      ),
+      http.get(`${BASE}/agenttrees`, ({ request }) =>
+        request.headers.get("authorization")
+          ? HttpResponse.json(mockTrees)
+          : unauthorized(),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/chat/c1?turn=t2"]}>
+          <App />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    // Login screen, not the "Backend unreachable" error screen.
+    await screen.findByText("Sign in to continue");
+    expect(screen.queryByText("Backend unreachable")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/Email/), "admin@demo");
+    await user.type(screen.getByLabelText(/^Password/), "demo");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    // Booted with the token: shell renders, session row shows the /me user
+    // with Sign out (a token exists for the active target).
+    await screen.findByRole("button", { name: "+ New chat" });
+    expect(await screen.findByText("Admin")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    // The deep link survived the round-trip: ChatPage loaded conversation c1.
+    await screen.findByTestId("transcript");
   });
 });

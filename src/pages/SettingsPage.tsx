@@ -200,12 +200,13 @@ export function SettingsPage() {
           </Group>
 
           {/* "Prod requires an auth token field" (feature-spec.md:161).
-              STORED device-locally only — attaching it to requests is P2-T07. */}
+              Attached as a Bearer header on requiresToken targets since
+              P2-T07 — unless a login JWT exists (auth.ts precedence). */}
           {selectedPreset?.requiresToken && (
             <PasswordInput
               label="Auth token"
               aria-label="Auth token"
-              description="Stored on this device only. Not sent with requests yet — auth wiring lands with P2-T07."
+              description="Stored on this device only; sent as a Bearer token on this target (a signed-in session's token takes precedence)."
               value={token}
               onChange={(e) => {
                 const value = e.currentTarget.value;
