@@ -20,6 +20,8 @@ import { http, HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
 import type {
+  AdminUser,
+  AdminUserUpsert,
   Agent,
   AgentCreate,
   AgentTree,
@@ -53,6 +55,7 @@ import type {
   SpanPayload,
   Task,
   Trace,
+  TreePermission,
   Turn,
 } from "../../api/types";
 
@@ -98,10 +101,62 @@ export const MOCK_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1X2FkbWluIn0.c2ln";
 export const authTokenRequests: Array<{ email: string; password: string }> = [];
 export const logoutRequests: string[] = []; // authorization header per hit
 
-export const mockTrees: AgentTree[] = [
-  { id: "agent1", name: "Agent 1", enabled: true },
-  { id: "agent2", name: "Agent 2", enabled: true },
-];
+function seedTrees(): AgentTree[] {
+  return [
+    { id: "agent1", name: "Agent 1", enabled: true },
+    { id: "agent2", name: "Agent 2", enabled: true },
+  ];
+}
+export const mockTrees: AgentTree[] = seedTrees();
+
+// P2-T07b/07c admin fixtures — GET/PUT /admin/users (openapi.yaml:169-218),
+// GET/PUT /admin/users/{userId}/permissions (:220-265), PATCH
+// /admin/agenttrees/{treeId} (:267-296). Users mirror the real mock's seeded
+// pair (mock/auth.py SEED_USERS); AdminUser carries roles only —
+// "per-tree rights live in the permission matrix" (openapi.yaml:3019).
+function seedAdminUsers(): AdminUser[] {
+  return [
+    {
+      id: "u_admin",
+      name: "Admin",
+      email: "admin@demo",
+      roles: ["admin", "inspect"],
+      invited: false,
+      created_at: "2026-07-01T10:00:00Z",
+    },
+    {
+      id: "u_restricted",
+      name: "Restricted",
+      email: "restricted@demo",
+      roles: [],
+      invited: false,
+      created_at: "2026-07-01T10:00:00Z",
+    },
+  ];
+}
+export const mockAdminUsers: AdminUser[] = seedAdminUsers();
+
+function seedPermissionMatrices(): Record<string, Record<string, TreePermission[]>> {
+  return {
+    u_admin: {
+      agent1: ["view", "tune", "evaluate"],
+      agent2: ["view", "tune", "evaluate"],
+    },
+    u_restricted: { agent1: ["view", "evaluate"] },
+  };
+}
+export const mockPermissionMatrices: Record<
+  string,
+  Record<string, TreePermission[]>
+> = seedPermissionMatrices();
+
+export const permissionPuts: Array<{
+  userId: string;
+  permissions: Record<string, TreePermission[]>;
+}> = [];
+export const adminUserUpserts: AdminUserUpsert[] = [];
+export const treeTogglePatches: Array<{ treeId: string; enabled: boolean }> = [];
+let adminUserCounter = 0;
 
 // GET /agenttrees/{tree}/endpoints (openapi.yaml:154-172, Endpoint :1130-1138
 // "an agent deployment/backend target") — ids/names mirror the real mock's
@@ -900,6 +955,16 @@ let newConvCounter = 0;
 export function resetHandlerState() {
   authTokenRequests.length = 0;
   logoutRequests.length = 0;
+  mockTrees.length = 0;
+  mockTrees.push(...seedTrees());
+  mockAdminUsers.length = 0;
+  mockAdminUsers.push(...seedAdminUsers());
+  for (const key of Object.keys(mockPermissionMatrices)) delete mockPermissionMatrices[key];
+  Object.assign(mockPermissionMatrices, seedPermissionMatrices());
+  permissionPuts.length = 0;
+  adminUserUpserts.length = 0;
+  treeTogglePatches.length = 0;
+  adminUserCounter = 0;
   healthConfig.status = 200;
   healthConfig.body = { status: "ok", version: "0.2.0", seed: "demo-agent1" };
   healthzRequests.length = 0;
@@ -1053,6 +1118,83 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/agenttrees`, () => HttpResponse.json(mockTrees)),
+
+  // ------------------------------------------------------------ admin (T07b)
+  // GET /admin/users — "Every user, cross-user (admin-only)"
+  // (openapi.yaml:184). Role gating is SERVER-side (403 Forbidden,
+  // openapi.yaml:1966-1970); the UI hides the section on /me.roles instead of
+  // relying on the error, so the happy path here always answers 200.
+  http.get(`${BASE}/admin/users`, () => HttpResponse.json(mockAdminUsers)),
+
+  // PUT /admin/users — "upsert keyed by email: a new email creates an invited
+  // user ...; an existing email updates name/roles" (openapi.yaml:195-200).
+  http.put(`${BASE}/admin/users`, async ({ request }) => {
+    const body = (await request.json()) as AdminUserUpsert[];
+    adminUserUpserts.push(...body);
+    const out: AdminUser[] = [];
+    for (const item of body) {
+      const existing = mockAdminUsers.find((u) => u.email === item.email);
+      if (existing) {
+        if (item.name != null) existing.name = item.name;
+        if (item.roles != null) existing.roles = item.roles;
+        out.push(existing);
+      } else {
+        const created: AdminUser = {
+          id: `u-new-${++adminUserCounter}`,
+          name: item.name ?? item.email,
+          email: item.email,
+          roles: item.roles ?? [],
+          invited: true,
+          created_at: new Date().toISOString(),
+        };
+        mockAdminUsers.push(created);
+        mockPermissionMatrices[created.id] = {};
+        out.push(created);
+      }
+    }
+    return HttpResponse.json(out);
+  }),
+
+  // GET/PUT /admin/users/{userId}/permissions — "Same shape as Me.permissions
+  // so the admin UI and /me agree exactly" (openapi.yaml:229-231); PUT is a
+  // "Full replacement of the matrix" (:246).
+  http.get(`${BASE}/admin/users/:userId/permissions`, ({ params }) => {
+    const userId = params.userId as string;
+    if (!mockAdminUsers.some((u) => u.id === userId)) {
+      return HttpResponse.json({ code: "not_found", message: "user not found" }, { status: 404 });
+    }
+    return HttpResponse.json({
+      user_id: userId,
+      permissions: mockPermissionMatrices[userId] ?? {},
+    });
+  }),
+
+  http.put(`${BASE}/admin/users/:userId/permissions`, async ({ params, request }) => {
+    const userId = params.userId as string;
+    const body = (await request.json()) as {
+      permissions: Record<string, TreePermission[]>;
+    };
+    permissionPuts.push({ userId, permissions: body.permissions });
+    if (!mockAdminUsers.some((u) => u.id === userId)) {
+      return HttpResponse.json({ code: "not_found", message: "user not found" }, { status: 404 });
+    }
+    mockPermissionMatrices[userId] = body.permissions;
+    return HttpResponse.json({ user_id: userId, permissions: body.permissions });
+  }),
+
+  // PATCH /admin/agenttrees/{treeId} {enabled} — "toggles availability, never
+  // data" (openapi.yaml:279-280).
+  http.patch(`${BASE}/admin/agenttrees/:treeId`, async ({ params, request }) => {
+    const treeId = params.treeId as string;
+    const body = (await request.json()) as { enabled: boolean };
+    treeTogglePatches.push({ treeId, enabled: body.enabled });
+    const tree = mockTrees.find((t) => t.id === treeId);
+    if (!tree) {
+      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
+    }
+    tree.enabled = body.enabled;
+    return HttpResponse.json(tree);
+  }),
 
   // GET /agenttrees/{tree}/endpoints — "Deploy targets for replay"
   // (openapi.yaml:158; feature-spec.md:121).

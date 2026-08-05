@@ -14,6 +14,7 @@ import {
 import { api } from "../api/client";
 import type { Agent, Rubric, RunConfig, RunSummaryItem, SelectionItem } from "../api/types";
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
+import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
 
 // P1-T11 — Runs 3-step flow (skein-phases.md:19): "Replay stored conversations
@@ -261,6 +262,9 @@ export function RunsPage() {
             New run
           </Button>
         </Group>
+        {/* P2-T07c: a disabled tree keeps its runs readable while queueing new
+            work 409s (feature-spec.md:20 "read-only banner"). */}
+        <ReadOnlyTreeBanner />
         {error && (
           <Alert color="red" title="Error">
             {error}
@@ -282,6 +286,7 @@ export function RunsPage() {
         <Stepper.Step label="Configure" />
         <Stepper.Step label="Results" />
       </Stepper>
+      <ReadOnlyTreeBanner />
       {error && (
         <Alert color="red" title="Error" withCloseButton onClose={() => setError(null)}>
           {error}

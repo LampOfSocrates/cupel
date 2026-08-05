@@ -29,6 +29,8 @@ import {
   setProdToken,
   setSseEnabled,
 } from "../api/backendPrefs";
+import { useApp } from "../AppContext";
+import { AgentTreesSection, MembersSection } from "./SettingsAdmin";
 
 // P2-T17 — Settings → Backend (sketch 09, feature-spec.md:157-161):
 // "Target switcher: Mock / Local / Staging / Prod presets + custom Base URL
@@ -58,6 +60,13 @@ const GEN_TOOLTIP = "Arrives with generator controls (P2-GEN)";
 
 export function SettingsPage() {
   const target = useBackendTarget();
+  // P2-T07b/07c: the admin sections are ROLE-driven — "Admin UI (visible when
+  // /me grants admin)" (feature-spec.md:19). /me is fetched once at boot and
+  // lives in AppContext; nothing here knows or asks how the backend
+  // authenticates (invariant: the frontend never branches on the auth mode —
+  // an off-mode backend simply answers /me with an admin dev user).
+  const { me } = useApp();
+  const isAdmin = me.roles?.includes("admin") ?? false;
 
   // Custom row: picking "Custom" before a URL exists cannot switch yet (an
   // empty baseUrl would mean same-origin, which is prod's semantic) — the
@@ -261,6 +270,16 @@ export function SettingsPage() {
           )}
         </Stack>
       </Paper>
+
+      {/* Settings → Members + Settings → Agent trees (feature-spec.md:19-20;
+          skein-phases.md:77) — unsketched, so they reuse this page's visual
+          language (Paper block, dense xs controls) per skein-phases.md:95. */}
+      {isAdmin && (
+        <>
+          <MembersSection />
+          <AgentTreesSection />
+        </>
+      )}
 
       {/* Per-environment note (sketch 09 bottom card). */}
       <Paper withBorder p="md" radius="md">

@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { Model } from "../api/types";
 import { AppContext, type ChatSettings } from "../AppContext";
 import { QueueProvider } from "../QueueContext";
+import type { AgentTree, Me } from "../api/types";
 import { mockMe, mockTrees } from "./msw/handlers";
 
 export const testAppState = {
@@ -14,11 +15,25 @@ export const testAppState = {
   tree: "agent1",
 };
 
+// P2-T07b: boot-state overrides. The admin sections are gated on /me.roles and
+// the read-only banner on the active tree's `enabled` — both arrive from the
+// boot fetch (App.tsx), so tests inject them here rather than re-booting App.
+export interface AppStateOverrides {
+  me?: Me;
+  trees?: AgentTree[];
+}
+
 // Working refreshConversations, so tests exercise the real sidebar-reload
 // signal (AppContext.conversationsVersion). Models + chatSettings mirror
 // App.tsx: lazy fetch-once GET /models cache and session-scoped settings
 // state (P1-T05, feature-spec.md:7).
-function TestAppProvider({ children }: { children: ReactNode }) {
+function TestAppProvider({
+  children,
+  overrides,
+}: {
+  children: ReactNode;
+  overrides: AppStateOverrides;
+}) {
   const [conversationsVersion, setConversationsVersion] = useState(0);
   const refreshConversations = useCallback(() => {
     setConversationsVersion((v) => v + 1);
@@ -37,6 +52,9 @@ function TestAppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         ...testAppState,
+        // ?? not spread: an explicitly-passed `undefined` must keep the default.
+        me: overrides.me ?? testAppState.me,
+        trees: overrides.trees ?? testAppState.trees,
         conversationsVersion,
         refreshConversations,
         models,
@@ -65,7 +83,8 @@ export function renderApp(
     route = "/chat",
     state,
     queue = false,
-  }: { route?: string; state?: unknown; queue?: boolean } = {},
+    ...overrides
+  }: { route?: string; state?: unknown; queue?: boolean } & AppStateOverrides = {},
 ) {
   const routed = (
     <MemoryRouter initialEntries={[state === undefined ? route : { pathname: route, state }]}>
@@ -74,7 +93,7 @@ export function renderApp(
   );
   return render(
     <MantineProvider env="test">
-      <TestAppProvider>
+      <TestAppProvider overrides={overrides}>
         {queue ? (
           <QueueProvider reconnectBaseMs={15} pollMs={40}>
             {routed}

@@ -30,6 +30,7 @@ import { getSseEnabled } from "../api/backendPrefs";
 import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
 import type { Attachment, Judgment, Lineage, Model, Turn } from "../api/types";
 import { EnvelopeChip, ForkModal } from "../components";
+import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp, type ChatSettings } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
@@ -391,6 +392,9 @@ export function ChatPage() {
         <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
         <ChatSettingsMenu />
       </Group>
+      {/* P2-T07c: a disabled tree keeps history readable while every new turn
+          409s (feature-spec.md:20 "read-only banner"). */}
+      <ReadOnlyTreeBanner />
       {/* P1-T13 fork identity banner — "Forks carry lineage metadata: parent
           conversation id, fork turn, endpoint + config used. Shown as a
           badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"

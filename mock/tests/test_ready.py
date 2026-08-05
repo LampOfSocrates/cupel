@@ -125,14 +125,18 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     # Subset (not equality): implemented-later endpoints simply drop out.
     assert missing_paths <= phase2_paths | {"/eval/cases/{caseId}"}  # P2 PUT on a P1 path
     # Sentinels that are certainly unimplemented today (P2-T07 implemented
-    # /auth/token + /auth/logout, so they left this list — the missing set
-    # shrinks task by task, as documented above).
+    # /auth/token + /auth/logout; P2-T07b/07c implemented /admin/users,
+    # /admin/users/{userId}/permissions and /admin/agenttrees/{treeId}, so
+    # they left this list — the missing set shrinks task by task, as
+    # documented above).
     for sentinel in ("/settings", "/casebooks",
-                     "/agenttrees/{tree}/memory", "/admin/users"):
+                     "/agenttrees/{tree}/memory", "/admin/generator"):
         assert sentinel in missing_paths, f"{sentinel} should be missing today"
-    # And the auth endpoints are now conformant, not missing.
-    assert "/auth/token" not in missing_paths
-    assert "/auth/logout" not in missing_paths
+    # And the auth + admin endpoints are now conformant, not missing.
+    for implemented in ("/auth/token", "/auth/logout", "/admin/users",
+                        "/admin/users/{userId}/permissions",
+                        "/admin/agenttrees/{treeId}"):
+        assert implemented not in missing_paths
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):

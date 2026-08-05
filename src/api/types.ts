@@ -9,6 +9,39 @@ export interface Me {
   permissions: Record<string, Array<"view" | "tune" | "evaluate">>;
 }
 
+// openapi.yaml:2013-2022 Me.permissions value type — also the PermissionMatrix
+// value ("the same shape as Me.permissions so the admin UI and /me agree
+// exactly", openapi.yaml:3048-3049).
+export type TreePermission = "view" | "tune" | "evaluate";
+
+// openapi.yaml:3009 AdminUser — "Row in Settings → Members (feature-spec.md:19
+// 'user list')"; roles only — "per-tree rights live in the permission matrix"
+// (:3019).
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  roles: Array<"admin" | "inspect">;
+  invited?: boolean;
+  created_at?: string;
+}
+
+// openapi.yaml:3027 AdminUserUpsert — "Upsert keyed by email: a new email
+// creates an invited user ...; an existing email updates name/roles. Null
+// name/roles = leave unchanged" (:3030-3033).
+export interface AdminUserUpsert {
+  email: string;
+  name?: string | null;
+  roles?: Array<"admin" | "inspect"> | null;
+}
+
+// openapi.yaml:3042 PermissionMatrix — "Per-tree matrix for one user ... keyed
+// by tree id ... Trees absent from the map grant nothing" (:3045-3049).
+export interface PermissionMatrix {
+  user_id: string;
+  permissions: Record<string, TreePermission[]>;
+}
+
 // openapi.yaml:2976 AuthTokenRequest — "email + password" (feature-spec.md:18).
 export interface AuthTokenRequest {
   email: string;

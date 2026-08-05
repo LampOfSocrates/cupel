@@ -326,3 +326,33 @@ describe("RunsPage — Tune/Evaluate preset arrival", () => {
     expect(screen.getByRole("combobox", { name: "Rubric" })).toBeInTheDocument();
   });
 });
+
+// P2-T07c: "existing conversations stay READABLE (read-only banner)"
+// (feature-spec.md:20) — the runs list of a disabled tree still loads; only
+// NEW work is blocked (409 tree_disabled, surfaced by the central mapping).
+describe("Disabled tree (P2-T07c)", () => {
+  it("shows the read-only banner above a still-readable runs list", async () => {
+    renderApp(
+      <Routes>
+        <Route path="/runs" element={<RunsPage />} />
+      </Routes>,
+      {
+        route: "/runs",
+        trees: [
+          { id: "agent1", name: "Agent 1", enabled: false },
+          { id: "agent2", name: "Agent 2", enabled: true },
+        ],
+      },
+    );
+    expect(await screen.findByText(/Replay · 1 config/)).toBeInTheDocument();
+    expect(screen.getByTestId("read-only-banner")).toHaveTextContent(
+      /Agent 1 is disabled/,
+    );
+  });
+
+  it("no banner while the tree is enabled", async () => {
+    renderRuns();
+    expect(await screen.findByText(/Replay · 1 config/)).toBeInTheDocument();
+    expect(screen.queryByTestId("read-only-banner")).not.toBeInTheDocument();
+  });
+});

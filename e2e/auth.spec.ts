@@ -54,6 +54,20 @@ test("auth-on: login redirect → admin session → logout → restricted permis
     "agent2",
   ]);
 
+  // --- P2-T07b/07c: the admin holds the admin role, so Settings carries the
+  // Members matrix and the Agent trees toggles ("Admin UI (visible when /me
+  // grants admin)", feature-spec.md:19) ---
+  await page.goto("/settings");
+  await expect(page.getByText("Members", { exact: true })).toBeVisible();
+  await expect(page.getByText("Agent trees", { exact: true })).toBeVisible();
+  // The matrix is live against the real mock: restricted@demo's seeded row is
+  // agent1 view+evaluate, no tune (mock/auth.py SEED_USERS).
+  await expect(page.getByLabel("restricted@demo agent1 view")).toBeChecked();
+  await expect(page.getByLabel("restricted@demo agent1 tune")).not.toBeChecked();
+  // Tree toggles list every tree the admin can see, enabled by default.
+  await expect(page.getByLabel("agent1 enabled")).toBeChecked();
+  await expect(page.getByLabel("agent2 enabled")).toBeChecked();
+
   // --- Logout: token discarded, back to the login screen ---
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL(/\/login/);
@@ -90,4 +104,16 @@ test("auth-on: login redirect → admin session → logout → restricted permis
     headers: { Authorization: `Bearer ${restrictedToken}` },
   });
   expect(agent1.status()).toBe(200);
+
+  // --- restricted@demo has no admin role: same Settings page, no admin
+  // sections (role-driven, not mode-driven) — and the server refuses anyway ---
+  await page.goto("/settings");
+  await expect(page.getByText("Backend", { exact: true })).toBeVisible();
+  await expect(page.getByText("Members", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Agent trees", { exact: true })).toHaveCount(0);
+  const forbidden = await request.get(`${MOCK}/admin/users`, {
+    headers: { Authorization: `Bearer ${restrictedToken}` },
+  });
+  expect(forbidden.status()).toBe(403);
+  expect((await forbidden.json()).code).toBe("forbidden");
 });

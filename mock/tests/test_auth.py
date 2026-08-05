@@ -50,12 +50,20 @@ def bearer(token):
 
 # ----------------------------------------------------------- off mode (demo)
 def test_off_mode_me_is_dev_user_unchanged():
+    """DELIBERATE P2-T07b change to the off-mode /me byte-parity assertion:
+    the dev user now carries roles ["admin", "inspect"] — roles is the
+    additive OPTIONAL v0.3.0 Me field (openapi.yaml:2004-2012), and off mode
+    is "instant dev as a chosen user ... default admin = all trees, all
+    rights" (feature-spec.md:17, skein-phases.md:76), so the dev user must
+    advertise admin for the role-driven Settings → Members / Agent trees UI.
+    Everything else stays byte-identical to the pre-T07 shape."""
     async def case():
         async with make_client() as c:
             r = await c.get("/me")
             assert r.status_code == 200
             assert r.json() == {
                 "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
+                "roles": ["admin", "inspect"],
                 "permissions": {"agent1": ["view", "tune", "evaluate"],
                                 "agent2": ["view", "tune", "evaluate"]},
             }

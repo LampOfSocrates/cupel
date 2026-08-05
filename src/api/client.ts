@@ -7,6 +7,8 @@ import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
 import type {
+  AdminUser,
+  AdminUserUpsert,
   Agent,
   AgentCreate,
   AgentTree,
@@ -33,6 +35,7 @@ import type {
   JudgmentListParams,
   Me,
   Model,
+  PermissionMatrix,
   ReplayAccepted,
   ReplayRequest,
   ReplayTurnAccepted,
@@ -52,6 +55,7 @@ import type {
   TaskRef,
   TokenEvent,
   Trace,
+  TreePermission,
 } from "./types";
 
 export type Query = Record<string, string | number | undefined>;
@@ -104,6 +108,14 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
   if (res.status === 401 && path !== "/auth/token") {
     clearAuthToken();
     emitAuthRequired();
+  }
+  // P2-T07c central 409 surface (extends the central-401 pattern minimally):
+  // tree_disabled means "new work blocked, history kept read-only"
+  // (openapi.yaml:1974-1979) — one friendly message here, so every caller's
+  // existing error rendering (chat sendError, Runs error alert, …) shows it
+  // without per-page mapping. Callers can still branch on ApiError.code.
+  if (code === "tree_disabled") {
+    message = "This agent tree is disabled — history is read-only.";
   }
   return new ApiError(res.status, code, message);
 }
@@ -219,6 +231,39 @@ export const api = {
 
   // GET /agenttrees (openapi.yaml:115)
   agentTrees: () => request<AgentTree[]>("/agenttrees"),
+
+  // P2-T07b admin — Settings → Members / Agent trees, role-gated server-side
+  // (403 Forbidden without the admin role, openapi.yaml:1966-1970).
+  // GET /admin/users (openapi.yaml:169-189) — "Every user, cross-user".
+  adminUsers: () => request<AdminUser[]>("/admin/users"),
+
+  // PUT /admin/users (openapi.yaml:190-218) — "upsert keyed by email: a new
+  // email creates an invited user (invite by email)".
+  putAdminUsers: (body: AdminUserUpsert[]) =>
+    request<AdminUser[]>("/admin/users", { method: "PUT", body }),
+
+  // GET /admin/users/{userId}/permissions (openapi.yaml:220-240) — "the
+  // per-tree view/tune/evaluate matrix behind the Settings → Members
+  // checkboxes. Same shape as Me.permissions".
+  userPermissions: (userId: string) =>
+    request<PermissionMatrix>(`/admin/users/${userId}/permissions`),
+
+  // PUT — "Full replacement of the matrix ... Takes effect on the user's
+  // next request" (openapi.yaml:241-265) — no live push.
+  putUserPermissions: (userId: string, permissions: Record<string, TreePermission[]>) =>
+    request<PermissionMatrix>(`/admin/users/${userId}/permissions`, {
+      method: "PUT",
+      body: { permissions },
+    }),
+
+  // PATCH /admin/agenttrees/{treeId} {enabled} (openapi.yaml:267-296) —
+  // "toggles availability, never data"; disabled = new work 409s while
+  // history stays readable (feature-spec.md:20).
+  toggleTree: (treeId: string, enabled: boolean) =>
+    request<AgentTree>(`/admin/agenttrees/${treeId}`, {
+      method: "PATCH",
+      body: { enabled },
+    }),
 
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
   // (feature-spec.md:122). Fetched once and cached in AppContext.

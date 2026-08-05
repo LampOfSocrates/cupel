@@ -6,8 +6,11 @@ import { MantineProvider } from "@mantine/core";
 import { ChatPage } from "./ChatPage";
 import { App } from "../App";
 import { setSseEnabled } from "../api/backendPrefs";
+import { http, HttpResponse } from "msw";
 import { renderApp } from "../test/render";
+import { server } from "../test/msw/server";
 import {
+  BASE,
   cancelRequests,
   chatConfig,
   chatRequests,
@@ -738,5 +741,60 @@ describe("Live LLM (BYOK) settings", () => {
     expect(localStorage.getItem("skein.byok.key")).toBeNull();
     expect(localStorage.getItem("skein.byok.model")).toBeNull();
     expect(screen.queryByTestId("live-badge")).not.toBeInTheDocument();
+  });
+});
+
+// P2-T07c disabled tree (feature-spec.md:20): "existing conversations stay
+// READABLE (read-only banner) so history and traces aren't lost"; "new
+// chat/replay/judge against it return 409 tree_disabled".
+describe("Disabled tree (P2-T07c)", () => {
+  const disabledTrees = [
+    { id: "agent1", name: "Agent 1", enabled: false },
+    { id: "agent2", name: "Agent 2", enabled: true },
+  ];
+
+  it("renders the read-only banner over readable history when the active tree is disabled", async () => {
+    renderApp(
+      <Routes>
+        <Route path="/chat/:conversationId" element={<ChatPage />} />
+      </Routes>,
+      { route: "/chat/c1", trees: disabledTrees },
+    );
+    // History still loads and renders — disabling never removes data.
+    await screen.findByText("How do refunds work?");
+    expect(screen.getByTestId("read-only-banner")).toHaveTextContent(
+      /Agent 1 is disabled — history is read-only/,
+    );
+  });
+
+  it("no banner while the tree is enabled", async () => {
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+    expect(screen.queryByTestId("read-only-banner")).not.toBeInTheDocument();
+  });
+
+  it("a 409 tree_disabled on send surfaces the friendly central message", async () => {
+    // The server's raw message is deliberately NOT what the user sees: the
+    // client maps code tree_disabled once, centrally (client.ts), so every
+    // page's existing error rendering says the same thing.
+    server.use(
+      http.post(`${BASE}/agenttrees/:tree/chat`, () =>
+        HttpResponse.json(
+          { code: "tree_disabled", message: "Agent tree 'agent1' is disabled — history is read-only." },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "hello");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const alert = await screen.findByText(
+      "This agent tree is disabled — history is read-only.",
+    );
+    expect(alert).toBeInTheDocument();
   });
 });

@@ -345,6 +345,37 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         handlers never read AUTH_MODE themselves."""
         return request.scope.get("state", {}).get("skein_user")
 
+    def request_roles(request: Request) -> list:
+        """Global roles of the caller. No verified user (an off-mode backend
+        never populates one) = the dev user, who IS admin+inspect
+        (feature-spec.md:17 "default admin = all trees, all rights") — same
+        roles GET /me advertises, so the UI and the gate agree."""
+        user = request_user(request)
+        return unj(user["roles"], []) if user else ["admin", "inspect"]
+
+    def need_admin(request: Request) -> None:
+        """403 Forbidden unless the caller holds the admin role — "admin for
+        /admin/* management" (openapi.yaml:1966-1970, code forbidden)."""
+        if "admin" not in request_roles(request):
+            err(403, "forbidden", "The admin role is required.")
+
+    def need_enabled_tree(tree: str) -> dict:
+        """need_tree + the P2-T07c disable gate for WRITE work: a disabled
+        tree answers 409 tree_disabled (openapi.yaml:1974-1979) on new work,
+        while every GET keeps working — "new chat/replay/judge against it
+        return 409 tree_disabled; existing conversations stay READABLE"
+        (feature-spec.md:20). Blocked writes (documented set): chat, replay,
+        replay/turn, judge-on-a-run-of-this-tree, create agent, PUT
+        instructions, POST snapshots, PUT last-selection, and conversation
+        rename/delete (history is read-only, not just readable). Feedback
+        stays allowed — a thumb annotates existing history, it creates no
+        new work. 404 (absent tree) wins over 409."""
+        row = need_tree(tree)
+        if not row["enabled"]:
+            err(409, "tree_disabled",
+                f"Agent tree '{tree}' is disabled — history is read-only.")
+        return row
+
     @app.post("/auth/token")
     async def create_token(request: Request):
         """POST /auth/token (openapi.yaml:96-128): open endpoint (security: [])
@@ -381,13 +412,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def me(request: Request):
         """GET /me (openapi.yaml:147-166): "answers in both auth modes".
         AUTH_MODE=on → the token's user with their roles+permissions;
-        off → the dev user, byte-for-byte as before P2-T07."""
+        off → the dev user. P2-T07b: the dev user now advertises roles
+        [admin, inspect] — "off = instant dev as a chosen user ... default
+        admin = all trees, all rights" (feature-spec.md:17), and roles is
+        the additive-optional v0.3.0 Me field (openapi.yaml:2004-2012) that
+        gates the Settings → Members / Agent trees UI role-driven, never
+        mode-driven."""
         user = request_user(request)
         if user:
             return auth.me_payload(user)
         trees = db.all("SELECT id FROM trees")
         return {
             "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
+            "roles": ["admin", "inspect"],
             "permissions": {t["id"]: ["view", "tune", "evaluate"] for t in trees},
         }
 
@@ -408,12 +445,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """GET /agenttrees (openapi.yaml:437-454): "Permitted agent trees".
         AUTH_MODE=on filters to trees the token's user can view — "GET
         /agent-trees returns only permitted trees; unpermitted trees never
-        render" (feature-spec.md:32). Off mode: all trees, as before."""
+        render" (feature-spec.md:32). P2-T07c: "permitted + enabled; admins
+        also see disabled" (feature-spec.md:121) — non-admins additionally
+        lose disabled trees; admins get them with enabled:false
+        (openapi.yaml:443-446). Off mode: the dev user is admin, so all
+        trees, disabled included."""
         rows = db.all("SELECT * FROM trees ORDER BY rowid")
         user = request_user(request)
         if user:
             permissions = unj(user["permissions"], {})
             rows = [t for t in rows if "view" in permissions.get(t["id"], [])]
+        if "admin" not in request_roles(request):
+            rows = [t for t in rows if t["enabled"]]
         return [{"id": t["id"], "name": t["name"], "enabled": bool(t["enabled"])}
                 for t in rows]
 
@@ -435,6 +478,128 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return [{"id": e["id"], "name": e["name"], "description": e["description"]}
                 for e in db.all("SELECT * FROM endpoints WHERE tree_id = ? ORDER BY rowid", (tree,))]
 
+    # --------------------------------------------------------------- admin
+    # P2-T07b/07c — users, permission matrices, tree enable/disable
+    # (openapi.yaml:168-296). Every operation is admin-gated (403 forbidden
+    # otherwise); in off mode the dev user IS admin (request_roles above).
+    # Permission updates take effect on the target user's NEXT request — the
+    # AuthGate re-reads the users row per request, so their next GET /me
+    # reflects it (openapi.yaml:246-250 "Takes effect on the user's next
+    # request"); there is no live push.
+    def admin_user_dict(u: dict) -> dict:
+        """AdminUser (openapi.yaml:3009-3025) — roles only; per-tree rights
+        live in the permission matrix endpoint."""
+        return {"id": u["id"], "name": u["name"], "email": u["email"],
+                "roles": unj(u["roles"], []), "invited": bool(u["invited"]),
+                "created_at": u["created_at"]}
+
+    @app.get("/admin/users")
+    async def list_users(request: Request):
+        """GET /admin/users (openapi.yaml:169-189): "Every user, cross-user
+        (admin-only)"."""
+        need_admin(request)
+        auth.ensure_users(db)
+        return [admin_user_dict(u)
+                for u in db.all("SELECT * FROM users ORDER BY rowid")]
+
+    @app.put("/admin/users")
+    async def put_users(request: Request):
+        """PUT /admin/users (openapi.yaml:190-218): "upsert keyed by email: a
+        new email creates an invited user ...; an existing email updates
+        name/roles. Users absent from the body are untouched, and there is
+        no user delete". Invited users carry an unusable password hash (the
+        mock has no set-password flow — they exist for the Members list and
+        permission assignment until a real IdP takes over)."""
+        need_admin(request)
+        try:
+            body = await request.json()
+        except Exception:
+            err(422, "invalid", "Request body must be valid JSON.")
+        if not isinstance(body, list) or not body:
+            err(422, "invalid", "Body must be a non-empty array of user upserts.")
+        out = []
+        for item in body:
+            if not isinstance(item, dict) or not item.get("email"):
+                err(422, "invalid", "Each upsert requires an email.")
+            existing = auth.find_user(db, item["email"])
+            if existing:
+                # Null name/roles = leave unchanged (openapi.yaml:3033).
+                name = item.get("name") or existing["name"]
+                roles = item["roles"] if item.get("roles") is not None \
+                    else unj(existing["roles"], [])
+                db.run("UPDATE users SET name = ?, roles = ? WHERE id = ?",
+                       (name, j(roles), existing["id"]))
+                uid = existing["id"]
+            else:
+                uid = new_id("u")
+                db.run(
+                    "INSERT INTO users (id, email, name, password_hash, roles,"
+                    " permissions, invited, created_at) VALUES (?, ?, ?, '', ?,"
+                    " '{}', 1, ?)",
+                    (uid, item["email"], item.get("name") or item["email"],
+                     j(item.get("roles") or []), now_iso()))
+            out.append(admin_user_dict(auth.user_by_id(db, uid)))
+        return out
+
+    @app.get("/admin/users/{userId}/permissions")
+    async def get_user_permissions(userId: str, request: Request):
+        """GET /admin/users/{userId}/permissions (openapi.yaml:220-240):
+        "Same shape as Me.permissions so the admin UI and /me agree"."""
+        need_admin(request)
+        user = auth.user_by_id(db, userId)
+        if not user:
+            err(404, "not_found", f"User '{userId}' not found.")
+        return {"user_id": user["id"], "permissions": unj(user["permissions"], {})}
+
+    @app.put("/admin/users/{userId}/permissions")
+    async def put_user_permissions(userId: str, request: Request):
+        """PUT (openapi.yaml:241-265): "Full replacement of the matrix ...
+        Takes effect on the user's next request — their GET /me reflects it,
+        and unpermitted trees stop rendering"."""
+        need_admin(request)
+        user = auth.user_by_id(db, userId)
+        if not user:
+            err(404, "not_found", f"User '{userId}' not found.")
+        body = await body_json(request)
+        permissions = body.get("permissions")
+        if not isinstance(permissions, dict) or not all(
+                isinstance(v, list) and set(v) <= {"view", "tune", "evaluate"}
+                for v in permissions.values()):
+            err(422, "invalid",
+                "permissions must map tree ids to arrays of view|tune|evaluate.")
+        db.run("UPDATE users SET permissions = ? WHERE id = ?",
+               (j(permissions), userId))
+        return {"user_id": userId, "permissions": permissions}
+
+    @app.patch("/admin/agenttrees/{treeId}")
+    async def toggle_tree(treeId: str, request: Request):
+        """PATCH /admin/agenttrees/{treeId} {enabled} (openapi.yaml:267-296):
+        toggles availability, never data. Disabling also cancels this tree's
+        queued/running batch work — "queued tasks on it are cancelled"
+        (feature-spec.md:20): every run-owning task (replay/replay_turn via
+        runs.task_id, judge via its payload's result.run_id) is cancelled;
+        chat tasks are sub-second in the mock and simply drain."""
+        need_admin(request)
+        row = db.one("SELECT * FROM trees WHERE id = ?", (treeId,))
+        if not row:
+            err(404, "not_found", f"Agent tree '{treeId}' not found.")
+        body = await body_json(request)
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            err(422, "invalid", "enabled (boolean) is required.")
+        db.run("UPDATE trees SET enabled = ? WHERE id = ?",
+               (1 if enabled else 0, treeId))
+        if not enabled:
+            stale = db.all(
+                "SELECT id FROM tasks WHERE status IN ('queued', 'running')"
+                " AND parent_id IS NULL AND (id IN (SELECT task_id FROM runs"
+                " WHERE tree_id = ?) OR json_extract(payload,"
+                " '$.result.run_id') IN (SELECT id FROM runs WHERE tree_id = ?))",
+                (treeId, treeId))
+            for t in stale:
+                engine.cancel(t["id"])
+        return {"id": row["id"], "name": row["name"], "enabled": enabled}
+
     # -------------------------------------------------------------- agents
     @app.get("/agenttrees/{tree}/agents")
     async def list_agents(tree: str):
@@ -444,7 +609,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/agents", status_code=201)
     async def create_agent(tree: str, request: Request):
-        need_tree(tree)
+        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
         body = await body_json(request)
         if not body.get("name"):
             err(422, "invalid", "name is required.")
@@ -475,6 +640,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.put("/agenttrees/{tree}/agents/{agentId}/instructions", status_code=201)
     async def save_instructions(tree: str, agentId: str, request: Request):
+        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
         agent = need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
@@ -506,6 +672,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/agents/{agentId}/snapshots", status_code=201)
     async def create_snapshot(tree: str, agentId: str, request: Request):
+        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
         need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
@@ -529,6 +696,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.put("/agenttrees/{tree}/agents/{agentId}/last-selection")
     async def put_last_selection(tree: str, agentId: str, request: Request):
+        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
         need_agent(tree, agentId)
         body = await body_json(request)
         items = body.get("items")
@@ -579,7 +747,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.patch("/agenttrees/{tree}/conversations/{conversationId}")
     async def rename_conversation(tree: str, conversationId: str, request: Request):
-        need_tree(tree)
+        need_enabled_tree(tree)  # history is read-only on a disabled tree (P2-T07c)
         conv = need_conversation(tree, conversationId)
         body = await body_json(request)
         if body.get("title"):
@@ -589,7 +757,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.delete("/agenttrees/{tree}/conversations/{conversationId}", status_code=204)
     async def delete_conversation(tree: str, conversationId: str):
-        need_tree(tree)
+        need_enabled_tree(tree)  # history is read-only on a disabled tree (P2-T07c)
         conv = need_conversation(tree, conversationId)
         # Tombstone: judgments, eval cases and fork lineage survive (openapi.yaml:438-443).
         db.run("UPDATE conversations SET deleted = 1 WHERE id = ?", (conv["id"],))
@@ -604,7 +772,9 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # ---------------------------------------------------------------- chat
     @app.post("/agenttrees/{tree}/chat", responses=SSE_RESPONSES)
     async def chat(tree: str, request: Request):
-        need_tree(tree)
+        # "new chat ... against it return 409 tree_disabled" (feature-spec.md:20;
+        # contract wires Conflict on chat, openapi.yaml:925).
+        need_enabled_tree(tree)
         body = await body_json(request)
         message = body.get("message")
         if not message:
@@ -767,7 +937,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/replay", status_code=202)
     async def replay(tree: str, request: Request):
-        need_tree(tree)
+        need_enabled_tree(tree)  # 409 on a disabled tree (openapi.yaml:1026)
         body = await body_json(request)
         selection, configs = body.get("selection"), body.get("configs")
         if not selection or not isinstance(selection, list):
@@ -845,7 +1015,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/replay/turn", status_code=202)
     async def replay_turn(tree: str, request: Request):
-        need_tree(tree)
+        need_enabled_tree(tree)  # 409 on a disabled tree (openapi.yaml:1058)
         body = await body_json(request)
         endpoints = body.get("endpoints")
         if not body.get("conversation_id") or not body.get("turn_id"):
@@ -1107,6 +1277,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             r = db.one("SELECT * FROM runs WHERE id = ?", (run_id,))
             if not r:
                 err(404, "not_found", f"Run '{run_id}' not found.")
+            # P2-T07c disable rule for judge (cheapest honest rule, documented):
+            # judging is blocked when the RUN'S TREE is disabled — "new
+            # chat/replay/judge against it return 409 tree_disabled"
+            # (feature-spec.md:20; Conflict wired on /eval/judge,
+            # openapi.yaml:1573). case_ids-only judging is NOT tree-gated:
+            # eval cases are global resources (feature-spec.md:115).
+            need_enabled_tree(r["tree_id"])
             cells = db.all(
                 "SELECT * FROM run_cells WHERE run_id = ? AND col_idx > 0 AND status = 'done'",
                 (run_id,))
