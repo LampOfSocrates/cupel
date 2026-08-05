@@ -66,3 +66,4 @@
 - PRO-1 "Agents as Code" — repo/PR integration: GitHub connect, instruction diffs as PRs, merge promotes live; mock git server (former P2-T20)
 - PRO-2 "Public Sharing" — anonymous tokenized share links for conversations/turns (expiry, revocation); free tier keeps in-app deep links only (P2-SHARE)
 - PRO-3 "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-E2E deliberately excludes this video harness.
+- FUTURE "Hybrid backend fill" (skipped 2026-08-05, keep) — per-feature-family routing: implemented endpoints → user backend, missing families → bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins).
