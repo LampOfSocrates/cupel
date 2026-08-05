@@ -19,7 +19,7 @@ import { TracePage } from "./pages/TracePage";
 const DEFAULT_TREE = "agent1";
 
 export function App() {
-  // Boot: GET /me is always called (invariant, loom-phases.md:160) alongside
+  // Boot: GET /me is always called (invariant, skein-phases.md:160) alongside
   // GET /agenttrees (feature-spec.md:225 "App shell / sidebar | GET /me, GET /agenttrees").
   const [me, setMe] = useState<Me | null>(null);
   const [trees, setTrees] = useState<AgentTree[] | null>(null);

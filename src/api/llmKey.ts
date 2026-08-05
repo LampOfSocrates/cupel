@@ -3,8 +3,8 @@
 // X-LLM-Key + X-LLM-Model headers." localStorage is the SPECCED home for this
 // key (deployment.md overrides the P1-T05 no-persistence note, which applied
 // to chat settings); it is never put in URLs and never logged.
-const KEY_STORAGE = "loom.byok.key";
-const MODEL_STORAGE = "loom.byok.model";
+const KEY_STORAGE = "skein.byok.key";
+const MODEL_STORAGE = "skein.byok.model";
 
 // try/catch: localStorage can throw (privacy mode, disabled storage) — BYOK
 // then simply stays off.

@@ -241,7 +241,7 @@ export function TracePage() {
           <Paper withBorder p="sm" data-testid="waterfall">
             <style>
               {/* running bars pulse to signal in-flight (feature-spec.md:150) */}
-              {"@keyframes loom-span-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }"}
+              {"@keyframes skein-span-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }"}
             </style>
             <Stack gap={6}>
               {spans.map((span, i) => {
@@ -293,7 +293,7 @@ export function TracePage() {
                                 ? ERROR_COLOR
                                 : BAR_COLOR[span.type],
                             animation: running
-                              ? "loom-span-pulse 1.2s ease-in-out infinite"
+                              ? "skein-span-pulse 1.2s ease-in-out infinite"
                               : undefined,
                           }}
                         />

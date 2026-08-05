@@ -1,4 +1,4 @@
-# Loom TASKS — worked by the auto-runner, one task per fresh session
+# Skein TASKS — worked by the auto-runner, one task per fresh session
 # Protocol per task (enforced by hooks + runner): implement → tests green → commit "P{phase}-T{id}: <summary>" → stop.
 # Runner picks the first unchecked box. Do not start a task whose deps are unchecked.
 
@@ -29,14 +29,16 @@
 - [x] P1-T18 Generator seed + basic drip  [deps: T18b]
 - [x] P1-T16 Trace view  [deps: T18b, T02]
 - [x] P1-T18c Live-LLM BYOK mode (OpenRouter passthrough in mock; X-LLM-Key/X-LLM-Model headers; key never persisted or logged; max_tokens cap + rate limit; see docs/deployment.md)  [deps: T18b]
+- [x] P1-TRENAME Rename Loom → Skein (user decision; landing page updated separately)
 
 ## Phase 1 — close
 - [ ] P1-T15 Tune/Evaluate presets  [deps: T11]
+- [ ] P1-TEXPORT Editor: download version history to file (free-tier export; no contract change)  [deps: T10b]
 - [ ] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md)  [deps: T18b, T01, T02]
 - [ ] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
 
-## Phase 2 (order per loom-phases.md build order — expand when Phase 1 is green)
+## Phase 2 (order per skein-phases.md build order — expand when Phase 1 is green)
 - [ ] P2-CONFIG agentic.config.ts + single API client
 - [ ] P2-T17 Backend switcher · P2-READY readiness script · P2-T07 auth · P2-T07b/07c admin+permissions
 - [ ] P2-T12/T12a eval workbench + inspector/casebooks · P2-CTX context policy+tools playback
-- [ ] P2-T20 repo/PR · P2-T19b k8s e2e harness · P2-MSW parity · P2-GEN generator controls · P2-MEM memory plumbing
+- [ ] P2-T20 repo/PR (P2-T20 = PRO TIER — excluded from free build; user decision 2026-08-05) · P2-T19b k8s e2e harness · P2-MSW parity · P2-GEN generator controls · P2-MEM memory plumbing

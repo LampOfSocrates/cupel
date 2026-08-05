@@ -1,4 +1,4 @@
-# Loom auto-runner
+# Skein auto-runner
 Copy TASKS.md, run-tasks.sh, and .claude/ into the repo root (merge .claude if it exists).
 
 - Each task runs in a FRESH `claude -p` session → context is cleared between tasks by construction

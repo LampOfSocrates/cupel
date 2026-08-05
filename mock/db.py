@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS agents (
   parent_id TEXT, tools TEXT NOT NULL DEFAULT '[]',
   enabled INTEGER NOT NULL DEFAULT 1, format TEXT NOT NULL DEFAULT 'text');
 
--- Append-only (loom-phases.md:160); live version = MAX(version).
+-- Append-only (skein-phases.md:160); live version = MAX(version).
 CREATE TABLE IF NOT EXISTS instruction_versions (
   agent_id TEXT NOT NULL, version INTEGER NOT NULL,
   content TEXT NOT NULL, format TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS eval_cases (
   id TEXT PRIMARY KEY, prompt TEXT NOT NULL, envelope TEXT,
   output TEXT NOT NULL, reference TEXT, source TEXT, created_at TEXT NOT NULL);
 
--- Append-only (loom-phases.md:160); human thumbs share this store.
+-- Append-only (skein-phases.md:160); human thumbs share this store.
 CREATE TABLE IF NOT EXISTS judgments (
   id TEXT PRIMARY KEY, case_id TEXT, run_id TEXT, turn_id TEXT,
   conversation_id TEXT, type TEXT NOT NULL, judge_model TEXT,

@@ -1,26 +1,26 @@
 openapi: 3.0.3
 info:
-  title: Loom API — Phase 1 contract
+  title: Skein API — Phase 1 contract
   version: 0.2.0
   description: |
-    Phase 1 API contract for Loom (draft). Scope: exactly the endpoints Phase 1
+    Phase 1 API contract for Skein (draft). Scope: exactly the endpoints Phase 1
     features need — chat (both stream modes), conversations + forks, agents +
     versioned instructions + snapshots, replay (conversation and turn level),
     runs, traces, task queue, eval basics (judge / judgments / summaries), and
     identity/meta. Source of truth: docs/feature-spec.md "API" section
-    (feature-spec.md:114-135) filtered by the Phase 1 plan (loom-phases.md:9-66).
+    (feature-spec.md:114-135) filtered by the Phase 1 plan (skein-phases.md:9-66).
 
     Scoping rule (feature-spec.md:115): "Tree-scoped: conversation/run/chat
     resources live under /agenttrees/{tree_id}/… — permission checks fall out of
     the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
 
-    Phase 1 has no auth (loom-phases.md:10 "No auth (dev user)"): no security
+    Phase 1 has no auth (skein-phases.md:10 "No auth (dev user)"): no security
     schemes here; GET /me is still always called and answers with the dev user
-    (feature-spec.md:17, invariant loom-phases.md:160).
+    (feature-spec.md:17, invariant skein-phases.md:160).
 
     Invariants encoded in this contract: instruction versions, judgments and
     snapshots are append-only — no endpoint updates or deletes them
-    (loom-phases.md:160).
+    (skein-phases.md:160).
 
     Machine-originated conversations: headless clients (the generator, or a
     production pipeline such as a mail scanner) speak this same public API —
@@ -33,18 +33,18 @@ info:
     Structural seed writes (POST /agenttrees, POST /agenttrees/{tree}/agents,
     POST /eval/rubrics) exist so the generator can seed trees, agents and
     rubrics through the public API — invariant "generator writes only through
-    the public API" (loom-phases.md:160, feature-spec.md:185, :188).
+    the public API" (skein-phases.md:160, feature-spec.md:185, :188).
 
     Deferred to later phases (deliberately absent): /auth/*, /admin/* (users,
     permissions, tree enable/disable, generator control API), /settings,
     /settings/repo, /assist, /webhooks/git, memory, casebooks/inspector, eval
     cases/sets CRUD + import, and replay context-override/tools-mode fields
     (feature-spec.md:82 — Phase 1 replays always run frozen: context_policy is
-    present but pinned to enum [frozen]; loom-phases.md:98 lists the rest under
+    present but pinned to enum [frozen]; skein-phases.md:98 lists the rest under
     Phase 2 mock deliverables).
 servers:
   - url: http://localhost:4010
-    description: FastAPI mock (loom-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
+    description: FastAPI mock (skein-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
 tags:
   - name: identity
   - name: meta
@@ -66,7 +66,7 @@ paths:
       summary: Current user and per-tree permissions
       description: |
         feature-spec.md:120: "GET /me (user + per-tree permissions; answers in
-        both auth modes)". Always called on boot — invariant (loom-phases.md:160
+        both auth modes)". Always called on boot — invariant (skein-phases.md:160
         "/me is always called"). Phase 1: backend/mock answers with the dev user
         (feature-spec.md:17).
       responses:
@@ -137,7 +137,7 @@ paths:
         Generator seed mode "builds the baseline dataset — trees, agents +
         versions" (feature-spec.md:188) and "writes through the public API,
         never directly to the DB" (feature-spec.md:185; invariant
-        loom-phases.md:160). Admin tree management UI is Phase 2
+        skein-phases.md:160). Admin tree management UI is Phase 2
         (feature-spec.md:20); this write exists for API completeness and seeding.
       requestBody:
         required: true
@@ -199,7 +199,7 @@ paths:
       description: |
         Tree-view node context menu: "add sub-agent (opens New-agent wizard
         pre-placed)" (feature-spec.md:26); Phase 1 capability "click any node
-        to edit it or add a sub-agent under it" (loom-phases.md:16). Also the
+        to edit it or add a sub-agent under it" (skein-phases.md:16). Also the
         generator's seed path for "agents + versions" (feature-spec.md:188).
         The created agent has no instruction versions yet; save v1 via
         PUT …/{agentId}/instructions. The AI-drafted wizard (POST /assist) is
@@ -275,7 +275,7 @@ paths:
         snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
         snapshotted immutably into the run config (snapshot_id), so the tested
         text is exactly what ran even if editing continues… Unsaved snapshots
-        display as 'v15-draft (a3f2)'." Append-only invariant (loom-phases.md:160).
+        display as 'v15-draft (a3f2)'." Append-only invariant (skein-phases.md:160).
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -438,7 +438,7 @@ paths:
       description: |
         Delete is a tombstone: the conversation disappears from listings and
         chat, but judgments referencing its turns are "persisted forever, never
-        overwritten" (feature-spec.md:59; invariant loom-phases.md:160), eval
+        overwritten" (feature-spec.md:59; invariant skein-phases.md:160), eval
         cases keep their source refs, and forks keep their lineage (the parent
         link renders as deleted). No cascade to judgments, cases, or forks.
       parameters:
@@ -458,7 +458,7 @@ paths:
         feature-spec.md:123: "POST /agenttrees/{tree}/chat (SSE; queued →
         returns task_id), stop = DELETE /tasks/{task_id}".
 
-        Both modes on this one endpoint (loom-phases.md:43): "stream: true (SSE
+        Both modes on this one endpoint (skein-phases.md:43): "stream: true (SSE
         token stream, the UI default) and stream: false (single JSON response,
         for curl/scripts/backends that can't stream) — same endpoint, flag in
         the request body".
@@ -872,7 +872,7 @@ paths:
       summary: Rubrics (for the Run Config judge section)
       description: |
         feature-spec.md:132 "GET/POST /eval/rubrics". Rubric EDITOR UI is
-        Phase 2 (eval workbench, loom-phases.md:98); the POST exists so the
+        Phase 2 (eval workbench, skein-phases.md:98); the POST exists so the
         generator can seed "judgments across 2 rubrics" (feature-spec.md:168)
         through the public API (feature-spec.md:185). Consumed by
         Runs · Configure (feature-spec.md:230).
@@ -891,7 +891,7 @@ paths:
       description: |
         feature-spec.md:132 "GET/POST /eval/rubrics" — versioned, "save = new
         version". Posting an existing rubric's name appends the next version;
-        no update/delete exists (append-only, loom-phases.md:160).
+        no update/delete exists (append-only, skein-phases.md:160).
       requestBody:
         required: true
         content:
@@ -1318,7 +1318,7 @@ components:
           nullable: true
           description: >
             "Every turn captures an envelope at generation" (feature-spec.md:76;
-            loom-phases.md:25 "every turn records its context"). The key is
+            skein-phases.md:25 "every turn records its context"). The key is
             required; null is permitted ONLY on legacy/imported turns
             (feature-spec.md:78). The server stamps assistant turns at
             generation and inbound (user/machine) turns at receipt; on turn
@@ -1433,7 +1433,7 @@ components:
           default: true
           description: >
             true = SSE token stream (UI default); false = single JSON response
-            (loom-phases.md:43).
+            (skein-phases.md:43).
 
     ChatResponse:
       type: object
@@ -1883,7 +1883,7 @@ components:
       required: [id, type, score, created_at]
       description: >
         Append-only, never overwritten (feature-spec.md:59; invariant
-        loom-phases.md:160). type llm: case_id, rubric_id and rubric_version
+        skein-phases.md:160). type llm: case_id, rubric_id and rubric_version
         are non-null (the judge always runs a rubric against a case). type
         human = thumbs via POST /feedback (feature-spec.md:60, :123): keyed by
         turn_id/conversation_id instead — a thumb has no rubric or case.

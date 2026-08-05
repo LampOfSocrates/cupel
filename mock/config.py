@@ -48,4 +48,4 @@ LIVE_MODELS = [
     {"id": "mistralai/mistral-small", "name": "Mistral Small"},
 ]
 
-DB_PATH = os.environ.get("LOOM_MOCK_DB") or str(Path(__file__).with_name("loom-mock.sqlite"))
+DB_PATH = os.environ.get("SKEIN_MOCK_DB") or str(Path(__file__).with_name("skein-mock.sqlite"))

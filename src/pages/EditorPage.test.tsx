@@ -199,7 +199,7 @@ describe("EditorPage", () => {
 
   // P1-T20b — "Test an instruction change in one click: 'Test in Runs'
   // snapshots your draft and replays your usual conversations against it —
-  // using the editor → Runs flow (sketches 06 → 03)" (loom-phases.md:18).
+  // using the editor → Runs flow (sketches 06 → 03)" (skein-phases.md:18).
   // Real RunsPage mounted at /runs so the router-state handoff is exercised
   // end to end, not against a probe.
   const renderEditorWithRuns = (agentId = "ag_concierge") =>

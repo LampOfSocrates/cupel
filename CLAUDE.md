@@ -1,7 +1,7 @@
-# Loom
+# Skein
 Read these before any work, in order:
 1. react-migration.md — evidence rules: quote spec lines, cite file:line, check lockfiles
-2. loom-phases.md — we build phase by phase; NEVER build ahead of the current phase
+2. skein-phases.md — we build phase by phase; NEVER build ahead of the current phase
 3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
 Current phase: 1. Current task: P1-T15 Tune/Evaluate presets (contract = openapi.yaml v0.2.0).

@@ -100,7 +100,7 @@ export interface ErrorBody {
 
 // openapi.yaml:1391 ChatRequest — ":1398 Omit [conversation_id] to start a new
 // conversation"; ":1431-1436 stream: true = SSE token stream (UI default);
-// false = single JSON response (loom-phases.md:43)".
+// false = single JSON response (skein-phases.md:43)".
 export interface ChatRequest {
   conversation_id?: string | null;
   message: string;

@@ -1,6 +1,6 @@
 node_modules/
 __pycache__/
 .pytest_cache/
-mock/loom-mock.sqlite
+mock/skein-mock.sqlite
 dist/
 coverage/

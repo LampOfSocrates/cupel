@@ -1,4 +1,4 @@
-"""Loom Phase-1 mock server — implements openapi.yaml v0.2.0 exactly.
+"""Skein Phase-1 mock server — implements openapi.yaml v0.2.0 exactly.
 
 Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 """
@@ -34,7 +34,7 @@ async def body_json(request: Request) -> dict:
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
                step_delay: float | None = None) -> FastAPI:
-    app = FastAPI(title="Loom mock", version=config.VERSION, openapi_url=None, docs_url=None)
+    app = FastAPI(title="Skein mock", version=config.VERSION, openapi_url=None, docs_url=None)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     db = Db(db_path or config.DB_PATH)
@@ -182,7 +182,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def me():
         trees = db.all("SELECT id FROM trees")
         return {
-            "user": {"id": "dev", "name": "Dev User", "email": "dev@loom.local"},
+            "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
             "permissions": {t["id"]: ["view", "tune", "evaluate"] for t in trees},
         }
 

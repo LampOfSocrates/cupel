@@ -5,7 +5,7 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 
 const doc = YAML.parse(readFileSync("openapi.yaml", "utf8"));
 
-// feature-spec.md:120-135 filtered to Phase 1 (loom-phases.md:9-66); tree-scoped
+// feature-spec.md:120-135 filtered to Phase 1 (skein-phases.md:9-66); tree-scoped
 // per feature-spec.md:115, global routes unprefixed.
 const PHASE1_PATHS = [
   "/me",
@@ -61,7 +61,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("chat serves both modes on one endpoint via a stream flag (loom-phases.md:43)", () => {
+  it("chat serves both modes on one endpoint via a stream flag (skein-phases.md:43)", () => {
     const stream = doc.components.schemas.ChatRequest.properties.stream;
     expect(stream.type).toBe("boolean");
     expect(stream.default).toBe(true);
@@ -98,7 +98,7 @@ describe("P1-T00 OpenAPI contract", () => {
     expect(doc.paths["/me"].get).toBeDefined();
   });
 
-  it("no auth anywhere — Phase 1 has no security schemes (loom-phases.md:10)", () => {
+  it("no auth anywhere — Phase 1 has no security schemes (skein-phases.md:10)", () => {
     expect(doc.security).toBeUndefined();
     expect(doc.components.securitySchemes).toBeUndefined();
     for (const [p, methods] of Object.entries(doc.paths)) {
@@ -132,7 +132,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("task lifecycle and result deep-links (loom-phases.md:43, feature-spec.md:107)", () => {
+  it("task lifecycle and result deep-links (skein-phases.md:43, feature-spec.md:107)", () => {
     const task = doc.components.schemas.Task.properties;
     expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
     expect(task.type.enum).toEqual(["chat", "replay", "replay_turn", "judge"]);

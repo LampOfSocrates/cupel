@@ -301,7 +301,7 @@ export function ChatPage() {
         { signal: abort.signal },
       );
       if (result.kind === "json") {
-        // Backend degraded to a single JSON ChatResponse (loom-phases.md:43)
+        // Backend degraded to a single JSON ChatResponse (skein-phases.md:43)
         attachedConvRef.current = result.response.conversation_id;
         setTurns((prev) => [...(prev ?? []), result.response.turn]);
         setStream(null);
@@ -833,7 +833,7 @@ function TurnBubble({
         <Text size="xs" c="dimmed">
           {turn.author}
         </Text>
-        {/* P1-T11a envelope affordance. loom-phases.md:25: "every turn records
+        {/* P1-T11a envelope affordance. skein-phases.md:25: "every turn records
             its context (date, timezone, region) at generation". Sketch 01
             shows no envelope UI, so the surface is deliberately minimal — a
             hover tooltip on the timestamp (dotted underline = discoverable),

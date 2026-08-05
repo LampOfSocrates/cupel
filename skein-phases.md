@@ -1,8 +1,8 @@
-# Loom — 4-Phase Build Plan (for Claude Code)
+# Skein — 4-Phase Build Plan (for Claude Code)
 
 > Companion to `feature-spec.md` (the what) and `react-migration.md` (the anti-hallucination rules). Work phases in order; within a phase, follow the task order given. Session opener for every Claude Code session:
 >
-> *"Read react-migration.md, feature-spec.md, and loom-phases.md. We are in Phase N, task X. Quote the relevant spec lines before writing code. Cite file:line for claims about existing code. Do not build features from later phases."*
+> *"Read react-migration.md, feature-spec.md, and skein-phases.md. We are in Phase N, task X. Quote the relevant spec lines before writing code. Cite file:line for claims about existing code. Do not build features from later phases."*
 
 ---
 
@@ -67,11 +67,11 @@ Clone → `npm run dev` → app boots on mock with seeded data → simulate (dri
 ---
 
 ## Phase 2 — Integrate & Test
-**Goal**: point Loom at real backends, prove conformance, harden. Clone → run simulation → edit ONE file to add backends.
+**Goal**: point Skein at real backends, prove conformance, harden. Clone → run simulation → edit ONE file to add backends.
 
 ### What you'll be able to do
-- **Point Loom at your own backend by editing one file** (`agentic.config.ts`) and switch between mock/local/staging/prod live — using Settings → Backend (sketch 09)
-- **Check whether your backend is ready before you try**: run `npx loom-ready <your-openapi>` and get a report of every missing endpoint or mismatched shape
+- **Point Skein at your own backend by editing one file** (`agentic.config.ts`) and switch between mock/local/staging/prod live — using Settings → Backend (sketch 09)
+- **Check whether your backend is ready before you try**: run `npx skein-ready <your-openapi>` and get a report of every missing endpoint or mismatched shape
 - **Connect backends whose routes are named differently** (e.g. `/nabu-service/…`) via remap, or **any backend at all** via a small adapter module — with the mock filling in whatever your backend doesn't do yet
 - **Turn auth on or off with one env var**: off = instant dev as a chosen user; on = real login, tokens, and 401 handling — using the login screen (unsketched) and the same UI code either way
 - **Control who sees and edits which agent tree** with a per-tree view/tune/evaluate matrix, and **disable a whole tree** (new work blocked, history kept read-only) — using Settings → Members and Settings → Agent trees (unsketched)
@@ -95,18 +95,18 @@ Clone → `npm run dev` → app boots on mock with seeded data → simulate (dri
 Plus new-in-Phase-2 screens with no sketch yet (derive from spec + existing visual language): login, Settings → Members matrix, Settings → Agent trees toggles, Settings → Repo, Memory panel, generator controls (extend 09), Inspector + Casebook view, judgment drawer, login/Members/tree-toggles. Claude Code: propose each layout as a description first, get approval, then build.
 
 ### Mock deliverables (Phase 2)
-Mock extends to FULL contract: auth endpoints in both `AUTH_MODE`s (seeded `admin@demo`/`restricted@demo`, real-shaped JWTs), admin users/permissions/tree-toggle, eval workbench CRUD, repo endpoints backed by a **mock git server** (branch/PR/merge webhook), generator control API, failure/latency injection env vars. Ships its own OpenAPI file — which the readiness script validates against Loom's contract as the first conformance test.
+Mock extends to FULL contract: auth endpoints in both `AUTH_MODE`s (seeded `admin@demo`/`restricted@demo`, real-shaped JWTs), admin users/permissions/tree-toggle, eval workbench CRUD, repo endpoints backed by a **mock git server** (branch/PR/merge webhook), generator control API, failure/latency injection env vars. Ships its own OpenAPI file — which the readiness script validates against Skein's contract as the first conformance test.
 
 ### Test deliverables (Phase 2)
-Full Playwright suite: checklist items 1–13 (shell, chat, runs, forks, judge, queue, editor, trace, backend switcher, permissions, tree disable, auth suite ×2 modes, authoring/PR loop), request-interception asserting the endpoint tags from the sketches; full MSW parity for unit tests; k8s manifests (pod: app + mock sidecar) + Helm post-upgrade Playwright Job (fail = block release, report artifact); `npx loom-ready` in CI.
+Full Playwright suite: checklist items 1–13 (shell, chat, runs, forks, judge, queue, editor, trace, backend switcher, permissions, tree disable, auth suite ×2 modes, authoring/PR loop), request-interception asserting the endpoint tags from the sketches; full MSW parity for unit tests; k8s manifests (pod: app + mock sidecar) + Helm post-upgrade Playwright Job (fail = block release, report artifact); `npx skein-ready` in CI.
 
 ### Runnable at end of Phase 2
 ```
 npm run mock && npm run dev          # as Phase 1, now full contract
 npm run e2e                          # full suite, both auth modes
-npx loom-ready http://localhost:4010/openapi.json   # conformance: PASS
+npx skein-ready http://localhost:4010/openapi.json   # conformance: PASS
 # edit agentic.config.ts → add your backend → switch target in Settings
-helm install loom ./chart            # pod boots, e2e Job gates it
+helm install skein ./chart            # pod boots, e2e Job gates it
 ```
 = production-shaped app: real-backend ready, auth on/off, fully tested, k8s-deployable.
 
@@ -129,7 +129,7 @@ Readiness script passes against the mock's own OpenAPI; a remapped backend (`/na
 - **Refine instructions with an AI copilot** that proposes changes as diff hunks you accept or reject one by one — using the copilot panel in the editor (unsketched)
 - **Get a test suite for free**: "gen evals" reads the instructions and generates eval cases + a rubric, so a brand-new agent is scoreable at minute one
 - **Have the app compact conversations into real memory**: LLM summarization merges what matters into the tree's memory document on a schedule, on conversation close, or on demand
-- **Do everything from the terminal**: `loom chat` with your favorite agent (`loom fav refunds`), `loom edit / test / replay / judge / trace / tasks --watch / memory / pr` — same API as the UI, `--json` for scripts, works against any conformant backend
+- **Do everything from the terminal**: `skein chat` with your favorite agent (`skein fav refunds`), `skein edit / test / replay / judge / trace / tasks --watch / memory / pr` — same API as the UI, `--json` for scripts, works against any conformant backend
 - Template repo hygiene: no monorepo internals, clean README quickstart (4 steps), CI template included
 
 ### Definition of done
@@ -137,12 +137,12 @@ Scaffold a project with 2 flags changed → boots on mock → author a new agent
 
 ---
 
-## Phase 4 — Hosted Loom
-**Goal**: Loom itself runs as a hosted multi-tenant platform (AWS-class infra).
+## Phase 4 — Hosted Skein
+**Goal**: Skein itself runs as a hosted multi-tenant platform (AWS-class infra).
 
 ### What you'll be able to do
-- **Use Loom without installing anything**: a hosted, multi-tenant instance with SSO, org isolation, and org-level member + tree administration
-- **Customise Loom in the browser and take it home**: rename, rebrand, pick features and routes in a live preview (it's the real app on the hosted mock), then download a zip, push to your GitHub, or one-click deploy — using the "Make it yours" configurator (unsketched)
+- **Use Skein without installing anything**: a hosted, multi-tenant instance with SSO, org isolation, and org-level member + tree administration
+- **Customise Skein in the browser and take it home**: rename, rebrand, pick features and routes in a live preview (it's the real app on the hosted mock), then download a zip, push to your GitHub, or one-click deploy — using the "Make it yours" configurator (unsketched)
 - **Show it off with zero setup**: the public demo fills itself continuously via the always-on generator
 - **Bring other agent frameworks**: CrewAI, LangGraph and similar config schemas plug into the editor's validation layer (deliberately deferred here — Phase 2 ships ADK only)
 - **Certify your backend**: point the hosted conformance service at your API and get a readiness + e2e report card

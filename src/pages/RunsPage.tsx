@@ -16,7 +16,7 @@ import type { Agent, Rubric, RunConfig, RunSummaryItem, SelectionItem } from "..
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { useApp } from "../AppContext";
 
-// P1-T11 — Runs 3-step flow (loom-phases.md:19): "Replay stored conversations
+// P1-T11 — Runs 3-step flow (skein-phases.md:19): "Replay stored conversations
 // — or a single turn — under a different instruction version, model, or
 // endpoint — using the Runs stepper: pick (sketch 02), configure (sketch 03),
 // compare (sketch 04)". Engine (feature-spec.md:41): "take stored
@@ -42,13 +42,13 @@ import { useApp } from "../AppContext";
 // FIRES from RunDetailPage when the run reaches done (see its judge-trigger
 // note) — queueing here only records the intent in the config.
 //
-// Scope guards (never build ahead, loom-phases.md:158):
+// Scope guards (never build ahead, skein-phases.md:158):
 // - endpoints hidden (showEndpoints defaults false) — turn re-fire is P1-T13.
 // - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 // - no queue UI here — the queue PANEL is P1-T08.
 //
-// P1-T20b — Test-in-Runs arrival (loom-phases.md:18 "editor → Runs flow
+// P1-T20b — Test-in-Runs arrival (skein-phases.md:18 "editor → Runs flow
 // (sketches 06 → 03)"): the editor navigates here with router state
 // {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set

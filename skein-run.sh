@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# loom-run.sh — one self-contained task runner for Loom. (Git Bash / macOS / Linux)
+# skein-run.sh — one self-contained task runner for Skein. (Git Bash / macOS / Linux)
 # Loop: pick first unchecked task in TASKS.md → fresh headless Claude session for that ONE
 # task → session must end with tests green + a commit → runner verifies independently →
 # prints progress + tokens/cost → next task.
 #
-# Usage: ./loom-run.sh [max_tasks]     DRY=1 ./loom-run.sh  (preview only)
+# Usage: ./skein-run.sh [max_tasks]     DRY=1 ./skein-run.sh  (preview only)
 
 set -euo pipefail
 MAX="${1:-999}"
@@ -27,7 +27,7 @@ except Exception:
 PYEOF
 }
 
-for f in TASKS.md feature-spec.md loom-phases.md react-migration.md CLAUDE.md; do
+for f in TASKS.md feature-spec.md skein-phases.md react-migration.md CLAUDE.md; do
   [ -f "$f" ] || { echo "Missing $f in $(pwd) — run from the repo root"; exit 1; }
 done
 
@@ -48,7 +48,7 @@ for i in $(seq 1 "$MAX"); do
   echo ""; echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "▶ Task $i: $TASK"; progress
 
-  PROMPT="Read CLAUDE.md, react-migration.md, loom-phases.md, and feature-spec.md.
+  PROMPT="Read CLAUDE.md, react-migration.md, skein-phases.md, and feature-spec.md.
 Execute TASKS.md task '$TID' and NOTHING else: $TASK
 Steps, in order:
 1. Find this task's numbered development prompt in feature-spec.md (match the T-number) and the relevant feature sections + sketches; QUOTE the spec lines you implement before coding.
@@ -84,7 +84,7 @@ Steps, in order:
   if [ -n "$FAIL" ]; then
     echo "✖ $TID FAILED verification: $FAIL"
     echo "$RESULT" | tail -c 600; echo ""
-    echo "Stopping for review. Fix, then re-run ./loom-run.sh"
+    echo "Stopping for review. Fix, then re-run ./skein-run.sh"
     exit 1
   fi
   echo "✔ $TID verified: $(git log -1 --format=%h) · tests green · ticked"
