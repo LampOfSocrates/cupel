@@ -9,8 +9,11 @@ tests/skein-ready.test.js (vitest, fixture specs).
 """
 
 import asyncio
+import functools
+import http.server
 import json
 import subprocess
+import threading
 from pathlib import Path
 
 import httpx
@@ -141,3 +144,37 @@ def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
     bad = skein_ready(str(spec_path), "--header", "no-colon-here")
     assert bad.returncode == 2
     assert "--header expects" in bad.stderr
+
+
+# ---------------------------------------------------- P2-INIT: --init mode
+def test_init_emits_target_block_from_real_mock(spec_path):
+    """--init against the real mock's OpenAPI, fetched over HTTP so the
+    fetched-origin baseUrl fallback is exercised end-to-end. Expectations
+    match the FastAPI-generated spec's reality (verified via app.openapi()):
+    it declares NO `servers` and NO securitySchemes (the DEMO_TOKEN gate is
+    middleware, outside the spec), so baseUrl falls back to the fetch origin,
+    requiresToken is omitted, and — paths matching the contract 1:1 — no
+    prefix remap is detected."""
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler,
+                                directory=str(spec_path.parent))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        origin = f"http://127.0.0.1:{server.server_address[1]}"
+        proc = skein_ready(f"{origin}/{spec_path.name}", "--init",
+                           "--phase1-only", "--json")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        init = json.loads(proc.stdout)["init"]
+        assert init["baseUrl"] == origin
+        assert init["baseUrlSource"] == "fetched-origin"
+        assert init["remapPrefix"] is None
+        assert init["requiresToken"] is False
+        block = init["block"]
+        assert f'baseUrl: "{origin}"' in block
+        assert "remap:" not in block
+        assert "requiresToken" not in block
+        # the one-config-artifact invariant is stated in the block header
+        assert "never writes agentic.config.ts" in block
+    finally:
+        server.shutdown()
+        server.server_close()

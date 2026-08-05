@@ -1,7 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { describe, it, expect, vi } from "vitest";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import YAML from "yaml";
 import { compare, PHASE1_PATHS, PHASE1_METHODS, renderReport } from "../scripts/conformance.mjs";
+import {
+  parseArgs,
+  deriveBaseUrl,
+  detectPrefix,
+  detectAuth,
+  buildInit,
+  renderInitBlock,
+  main,
+} from "../scripts/skein-ready.mjs";
 
 // P2-READY comparator unit layer — small fixture specs, no server involved.
 // The against-the-real-mock conformance run lives in mock/tests/test_ready.py
@@ -246,5 +257,163 @@ describe("skein-ready comparator", () => {
     });
     expect(fail).toContain("missing (1): POST /things");
     expect(fail).toContain("conformance: FAIL");
+  });
+});
+
+// P2-INIT — config-from-swagger: derive an agentic.config.ts target block.
+describe("skein-ready --init", () => {
+  // Nabu-style fixture (skein-phases.md:75): most routes live under
+  // /nabu-service, /healthz matches without any remap.
+  const nabuContract = () =>
+    doc({
+      "/healthz": { get: { responses: { 200: jsonResponse() } } },
+      "/agenttrees": { get: { responses: { 200: jsonResponse() } } },
+      "/agenttrees/{tree}/chat": { post: { responses: { 200: jsonResponse() } } },
+    });
+  const nabuTarget = () =>
+    doc({
+      "/healthz": { get: { responses: { 200: jsonResponse() } } },
+      "/nabu-service/agenttrees": { get: { responses: { 200: jsonResponse() } } },
+      "/nabu-service/agenttrees/{tree}/chat": { post: { responses: { 200: jsonResponse() } } },
+    });
+
+  it("parseArgs: --init/--id/--label; --id without --init is an error", () => {
+    const options = parseArgs(["spec.json", "--init", "--id", "mycorp", "--label", "MyCorp API"]);
+    expect(options.init).toBe(true);
+    expect(options.id).toBe("mycorp");
+    expect(options.label).toBe("MyCorp API");
+    expect(() => parseArgs(["spec.json", "--id", "mycorp"])).toThrow(/--id\/--label require --init/);
+  });
+
+  it("baseUrl precedence: absolute servers[0].url > fetched origin > unknown", () => {
+    expect(deriveBaseUrl({ servers: [{ url: "https://api.example.com/" }] }, "spec.json")).toEqual({
+      baseUrl: "https://api.example.com",
+      baseUrlSource: "servers",
+    });
+    // relative server URL: fall back to the fetched URL's origin (path stripped)
+    expect(deriveBaseUrl({ servers: [{ url: "/api/v1" }] }, "http://localhost:4010/openapi.json")).toEqual({
+      baseUrl: "http://localhost:4010",
+      baseUrlSource: "fetched-origin",
+    });
+    expect(deriveBaseUrl({}, "spec.yaml")).toEqual({ baseUrl: "", baseUrlSource: "unknown" });
+  });
+
+  it("detects the /nabu-service prefix and reports before/after counts", () => {
+    const { init } = buildInit(nabuContract(), nabuTarget(), {
+      source: "https://nabu.example.com/openapi.json",
+    });
+    expect(init.remapPrefix).toBe("/nabu-service");
+    // /healthz matches without remap; the other two only with it.
+    expect(init.conformance.withoutRemap).toEqual({ conformant: 1, checked: 3 });
+    expect(init.conformance.withRemap).toEqual({ conformant: 2, checked: 3 });
+    // identity derived from the hostname when no flags are given
+    expect(init.id).toBe("nabu");
+    expect(init.label).toBe("nabu.example.com");
+    const block = renderInitBlock(init);
+    expect(block).toContain('remap: (p) => "/nabu-service" + p,');
+    expect(block).toContain("// conformance without remap 1/3 -> with /nabu-service remap 2/3");
+  });
+
+  it("tied prefix candidates emit no remap plus a note", () => {
+    const c = doc({
+      "/a/x": { get: { responses: { 200: jsonResponse() } } },
+      "/b/y": { get: { responses: { 200: jsonResponse() } } },
+    });
+    const target = doc({
+      "/p1/a/x": { get: { responses: { 200: jsonResponse() } } },
+      "/p2/b/y": { get: { responses: { 200: jsonResponse() } } },
+    });
+    const detection = detectPrefix(c, target);
+    expect(detection.prefix).toBeNull();
+    expect(detection.note).toMatch(/ambiguous prefix candidates \(\/p1, \/p2\)/);
+    const { init } = buildInit(c, target, { source: "spec.json" });
+    const block = renderInitBlock(init);
+    expect(block).not.toContain("remap:");
+    expect(block).toContain("ambiguous prefix candidates");
+  });
+
+  it("http bearer scheme → requiresToken with a naming comment", () => {
+    const target = nabuTarget();
+    target.components = {
+      securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+    };
+    expect(detectAuth(target)).toEqual({
+      requiresToken: true,
+      authSchemes: [{ name: "bearerAuth", type: "http", scheme: "bearer" }],
+    });
+    const { init } = buildInit(nabuContract(), target, { source: "spec.json" });
+    expect(renderInitBlock(init)).toContain('requiresToken: true, // securityScheme "bearerAuth" (http bearer)');
+  });
+
+  it("apiKey scheme → requiresToken; no schemes → omitted", () => {
+    const target = nabuTarget();
+    target.components = {
+      securitySchemes: { demoKey: { type: "apiKey", in: "header", name: "X-Demo-Token" } },
+    };
+    const { init } = buildInit(nabuContract(), target, { source: "spec.json" });
+    expect(init.requiresToken).toBe(true);
+    expect(renderInitBlock(init)).toContain('requiresToken: true, // securityScheme "demoKey" (apiKey)');
+
+    const bare = buildInit(nabuContract(), nabuTarget(), { source: "spec.json" }).init;
+    expect(bare.requiresToken).toBe(false);
+    expect(renderInitBlock(bare)).not.toContain("requiresToken");
+  });
+
+  it("emitted block is plausibly valid TS: balanced delimiters + expected keys", () => {
+    const { init } = buildInit(nabuContract(), nabuTarget(), {
+      source: "https://nabu.example.com/openapi.json",
+      id: "mycorp",
+      label: "MyCorp API",
+    });
+    const block = renderInitBlock(init);
+    // cheap syntactic check only (no TS compile step by design)
+    const count = (re) => (block.match(re) ?? []).length;
+    expect(count(/\{/g)).toBe(count(/\}/g));
+    expect(count(/\(/g)).toBe(count(/\)/g));
+    for (const key of ['id: "mycorp"', 'label: "MyCorp API"', 'baseUrl: "https://nabu.example.com"', "banner: { label:"]) {
+      expect(block).toContain(key);
+    }
+    expect(block).toContain('banner: { label: "MYCORP API BACKEND" }');
+    // the human-owned invariant is stated in the header comment
+    expect(block).toContain("never writes agentic.config.ts");
+    expect(block.endsWith("},")).toBe(true);
+  });
+
+  it("--json carries the report plus a structured init object (via main)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "skein-init-"));
+    const contractPath = join(dir, "contract.json");
+    const targetPath = join(dir, "target.json");
+    writeFileSync(contractPath, JSON.stringify(nabuContract()));
+    writeFileSync(targetPath, JSON.stringify(nabuTarget()));
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const code = await main([
+        targetPath, "--contract", contractPath, "--init", "--json",
+        "--id", "mycorp", "--label", "MyCorp API",
+      ]);
+      expect(code).toBe(1); // with-remap run still misses /healthz
+      const payload = JSON.parse(log.mock.calls[0][0]);
+      // top-level report is the with-remap run
+      expect(payload.prefix).toBe("/nabu-service");
+      expect(payload.conformant).toBe(2);
+      const { init } = payload;
+      expect(init).toMatchObject({
+        id: "mycorp",
+        label: "MyCorp API",
+        baseUrl: "", // local file, no servers → unknown
+        baseUrlSource: "unknown",
+        requiresToken: false,
+        remapPrefix: "/nabu-service",
+        remapNote: null,
+        conformance: {
+          withoutRemap: { conformant: 1, checked: 3 },
+          withRemap: { conformant: 2, checked: 3 },
+        },
+      });
+      expect(typeof init.block).toBe("string");
+      expect(init.block).toContain('remap: (p) => "/nabu-service" + p,');
+    } finally {
+      log.mockRestore();
+    }
   });
 });
