@@ -37,8 +37,19 @@
 - [x] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md) (live Render service created from main session)  [deps: T18b, T01, T02]
 - [x] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
 
-## Phase 2 (order per skein-phases.md build order — expand when Phase 1 is green)
-- [ ] P2-CONFIG agentic.config.ts + single API client
-- [ ] P2-T17 Backend switcher · P2-READY readiness script · P2-T07 auth · P2-T07b/07c admin+permissions
-- [ ] P2-T12/T12a eval workbench + inspector/casebooks · P2-CTX context policy+tools playback
-- [ ] P2-T20 repo/PR (P2-T20 = PRO TIER — excluded from free build; user decision 2026-08-05) · P2-T19b k8s e2e harness · P2-MSW parity · P2-GEN generator controls · P2-MEM memory plumbing
+## Phase 2 (expanded 2026-08-05, Phase 1 green; order per skein-phases.md build order)
+- [ ] P2-CONFIG agentic.config.ts (one config artifact) + API client refactor onto it  [deps: Phase 1]
+- [ ] P2-T17 Backend switcher UI — Settings → Backend, sketch 09 (targets, healthz check, mock options)  [deps: CONFIG]
+- [ ] P2-T00 Contract v0.3.0 — extend openapi.yaml: auth, admin users/permissions/tree-toggle, eval workbench CRUD+import, generator control, memory (NO repo endpoints — pro tier); update contract tests  [deps: CONFIG]
+- [ ] P2-READY skein-ready readiness script (validate a backend OpenAPI against the contract; mock's own OpenAPI = first conformance test)  [deps: T00]
+- [ ] P2-T07 Auth both AUTH_MODEs — mock JWT endpoints + seeded users, login screen, token handling/401s, /me both modes, no AUTH_MODE branches in components  [deps: T00]
+- [ ] P2-T07b/07c Admin — members permission matrix (view/tune/evaluate) + tree enable/disable (read-only history)  [deps: T07]
+- [ ] P2-T12 Eval workbench — cases/sets/rubrics CRUD, hand-crafted references, CSV/XLSX import (sketch 10)  [deps: T00]
+- [ ] P2-T12a Inspector + Casebooks (inspect role, audit-logged; casebook → eval set / replay suite)  [deps: T07, T12]
+- [ ] P2-CTX Context policy widening — frozen/today/custom + fallback + recorded-tools playback (extend sketch 03)  [deps: T00]
+- [ ] P2-GEN Generator control API + Settings drip-rate controls  [deps: T00, T17]
+- [ ] P2-MEM Memory panel — view/edit/clear per tree, compaction as queued task  [deps: T00]
+- [ ] P2-MSW Full MSW parity for unit tests
+- [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
+- [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
+- ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
