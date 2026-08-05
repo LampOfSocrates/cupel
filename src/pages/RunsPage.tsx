@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import {
   Alert,
   Button,
@@ -47,22 +47,55 @@ import { useApp } from "../AppContext";
 // - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 // - no queue UI here — the queue PANEL is P1-T08.
+//
+// P1-T20b — Test-in-Runs arrival (loom-phases.md:18 "editor → Runs flow
+// (sketches 06 → 03)"): the editor navigates here with router state
+// {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
+// handoff note). Prefill (feature-spec.md:87 "the previous conversation set
+// is remembered per agent (GET/PUT /agents/{id}/last-selection). Repeat
+// testing = Test in Runs → Queue, two taps."):
+// - GET last-selection; non-empty items → seed the selection and land on
+//   Configure directly (the two taps: Test in Runs → Queue); "empty items =
+//   first-time testing" (openapi.yaml:311) → land on Pick.
+// - the single config is prefilled {agent_id, snapshot_id}; the panel shows
+//   the snapshot's label ("v3-draft (a3f1)", feature-spec.md:86).
+// - Queue PUTs last-selection with the selection ACTUALLY queued (preloaded
+//   or user-changed) before POSTing the replay, so the next test remembers it.
+// A fresh "New run" clears the flow — the PUT belongs to Test-in-Runs only.
+
+interface TestInRunsState {
+  agent_id: string;
+  snapshot_id: string;
+  snapshot_label: string;
+}
 
 const emptyConfig = (): RunConfig => ({});
 
 export function RunsPage() {
   const { tree, models, ensureModels } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Test-in-Runs handoff, read once from router state (cleared by "New run").
+  const [testFlow, setTestFlow] = useState<TestInRunsState | null>(
+    () => (location.state as { testInRuns?: TestInRunsState } | null)?.testInRuns ?? null,
+  );
 
   const [runs, setRuns] = useState<RunSummaryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"list" | "stepper">("list");
+  const [mode, setMode] = useState<"list" | "stepper">(testFlow ? "stepper" : "list");
+  // Waiting on GET last-selection before the stepper knows its landing step.
+  const [prefilling, setPrefilling] = useState(testFlow != null);
 
   // Stepper state — step 0 = Select, 1 = Configure; step 2 (Results) lives on
   // the run-detail route, entered by Queue's navigate.
   const [step, setStep] = useState(0);
   const [selection, setSelection] = useState<SelectionItem[]>([]);
-  const [configs, setConfigs] = useState<RunConfig[]>([emptyConfig()]);
+  const [configs, setConfigs] = useState<RunConfig[]>(
+    testFlow
+      ? [{ agent_id: testFlow.agent_id, snapshot_id: testFlow.snapshot_id }]
+      : [emptyConfig()],
+  );
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
@@ -120,7 +153,37 @@ export function RunsPage() {
     [tree],
   );
 
+  // Test-in-Runs prefill: fetch the per-agent remembered selection once on
+  // arrival (GET .../last-selection, openapi.yaml:295-313). Non-empty →
+  // preload + jump to Configure; "empty items = first-time testing" (:311)
+  // → start at Pick. Runs once for the mount's handoff, hence no deps.
+  useEffect(() => {
+    if (!testFlow) return;
+    let cancelled = false;
+    ensureVersions(testFlow.agent_id); // version dropdown data for the prefilled agent
+    api
+      .lastSelection(tree, testFlow.agent_id)
+      .then((sel) => {
+        if (cancelled) return;
+        setSelection(sel.items);
+        setStep(sel.items.length > 0 ? 1 : 0);
+        setPrefilling(false);
+      })
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setError(e.message);
+        setPrefilling(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startStepper = () => {
+    // Fresh manual run — drop any Test-in-Runs handoff (its config prefill
+    // and Queue-time last-selection PUT belong to that flow only).
+    setTestFlow(null);
     setMode("stepper");
     setStep(0);
     setSelection([]);
@@ -130,6 +193,12 @@ export function RunsPage() {
   const queueRun = async () => {
     setQueueing(true);
     try {
+      // Test-in-Runs: remember the selection ACTUALLY queued for this agent
+      // before enqueueing (PUT .../last-selection, openapi.yaml:315-332;
+      // feature-spec.md:87 "Repeat testing = Test in Runs → Queue, two taps").
+      if (testFlow) {
+        await api.putLastSelection(tree, testFlow.agent_id, { items: selection });
+      }
       // POST /agenttrees/{tree}/replay → "202: Work enqueued; run row appears
       // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
       // straight to the detail route, which owns the live fill.
@@ -177,12 +246,20 @@ export function RunsPage() {
         </Alert>
       )}
 
-      {step === 0 && (
+      {prefilling && <Loader size="sm" mx="auto" my="md" data-testid="prefill-loader" />}
+
+      {!prefilling && step === 0 && (
         <>
           {/* Step 1 Select (feature-spec.md:44): "ConversationPicker:
               search/filter/multi-select conversations, expandable to pick
-              individual turns" — server-side search inside the picker. */}
-          <ConversationPicker tree={tree} onSelectionChange={setSelection} />
+              individual turns" — server-side search inside the picker.
+              initialSelection restores the current picks (remembered
+              last-selection on Test-in-Runs arrival, or Back from Configure). */}
+          <ConversationPicker
+            tree={tree}
+            onSelectionChange={setSelection}
+            initialSelection={selection}
+          />
           <Group justify="space-between">
             <Button variant="default" size="xs" onClick={() => setMode("list")}>
               Cancel
@@ -198,7 +275,7 @@ export function RunsPage() {
         </>
       )}
 
-      {step === 1 && (
+      {!prefilling && step === 1 && (
         <>
           {/* Step 2 Configure (feature-spec.md:45): "Run Config drawer …
               prefilled from the baseline so changing one axis = one field".
@@ -237,6 +314,13 @@ export function RunsPage() {
                 versions={cfg.agent_id ? (versionsByAgent[cfg.agent_id] ?? []) : []}
                 models={models ?? []}
                 rubrics={rubrics ?? []}
+                // "Unsaved snapshots display as 'v15-draft (a3f2)'"
+                // (feature-spec.md:86) — label carried in the handoff state.
+                snapshotLabel={
+                  cfg.snapshot_id != null && cfg.snapshot_id === testFlow?.snapshot_id
+                    ? testFlow.snapshot_label
+                    : undefined
+                }
               />
             </Paper>
           ))}

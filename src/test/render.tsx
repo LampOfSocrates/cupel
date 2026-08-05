@@ -53,11 +53,18 @@ function TestAppProvider({ children }: { children: ReactNode }) {
 // and floating-ui hideDetached — without it, popover dropdowns get inline
 // display:none in jsdom (zero layout rects read as "reference hidden") and
 // role queries can't see their contents.
-export function renderApp(ui: ReactNode, { route = "/chat" }: { route?: string } = {}) {
+// `state` = router location state for the initial entry (P1-T20b: the
+// editor → Runs Test-in-Runs handoff travels as navigate state, not a URL).
+export function renderApp(
+  ui: ReactNode,
+  { route = "/chat", state }: { route?: string; state?: unknown } = {},
+) {
   return render(
     <MantineProvider env="test">
       <TestAppProvider>
-        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        <MemoryRouter initialEntries={[state === undefined ? route : { pathname: route, state }]}>
+          {ui}
+        </MemoryRouter>
       </TestAppProvider>
     </MantineProvider>,
   );

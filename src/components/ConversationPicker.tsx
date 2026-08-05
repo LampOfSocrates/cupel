@@ -37,6 +37,23 @@ type ConvSelection = "all" | Set<string>;
 interface Props {
   tree: string;
   onSelectionChange: (items: SelectionItem[]) => void;
+  /**
+   * Mount-time seed for the selection (P1-T20b: the per-agent remembered
+   * selection, feature-spec.md:87 — and Back-from-Configure restores what was
+   * picked). Read once on mount; later prop changes are ignored — the picker
+   * owns its selection state after that.
+   */
+  initialSelection?: SelectionItem[];
+}
+
+// Inverse of toItems, for the mount-time seed: "Absent/null = whole
+// conversation; present = just these turns" (openapi.yaml:1258).
+function fromItems(items: SelectionItem[]): Map<string, ConvSelection> {
+  const map = new Map<string, ConvSelection>();
+  for (const item of items) {
+    map.set(item.conversation_id, item.turn_ids == null ? "all" : new Set(item.turn_ids));
+  }
+  return map;
 }
 
 function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
@@ -54,7 +71,7 @@ function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
 const assistantTurns = (conv: Conversation): Turn[] =>
   (conv.turns ?? []).filter((t) => t.role === "assistant");
 
-export function ConversationPicker({ tree, onSelectionChange }: Props) {
+export function ConversationPicker({ tree, onSelectionChange, initialSelection }: Props) {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [items, setItems] = useState<Conversation[]>([]);
@@ -62,7 +79,9 @@ export function ConversationPicker({ tree, onSelectionChange }: Props) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selected, setSelected] = useState<Map<string, ConvSelection>>(new Map());
+  const [selected, setSelected] = useState<Map<string, ConvSelection>>(() =>
+    fromItems(initialSelection ?? []),
+  );
 
   const load = useCallback(
     async (pageNum: number, append: boolean) => {

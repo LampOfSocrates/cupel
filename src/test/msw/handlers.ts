@@ -11,7 +11,9 @@
 // GET /eval/runs/{id}/summary (:1001-1022),
 // GET/POST /agenttrees/{tree}/agents (:175-219, tree view + add sub-agent),
 // GET/PUT .../agents/{id}/instructions + POST .../snapshots (:221-293,
-// append-only versions + immutable draft snapshots, P1-T10b).
+// append-only versions + immutable draft snapshots, P1-T10b),
+// GET/PUT .../agents/{id}/last-selection (:295-332, per-agent remembered
+// selection, P1-T20b).
 import { http, HttpResponse } from "msw";
 import { BASE } from "../../api/base";
 import type {
@@ -40,6 +42,8 @@ import type {
   RunConfig,
   RunScoreSummary,
   RunSummaryItem,
+  Selection,
+  SelectionItem,
   Snapshot,
   SnapshotCreate,
   Task,
@@ -157,6 +161,13 @@ export const instructionSaveRequests: Array<{ agentId: string; body: Instruction
 export const snapshotRequests: Array<{ agentId: string; body: SnapshotCreate }> = [];
 export const mockSnapshots: Snapshot[] = []; // append-only — nothing deletes
 let snapshotCounter = 0;
+
+// GET/PUT .../last-selection (openapi.yaml:295-332) — "Last-used conversation
+// selection for this agent"; GET answers "empty items = first-time testing"
+// (:311). Per-agent state (feature-spec.md:87 "remembered per agent") + PUT
+// capture for exact-body asserts (P1-T20b).
+export const mockLastSelections: Record<string, SelectionItem[]> = {};
+export const lastSelectionPuts: Array<{ agentId: string; items: SelectionItem[] }> = [];
 
 function findAgent(tree: string, agentId: string): Agent | undefined {
   return mockAgents[tree]?.find((a) => a.id === agentId);
@@ -570,9 +581,15 @@ export const mockRuns: StoredRun[] = seedRuns();
 export const runListRequests: string[] = []; // tree ids seen by GET runs
 export const runDetailRequests: string[] = []; // run ids seen by GET run
 
-// Column label mirror of the real mock (mock/main.py:110-119 config_label).
+// Column label mirror of the real mock (mock/main.py:110-119 config_label):
+// a snapshot column carries the SNAPSHOT'S label ("v3-draft (a3f1)") looked up
+// server-side — the client never derives it (feature-spec.md:86; relabel to vN
+// on promotion is likewise server-side, mock/main.py:257-262).
 function configLabel(cfg: RunConfig, index: number): string {
-  if (cfg.snapshot_id) return `snapshot ${cfg.snapshot_id}`;
+  if (cfg.snapshot_id) {
+    const snap = mockSnapshots.find((s) => s.snapshot_id === cfg.snapshot_id);
+    return snap?.label ?? `snapshot ${cfg.snapshot_id}`;
+  }
   if (cfg.instruction_version != null) return `v${cfg.instruction_version}`;
   if (cfg.model) return cfg.model;
   return `config ${index + 1}`;
@@ -676,6 +693,8 @@ export function resetHandlerState() {
   snapshotRequests.length = 0;
   mockSnapshots.length = 0;
   snapshotCounter = 0;
+  for (const key of Object.keys(mockLastSelections)) delete mockLastSelections[key];
+  lastSelectionPuts.length = 0;
   for (const key of Object.keys(mockInstructions)) delete mockInstructions[key];
   Object.assign(mockInstructions, seedInstructions());
   mockRuns.length = 0;
@@ -820,6 +839,29 @@ export const handlers = [
     };
     mockSnapshots.push(snapshot);
     return HttpResponse.json(snapshot, { status: 201 });
+  }),
+
+  // GET .../last-selection — "Remembered selection (empty items = first-time
+  // testing)" (openapi.yaml:309-311).
+  http.get(`${BASE}/agenttrees/:tree/agents/:agentId/last-selection`, ({ params }) => {
+    const agent = findAgent(params.tree as string, params.agentId as string);
+    if (!agent) {
+      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+    }
+    return HttpResponse.json({ items: mockLastSelections[agent.id] ?? [] } satisfies Selection);
+  }),
+
+  // PUT .../last-selection — "Remember the conversation selection for this
+  // agent" (openapi.yaml:315-317); 200 → "Stored selection" (:329).
+  http.put(`${BASE}/agenttrees/:tree/agents/:agentId/last-selection`, async ({ params, request }) => {
+    const agent = findAgent(params.tree as string, params.agentId as string);
+    if (!agent) {
+      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+    }
+    const body = (await request.json()) as Selection;
+    lastSelectionPuts.push({ agentId: agent.id, items: body.items });
+    mockLastSelections[agent.id] = body.items;
+    return HttpResponse.json({ items: body.items } satisfies Selection);
   }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations`, ({ request }) => {

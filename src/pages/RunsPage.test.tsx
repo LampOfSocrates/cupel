@@ -5,7 +5,10 @@ import { Route, Routes } from "react-router";
 import { renderApp } from "../test/render";
 import {
   judgeRequests,
+  lastSelectionPuts,
+  mockLastSelections,
   mockRuns,
+  mockSnapshots,
   replayRequests,
   rubricRequests,
   runListRequests,
@@ -25,13 +28,13 @@ import { RunDetailPage } from "./RunDetailPage";
 // - 202 "run row appears immediately and fills incrementally" (:617) →
 //   navigate to the detail grid.
 
-function renderRuns(route = "/runs") {
+function renderRuns(route = "/runs", state?: unknown) {
   return renderApp(
     <Routes>
       <Route path="/runs" element={<RunsPage />} />
       <Route path="/runs/:runId" element={<RunDetailPage />} />
     </Routes>,
-    { route },
+    { route, state },
   );
 }
 
@@ -174,5 +177,114 @@ describe("RunsPage — stepper", () => {
     });
     // 202 task_id → subtle judging state on the run header (no queue UI — T08)
     await screen.findByTestId("judging-badge");
+  });
+});
+
+// P1-T20b — Test-in-Runs arrival + per-agent last-selection:
+// - GET .../last-selection "Remembered selection (empty items = first-time
+//   testing)" (openapi.yaml:309-311); PUT "Remember the conversation
+//   selection for this agent" (:315-317).
+// - feature-spec.md:87: "the previous conversation set is remembered per
+//   agent … Repeat testing = Test in Runs → Queue, two taps. First-time
+//   testing drops into Select".
+// - feature-spec.md:86: config carries snapshot_id; "Unsaved snapshots
+//   display as 'v15-draft (a3f2)'" — column label comes from the SERVER.
+describe("RunsPage — Test in Runs arrival", () => {
+  const arrival = {
+    testInRuns: {
+      agent_id: "ag_refunds",
+      snapshot_id: "a3f9",
+      snapshot_label: "v1-draft (a3f9)",
+    },
+  };
+  // The snapshot the editor created, as the server knows it — the replay
+  // handler's column labeling looks it up (mirror of mock/main.py:110-114).
+  const seedSnapshot = () =>
+    mockSnapshots.push({
+      snapshot_id: "a3f9",
+      agent_id: "ag_refunds",
+      label: "v1-draft (a3f9)",
+      created_at: "2026-08-04T10:00:00Z",
+    });
+
+  it("remembered selection → lands on Configure with the snapshot config set and labeled; picker preloaded", async () => {
+    seedSnapshot();
+    mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
+    const user = userEvent.setup();
+    renderRuns("/runs", arrival);
+
+    // two taps: Test in Runs already happened, Queue is immediately reachable
+    expect(await screen.findByTestId("config-0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeInTheDocument();
+    expect(screen.getByTestId("snapshot-badge")).toHaveTextContent("v1-draft (a3f9)");
+
+    // the remembered selection preloads the picker (visible via Back)
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(
+      await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
+    ).toBeChecked();
+    expect(screen.getByTestId("picker-summary")).toHaveTextContent("1 conversation · 0 turns");
+  });
+
+  it('empty last-selection ("first-time testing") → lands on Pick', async () => {
+    seedSnapshot();
+    renderRuns("/runs", arrival);
+    // picker shown, nothing preselected, Configure gated as usual
+    expect(
+      await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Configure ▸" })).toBeDisabled();
+    expect(screen.queryByTestId("config-0")).not.toBeInTheDocument();
+  });
+
+  it("Queue PUTs last-selection with the exact items, then POSTs the snapshot replay; grid label is the server's", async () => {
+    seedSnapshot();
+    mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
+    const user = userEvent.setup();
+    renderRuns("/runs", arrival);
+
+    await user.click(await screen.findByRole("button", { name: "Queue" }));
+    await waitFor(() => expect(replayRequests).toHaveLength(1));
+    // PUT is awaited before the replay POST — replay done implies PUT done
+    expect(lastSelectionPuts).toEqual([
+      { agentId: "ag_refunds", items: [{ conversation_id: "c1" }] },
+    ]);
+    // exact contract body: snapshot_id config (XOR — no instruction_version),
+    // frozen policy pinned by the client (openapi.yaml:1488-1497, 1540-1546)
+    expect(replayRequests[0].body).toEqual({
+      selection: [{ conversation_id: "c1" }],
+      configs: [{ agent_id: "ag_refunds", snapshot_id: "a3f9" }],
+      context_policy: "frozen",
+    });
+
+    // run detail: the snapshot column label comes from the server ("v1-draft
+    // (a3f9)" until promotion relabels it — server-side, mock/main.py:257-262)
+    await screen.findByText("Run run-1");
+    expect(screen.getByText("v1-draft (a3f9)")).toBeInTheDocument();
+  });
+
+  it("a changed selection is what gets persisted on Queue", async () => {
+    seedSnapshot();
+    mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
+    const user = userEvent.setup();
+    renderRuns("/runs", arrival);
+    await screen.findByTestId("config-0");
+
+    // widen the preloaded selection, then queue
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Select Billing dispute" }));
+    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
+    await user.click(screen.getByRole("button", { name: "Queue" }));
+
+    // "always persist what was actually queued" — the changed set
+    await waitFor(() => expect(lastSelectionPuts).toHaveLength(1));
+    expect(lastSelectionPuts[0].items).toEqual([
+      { conversation_id: "c1" },
+      { conversation_id: "c2" },
+    ]);
+    expect(replayRequests[0].body.selection).toEqual([
+      { conversation_id: "c1" },
+      { conversation_id: "c2" },
+    ]);
   });
 });

@@ -35,6 +35,7 @@ import type {
   Run,
   RunScoreSummary,
   RunSummaryItem,
+  Selection,
   Snapshot,
   SnapshotCreate,
   Task,
@@ -195,6 +196,22 @@ export const api = {
   createSnapshot: (tree: string, agentId: string, body: SnapshotCreate) =>
     request<Snapshot>(`/agenttrees/${tree}/agents/${agentId}/snapshots`, {
       method: "POST",
+      body,
+    }),
+
+  // GET /agenttrees/{tree}/agents/{agentId}/last-selection (openapi.yaml:
+  // 295-313) — "Last-used conversation selection for this agent"; "empty
+  // items = first-time testing" (:311). feature-spec.md:87: "the previous
+  // conversation set is remembered per agent … Repeat testing = Test in Runs
+  // → Queue, two taps."
+  lastSelection: (tree: string, agentId: string) =>
+    request<Selection>(`/agenttrees/${tree}/agents/${agentId}/last-selection`),
+
+  // PUT — "Remember the conversation selection for this agent"
+  // (openapi.yaml:315-332); 200 → the stored Selection.
+  putLastSelection: (tree: string, agentId: string, body: Selection) =>
+    request<Selection>(`/agenttrees/${tree}/agents/${agentId}/last-selection`, {
+      method: "PUT",
       body,
     }),
 

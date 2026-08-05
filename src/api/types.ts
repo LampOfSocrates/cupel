@@ -188,6 +188,13 @@ export interface SelectionItem {
   turn_ids?: string[] | null;
 }
 
+// openapi.yaml:1241 Selection — ":1244 Conversation/turn selection remembered
+// per agent (feature-spec.md:87)"; GET answer ":311 empty items = first-time
+// testing" (openapi.yaml:295-332 GET/PUT .../last-selection).
+export interface Selection {
+  items: SelectionItem[];
+}
+
 // openapi.yaml:1130 Endpoint — "an agent deployment/backend target"
 // (feature-spec.md:67).
 export interface Endpoint {

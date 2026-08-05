@@ -7,9 +7,11 @@ import {
   instructionSaveRequests,
   mockAgents,
   mockInstructions,
+  mockLastSelections,
   snapshotRequests,
 } from "../test/msw/handlers";
 import { EditorPage } from "./EditorPage";
+import { RunsPage } from "./RunsPage";
 
 // P1-T10b contract under test:
 // - GET .../instructions → live pointer + full ascending history
@@ -51,9 +53,10 @@ describe("EditorPage", () => {
     expect(screen.getByTestId("version-1")).toBeInTheDocument();
     expect(screen.getByText("v4 · draft")).toBeInTheDocument();
     expect(screen.queryByText("unsaved changes")).not.toBeInTheDocument();
-    // save disabled until dirty; no Test-in-Runs affordance (that is P1-T20b)
+    // save disabled until dirty; Test in Runs always available — "drafts are
+    // testable without saving" (feature-spec.md:86, P1-T20b)
     expect(screen.getByRole("button", { name: "Save as v4" })).toBeDisabled();
-    expect(screen.queryByText(/Test in Runs/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test in Runs ▸" })).toBeEnabled();
   });
 
   it("save PUTs {content, format}; the new version appends and becomes live", async () => {
@@ -192,6 +195,61 @@ describe("EditorPage", () => {
     ]);
     expect(within(screen.getByTestId("version-1")).getByText("live")).toBeInTheDocument();
     expect(screen.getByText("v2 · draft")).toBeInTheDocument();
+  });
+
+  // P1-T20b — "Test an instruction change in one click: 'Test in Runs'
+  // snapshots your draft and replays your usual conversations against it —
+  // using the editor → Runs flow (sketches 06 → 03)" (loom-phases.md:18).
+  // Real RunsPage mounted at /runs so the router-state handoff is exercised
+  // end to end, not against a probe.
+  const renderEditorWithRuns = (agentId = "ag_concierge") =>
+    renderApp(
+      <Routes>
+        <Route path="/agents/:agentId/editor" element={<EditorPage />} />
+        <Route path="/runs" element={<RunsPage />} />
+      </Routes>,
+      { route: `/agents/${agentId}/editor` },
+    );
+
+  it("Test in Runs reuses an unchanged snapshot (no second POST) and opens Runs prefilled", async () => {
+    // remembered selection → the arrival lands straight on Configure
+    // (feature-spec.md:87 "Repeat testing = Test in Runs → Queue, two taps")
+    mockLastSelections.ag_concierge = [{ conversation_id: "c1" }];
+    const user = userEvent.setup();
+    renderEditorWithRuns();
+    await setDraft(user, "Draft text.");
+    await user.click(screen.getByRole("button", { name: "Snapshot draft" }));
+    await screen.findByText("v3-draft (a3f1)");
+
+    await user.click(screen.getByRole("button", { name: "Test in Runs ▸" }));
+    // Runs stepper at Configure, config carrying the snapshot + its label
+    // ("the draft text is snapshotted immutably into the run config
+    // (snapshot_id)", feature-spec.md:86) — Queue is the second tap.
+    expect(await screen.findByTestId("config-0")).toBeInTheDocument();
+    expect(screen.getByTestId("snapshot-badge")).toHaveTextContent("v3-draft (a3f1)");
+    expect(screen.getByRole("button", { name: "Queue" })).toBeInTheDocument();
+    // draft unchanged since its snapshot → REUSED, still exactly one POST
+    expect(snapshotRequests).toHaveLength(1);
+  });
+
+  it("Test in Runs with an edited draft POSTs a fresh snapshot; empty last-selection lands on Pick", async () => {
+    const user = userEvent.setup();
+    renderEditorWithRuns();
+    await setDraft(user, "Draft text.");
+    await user.click(screen.getByRole("button", { name: "Snapshot draft" }));
+    await screen.findByText("v3-draft (a3f1)");
+    await setDraft(user, "Draft text. Edited.");
+
+    await user.click(screen.getByRole("button", { name: "Test in Runs ▸" }));
+    // "empty items = first-time testing" (openapi.yaml:311) → Pick step
+    await screen.findByText("Refund escalation");
+    expect(screen.getByRole("button", { name: "Configure ▸" })).toBeDisabled();
+    // snapshots are immutable — the edited draft needed a NEW one
+    expect(snapshotRequests).toHaveLength(2);
+    expect(snapshotRequests[1]).toEqual({
+      agentId: "ag_concierge",
+      body: { content: "Draft text. Edited.", base_version: 3 },
+    });
   });
 
   it("format select is metadata only and is sent on save", async () => {

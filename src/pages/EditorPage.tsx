@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import {
   Alert,
   Badge,
@@ -40,9 +40,29 @@ import { relativeTime } from "../lib/relativeTime";
 //   draft; if the draft is unchanged since that snapshot, Save sends its
 //   snapshot_id so the server promotes it (openapi.yaml:245-249). Snapshots
 //   are append-only (openapi.yaml:278) — listed for this session, no delete.
-//   "Test in Runs" consuming these is P1-T20b — not built here.
 // - format select is metadata only: "Phase 1 treats both as plain text; YAML
 //   schema validation is Phase 2" (openapi.yaml:1163-1164).
+//
+// P1-T20b — "Test in Runs" (sketch 06 "Test ▸"; annotated 06 tags it
+// "POST …/refunds/snapshots"): "the draft text is snapshotted immutably into
+// the run config (snapshot_id), so the tested text is exactly what ran even
+// if editing continues" (feature-spec.md:86). The button ensures a snapshot
+// of the CURRENT draft — reusing the last one if the draft is unchanged since
+// it (same content-equality rule the promoting Save uses) — then hands off to
+// the Runs stepper.
+//
+// Handoff = router state, not query params: the payload carries a display
+// label ("v3-draft (a3f1)") that has no business in a URL, drafts are
+// session-local so a deep link to this handoff is meaningless after reload,
+// and react-router state costs no new persistence. Shape:
+// navigate("/runs", { state: { testInRuns: { agent_id, snapshot_id,
+// snapshot_label } } }) — consumed by RunsPage (see its prefill note).
+//
+// "Last tested: run …" breadcrumb in the editor: SKIPPED — the editor
+// unmounts on the navigate, so surfacing the queued run back here would need
+// new persistence (session storage / server state the contract doesn't have).
+// The spec'd link-back lives on the Results side ("Back to editor" breadcrumb,
+// feature-spec.md:88) — not this task's scope to invent storage for.
 
 const DEL_STYLE = { background: "#FCEBEB", color: "#A32D2D" };
 const ADD_STYLE = { background: "#EAF3DE", color: "#3B6D11" };
@@ -50,6 +70,7 @@ const ADD_STYLE = { background: "#EAF3DE", color: "#3B6D11" };
 export function EditorPage() {
   const { tree } = useApp();
   const { agentId } = useParams();
+  const navigate = useNavigate();
   const [history, setHistory] = useState<InstructionHistory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -60,7 +81,11 @@ export function EditorPage() {
   const [diffFrom, setDiffFrom] = useState("draft");
   const [diffTo, setDiffTo] = useState("draft");
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [lastSnapshot, setLastSnapshot] = useState<{ id: string; content: string } | null>(null);
+  const [lastSnapshot, setLastSnapshot] = useState<{
+    id: string;
+    content: string;
+    label: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -137,16 +162,52 @@ export function EditorPage() {
     }
   };
 
+  // Shared by "Snapshot draft" and "Test in Runs": POST the current draft as
+  // an immutable snapshot and remember it for content-equality reuse.
+  const createDraftSnapshot = async (): Promise<Snapshot> => {
+    if (!history) throw new Error("no history loaded");
+    const snap = await api.createSnapshot(tree, agentId, {
+      content: draft,
+      base_version: history.live_version,
+    });
+    setSnapshots((s) => [...s, snap]);
+    setLastSnapshot({ id: snap.snapshot_id, content: draft, label: snap.label });
+    return snap;
+  };
+
   const snapshotDraft = async () => {
     if (!history) return;
     setBusy(true);
     try {
-      const snap = await api.createSnapshot(tree, agentId, {
-        content: draft,
-        base_version: history.live_version,
+      await createDraftSnapshot();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // "Test in Runs snapshots your draft and replays your usual conversations
+  // against it" (loom-phases.md:18). Snapshots are immutable, so an unchanged
+  // draft REUSES the last one instead of POSTing a duplicate (same rule Save
+  // uses for promotion); an edited draft gets a fresh snapshot.
+  const testInRuns = async () => {
+    if (!history) return;
+    setBusy(true);
+    try {
+      const snap =
+        lastSnapshot && lastSnapshot.content === draft
+          ? { snapshot_id: lastSnapshot.id, label: lastSnapshot.label }
+          : await createDraftSnapshot();
+      navigate("/runs", {
+        state: {
+          testInRuns: {
+            agent_id: agentId,
+            snapshot_id: snap.snapshot_id,
+            snapshot_label: snap.label,
+          },
+        },
       });
-      setSnapshots((s) => [...s, snap]);
-      setLastSnapshot({ id: snap.snapshot_id, content: draft });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -333,6 +394,11 @@ export function EditorPage() {
             <Group gap="xs">
               <Button size="xs" variant="default" onClick={() => void snapshotDraft()} disabled={busy}>
                 Snapshot draft
+              </Button>
+              {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Runs
+                  (loom-phases.md:18 "editor → Runs flow (sketches 06 → 03)"). */}
+              <Button size="xs" variant="light" onClick={() => void testInRuns()} disabled={busy}>
+                Test in Runs ▸
               </Button>
               <Button size="xs" onClick={() => void save()} disabled={busy || !dirty}>
                 Save as v{nextVersion}
