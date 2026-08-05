@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "mock": "python -m uvicorn mock.main:app --port 4010",
+    "simulate": "python -m mock.generator simulate",
     "test:mock": "python -m pytest mock/tests -q"
   },
   "devDependencies": {
