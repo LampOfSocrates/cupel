@@ -54,3 +54,8 @@
 - [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
+
+## PRO phases (plans only — NOT scheduled; do not build in free phases; user decisions 2026-08-05)
+- PRO-1 "Agents as Code" — repo/PR integration: GitHub connect, instruction diffs as PRs, merge promotes live; mock git server (former P2-T20)
+- PRO-2 "Public Sharing" — anonymous tokenized share links for conversations/turns (expiry, revocation); free tier keeps in-app deep links only (P2-SHARE)
+- PRO-3 "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-E2E deliberately excludes this video harness.
