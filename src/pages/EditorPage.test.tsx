@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
@@ -250,6 +250,60 @@ describe("EditorPage", () => {
       agentId: "ag_concierge",
       body: { content: "Draft text. Edited.", base_version: 3 },
     });
+  });
+
+  // P1-TEXPORT — free-tier export: pure client-side Blob download of the
+  // already-fetched history; no request leaves the page (MSW would error on
+  // any unhandled one — contract untouched).
+  it("Download → JSON triggers a client-side download with the right filename", async () => {
+    const blobs: Blob[] = [];
+    const createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return "blob:skein-export";
+    });
+    const revokeObjectURL = vi.fn();
+    // jsdom ships neither — install, then remove so other tests see stock URL
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const downloads: string[] = [];
+    // jsdom can't navigate blob: URLs — capture the anchor click instead
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloads.push(this.download);
+      });
+    try {
+      const user = userEvent.setup();
+      renderEditor();
+      await screen.findByLabelText("Instructions");
+      const trigger = screen.getByRole("button", { name: "Download" });
+      expect(trigger).toBeEnabled();
+      await user.click(trigger);
+      await user.click(await screen.findByRole("menuitem", { name: "JSON (.json)" }));
+
+      expect(downloads).toEqual(["ag_concierge-instructions-v3.json"]);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(blobs[0].type).toBe("application/json");
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:skein-export");
+    } finally {
+      clickSpy.mockRestore();
+      Reflect.deleteProperty(URL, "createObjectURL");
+      Reflect.deleteProperty(URL, "revokeObjectURL");
+    }
+  });
+
+  it("v0 agent (no versions) has Download disabled", async () => {
+    mockAgents.agent1.push({
+      id: "ag_new",
+      name: "New Agent",
+      parent_id: "ag_concierge",
+      live_version: 0,
+      tools: [],
+      enabled: true,
+      format: "text",
+    });
+    renderEditor("ag_new");
+    await screen.findByText("No versions yet — first save creates v1.");
+    expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
   });
 
   it("format select is metadata only and is sent on save", async () => {

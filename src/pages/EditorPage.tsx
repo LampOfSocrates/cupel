@@ -6,6 +6,7 @@ import {
   Button,
   Group,
   Loader,
+  Menu,
   NativeSelect,
   Paper,
   SegmentedControl,
@@ -13,12 +14,19 @@ import {
   Text,
   Textarea,
   Title,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import { api } from "../api/client";
 import type { InstructionHistory, InstructionSave, Snapshot } from "../api/types";
 import { useApp } from "../AppContext";
 import { diffLines } from "../lib/diff";
+import {
+  exportFilename,
+  serializeHistoryJson,
+  serializeHistoryMarkdown,
+  triggerDownload,
+} from "../lib/exportInstructions";
 import { relativeTime } from "../lib/relativeTime";
 
 // Instruction editor (P1-T10b, sketch 06): "Edit an agent's instructions
@@ -220,6 +228,21 @@ export function EditorPage() {
     setMode("edit");
   };
 
+  // P1-TEXPORT — free-tier file export: serialize the already-fetched history
+  // (no server round-trip, no contract change) and hand it to the browser.
+  const download = (kind: "json" | "md") => {
+    if (!history) return;
+    const text =
+      kind === "json"
+        ? serializeHistoryJson(history)
+        : serializeHistoryMarkdown(history, agentId);
+    triggerDownload(
+      exportFilename(agentId, history.live_version, kind),
+      text,
+      kind === "json" ? "application/json" : "text/markdown",
+    );
+  };
+
   if (error) {
     return (
       <Stack gap="sm">
@@ -266,9 +289,36 @@ export function EditorPage() {
         {/* Version rail (sketch 06: "Versions" panel, draft on top, live badge) */}
         <Paper withBorder p="sm" w={230} style={{ flexShrink: 0 }}>
           <Stack gap="xs">
-            <Text size="xs" c="dimmed">
-              Versions
-            </Text>
+            <Group justify="space-between">
+              <Text size="xs" c="dimmed">
+                Versions
+              </Text>
+              {/* P1-TEXPORT: download the version history as a file. Disabled
+                  on v0 agents — nothing to export yet (openapi.yaml:215). */}
+              <Tooltip
+                label="No versions yet — nothing to export"
+                disabled={history.versions.length > 0}
+              >
+                <span>
+                  <Menu position="bottom-end" withinPortal>
+                    <Menu.Target>
+                      <Button
+                        size="compact-xs"
+                        variant="subtle"
+                        color="gray"
+                        disabled={history.versions.length === 0}
+                      >
+                        Download
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item onClick={() => download("json")}>JSON (.json)</Menu.Item>
+                      <Menu.Item onClick={() => download("md")}>Markdown (.md)</Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                </span>
+              </Tooltip>
+            </Group>
             <Group gap={6} data-testid="version-draft">
               <Badge size="sm" variant="light" color="blue">
                 v{nextVersion} · draft
