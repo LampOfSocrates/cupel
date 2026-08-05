@@ -54,10 +54,12 @@
 - [ ] P2-MSW Full MSW parity for unit tests
 - [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
+- [ ] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
 
 ## After Phase 2 (user decision 2026-08-05): FULL STOP — no Phase 3 (scaffold) or Phase 4 (hosted).
 ## Next focus after Phase 2 close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
+## UX-phase candidate (user-approved 2026-08-05): "whitelabel-lite" — npm run init (asks name/label/backend, writes agentic.config.ts) + wire product.label through all UI strings; full Phase-3 scaffolder stays parked.
 
 ## PRO phases (plans only — NOT scheduled; do not build in free phases; user decisions 2026-08-05)
 - PRO-1 "Agents as Code" — repo/PR integration: GitHub connect, instruction diffs as PRs, merge promotes live; mock git server (former P2-T20)
