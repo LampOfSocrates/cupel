@@ -4,7 +4,7 @@ Read these before any work, in order:
 2. skein-phases.md — we build phase by phase; NEVER build ahead of the current phase
 3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
-Current phase: 2. Current task: P2-T00 contract v0.3.0 (extends openapi.yaml v0.2.0).
+Current phase: 2. Current task: P2-READY skein-ready readiness script (validates a backend OpenAPI against contract v0.3.0).
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.

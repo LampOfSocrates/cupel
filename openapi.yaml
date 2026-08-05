@@ -1,26 +1,48 @@
 openapi: 3.0.3
 info:
-  title: Skein API — Phase 1 contract
-  version: 0.2.0
+  title: Skein API — Phase 2 contract
+  version: 0.3.0
   description: |
-    Phase 1 API contract for Skein (draft). Scope: exactly the endpoints Phase 1
-    features need — chat (both stream modes), conversations + forks, agents +
-    versioned instructions + snapshots, replay (conversation and turn level),
-    runs, traces, task queue, eval basics (judge / judgments / summaries), and
-    identity/meta. Source of truth: docs/feature-spec.md "API" section
-    (feature-spec.md:114-135) filtered by the Phase 1 plan (skein-phases.md:9-66).
+    Phase 2 API contract for Skein. Extends v0.2.0 (Phase 1) in place: every
+    Phase-1 path and schema is unchanged or additively extended (new optional
+    fields, widened enums with unchanged defaults), so Phase-1 clients keep
+    working. New in v0.3.0: auth + security model, admin (users, permissions,
+    tree enable/disable, Inspector, generator control), casebooks, the eval
+    workbench (cases/sets CRUD, import, rubric saves), context-policy
+    widening, per-tree memory, and user settings. Source of truth:
+    docs/feature-spec.md "API" section (feature-spec.md:114-135) filtered by
+    the Phase 2 plan (skein-phases.md:69-118); pro-tier endpoints are
+    excluded (see below).
 
     Scoping rule (feature-spec.md:115): "Tree-scoped: conversation/run/chat
     resources live under /agenttrees/{tree_id}/… — permission checks fall out of
     the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
 
-    Phase 1 has no auth (skein-phases.md:10 "No auth (dev user)"): no security
-    schemes here; GET /me is still always called and answers with the dev user
-    (feature-spec.md:17, invariant skein-phases.md:160).
+    Auth model (feature-spec.md:15-21): one bearer JWT scheme
+    (components.securitySchemes.bearerAuth) applies to EVERY operation via
+    the top-level security block, except the two explicitly open ones —
+    GET /healthz and POST /auth/token (security: []) — because a client must
+    be able to probe liveness and log in before it holds a token. Everything
+    else, including GET /models, is gated. AUTH_MODE semantics
+    (feature-spec.md:16-18): this contract declares the AUTH_MODE=on
+    behaviour; with AUTH_MODE=off the backend simply does not ENFORCE the
+    scheme — requests without a token succeed as the configured dev user.
+    Clients never branch on the mode (invariant skein-phases.md:160 "no
+    component branches on AUTH_MODE"): they always attach a token when they
+    have one, and route any 401 to the login screen. GET /me answers in both
+    modes (feature-spec.md:120). The 401 response is spelled out on /me,
+    /auth/logout and every /admin/* operation; for all other gated
+    operations it is implied by the top-level security block rather than
+    repeated per path.
 
     Invariants encoded in this contract: instruction versions, judgments and
     snapshots are append-only — no endpoint updates or deletes them
-    (skein-phases.md:160).
+    (skein-phases.md:160). Phase 2 adds more versioned stores under the same
+    rule: PUT /eval/cases/{id}, PUT /eval/sets/{id} and
+    PUT /eval/rubrics/{id} each append a NEW version, never overwrite
+    (feature-spec.md:130-132). Per-tree memory is the deliberate exception:
+    a mutable working document (PUT overwrites, DELETE clears) — it is not
+    one of the append-only stores.
 
     Machine-originated conversations: headless clients (the generator, or a
     production pipeline such as a mail scanner) speak this same public API —
@@ -35,29 +57,92 @@ info:
     rubrics through the public API — invariant "generator writes only through
     the public API" (skein-phases.md:160, feature-spec.md:185, :188).
 
-    Deferred to later phases (deliberately absent): /auth/*, /admin/* (users,
-    permissions, tree enable/disable, generator control API), /settings,
-    /settings/repo, /assist, /webhooks/git, memory, casebooks/inspector, eval
-    cases/sets CRUD + import, and replay context-override/tools-mode fields
-    (feature-spec.md:82 — Phase 1 replays always run frozen: context_policy is
-    present but pinned to enum [frozen]; skein-phases.md:98 lists the rest under
-    Phase 2 mock deliverables).
+    Pro-tier exclusions (user decision 2026-08-05, TASKS.md:56-61): repo/PR
+    integration (POST /agenttrees/{tree}/agents/{id}/pr, GET/PUT
+    /settings/repo, POST /webhooks/git, the mock git server) and public
+    tokenized share links are PRO tier and deliberately ABSENT from this
+    contract — the contract test asserts their absence. Free-tier sharing
+    (P2-SHARE, TASKS.md:47) is in-app deep links (/chat/{id}?turn=) over the
+    existing conversation GETs and needs no new endpoints.
+
+    Deferred to later phases (deliberately absent): /assist — the AI
+    authoring fast path is Phase 3 (feature-spec.md:119; skein-phases.md:128
+    "New-agent wizard" under Phase 3) — and additional YAML framework
+    schemas (Phase 4).
 servers:
   - url: http://localhost:4010
     description: FastAPI mock (skein-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
+security:
+  - bearerAuth: []
 tags:
+  - name: auth
   - name: identity
+  - name: admin
   - name: meta
   - name: trees
   - name: agents
   - name: conversations
+  - name: memory
   - name: chat
   - name: runs
   - name: trace
   - name: tasks
   - name: eval
+  - name: casebooks
+  - name: settings
 
 paths:
+  # -------------------------------------------------------------------- auth
+  /auth/token:
+    post:
+      tags: [auth]
+      operationId: createToken
+      summary: Exchange credentials for a bearer JWT + user
+      security: []
+      description: |
+        feature-spec.md:18: "On: login screen (email + password or SSO
+        redirect) → POST /auth/token; token attached by the single API
+        client; 401 anywhere → back to login." Open endpoint (security: []) —
+        a client cannot hold a token before logging in. The mock serves
+        seeded credentials admin@demo / restricted@demo issuing real-shaped
+        JWTs so the auth-on path is testable without a real IdP
+        (feature-spec.md:21; skein-phases.md:98). With AUTH_MODE=off the
+        endpoint still answers (a dev-user token) so the login flow stays
+        testable, but the app never needs it — /me answers without a token
+        and no component branches on the mode (skein-phases.md:160).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthTokenRequest" }
+      responses:
+        "200":
+          description: JWT plus the authenticated user (same shape as GET /me).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokenResponse" }
+        "401":
+          description: Bad credentials (code invalid_credentials).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Invalidate the current token
+      description: |
+        feature-spec.md:120 "POST /auth/logout"; the session is shown in
+        Settings "with sign-out" (feature-spec.md:18). Invalidates the
+        presented bearer token server-side; the client then drops it and
+        returns to login. With AUTH_MODE=off this is a no-op 204 (nothing to
+        invalidate) — clients call it unconditionally, never branching on
+        the mode (skein-phases.md:160).
+      responses:
+        "204": { description: Token invalidated (or nothing to invalidate). }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   # ---------------------------------------------------------------- identity
   /me:
     get:
@@ -67,14 +152,249 @@ paths:
       description: |
         feature-spec.md:120: "GET /me (user + per-tree permissions; answers in
         both auth modes)". Always called on boot — invariant (skein-phases.md:160
-        "/me is always called"). Phase 1: backend/mock answers with the dev user
-        (feature-spec.md:17).
+        "/me is always called"). AUTH_MODE=off: answers with the configured
+        dev user, no token needed (feature-spec.md:17 — "the backend/mock
+        just answers with the dev user, so permission code paths run
+        identically"). AUTH_MODE=on: requires the bearer token; 401 routes
+        to login (feature-spec.md:18).
       responses:
         "200":
-          description: The current (Phase 1 = dev) user.
+          description: The current user (AUTH_MODE=off = the dev user).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ------------------------------------------------------------------- admin
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      summary: All users (Settings → Members)
+      description: |
+        feature-spec.md:19: "Admin UI (visible when /me grants admin):
+        Settings → Members — user list, per-tree permission matrix (view/
+        tune/evaluate checkboxes), invite by email. API: GET/PUT
+        /admin/users, GET/PUT /admin/users/{id}/permissions." Requires the
+        admin role (403 otherwise).
+      responses:
+        "200":
+          description: Every user, cross-user (admin-only).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [admin]
+      operationId: putUsers
+      summary: Upsert users (invite by email)
+      description: |
+        The PUT half of feature-spec.md:19 "GET/PUT /admin/users" — upsert
+        keyed by email: a new email creates an invited user
+        (feature-spec.md:19 "invite by email"), an existing email updates
+        name/roles. Users absent from the body are untouched, and there is
+        no user delete — conversations and judgments keep their author
+        references forever.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items: { $ref: "#/components/schemas/AdminUserUpsert" }
+      responses:
+        "200":
+          description: The upserted users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/users/{userId}/permissions:
+    get:
+      tags: [admin]
+      operationId: getUserPermissions
+      summary: One user's per-tree permission matrix
+      description: |
+        feature-spec.md:19: "GET/PUT /admin/users/{id}/permissions" — the
+        per-tree view/tune/evaluate matrix behind the Settings → Members
+        checkboxes. Same shape as Me.permissions so the admin UI and /me
+        agree exactly (feature-spec.md:32 "Permissions per tree (view / tune
+        / evaluate)").
+      parameters: [{ $ref: "#/components/parameters/userId" }]
+      responses:
+        "200":
+          description: The user's matrix.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PermissionMatrix" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [admin]
+      operationId: putUserPermissions
+      summary: Replace one user's per-tree permission matrix
+      description: |
+        Full replacement of the matrix (feature-spec.md:19). Takes effect on
+        the user's next request — their GET /me reflects it, and unpermitted
+        trees stop rendering (feature-spec.md:32 "unpermitted trees never
+        render"). E2e checklist 12: "admin permission matrix edit takes
+        effect" (feature-spec.md:217).
+      parameters: [{ $ref: "#/components/parameters/userId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PermissionMatrixUpdate" }
+      responses:
+        "200":
+          description: The stored matrix.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PermissionMatrix" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/agenttrees/{treeId}:
+    patch:
+      tags: [admin]
+      operationId: toggleAgentTree
+      summary: Enable/disable an agent tree (history stays read-only)
+      description: |
+        feature-spec.md:20: "Admin → Agent trees: … enable/disable toggle per
+        tree (PATCH /admin/agenttrees/{id} {enabled}). Disabled tree: hidden
+        from GET /agenttrees for non-admins (admins see it greyed with a
+        'disabled' badge); new chat/replay/judge against it return 409
+        tree_disabled; queued tasks on it are cancelled; existing
+        conversations stay READABLE (read-only banner) so history and traces
+        aren't lost. Re-enabling restores everything" (feature-spec.md:21).
+        Nothing is deleted by disabling — this toggles availability, never
+        data.
+      parameters: [{ $ref: "#/components/parameters/treeId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TreeToggleRequest" }
+      responses:
+        "200":
+          description: The tree with its new enabled state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTree" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/conversations:
+    get:
+      tags: [admin]
+      operationId: listAdminConversations
+      summary: Inspector — every conversation, cross-user
+      description: |
+        feature-spec.md:117: "Inspector/Casebooks: GET /admin/conversations
+        (cross-user)". skein-phases.md:78: "Inspect every conversation in
+        the system as a super user — filter by user, tree, date, or score in
+        a dense keyboard-driven table … requires the inspect role,
+        audit-logged." Requires the inspect role (403 otherwise); EVERY
+        access is audit-logged server-side. Paginated like the tree-scoped
+        listing; rows add the owning user and a latest-score column for the
+        score filter. Feed the ⊞ casebook action from here
+        (feature-spec.md:240 "Inspector | GET /admin/conversations,
+        POST /casebooks/{id}/items").
+      parameters:
+        - name: user_id
+          in: query
+          schema: { type: string }
+        - name: tree
+          in: query
+          schema: { type: string }
+        - name: date_from
+          in: query
+          description: Conversations with activity on/after this date.
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: score_min
+          in: query
+          description: Latest-judgment score filter (triage worst-first, feature-spec.md:64).
+          schema: { type: number }
+        - name: score_max
+          in: query
+          schema: { type: number }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Page of conversations across all users, most recent activity first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminConversationPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/generator:
+    post:
+      tags: [admin]
+      operationId: controlGenerator
+      summary: Control the data generator (seed / drip / stop)
+      description: |
+        feature-spec.md:122: "Generator: POST /admin/generator ({mode:
+        seed|drip|stop, seed?, rates?})"; modes per feature-spec.md:186-188 —
+        seed = one-shot baseline dataset, "Deterministic from --seed N (e2e
+        depends on this)"; drip = continuous background loop with
+        configurable rates; stop = halt the drip. The generator writes ONLY
+        through this public API (invariant skein-phases.md:160;
+        feature-spec.md:185 "never directly to the DB"), so everything it
+        produces flows through the same queues and SSE streams as real
+        usage. Surfaced in Settings → Backend for the mock and Settings →
+        Admin for staging; "Prod hides it" (feature-spec.md:189).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GeneratorCommand" }
+      responses:
+        "202":
+          description: Command accepted; the resulting generator state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeneratorStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/generator/status:
+    get:
+      tags: [admin]
+      operationId: getGeneratorStatus
+      summary: Generator status — counts produced, current rates
+      description: |
+        feature-spec.md:189: "GET /admin/generator/status (counts produced,
+        current rates)". Backs the drip toggle + rate sliders in Settings
+        (feature-spec.md:189) and the "visible liveness" loop
+        (feature-spec.md:190).
+      responses:
+        "200":
+          description: Current generator state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeneratorStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   # -------------------------------------------------------------------- meta
   /healthz:
@@ -82,12 +402,14 @@ paths:
       tags: [meta]
       operationId: getHealthz
       summary: Liveness / server info
+      security: []
       description: |
         feature-spec.md:122 "GET /healthz (backend switcher)"; feature-spec.md:159
         "shows status, latency, server version, and (for mock) the loaded seed"
-        (latency is client-measured). Note: the backend-switcher UI that consumes
-        this is Phase 2 (sketch 09); the endpoint ships in Phase 1 for mock/e2e
-        liveness only.
+        (latency is client-measured). Open endpoint (security: []): the
+        backend switcher probes candidate targets BEFORE any login
+        (feature-spec.md:159 "Health check: GET {base}/healthz on select"),
+        so liveness must be checkable without a token in either AUTH_MODE.
       responses:
         "200":
           description: Server is up.
@@ -119,8 +441,9 @@ paths:
       summary: Permitted agent trees
       description: |
         feature-spec.md:121: "GET /agenttrees (permitted + enabled; admins also
-        see disabled)". Phase 1 has no admin/disable mechanics; all seeded trees
-        return enabled=true (disable toggle is Phase 2, feature-spec.md:20).
+        see disabled)". Disabled trees (PATCH /admin/agenttrees/{id}) are
+        omitted for non-admins; admins see them with enabled=false, rendered
+        "greyed with a 'disabled' badge" (feature-spec.md:20).
       responses:
         "200":
           description: Trees visible to the current user.
@@ -448,6 +771,86 @@ paths:
         "204": { description: Deleted. }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # ------------------------------------------------------------------ memory
+  /agenttrees/{tree}/memory:
+    get:
+      tags: [memory]
+      operationId: getMemory
+      summary: The tree's memory document
+      description: |
+        feature-spec.md:118: "Memory: GET/PUT/DELETE /agenttrees/{tree}/memory".
+        skein-phases.md:85: "See and control what the app remembers about
+        your conversations per agent tree — view, edit, or clear the memory
+        document; compaction runs as a visible queued task — using the
+        Memory panel." One document per tree. A tree that has never
+        remembered anything returns content "" (not 404).
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "200":
+          description: The memory document.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Memory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [memory]
+      operationId: putMemory
+      summary: Edit the memory document (overwrites — mutable by design)
+      description: |
+        The edit half of skein-phases.md:85 "view, edit, or clear". Memory
+        is a MUTABLE working document — the deliberate exception to the
+        append-only stores (versions/judgments/snapshots,
+        skein-phases.md:160): PUT replaces the content outright.
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemoryUpdate" }
+      responses:
+        "200":
+          description: The updated document.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Memory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [memory]
+      operationId: clearMemory
+      summary: Clear the memory document
+      description: |
+        The clear half of skein-phases.md:85 "view, edit, or clear the
+        memory document". Resets content to ""; subsequent GET returns the
+        empty document, not 404. Conversations are untouched — only the
+        distilled memory is cleared.
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "204": { description: Cleared. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/memory/compact:
+    post:
+      tags: [memory]
+      operationId: compactMemory
+      summary: Compact conversations into memory (queued task)
+      description: |
+        feature-spec.md:118: "POST /agenttrees/{tree}/memory/compact
+        (queued)". Enqueued like all backend work (feature-spec.md:106
+        "every request returns task_id"): 202 + TaskRef; the task has type
+        "compact" and streams progress on GET /tasks/stream. On completion
+        the memory document holds the merged summary (skein-phases.md:131:
+        "LLM summarization merges what matters into the tree's memory
+        document"). Compaction rewrites memory, not conversations —
+        transcripts, traces and judgments are untouched.
+      parameters: [{ $ref: "#/components/parameters/tree" }]
+      responses:
+        "202":
+          description: Compaction enqueued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskRef" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   # -------------------------------------------------------------------- chat
   /agenttrees/{tree}/chat:
     post:
@@ -519,6 +922,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ChatResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /upload:
     post:
@@ -619,6 +1023,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReplayAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /agenttrees/{tree}/replay/turn:
     post:
@@ -650,6 +1055,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReplayTurnAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /agenttrees/{tree}/runs:
     get:
@@ -904,6 +1310,124 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Rubric" }
 
+  /eval/rubrics/{rubricId}:
+    put:
+      tags: [eval]
+      operationId: updateRubric
+      summary: Save a rubric as a NEW version (append-only)
+      description: |
+        feature-spec.md:132: "PUT /eval/rubrics/{id} (save = new version)";
+        workbench rubric editor: "prompt text, save = new version, test
+        against one case" (feature-spec.md:63). Appends the next version of
+        this rubric id — never overwrites (invariant skein-phases.md:160);
+        Judgment.rubric_version keeps old scores comparable
+        (feature-spec.md:59). Complements Phase-1 POST /eval/rubrics
+        (existing NAME appends) with the id-addressed save the editor needs.
+      parameters: [{ $ref: "#/components/parameters/rubricId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RubricUpdate" }
+      responses:
+        "201":
+          description: The new rubric version (now latest).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rubric" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/cases:
+    post:
+      tags: [eval]
+      operationId: createEvalCase
+      summary: Create an eval case (handcrafted or sourced from a turn)
+      description: |
+        feature-spec.md:130: "POST /eval/cases (handcrafted or source: {tree,
+        conversation_id, turn_id})". Model (feature-spec.md:54-57): input =
+        "prompt + context (frozen)"; output = "candidate response";
+        reference = expected answer, "handcrafted in an editor, or sourced
+        from conversation history (pick a turn → its response becomes the
+        reference)", nullable ("reference-free rubrics allowed"). Exactly
+        one creation mode (request oneOf): handcrafted = input + output
+        supplied; sourced = source supplied and the server derives input
+        (the turn's prompt + envelope) and output (its response). Entry
+        points: the workbench case editor and "add as eval case" on any turn
+        (feature-spec.md:63).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalCaseCreate" }
+      responses:
+        "201":
+          description: The created case (version 1).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalCase" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/cases/import:
+    post:
+      tags: [eval]
+      operationId: importEvalCases
+      summary: Bulk import cases (CSV/XLSX, column mapping, per-row errors)
+      description: |
+        feature-spec.md:129: "Import: POST /eval/cases/import
+        (CSV/XLSX/pasted table, column mapping, per-row error report)".
+        Workbench rule (feature-spec.md:63): "upload CSV/XLSX (or paste a
+        table) with columns mapped to input/output/reference → creates/
+        extends a set in one shot (…queued for large files; row errors
+        reported per line, not all-or-nothing)". Multipart: file (pasted
+        tables are uploaded as CSV) + mapping (JSON object as a string:
+        which column feeds input/output/reference) + set_id (extend an
+        existing set — new membership version) or set_name (create one).
+        Small files: 200 with the per-row report inline. Above the server's
+        size threshold: 202 TaskRef — an "import" task whose
+        result.import_report carries the identical report shape on
+        completion. Failed rows never abort the import; valid rows land.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, mapping]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or XLSX; a pasted table is submitted as CSV.
+                mapping:
+                  type: string
+                  description: >-
+                    JSON object string, e.g.
+                    {"input":"question","output":"answer","reference":"expected"}
+                    — reference optional (nullable references allowed,
+                    feature-spec.md:57).
+                set_id:
+                  type: string
+                  description: Extend this set (appends a new membership version).
+                set_name:
+                  type: string
+                  description: Create a new set holding the imported cases.
+      responses:
+        "200":
+          description: Import processed synchronously — per-row report.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalCaseImportReport" }
+        "202":
+          description: Large file — import queued; the finished task's result.import_report holds the report.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskRef" }
+        "422":
+          description: Unparseable file or invalid mapping (whole-file failure, distinct from per-row errors).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /eval/cases/{caseId}:
     get:
       tags: [eval]
@@ -911,10 +1435,11 @@ paths:
       summary: One eval case (judgment drawer)
       description: |
         feature-spec.md:130 "GET /eval/cases/{id}". Model (feature-spec.md:54):
-        "EvalCase = {input, output, reference?}". Phase 1 cases are
-        auto-created from conversation turns during judging
-        (feature-spec.md:61); handcrafted CRUD/import is Phase 2 workbench.
-        Consumed by the judgment drawer (feature-spec.md:233).
+        "EvalCase = {input, output, reference?}". Cases arrive handcrafted
+        or imported via the workbench (feature-spec.md:63), or auto-created
+        from conversation turns during judging (feature-spec.md:61). Returns
+        the LATEST version. Consumed by the judgment drawer
+        (feature-spec.md:233).
       parameters:
         - name: caseId
           in: path
@@ -922,10 +1447,102 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: The case.
+          description: The case (latest version).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvalCase" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [eval]
+      operationId: updateEvalCase
+      summary: Save an eval case as a NEW version (append-only)
+      description: |
+        feature-spec.md:130: "PUT (new version)" — the same append-only
+        versioning as rubrics (feature-spec.md:132) and instructions
+        (feature-spec.md:33): each save appends the next version, never
+        overwrites. Prior versions stay readable and existing judgments keep
+        pointing at the content they actually judged. Rollback = PUT the old
+        content again (a new version).
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalCaseUpdate" }
+      responses:
+        "201":
+          description: The new case version (now latest).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalCase" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/sets:
+    get:
+      tags: [eval]
+      operationId: listEvalSets
+      summary: Eval sets (latest version each)
+      description: |
+        feature-spec.md:131: "Sets: POST/GET /eval/sets". Model
+        (feature-spec.md:58): "EvalSet: named collection of cases
+        (versioned, reusable across runs/models)". Returns the latest
+        version of each set, membership included — feeds the workbench set
+        manager (feature-spec.md:63) and the judge's set picker.
+      responses:
+        "200":
+          description: Latest version of every set.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EvalSet" }
+    post:
+      tags: [eval]
+      operationId: createEvalSet
+      summary: Create an eval set (version 1)
+      description: |
+        feature-spec.md:131 "POST/GET /eval/sets"; workbench set manager:
+        "create/name/version sets, drag cases in" (feature-spec.md:63).
+        Membership changes after creation go through PUT /eval/sets/{id}
+        (new version).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetCreate" }
+      responses:
+        "201":
+          description: The created set (version 1).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+
+  /eval/sets/{setId}:
+    put:
+      tags: [eval]
+      operationId: updateEvalSet
+      summary: Save set membership as a NEW version (append-only)
+      description: |
+        feature-spec.md:131: "PUT /eval/sets/{id} (versioned membership)".
+        Append-only like rubrics: each save is a new version carrying its
+        full case_ids list; earlier versions remain queryable so judgments
+        made against version N stay attributable to exactly that membership.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetUpdate" }
+      responses:
+        "201":
+          description: The new set version (now latest).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /eval/judge:
@@ -935,10 +1552,11 @@ paths:
       summary: Enqueue LLM judging
       description: |
         feature-spec.md:133: "POST /eval/judge ({set_id | case_ids | run_id,
-        judge_model, rubric_id} → enqueued), judgments append-only". Phase 1
-        accepts run_id ("Score this run… auto-creating cases from conversation
-        turns if none exist", feature-spec.md:61) or explicit case_ids; set_id
-        needs EvalSets (Phase 2 workbench) and is intentionally absent. Judge
+        judge_model, rubric_id} → enqueued), judgments append-only". Exactly
+        one selector (oneOf): run_id ("Score this run… auto-creating cases
+        from conversation turns if none exist", feature-spec.md:61),
+        explicit case_ids, or — since v0.3.0, with EvalSets — set_id
+        (latest membership version unless set_version pins one). Judge
         prompt receives the case's envelope (feature-spec.md:81).
       requestBody:
         required: true
@@ -952,6 +1570,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TaskRef" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /eval/judgments:
     get:
@@ -1021,7 +1640,255 @@ paths:
               schema: { $ref: "#/components/schemas/RunScoreSummary" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # --------------------------------------------------------------- casebooks
+  /casebooks:
+    get:
+      tags: [casebooks]
+      operationId: listCasebooks
+      summary: Casebooks
+      description: |
+        feature-spec.md:117: "GET/POST/PATCH/DELETE /casebooks".
+        skein-phases.md:79: "Collect noteworthy turns into Casebooks with
+        one keystroke, then turn a casebook into an eval set, a replay
+        regression suite, or few-shot examples for an agent — using the ⊞
+        action and Casebook view." Global (not tree-scoped): a casebook may
+        reference turns across trees; per-item visibility still follows the
+        viewer's tree permissions.
+      responses:
+        "200":
+          description: All casebooks visible to the user, items included.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Casebook" }
+    post:
+      tags: [casebooks]
+      operationId: createCasebook
+      summary: Create a casebook
+      description: The POST of feature-spec.md:117 "GET/POST/PATCH/DELETE /casebooks". Starts empty; add items via POST /casebooks/{id}/items.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CasebookCreate" }
+      responses:
+        "201":
+          description: The created casebook.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Casebook" }
+
+  /casebooks/{casebookId}:
+    get:
+      tags: [casebooks]
+      operationId: getCasebook
+      summary: One casebook (Casebook view)
+      description: |
+        feature-spec.md:241: "Casebook view | GET /casebooks/{id},
+        POST …/to-eval-set, POST …/replay". Items are turn REFERENCES —
+        render transcripts by following each item's
+        tree/conversation_id/turn_id.
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      responses:
+        "200":
+          description: The casebook with items.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Casebook" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [casebooks]
+      operationId: updateCasebook
+      summary: Rename / re-describe a casebook
+      description: The PATCH of feature-spec.md:117 — metadata only; membership changes go through the items endpoints.
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CasebookUpdate" }
+      responses:
+        "200":
+          description: The updated casebook.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Casebook" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [casebooks]
+      operationId: deleteCasebook
+      summary: Delete a casebook (references only — nothing else is touched)
+      description: |
+        The DELETE of feature-spec.md:117. Removes the casebook and its item
+        REFERENCES only: the referenced turns/conversations, and any eval
+        sets or runs already materialized from this casebook, are untouched
+        (items are references, not copies).
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      responses:
+        "204": { description: Deleted. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /casebooks/{casebookId}/items:
+    post:
+      tags: [casebooks]
+      operationId: addCasebookItem
+      summary: Add a turn reference (the ⊞ action)
+      description: |
+        feature-spec.md:117: "POST/DELETE /casebooks/{id}/items" — the POST
+        half. An item is a REFERENCE to a turn, never a copy (dev prompt
+        12a, feature-spec.md:289 "Quote the reference-not-copy rule"):
+        {tree, conversation_id, turn_id} plus an optional note; the
+        transcript stays in its conversation. Entry points: ⊞ on any turn,
+        Chat, the Inspector (feature-spec.md:240) and results cells.
+        Re-adding the same turn is idempotent (returns the existing item).
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CasebookItemCreate" }
+      responses:
+        "201":
+          description: The item reference.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CasebookItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /casebooks/{casebookId}/items/{itemId}:
+    delete:
+      tags: [casebooks]
+      operationId: removeCasebookItem
+      summary: Remove a turn reference
+      description: |
+        The DELETE half of feature-spec.md:117 "POST/DELETE
+        /casebooks/{id}/items" — the item id moves into the path to address
+        the individual reference. Removes only the reference; the turn, its
+        conversation, and anything already materialized from the casebook
+        are untouched.
+      parameters:
+        - { $ref: "#/components/parameters/casebookId" }
+        - { $ref: "#/components/parameters/itemId" }
+      responses:
+        "204": { description: Removed. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /casebooks/{casebookId}/to-eval-set:
+    post:
+      tags: [casebooks]
+      operationId: casebookToEvalSet
+      summary: Materialize the casebook as an eval set
+      description: |
+        feature-spec.md:117: "POST /casebooks/{id}/to-eval-set";
+        skein-phases.md:79 "turn a casebook into an eval set". For each item
+        the server reuses the existing eval case for that turn or creates
+        one sourced from it (same semantics as POST /eval/cases with
+        source), then creates a new set (set_name) or appends a new
+        membership version to an existing one (set_id — versioned
+        membership, feature-spec.md:131).
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CasebookToEvalSetRequest" }
+      responses:
+        "201":
+          description: The created / newly-versioned set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /casebooks/{casebookId}/replay:
+    post:
+      tags: [casebooks]
+      operationId: replayCasebook
+      summary: Replay the casebook as a regression suite
+      description: |
+        feature-spec.md:117: "POST /casebooks/{id}/replay";
+        skein-phases.md:79 "a replay regression suite". Replays every
+        referenced turn under the given configs — same engine as
+        POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
+        fields and frozen default. A casebook may reference several trees,
+        so the response carries one run per tree touched, all children of a
+        single parent task; each run's grid is fetched tree-scoped as usual.
+      parameters: [{ $ref: "#/components/parameters/casebookId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CasebookReplayRequest" }
+      responses:
+        "202":
+          description: Replays enqueued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CasebookReplayAccepted" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------------- settings
+  /settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      summary: User-scoped app settings
+      description: |
+        feature-spec.md:123 "GET/PUT /settings"; consumed by Settings ·
+        global (feature-spec.md:245, dev prompt #6 "Settings page bound to
+        GET/PUT /settings, validation, optimistic save with rollback").
+        User-scoped and server-persisted. Deliberately small — chat
+        defaults, the replay fallback envelope (feature-spec.md:78, :81
+        "fallback envelope in GET/PUT /settings"), and read-only upload
+        limits for the composer (feature-spec.md:277 "Enforce type/size
+        limits from settings"). The backend TARGET is deliberately NOT here:
+        "Target is device-local (not synced via /settings)"
+        (feature-spec.md:161) — it lives in the one config artifact. The
+        Phase-2 Settings UI owns this shape; widen it there, not
+        speculatively here.
+      responses:
+        "200":
+          description: The user's settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+    put:
+      tags: [settings]
+      operationId: putSettings
+      summary: Replace settings
+      description: |
+        Full replacement of the writable fields; readOnly fields
+        (upload_limits) are server-owned and ignored if sent. UI does
+        "optimistic save with rollback" (feature-spec.md:279).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Settings" }
+      responses:
+        "200":
+          description: The stored settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Bearer JWT from POST /auth/token (feature-spec.md:18 "token attached
+        by the single API client; 401 anywhere → back to login"). Applied
+        globally via the top-level security block; only GET /healthz and
+        POST /auth/token opt out (security: []). AUTH_MODE=off backends do
+        not ENFORCE this scheme — requests without a token succeed as the
+        dev user — but the contract declares the on-mode and clients never
+        branch (invariant skein-phases.md:160).
+
   parameters:
     tree:
       name: tree
@@ -1044,6 +1911,37 @@ components:
       in: path
       required: true
       schema: { type: string }
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    treeId:
+      name: treeId
+      in: path
+      required: true
+      description: Tree being administered — same ids as {tree} (feature-spec.md:121).
+      schema: { type: string }
+    casebookId:
+      name: casebookId
+      in: path
+      required: true
+      schema: { type: string }
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: string }
+    setId:
+      name: setId
+      in: path
+      required: true
+      schema: { type: string }
+    rubricId:
+      name: rubricId
+      in: path
+      required: true
+      schema: { type: string }
 
   responses:
     NotFound:
@@ -1053,6 +1951,32 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Error:
       description: Request error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: >
+        Missing, invalid or expired bearer token (code unauthorized).
+        AUTH_MODE=on only — an off-mode backend does not enforce the scheme.
+        Clients route any 401 back to the login screen
+        (feature-spec.md:18); they never branch on the mode.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: >
+        Authenticated but lacking the required role (code forbidden): admin
+        for /admin/* management, inspect for the Inspector
+        (skein-phases.md:78 "requires the inspect role").
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: >
+        The target tree is disabled (code tree_disabled): "new
+        chat/replay/judge against it return 409 tree_disabled"
+        (feature-spec.md:20). Existing conversations stay readable; re-enable
+        via PATCH /admin/agenttrees/{id} restores everything.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1077,6 +2001,15 @@ components:
             id: { type: string }
             name: { type: string }
             email: { type: string }
+        roles:
+          type: array
+          description: >
+            Global roles (additive in v0.3.0, not required — Phase-1
+            backends omit it): admin gates the Settings → Members / Agent
+            trees UI (feature-spec.md:19 "visible when /me grants admin");
+            inspect gates the Inspector (skein-phases.md:78). Absent or
+            empty = neither.
+          items: { type: string, enum: [admin, inspect] }
         permissions:
           type: object
           description: >
@@ -1115,7 +2048,10 @@ components:
         name: { type: string }
         enabled:
           type: boolean
-          description: Always true in Phase 1; disable toggle is Phase 2 (feature-spec.md:20).
+          description: >
+            Toggled via PATCH /admin/agenttrees/{id} (feature-spec.md:20).
+            false is only ever seen by admins (non-admin listings omit
+            disabled trees); render greyed with a "disabled" badge.
 
     AgentTreeCreate:
       type: object
@@ -1428,6 +2364,15 @@ components:
           type: string
           nullable: true
           description: Session-scoped chat settings, sent per call (feature-spec.md:7, :278).
+        memory:
+          type: boolean
+          nullable: true
+          description: >
+            feature-spec.md:118: "/chat accepts memory flag". true = include
+            the tree's memory document (GET /agenttrees/{tree}/memory) in
+            the agent's context for this call; false = exclude it;
+            omitted/null = backend default. Additive in v0.3.0 — Phase-1
+            requests are unchanged.
         stream:
           type: boolean
           default: true
@@ -1539,11 +2484,54 @@ components:
             stored originals.
         context_policy:
           type: string
-          enum: [frozen]
+          enum: [frozen, current, custom]
           default: frozen
           description: >
-            Phase 1 pin — replays always run under each turn's original
-            envelope (feature-spec.md:77, :82). Phase 2 widens the enum.
+            feature-spec.md:77: "frozen (default — replay under each turn's
+            original envelope) · current (today's context, for time-drift
+            testing) · custom (explicit values)". Widened from the Phase-1
+            pin [frozen] (feature-spec.md:82); the DEFAULT stays frozen, so
+            Phase-1 requests are valid and behave unchanged. The grid
+            labels each column's policy; mixed-policy comparisons get a
+            warning badge.
+        context_override:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: >
+            The explicit envelope for context_policy custom
+            (feature-spec.md:77 "custom (explicit values)";
+            feature-spec.md:81 "accepts {context_policy,
+            context_override?, tools_mode}"). REQUIRED when policy is
+            custom; 422 if custom without it or if sent under another
+            policy.
+        fallback_policy:
+          type: string
+          enum: [settings, error]
+          default: settings
+          description: >
+            What to do when the resolved policy reads a turn's envelope and
+            it is null (legacy/imported turns). settings = apply the
+            settings-level fallback envelope (feature-spec.md:78: "a
+            settings-level default envelope applied to turns that have
+            none… Applied explicitly — the grid marks such cells env:
+            fallback, never silently 'now'"; stored as
+            Settings.fallback_envelope); error = fail that cell instead.
+            Only meaningful under frozen — current/custom never read the
+            stored envelope.
+        tools_mode:
+          type: string
+          enum: [live, replay_recorded]
+          default: live
+          description: >
+            feature-spec.md:79 "Tools mode": replay_recorded = "replay tool
+            spans' recorded results from the original trace — true
+            counterfactual: only instructions/model/endpoint vary"; a tool
+            absent from the trace falls back per-call to live or mock,
+            logged in the new trace. live = re-execute tools. The WIRE
+            default stays live so Phase-1 requests behave unchanged; the
+            Run Config UI preselects replay_recorded under frozen
+            (feature-spec.md:79 "Playback is the default under frozen") —
+            a UI default, not a wire default.
 
     ReplayAccepted:
       type: object
@@ -1569,9 +2557,23 @@ components:
           nullable: true
         context_policy:
           type: string
-          enum: [frozen]
+          enum: [frozen, current, custom]
           default: frozen
-          description: Phase 1 pin — as on ReplayRequest.
+          description: As on ReplayRequest — widened in v0.3.0, default stays frozen (feature-spec.md:77, :82).
+        context_override:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: As on ReplayRequest — required when context_policy is custom.
+        fallback_policy:
+          type: string
+          enum: [settings, error]
+          default: settings
+          description: As on ReplayRequest — settings applies Settings.fallback_envelope, cell marked env:fallback (feature-spec.md:78).
+        tools_mode:
+          type: string
+          enum: [live, replay_recorded]
+          default: live
+          description: As on ReplayRequest (feature-spec.md:79) — wire default live; UI preselects replay_recorded under frozen.
 
     ReplayTurnAccepted:
       type: object
@@ -1662,6 +2664,18 @@ components:
           type: number
           nullable: true
           description: Denormalized latest judgment score for the grid's score column.
+        envelope_source:
+          type: string
+          nullable: true
+          enum: [original, current, override, fallback]
+          description: >
+            Which envelope this cell ran under (additive in v0.3.0):
+            original = the turn's frozen envelope; current = policy current;
+            override = policy custom's context_override; fallback = the
+            settings fallback envelope was applied — "the grid marks such
+            cells env: fallback, never silently 'now'"
+            (feature-spec.md:78). null on Phase-1 rows (implicitly
+            original).
         error: { type: string, nullable: true }
 
     # ------------------------------------------------------------------ trace
@@ -1734,8 +2748,14 @@ components:
         id: { type: string }
         type:
           type: string
-          enum: [chat, replay, replay_turn, judge]
+          enum: [chat, replay, replay_turn, judge, compact, import]
           example: replay
+          description: >
+            compact and import are additive in v0.3.0: compact = memory
+            compaction (POST /agenttrees/{tree}/memory/compact, queued —
+            feature-spec.md:118); import = a large POST /eval/cases/import
+            processed in the background (feature-spec.md:63 "queued for
+            large files").
         status: { type: string, enum: [queued, running, done, failed, cancelled] }
         progress: { $ref: "#/components/schemas/TaskProgress" }
         parent_id: { type: string, nullable: true }
@@ -1750,6 +2770,13 @@ components:
             run_id: { type: string, nullable: true }
             conversation_id: { type: string, nullable: true }
             turn_id: { type: string, nullable: true }
+            import_report:
+              allOf: [{ $ref: "#/components/schemas/EvalCaseImportReport" }]
+              nullable: true
+              description: >
+                For type import (additive in v0.3.0) — the same per-row
+                report a small synchronous POST /eval/cases/import returns
+                inline (feature-spec.md:63).
         error: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         started_at: { type: string, format: date-time, nullable: true }
@@ -1852,25 +2879,43 @@ components:
             tree: { type: string }
             conversation_id: { type: string }
             turn_id: { type: string }
+        version:
+          type: integer
+          description: >
+            Additive in v0.3.0 (not required — Phase-1 backends omit it,
+            read as 1): versions append on PUT /eval/cases/{id}
+            (feature-spec.md:130 "PUT (new version)"); GET returns the
+            latest.
         created_at: { type: string, format: date-time }
 
     JudgeRequest:
       type: object
       required: [judge_model, rubric_id]
       description: >
-        Exactly one of run_id / case_ids (feature-spec.md:133) — enforced by
-        the oneOf. run_id = "Score this run", auto-creating cases from turns
-        if none exist (feature-spec.md:61). set_id is Phase 2 (EvalSets ship
-        with the workbench).
+        Exactly one of run_id / case_ids / set_id (feature-spec.md:133
+        "{set_id | case_ids | run_id, judge_model, rubric_id}") — enforced
+        by the oneOf. run_id = "Score this run", auto-creating cases from
+        turns if none exist (feature-spec.md:61). set_id (added in v0.3.0
+        with EvalSets) judges the set's latest membership version unless
+        set_version pins one.
       oneOf:
         - required: [run_id]
         - required: [case_ids]
+        - required: [set_id]
       properties:
         run_id: { type: string, nullable: true }
         case_ids:
           type: array
           nullable: true
           items: { type: string }
+        set_id:
+          type: string
+          nullable: true
+          description: Judge every case in this eval set (feature-spec.md:133).
+        set_version:
+          type: integer
+          nullable: true
+          description: Pin a set membership version; omit for latest (feature-spec.md:131 "versioned membership").
         judge_model: { type: string }
         rubric_id: { type: string }
         rubric_version:
@@ -1926,3 +2971,526 @@ components:
                 type: array
                 description: Bucketed score counts for the sparkline.
                 items: { type: integer }
+
+    # ------------------------------------------------------------------- auth
+    AuthTokenRequest:
+      type: object
+      required: [email, password]
+      description: >
+        Login credentials (feature-spec.md:18 "email + password"). Mock
+        seeds admin@demo / restricted@demo (feature-spec.md:21). SSO
+        redirect flows land on the same endpoint server-side.
+      properties:
+        email: { type: string, format: email, example: admin@demo }
+        password: { type: string, format: password }
+
+    AuthTokenResponse:
+      type: object
+      required: [access_token, token_type, me]
+      description: >
+        Real-shaped JWT (feature-spec.md:21) plus the authenticated user so
+        the login screen can hydrate immediately — the app still calls
+        GET /me on every boot regardless (invariant skein-phases.md:160
+        "/me is always called").
+      properties:
+        access_token:
+          type: string
+          description: >
+            JWT, sent as "Authorization: Bearer <token>" by the single API
+            client on every subsequent call (feature-spec.md:18).
+        token_type: { type: string, enum: [bearer] }
+        expires_in:
+          type: integer
+          nullable: true
+          description: Seconds until expiry; null = non-expiring (mock convenience).
+        me: { $ref: "#/components/schemas/Me" }
+
+    # ------------------------------------------------------------------ admin
+    AdminUser:
+      type: object
+      required: [id, name, email, roles]
+      description: Row in Settings → Members (feature-spec.md:19 "user list").
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        roles:
+          type: array
+          description: Global roles; per-tree rights live in the permission matrix.
+          items: { type: string, enum: [admin, inspect] }
+        invited:
+          type: boolean
+          default: false
+          description: True until an invited user first signs in (feature-spec.md:19 "invite by email").
+        created_at: { type: string, format: date-time }
+
+    AdminUserUpsert:
+      type: object
+      required: [email]
+      description: >
+        Upsert keyed by email: a new email creates an invited user
+        (feature-spec.md:19 "invite by email"); an existing email updates
+        name/roles. Null name/roles = leave unchanged.
+      properties:
+        email: { type: string }
+        name: { type: string, nullable: true }
+        roles:
+          type: array
+          nullable: true
+          items: { type: string, enum: [admin, inspect] }
+
+    PermissionMatrix:
+      type: object
+      required: [user_id, permissions]
+      description: >
+        Per-tree matrix for one user (feature-spec.md:19 "per-tree
+        permission matrix (view/tune/evaluate checkboxes)"), keyed by tree
+        id — the same shape as Me.permissions so the admin UI and /me agree
+        exactly. Trees absent from the map grant nothing.
+      properties:
+        user_id: { type: string }
+        permissions:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [view, tune, evaluate]
+
+    PermissionMatrixUpdate:
+      type: object
+      required: [permissions]
+      description: >
+        Full replacement of the user's matrix (PUT semantics). Takes effect
+        on the user's next request — their GET /me reflects it
+        (feature-spec.md:217, e2e checklist 12).
+      properties:
+        permissions:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [view, tune, evaluate]
+
+    TreeToggleRequest:
+      type: object
+      required: [enabled]
+      description: >
+        feature-spec.md:20: "PATCH /admin/agenttrees/{id} ({enabled})" —
+        the only mutable field; disabling never deletes anything.
+      properties:
+        enabled: { type: boolean }
+
+    AdminConversationItem:
+      allOf:
+        - $ref: "#/components/schemas/Conversation"
+        - type: object
+          required: [user_id]
+          description: >
+            Inspector row = an ordinary conversation plus the cross-user
+            dimension (skein-phases.md:78 "filter by user, tree, date, or
+            score").
+          properties:
+            user_id: { type: string, description: Owning user. }
+            user_email: { type: string, nullable: true }
+            latest_score:
+              type: number
+              nullable: true
+              description: Latest judgment score across the conversation's turns — backs the score filter/column.
+
+    AdminConversationPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminConversationItem" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    # -------------------------------------------------------------- generator
+    GeneratorRates:
+      type: object
+      description: >
+        feature-spec.md:188: "Rates configurable (conversations/hr, runs/hr,
+        fail %)" — drip-mode knobs, surfaced as rate sliders in Settings
+        (feature-spec.md:189).
+      properties:
+        conversations_per_hour: { type: number, nullable: true }
+        runs_per_hour: { type: number, nullable: true }
+        fail_pct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: Injected child-task failure rate — exercises retry-failed (feature-spec.md:169).
+
+    GeneratorCommand:
+      type: object
+      required: [mode]
+      description: >
+        feature-spec.md:122: "POST /admin/generator ({mode: seed|drip|stop,
+        seed?, rates?})".
+      properties:
+        mode: { type: string, enum: [seed, drip, stop] }
+        seed:
+          type: string
+          nullable: true
+          description: >
+            For mode seed — deterministic dataset id ("Deterministic from
+            --seed N (e2e depends on this)", feature-spec.md:187).
+        rates:
+          allOf: [{ $ref: "#/components/schemas/GeneratorRates" }]
+          nullable: true
+          description: For mode drip; omitted fields keep their current values.
+
+    GeneratorStatus:
+      type: object
+      required: [mode, rates, counts]
+      description: >
+        feature-spec.md:189: "GET /admin/generator/status (counts produced,
+        current rates)".
+      properties:
+        mode: { type: string, enum: [idle, seeding, drip] }
+        seed:
+          type: string
+          nullable: true
+          description: Seed of the loaded dataset (the mock also reports it on GET /healthz).
+        rates: { $ref: "#/components/schemas/GeneratorRates" }
+        counts:
+          type: object
+          description: >
+            Produced since seed — all written through the public API
+            (invariant skein-phases.md:160), so they flowed through the
+            normal queues and SSE streams.
+          required: [conversations, runs, judgments]
+          properties:
+            conversations: { type: integer }
+            runs: { type: integer }
+            judgments: { type: integer }
+
+    # -------------------------------------------------------------- casebooks
+    Casebook:
+      type: object
+      required: [id, name, created_at, items]
+      description: >
+        A named collection of turn REFERENCES (skein-phases.md:79) — the
+        raw material for eval sets and replay regression suites. References,
+        never copies: deleting a casebook touches nothing else.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CasebookItem" }
+
+    CasebookCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+
+    CasebookUpdate:
+      type: object
+      description: Metadata only; membership changes go through the items endpoints.
+      properties:
+        name: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+
+    CasebookItem:
+      type: object
+      required: [id, tree, conversation_id, turn_id, added_at]
+      description: >
+        A REFERENCE to a turn, never a copy (dev prompt 12a,
+        feature-spec.md:289 "reference-not-copy rule") — the transcript
+        stays in its conversation; removing the item touches nothing else.
+      properties:
+        id: { type: string }
+        tree: { type: string }
+        conversation_id: { type: string }
+        turn_id: { type: string }
+        note: { type: string, nullable: true, description: Why this turn is noteworthy. }
+        added_at: { type: string, format: date-time }
+
+    CasebookItemCreate:
+      type: object
+      required: [tree, conversation_id, turn_id]
+      properties:
+        tree: { type: string }
+        conversation_id: { type: string }
+        turn_id: { type: string }
+        note: { type: string, nullable: true }
+
+    CasebookToEvalSetRequest:
+      type: object
+      description: >
+        Exactly one target (oneOf): set_name creates a new set (version 1);
+        set_id appends a new membership version to an existing set
+        (feature-spec.md:131 "versioned membership").
+      oneOf:
+        - required: [set_name]
+        - required: [set_id]
+      properties:
+        set_name: { type: string, nullable: true }
+        set_id: { type: string, nullable: true }
+
+    CasebookReplayRequest:
+      type: object
+      required: [configs]
+      description: >
+        Same engine as ReplayRequest (feature-spec.md:41) applied to the
+        casebook's referenced turns; context fields carry ReplayRequest's
+        enums and defaults (frozen / settings / live), so Phase-1-shaped
+        requests behave identically.
+      properties:
+        configs:
+          type: array
+          minItems: 1
+          description: One grid column per config, as on ReplayRequest (feature-spec.md:49).
+          items: { $ref: "#/components/schemas/RunConfig" }
+        context_policy:
+          type: string
+          enum: [frozen, current, custom]
+          default: frozen
+          description: As on ReplayRequest (feature-spec.md:77, :82).
+        context_override:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: As on ReplayRequest — required when context_policy is custom.
+        fallback_policy:
+          type: string
+          enum: [settings, error]
+          default: settings
+          description: As on ReplayRequest (feature-spec.md:78).
+        tools_mode:
+          type: string
+          enum: [live, replay_recorded]
+          default: live
+          description: As on ReplayRequest (feature-spec.md:79).
+
+    CasebookReplayAccepted:
+      type: object
+      required: [task_id, runs]
+      description: >
+        One parent task; one run per tree the casebook's items reference
+        (runs are tree-scoped, feature-spec.md:115 — a cross-tree casebook
+        therefore yields several runs). Fetch each grid via
+        GET /agenttrees/{tree_id}/runs/{run_id}.
+      properties:
+        task_id: { type: string }
+        runs:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [tree_id, run_id]
+            properties:
+              tree_id: { type: string }
+              run_id: { type: string }
+
+    # --------------------------------------------------------- eval workbench
+    EvalCaseCreate:
+      type: object
+      description: >
+        Exactly one creation mode (oneOf; feature-spec.md:130 "handcrafted
+        or source: {tree, conversation_id, turn_id}"): handcrafted = input +
+        output typed in the editor; sourced = the server derives input (the
+        turn's prompt + envelope) and output (its response) from the
+        referenced turn. reference optional in both (feature-spec.md:57
+        "Nullable (reference-free rubrics allowed)"); "pick a turn → its
+        response becomes the reference" is the reference-from-turn picker
+        filling the field client-side.
+      oneOf:
+        - required: [input, output]
+        - required: [source]
+      properties:
+        input:
+          type: object
+          nullable: true
+          required: [prompt]
+          properties:
+            prompt: { type: string }
+            envelope:
+              allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+              nullable: true
+        output: { type: string, nullable: true, description: Candidate response. }
+        reference: { type: string, nullable: true }
+        source:
+          type: object
+          nullable: true
+          required: [tree, conversation_id, turn_id]
+          properties:
+            tree: { type: string }
+            conversation_id: { type: string }
+            turn_id: { type: string }
+
+    EvalCaseUpdate:
+      type: object
+      required: [input, output]
+      description: >
+        Full content for the NEW version (append-only,
+        feature-spec.md:130 "PUT (new version)") — prior versions and the
+        judgments recorded against them are untouched.
+      properties:
+        input:
+          type: object
+          required: [prompt]
+          properties:
+            prompt: { type: string }
+            envelope:
+              allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+              nullable: true
+        output: { type: string }
+        reference: { type: string, nullable: true }
+
+    EvalCaseImportReport:
+      type: object
+      required: [rows_total, rows_imported, created_case_ids, errors]
+      description: >
+        Per-row error report (feature-spec.md:129; :63 "row errors reported
+        per line, not all-or-nothing") — valid rows import even when others
+        fail.
+      properties:
+        set_id:
+          type: string
+          nullable: true
+          description: The set created/extended (new membership version), when requested.
+        rows_total: { type: integer }
+        rows_imported: { type: integer }
+        created_case_ids:
+          type: array
+          items: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, message]
+            properties:
+              row: { type: integer, description: 1-based data-row number in the uploaded file. }
+              column: { type: string, nullable: true }
+              message: { type: string }
+
+    EvalSet:
+      type: object
+      required: [id, name, version, case_ids, created_at]
+      description: >
+        feature-spec.md:58: "EvalSet: named collection of cases (versioned,
+        reusable across runs/models)". Membership is versioned
+        (feature-spec.md:131): each PUT appends a new version with its own
+        full case_ids; judgments made against version N stay attributable
+        to exactly that membership.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        case_ids:
+          type: array
+          items: { type: string }
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time of THIS version.
+
+    EvalSetCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        case_ids:
+          type: array
+          description: Initial membership; empty/omitted = start empty.
+          items: { type: string }
+
+    EvalSetUpdate:
+      type: object
+      required: [case_ids]
+      description: >
+        The full membership for the NEW version (append-only,
+        feature-spec.md:131). Optional name carries a rename into the new
+        version.
+      properties:
+        case_ids:
+          type: array
+          items: { type: string }
+        name: { type: string, nullable: true }
+
+    RubricUpdate:
+      type: object
+      required: [prompt]
+      description: >
+        The prompt text for the NEW rubric version (feature-spec.md:63
+        "rubric editor (prompt text, save = new version…)").
+      properties:
+        prompt: { type: string }
+
+    # ----------------------------------------------------------------- memory
+    Memory:
+      type: object
+      required: [tree_id, content]
+      description: >
+        One MUTABLE memory document per tree (skein-phases.md:85) — the
+        deliberate exception to the append-only stores: PUT overwrites,
+        DELETE clears. content "" = nothing remembered (never 404 for an
+        existing tree).
+      properties:
+        tree_id: { type: string }
+        content: { type: string, description: Markdown document. }
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: null when never written.
+
+    MemoryUpdate:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+
+    # --------------------------------------------------------------- settings
+    Settings:
+      type: object
+      required: [chat_defaults, fallback_envelope, upload_limits]
+      description: >
+        User-scoped app settings (feature-spec.md:123). Deliberately small —
+        the Phase-2 Settings UI owns this shape. The backend target is NOT
+        here: device-local by design (feature-spec.md:161).
+      properties:
+        chat_defaults:
+          type: object
+          description: >
+            Defaults for the chat settings submenu (feature-spec.md:7);
+            each /chat call still sends its session-scoped values
+            (feature-spec.md:278) — these only seed new sessions.
+          properties:
+            model: { type: string, nullable: true }
+            temperature: { type: number, nullable: true }
+            system_prompt: { type: string, nullable: true }
+        fallback_envelope:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: >
+            feature-spec.md:78: "a settings-level default envelope applied
+            to turns that have none (legacy/imported). Applied explicitly —
+            the grid marks such cells env: fallback, never silently 'now'."
+            Consumed when a replay's fallback_policy is settings; null =
+            unset (fallback_policy settings then errors the affected cell).
+        upload_limits:
+          type: object
+          readOnly: true
+          description: >
+            Server-owned composer limits, surfaced read-only
+            (feature-spec.md:277 "Enforce type/size limits from settings");
+            ignored if sent on PUT.
+          required: [max_size_bytes, accepted_types]
+          properties:
+            max_size_bytes: { type: integer }
+            accepted_types:
+              type: array
+              items: { type: string }
+              example: [image/png, image/jpeg, application/pdf, text/plain]
