@@ -63,11 +63,23 @@ import { useApp } from "../AppContext";
 //   or user-changed) before POSTing the replay, so the next test remembers it.
 // A fresh "New run" clears the flow — the PUT belongs to Test-in-Runs only.
 
+// P1-T15 — sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
+// Runs with instruction-version field focused, judge off. Sidebar Evaluate →
+// opens Runs with model field + judge section expanded." The preset travels
+// as router state {preset} (same mechanism as the T20b handoff above) but is
+// applied in an effect keyed on the location, because the sidebar links can
+// fire while this page is already mounted. A preset only shapes the Configure
+// step's INITIAL panel UI (focus + judge open/closed) — the flow is
+// unchanged: the user still picks conversations first unless a selection is
+// already in progress mid-stepper.
+
 interface TestInRunsState {
   agent_id: string;
   snapshot_id: string;
   snapshot_label: string;
 }
+
+type Preset = "tune" | "evaluate";
 
 const emptyConfig = (): RunConfig => ({});
 
@@ -81,9 +93,16 @@ export function RunsPage() {
     () => (location.state as { testInRuns?: TestInRunsState } | null)?.testInRuns ?? null,
   );
 
+  // Preset handoff (P1-T15) — initial value seeds mode so a preset arrival
+  // opens the stepper without a list-mode flash; re-arrivals land in the
+  // location-keyed effect below.
+  const [preset, setPreset] = useState<Preset | null>(
+    () => (location.state as { preset?: Preset } | null)?.preset ?? null,
+  );
+
   const [runs, setRuns] = useState<RunSummaryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"list" | "stepper">(testFlow ? "stepper" : "list");
+  const [mode, setMode] = useState<"list" | "stepper">(testFlow || preset ? "stepper" : "list");
   // Waiting on GET last-selection before the stepper knows its landing step.
   const [prefilling, setPrefilling] = useState(testFlow != null);
 
@@ -180,10 +199,33 @@ export function RunsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Preset arrival — runs for every location change so clicking Tune/Evaluate
+  // while already on /runs still applies. From the list a preset is a fresh
+  // stepper entry (same reset as "New run"); mid-stepper it keeps the flow and
+  // jumps to Configure only when a selection is already in progress. Reads
+  // mode/selection without depending on them: this reacts to NAVIGATION only.
+  useEffect(() => {
+    const p = (location.state as { preset?: Preset } | null)?.preset;
+    if (!p) return;
+    setPreset(p);
+    if (mode === "list") {
+      setTestFlow(null);
+      setSelection([]);
+      setConfigs([emptyConfig()]);
+      setStep(0);
+      setMode("stepper");
+    } else {
+      setStep(selection.length > 0 ? 1 : 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
   const startStepper = () => {
     // Fresh manual run — drop any Test-in-Runs handoff (its config prefill
-    // and Queue-time last-selection PUT belong to that flow only).
+    // and Queue-time last-selection PUT belong to that flow only) and any
+    // preset shaping (a plain "New run" carries no preset UI).
     setTestFlow(null);
+    setPreset(null);
     setMode("stepper");
     setStep(0);
     setSelection([]);
@@ -285,7 +327,10 @@ export function RunsPage() {
             baseline: stored originals · prefilled
           </Text>
           {configs.map((cfg, i) => (
-            <Paper key={i} withBorder p="sm" data-testid={`config-${i}`}>
+            // key includes the preset so a preset arrival mid-Configure
+            // remounts the panel (focus + judge-open are mount-time initial
+            // state, not controlled props).
+            <Paper key={`${preset ?? "manual"}-${i}`} withBorder p="sm" data-testid={`config-${i}`}>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" fw={600}>
                   Config {i + 1}
@@ -320,6 +365,15 @@ export function RunsPage() {
                   cfg.snapshot_id != null && cfg.snapshot_id === testFlow?.snapshot_id
                     ? testFlow.snapshot_label
                     : undefined
+                }
+                // Preset shaping (feature-spec.md:102-103), first config only:
+                // Tune = version focused + judge off; Evaluate = model
+                // focused + judge section expanded.
+                initialFocus={
+                  i === 0 && preset ? (preset === "tune" ? "version" : "model") : undefined
+                }
+                judgeInitiallyOpen={
+                  i === 0 && preset ? preset === "evaluate" : undefined
                 }
               />
             </Paper>

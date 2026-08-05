@@ -288,3 +288,41 @@ describe("RunsPage — Test in Runs arrival", () => {
     ]);
   });
 });
+
+// P1-T15 — sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
+// Runs with instruction-version field focused, judge off. Sidebar Evaluate →
+// opens Runs with model field + judge section expanded." The preset arrives
+// as router state {preset} and shapes ONLY the Configure step's initial panel
+// UI — the flow is unchanged: the user still picks conversations first.
+describe("RunsPage — Tune/Evaluate preset arrival", () => {
+  it("Tune: lands on Select, then Configure autofocuses the version field with judge off", async () => {
+    const user = userEvent.setup();
+    renderRuns("/runs", { preset: "tune" });
+
+    // preset does NOT skip the pick — Select gates Configure as usual
+    await user.click(await screen.findByRole("checkbox", { name: "Select Refund escalation" }));
+    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
+
+    await screen.findByTestId("config-0");
+    expect(screen.getByRole("combobox", { name: "Instruction version" })).toHaveFocus();
+    // judge off: toggle unchecked, its fields absent
+    expect(screen.getByRole("switch", { name: "⚖ Judge" })).not.toBeChecked();
+    expect(screen.queryByRole("combobox", { name: "Judge model" })).not.toBeInTheDocument();
+  });
+
+  it("Evaluate: Configure autofocuses the model field with the judge section expanded", async () => {
+    const user = userEvent.setup();
+    renderRuns("/runs", { preset: "evaluate" });
+
+    await user.click(await screen.findByRole("checkbox", { name: "Select Refund escalation" }));
+    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
+
+    await screen.findByTestId("config-0");
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
+    // judge section expanded, awaiting judge_model/rubric — but an empty
+    // section emits nothing: the config would queue without a judge key
+    expect(screen.getByRole("switch", { name: "⚖ Judge" })).toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Judge model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Rubric" })).toBeInTheDocument();
+  });
+});

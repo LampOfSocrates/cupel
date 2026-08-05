@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { NavLink as RouterNavLink, useNavigate } from "react-router";
 import { AppShell, Badge, Button, Divider, Group, Loader, NavLink, Stack, Text } from "@mantine/core";
 import { useApp } from "../AppContext";
@@ -13,6 +14,15 @@ const NAV = [
   { to: "/queue", label: "Queue" },
   { to: "/agents", label: "Agents" },
 ];
+
+// P1-T15 — presets nest under Runs (feature-spec.md:4 "Menus: Chat, Runs
+// (Tune / Evaluate presets), Settings"; :102-103). They are LINKS into the
+// same Runs page, not routes of their own — the preset travels as router
+// state, the same handoff mechanism as Test-in-Runs (T20b).
+const PRESETS = [
+  { preset: "tune", label: "Tune" },
+  { preset: "evaluate", label: "Evaluate" },
+] as const;
 
 // P1-T08 badge on the Queue entry: "Sidebar badge: pending count; subtle
 // spinner while anything is running" (feature-spec.md:111) — pending =
@@ -46,13 +56,25 @@ export function Sidebar() {
             + New chat
           </Button>
           {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              component={RouterNavLink}
-              to={item.to}
-              label={item.label}
-              rightSection={item.to === "/queue" ? <QueueIndicator /> : undefined}
-            />
+            <Fragment key={item.to}>
+              <NavLink
+                component={RouterNavLink}
+                to={item.to}
+                label={item.label}
+                rightSection={item.to === "/queue" ? <QueueIndicator /> : undefined}
+              />
+              {item.to === "/runs" &&
+                PRESETS.map((p) => (
+                  <NavLink
+                    key={p.preset}
+                    component={RouterNavLink}
+                    to="/runs"
+                    state={{ preset: p.preset }}
+                    label={p.label}
+                    pl={28}
+                  />
+                ))}
+            </Fragment>
           ))}
         </Stack>
         <Divider my="xs" />

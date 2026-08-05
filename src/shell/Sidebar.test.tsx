@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
-import { Route, Routes } from "react-router";
+import userEvent from "@testing-library/user-event";
+import { Route, Routes, useLocation } from "react-router";
 import { renderApp } from "../test/render";
 import { mockTasks, taskStreamRig } from "../test/msw/handlers";
 import { Shell } from "./Shell";
@@ -10,11 +11,22 @@ import { Shell } from "./Shell";
 // parents; fed by QueueProvider's single app-wide /tasks/stream + GET /tasks
 // (openapi.yaml:747-775 "polling fallback + sidebar badge").
 
+// Probe exposing where a nav click landed — pathname + router state, the
+// preset handoff channel (P1-T15).
+function LocationProbe() {
+  const loc = useLocation();
+  return (
+    <div data-testid="loc">
+      {loc.pathname}|{JSON.stringify(loc.state ?? null)}
+    </div>
+  );
+}
+
 const renderShell = () =>
   renderApp(
     <Routes>
       <Route element={<Shell />}>
-        <Route path="*" element={<div>page</div>} />
+        <Route path="*" element={<LocationProbe />} />
       </Route>
     </Routes>,
     { route: "/chat", queue: true },
@@ -52,5 +64,21 @@ describe("Sidebar queue badge", () => {
     });
     await waitFor(() => expect(screen.getByTestId("queue-badge")).toHaveTextContent("1"));
     expect(screen.queryByLabelText("Tasks running")).not.toBeInTheDocument();
+  });
+});
+
+// P1-T15 — presets nested under Runs (feature-spec.md:4 "Runs (Tune /
+// Evaluate presets)"; :102-103). They route to /runs carrying {preset} as
+// router state — the same handoff channel as Test-in-Runs (T20b).
+describe("Sidebar Tune/Evaluate presets", () => {
+  it("renders both entries and routes to /runs with the preset in router state", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole("link", { name: "Tune" }));
+    expect(screen.getByTestId("loc")).toHaveTextContent('/runs|{"preset":"tune"}');
+
+    await user.click(screen.getByRole("link", { name: "Evaluate" }));
+    expect(screen.getByTestId("loc")).toHaveTextContent('/runs|{"preset":"evaluate"}');
   });
 });
