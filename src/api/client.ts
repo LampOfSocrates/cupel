@@ -21,6 +21,7 @@ import type {
   ErrorBody,
   EvalCase,
   FeedbackRequest,
+  Health,
   InstructionHistory,
   InstructionSave,
   InstructionVersion,
@@ -178,6 +179,11 @@ async function* chatEvents(
 export const api = {
   // GET /me — always called on boot (skein-phases.md:160; openapi.yaml:62)
   me: () => request<Me>("/me"),
+
+  // GET /healthz (openapi.yaml:80-96) — backend-switcher health check
+  // (feature-spec.md:159). Latency is client-measured (openapi.yaml:88):
+  // the Settings page wraps this call in performance.now().
+  healthz: () => request<Health>("/healthz"),
 
   // GET /agenttrees (openapi.yaml:115)
   agentTrees: () => request<AgentTree[]>("/agenttrees"),

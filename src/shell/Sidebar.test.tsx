@@ -70,6 +70,17 @@ describe("Sidebar queue badge", () => {
 // P1-T15 — presets nested under Runs (feature-spec.md:4 "Runs (Tune /
 // Evaluate presets)"; :102-103). They route to /runs carrying {preset} as
 // router state — the same handoff channel as Test-in-Runs (T20b).
+// P2-T17 — Settings entry pinned below the recent list (feature-spec.md:4
+// "Menus: Chat, Runs (Tune / Evaluate presets), Settings").
+describe("Sidebar Settings entry", () => {
+  it("routes to /settings", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+    expect(screen.getByTestId("loc")).toHaveTextContent("/settings|null");
+  });
+});
+
 describe("Sidebar Tune/Evaluate presets", () => {
   it("renders both entries and routes to /runs with the preset in router state", async () => {
     const user = userEvent.setup();

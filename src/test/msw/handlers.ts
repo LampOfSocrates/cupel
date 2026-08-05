@@ -17,6 +17,7 @@
 // GET/PUT .../agents/{id}/last-selection (:295-332, per-agent remembered
 // selection, P1-T20b).
 import { http, HttpResponse } from "msw";
+import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
 import type {
   Agent,
@@ -29,6 +30,7 @@ import type {
   Endpoint,
   EvalCase,
   FeedbackRequest,
+  Health,
   InstructionHistory,
   InstructionSave,
   JudgeRequest,
@@ -58,6 +60,21 @@ import type {
 // through the same store the client uses (P2-CONFIG) — vitest is a dev build,
 // so the default active target IS mock (agentic.config.ts defaultTarget.dev).
 export const BASE = getActiveTarget().baseUrl;
+
+// P2-T17 second base: the config's LOCAL preset — target-switch tests prove
+// that after setActiveTarget("local") every fetch lands on the NEW base.
+// Resolved from the one config artifact like BASE (no hardcoded hosts).
+export const LOCAL_BASE = agenticConfig.targets.find((t) => t.id === "local")!.baseUrl;
+export const localBaseRequests: string[] = []; // pathnames hit on LOCAL_BASE
+export const localHealth: Health = { status: "ok", version: "0.9-local", seed: null };
+
+// GET /healthz (openapi.yaml:80-96, Health :1091-1100) — backend-switcher
+// check (feature-spec.md:159). status knob lets tests exercise the fail path.
+export const healthConfig: { status: number; body: Health } = {
+  status: 200,
+  body: { status: "ok", version: "0.2.0", seed: "demo-agent1" },
+};
+export const healthzRequests: string[] = []; // "mock" | "local" per hit
 
 export const mockMe: Me = {
   user: { id: "dev", name: "Dev User", email: "dev@example.com" },
@@ -864,6 +881,10 @@ const cancelledTasks = new Set<string>();
 let newConvCounter = 0;
 
 export function resetHandlerState() {
+  healthConfig.status = 200;
+  healthConfig.body = { status: "ok", version: "0.2.0", seed: "demo-agent1" };
+  healthzRequests.length = 0;
+  localBaseRequests.length = 0;
   conversationRequests.length = 0;
   endpointsRequests.length = 0;
   modelsRequests.length = 0;
@@ -935,6 +956,56 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const handlers = [
   http.get(`${BASE}/me`, () => HttpResponse.json(mockMe)),
+
+  // GET /healthz (openapi.yaml:80-96) — status/version/seed; latency is
+  // client-measured (openapi.yaml:88), so none here.
+  http.get(`${BASE}/healthz`, () => {
+    healthzRequests.push("mock");
+    if (healthConfig.status !== 200) {
+      return HttpResponse.json(
+        { code: "unavailable", message: "backend down" },
+        { status: healthConfig.status },
+      );
+    }
+    return HttpResponse.json(healthConfig.body);
+  }),
+
+  // ------------------------- LOCAL_BASE handlers (P2-T17 target switching):
+  // everything a full-App boot + Settings page touch on the new base.
+  http.get(`${LOCAL_BASE}/me`, () => {
+    localBaseRequests.push("/me");
+    return HttpResponse.json(mockMe);
+  }),
+  http.get(`${LOCAL_BASE}/agenttrees`, () => {
+    localBaseRequests.push("/agenttrees");
+    return HttpResponse.json(mockTrees);
+  }),
+  http.get(`${LOCAL_BASE}/healthz`, () => {
+    localBaseRequests.push("/healthz");
+    healthzRequests.push("local");
+    return HttpResponse.json(localHealth);
+  }),
+  http.get(`${LOCAL_BASE}/agenttrees/:tree/conversations`, () => {
+    localBaseRequests.push("/conversations");
+    return HttpResponse.json({ items: [], page: 1, page_size: 20, total: 0 });
+  }),
+  http.get(`${LOCAL_BASE}/tasks`, () => {
+    localBaseRequests.push("/tasks");
+    return HttpResponse.json([]);
+  }),
+  http.get(`${LOCAL_BASE}/tasks/stream`, () => {
+    localBaseRequests.push("/tasks/stream");
+    // Idle stream held open until abort — registered with the rig's client
+    // set so resetHandlerState's closeAll cleans it up.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        taskStreamClients.add(controller);
+      },
+    });
+    return new HttpResponse(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }),
 
   http.get(`${BASE}/agenttrees`, () => HttpResponse.json(mockTrees)),
 

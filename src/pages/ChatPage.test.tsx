@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useParams } from "react-router";
 import { MantineProvider } from "@mantine/core";
 import { ChatPage } from "./ChatPage";
 import { App } from "../App";
+import { setSseEnabled } from "../api/backendPrefs";
 import { renderApp } from "../test/render";
 import {
   cancelRequests,
@@ -107,6 +108,28 @@ describe("ChatPage streaming", () => {
     // back out of streaming mode
     expect(screen.queryByRole("button", { name: "Stop generation" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+  });
+
+  // P2-T17 — the Settings → Backend SSE toggle (feature-spec.md:160 "SSE
+  // streaming on/off") drives ChatRequest.stream; off → the T02 JSON path
+  // renders the full reply ("the UI degrades gracefully to non-streaming when
+  // the SSE toggle is off in mock options", skein-phases.md:43).
+  it("sends stream:false when the device-local SSE flag is off and renders the full JSON reply", async () => {
+    setSseEnabled(false);
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    await user.type(screen.getByPlaceholderText("Message…"), "No stream please");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(chatRequests).toHaveLength(1));
+    expect(chatRequests[0].stream).toBe(false); // MSW wire capture
+    // Full reply lands at once via the JSON ChatResponse.
+    await waitFor(() =>
+      expect(screen.getByTestId("transcript")).toHaveTextContent("Hello streaming world."),
+    );
+    expect(screen.queryByTestId("streaming-turn")).not.toBeInTheDocument();
   });
 
   it("renders an inline error state on an SSE error event", async () => {

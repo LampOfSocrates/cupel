@@ -85,6 +85,13 @@ export function Sidebar() {
       <AppShell.Section grow style={{ overflowY: "auto" }} mt={4}>
         <ConversationList tree={tree} />
       </AppShell.Section>
+      {/* P2-T17 — Settings pinned at the bottom, below the recent list
+          (feature-spec.md:4 "Menus: Chat, Runs (Tune / Evaluate presets),
+          Settings"). First section: Settings → Backend (sketch 09). */}
+      <AppShell.Section>
+        <Divider my="xs" />
+        <NavLink component={RouterNavLink} to="/settings" label="Settings" />
+      </AppShell.Section>
     </>
   );
 }

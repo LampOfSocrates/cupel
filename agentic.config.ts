@@ -34,6 +34,14 @@ export interface BackendTarget {
    */
   requiresToken?: boolean;
   /**
+   * Chrome banner for this target (feature-spec.md:161 "Non-prod targets show
+   * a colored banner in the app chrome so nobody mistakes mock data for
+   * real"). `false` = no banner (prod). When UNSET the app falls back to the
+   * P2-CONFIG id-based rule: every target except id "prod" shows an orange
+   * "<label> backend" banner. color is any CSS color; defaults to orange.
+   */
+  banner?: { label: string; color?: string } | false;
+  /**
    * Route remapping for backends whose routes are NAMED DIFFERENTLY
    * (skein-phases.md:75 — e.g. everything lives under "/nabu-service/…").
    * Receives the contract path ("/agenttrees/agent1/chat") and returns the
@@ -75,6 +83,7 @@ export const agenticConfig: AgenticConfig = {
       id: "mock",
       label: "Mock",
       baseUrl: "http://localhost:4010",
+      banner: { label: "MOCK BACKEND", color: "#e8590c" },
     },
     {
       // YOUR backend on your dev machine — edit the port to taste.
@@ -87,6 +96,7 @@ export const agenticConfig: AgenticConfig = {
       id: "staging",
       label: "Staging",
       baseUrl: "https://staging.example.com",
+      banner: { label: "STAGING BACKEND", color: "#1971c2" },
     },
     {
       // "" = same-origin (see BackendTarget.baseUrl): the deployed app calls
@@ -96,6 +106,7 @@ export const agenticConfig: AgenticConfig = {
       label: "Prod",
       baseUrl: "",
       requiresToken: true,
+      banner: false,
     },
   ],
 

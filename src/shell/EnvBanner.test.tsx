@@ -3,15 +3,32 @@ import { render, screen } from "@testing-library/react";
 import { setActiveTarget } from "../api/target";
 import { EnvBanner } from "./EnvBanner";
 
-// P2-CONFIG — "Non-prod targets show a colored banner in the app chrome so
-// nobody mistakes mock data for real" (feature-spec.md:161).
+// P2-T17 — banner config lives on the target (agentic.config.ts
+// BackendTarget.banner); "Non-prod targets show a colored banner in the app
+// chrome so nobody mistakes mock data for real" (feature-spec.md:161).
 describe("EnvBanner", () => {
-  it("renders the target label for the mock target (the test/dev default)", () => {
+  it("renders the mock target's configured banner (the test/dev default)", () => {
     render(<EnvBanner />);
-    expect(screen.getByTestId("env-banner")).toHaveTextContent("Mock backend");
+    const banner = screen.getByTestId("env-banner");
+    expect(banner).toHaveTextContent("MOCK BACKEND");
+    expect(banner).toHaveStyle({ background: "#e8590c" });
   });
 
-  it("is absent when the active target is prod", () => {
+  it("staging renders its configured label and color", () => {
+    setActiveTarget("staging");
+    render(<EnvBanner />);
+    const banner = screen.getByTestId("env-banner");
+    expect(banner).toHaveTextContent("STAGING BACKEND");
+    expect(banner).toHaveStyle({ background: "#1971c2" });
+  });
+
+  it("targets WITHOUT banner config fall back to the id rule: '<label> backend'", () => {
+    setActiveTarget("local"); // local declares no banner in agentic.config.ts
+    render(<EnvBanner />);
+    expect(screen.getByTestId("env-banner")).toHaveTextContent("Local backend");
+  });
+
+  it("is absent for prod (banner: false in the config)", () => {
     setActiveTarget("prod");
     render(<EnvBanner />);
     expect(screen.queryByTestId("env-banner")).not.toBeInTheDocument();

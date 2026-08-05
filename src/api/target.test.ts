@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { agenticConfig } from "../../agentic.config";
 import {
+  CUSTOM_TARGET_ID,
+  CUSTOM_URL_KEY,
   TARGET_STORAGE_KEY,
   getActiveTarget,
   resolveDefaultTargetId,
   setActiveTarget,
+  setCustomUrl,
   subscribeTarget,
 } from "./target";
 
@@ -52,6 +55,47 @@ describe("device-local persistence (feature-spec.md:161)", () => {
 
   it("rejects unknown target ids", () => {
     expect(() => setActiveTarget("nope")).toThrow(/Unknown backend target/);
+  });
+});
+
+// P2-T17 — the "custom Base URL field" (feature-spec.md:158), device-local
+// under skein.backend.customUrl like the target choice itself (:161).
+describe("custom target (P2-T17)", () => {
+  const URL = "http://backend.internal:9999";
+
+  it("setCustomUrl + setActiveTarget('custom') resolve a target with the stored URL", () => {
+    setCustomUrl(URL);
+    setActiveTarget(CUSTOM_TARGET_ID);
+    expect(localStorage.getItem(CUSTOM_URL_KEY)).toBe(URL);
+    expect(localStorage.getItem(TARGET_STORAGE_KEY)).toBe(CUSTOM_TARGET_ID);
+    expect(getActiveTarget()).toMatchObject({ id: CUSTOM_TARGET_ID, baseUrl: URL });
+  });
+
+  it("returns a stable reference while the URL is unchanged; a URL edit produces a new object", () => {
+    setCustomUrl(URL);
+    setActiveTarget(CUSTOM_TARGET_ID);
+    const before = getActiveTarget();
+    expect(getActiveTarget()).toBe(before);
+    setCustomUrl("http://backend.internal:8888");
+    const after = getActiveTarget();
+    expect(after).not.toBe(before);
+    expect(after.baseUrl).toBe("http://backend.internal:8888");
+  });
+
+  it("custom without a stored URL is not selectable; a stored 'custom' id without a URL falls back", () => {
+    expect(() => setActiveTarget(CUSTOM_TARGET_ID)).toThrow(/Unknown backend target/);
+    localStorage.setItem(TARGET_STORAGE_KEY, CUSTOM_TARGET_ID);
+    expect(getActiveTarget().id).toBe("mock"); // dev default
+  });
+
+  it("setCustomUrl notifies subscribers (the client retargets immediately)", () => {
+    setCustomUrl(URL);
+    setActiveTarget(CUSTOM_TARGET_ID);
+    const listener = vi.fn();
+    const unsubscribe = subscribeTarget(listener);
+    setCustomUrl("http://backend.internal:7777");
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 });
 

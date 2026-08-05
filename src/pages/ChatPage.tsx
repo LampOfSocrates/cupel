@@ -26,6 +26,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
+import { getSseEnabled } from "../api/backendPrefs";
 import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
 import type { Attachment, Judgment, Lineage, Model, Turn } from "../api/types";
 import { EnvelopeChip, ForkModal } from "../components";
@@ -290,7 +291,12 @@ export function ChatPage() {
         {
           message: text,
           conversation_id: conversationId,
-          stream: true,
+          // P2-T17: the Settings → Backend "SSE streaming on/off" mock option
+          // (feature-spec.md:160) — device-local flag, read at send time.
+          // stream:false answers a single JSON ChatResponse handled below
+          // (skein-phases.md:43 "the UI degrades gracefully to non-streaming
+          // when the SSE toggle is off in mock options").
+          stream: getSseEnabled(),
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
           // P1-T05: session-scoped settings "sent with each /chat call"
           // (feature-spec.md:278). ChatSettings keys mirror ChatRequest

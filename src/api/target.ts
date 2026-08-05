@@ -8,6 +8,12 @@ import { agenticConfig, type BackendTarget } from "../../agentic.config";
 
 export const TARGET_STORAGE_KEY = "skein.backend.target";
 
+// P2-T17 — the "custom Base URL field" of feature-spec.md:158: one extra
+// non-preset target whose baseUrl the user types in Settings → Backend.
+// Device-local like the target choice itself (feature-spec.md:161).
+export const CUSTOM_TARGET_ID = "custom";
+export const CUSTOM_URL_KEY = "skein.backend.customUrl";
+
 /**
  * Default target id per build kind (agentic.config.ts defaultTarget):
  * dev server / vitest → mock; `vite build` bundles → prod (same-origin,
@@ -20,8 +26,46 @@ export function resolveDefaultTargetId(isProd: boolean = import.meta.env.PROD): 
   return isProd ? agenticConfig.defaultTarget.production : agenticConfig.defaultTarget.dev;
 }
 
+export function getCustomUrl(): string {
+  try {
+    return localStorage.getItem(CUSTOM_URL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Synthesized custom target. Cached so the reference is stable while the URL
+// is unchanged (the useSyncExternalStore snapshot contract getActiveTarget
+// documents); a URL edit invalidates the cache → new object → re-render.
+let customCache: BackendTarget | null = null;
+function customTarget(): BackendTarget | undefined {
+  const baseUrl = getCustomUrl();
+  if (!baseUrl) return undefined; // no URL entered yet — not selectable
+  if (!customCache || customCache.baseUrl !== baseUrl) {
+    customCache = { id: CUSTOM_TARGET_ID, label: "Custom", baseUrl };
+  }
+  return customCache;
+}
+
+/** Persist the custom base URL (skein.backend.customUrl) and notify — the
+ * client rebuilds URLs from getActiveTarget() on every call, so an edit while
+ * the custom target is active retargets the app immediately. */
+export function setCustomUrl(url: string): void {
+  try {
+    if (url) localStorage.setItem(CUSTOM_URL_KEY, url);
+    else localStorage.removeItem(CUSTOM_URL_KEY);
+  } catch {
+    // storage unavailable — nothing to persist; the custom target stays
+    // unavailable (mirrors llmKey.ts).
+  }
+  for (const listener of listeners) listener();
+}
+
 function findTarget(id: string): BackendTarget | undefined {
-  return agenticConfig.targets.find((t) => t.id === id);
+  return (
+    agenticConfig.targets.find((t) => t.id === id) ??
+    (id === CUSTOM_TARGET_ID ? customTarget() : undefined)
+  );
 }
 
 // try/catch mirrors llmKey.ts: localStorage can throw (privacy mode) — the

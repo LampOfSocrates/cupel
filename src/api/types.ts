@@ -13,6 +13,15 @@ export interface AgentTree {
   enabled: boolean;
 }
 
+// openapi.yaml:1091 Health — GET /healthz (backend switcher,
+// feature-spec.md:159 "shows status, latency, server version, and (for mock)
+// the loaded seed"; latency is CLIENT-measured, openapi.yaml:88 — not a field).
+export interface Health {
+  status: "ok";
+  version: string;
+  seed?: string | null; // "Loaded seed dataset — mock only" (openapi.yaml:1100)
+}
+
 // openapi.yaml:1102 Model — GET /models feeds the chat model dropdown
 // (feature-spec.md:122 "GET /models (chat/run/judge model dropdowns)").
 export interface Model {
