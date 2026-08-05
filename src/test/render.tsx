@@ -5,6 +5,7 @@ import { MantineProvider } from "@mantine/core";
 import { api } from "../api/client";
 import type { Model } from "../api/types";
 import { AppContext, type ChatSettings } from "../AppContext";
+import { QueueProvider } from "../QueueContext";
 import { mockMe, mockTrees } from "./msw/handlers";
 
 export const testAppState = {
@@ -55,16 +56,32 @@ function TestAppProvider({ children }: { children: ReactNode }) {
 // role queries can't see their contents.
 // `state` = router location state for the initial entry (P1-T20b: the
 // editor → Runs Test-in-Runs handoff travels as navigate state, not a URL).
+// `queue` = wrap in QueueProvider (P1-T08) with fast timings — OPT-IN so
+// existing tests that count taskStreamRig.clients (RunDetailPage) keep their
+// single-subscription arithmetic.
 export function renderApp(
   ui: ReactNode,
-  { route = "/chat", state }: { route?: string; state?: unknown } = {},
+  {
+    route = "/chat",
+    state,
+    queue = false,
+  }: { route?: string; state?: unknown; queue?: boolean } = {},
 ) {
+  const routed = (
+    <MemoryRouter initialEntries={[state === undefined ? route : { pathname: route, state }]}>
+      {ui}
+    </MemoryRouter>
+  );
   return render(
     <MantineProvider env="test">
       <TestAppProvider>
-        <MemoryRouter initialEntries={[state === undefined ? route : { pathname: route, state }]}>
-          {ui}
-        </MemoryRouter>
+        {queue ? (
+          <QueueProvider reconnectBaseMs={15} pollMs={40}>
+            {routed}
+          </QueueProvider>
+        ) : (
+          routed
+        )}
       </TestAppProvider>
     </MantineProvider>,
   );

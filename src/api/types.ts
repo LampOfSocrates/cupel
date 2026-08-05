@@ -447,6 +447,14 @@ export interface TaskProgressEvent {
   progress: TaskProgress;
 }
 
+// openapi.yaml:747-767 GET /tasks query params — status / parent_id
+// ("Children of this task; omit for the default top-level listing") / limit.
+export interface TaskListParams {
+  status?: Task["status"];
+  parent_id?: string;
+  limit?: number;
+}
+
 // openapi.yaml:1726 Task — returned by DELETE /tasks/{taskId}
 // (openapi.yaml:832-847 "Cancel a task ... also stop-generation").
 export interface Task {

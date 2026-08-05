@@ -4,6 +4,7 @@ import { Alert, Center, Loader } from "@mantine/core";
 import { api } from "./api/client";
 import type { AgentTree, Me, Model } from "./api/types";
 import { AppContext, type ChatSettings } from "./AppContext";
+import { QueueProvider } from "./QueueContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
 import { RunsPage } from "./pages/RunsPage";
@@ -95,6 +96,10 @@ export function App() {
         setChatSettings,
       }}
     >
+      {/* P1-T08: ONE app-wide /tasks/stream subscription, opened on boot —
+          feeds the queue panel and the sidebar badge (feature-spec.md:108,
+          :111). Design notes in QueueContext.tsx. */}
+      <QueueProvider>
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<Navigate to="/chat" replace />} />
@@ -115,6 +120,7 @@ export function App() {
           <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
         </Route>
       </Routes>
+      </QueueProvider>
     </AppContext.Provider>
   );
 }

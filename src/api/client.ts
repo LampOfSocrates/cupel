@@ -39,6 +39,7 @@ import type {
   Snapshot,
   SnapshotCreate,
   Task,
+  TaskListParams,
   TaskProgressEvent,
   TaskRef,
   TokenEvent,
@@ -276,10 +277,26 @@ export const api = {
     return (await res.json()) as Attachment;
   },
 
+  // GET /tasks (openapi.yaml:747-775) — "List tasks (polling fallback +
+  // sidebar badge)"; response is "Tasks, newest first. Parents only (unless
+  // parent_id given); expand via GET /tasks/{id}" (:769-771).
+  tasks: (params: TaskListParams = {}) =>
+    request<Task[]>("/tasks", { query: params as Query }),
+
+  // GET /tasks/{taskId} (openapi.yaml:815-830) — "Task with children
+  // populated" (:826); the queue panel's expand fetch.
+  task: (taskId: string) => request<Task>(`/tasks/${taskId}`),
+
   // DELETE /tasks/{taskId} — "Cancel a task ... Doubles as chat
   // stop-generation: 'stop = DELETE /tasks/{task_id}'" (openapi.yaml:832-839).
   cancelTask: (taskId: string) =>
     request<Task>(`/tasks/${taskId}`, { method: "DELETE" }),
+
+  // POST /tasks/{taskId}/retry-failed (openapi.yaml:849-865) — "Retry only
+  // the failed children of a batch"; 202 = "Failed children re-enqueued;
+  // parent task returned" (:858-861).
+  retryFailedTask: (taskId: string) =>
+    request<Task>(`/tasks/${taskId}/retry-failed`, { method: "POST" }),
 
   // POST /feedback — "👍/👎 on an assistant message ... writes a type: human
   // judgment — single store with /eval/judgments" (openapi.yaml:556-583).
@@ -320,15 +337,19 @@ export const api = {
 
   // GET /tasks/stream (openapi.yaml:777-813) — SSE read off a fetch body via
   // the shared parser (sse.ts works for GET too); abort the signal to
-  // unsubscribe. Yields task/progress frames (see TaskStreamEvent).
+  // unsubscribe. Yields task/progress frames (see TaskStreamEvent). `onOpen`
+  // fires once the response headers confirm the stream is up — QueueProvider
+  // (P1-T08) uses it to detect reconnection (an idle stream sends no frames,
+  // so frame arrival alone can't signal recovery).
   taskStream: async function* (
-    opts: { signal?: AbortSignal } = {},
+    opts: { signal?: AbortSignal; onOpen?: () => void } = {},
   ): AsyncGenerator<TaskStreamEvent, void> {
     const res = await fetch(buildUrl("/tasks/stream"), { signal: opts.signal });
     if (!res.ok) throw await errorFromResponse(res);
     if (!res.body) {
       throw new ApiError(res.status, "empty_stream", "SSE response had no body");
     }
+    opts.onOpen?.();
     for await (const msg of parseSseStream(res.body)) {
       if (msg.event === "task") {
         yield { event: "task", data: JSON.parse(msg.data) as Task };

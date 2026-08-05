@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActionIcon,
   Badge,
@@ -55,11 +55,24 @@ interface Props {
   onRetryFailed?: (taskId: string) => void;
   /** Fired when a parent row expands — lets the page lazy-fetch children. */
   onExpand?: (taskId: string) => void;
+  /**
+   * Result deep links per task — "View results" → grid, "Open in Chat" →
+   * fork (Task.result, openapi.yaml:1744-1752; sketch 05). A prop so routing
+   * stays in the page and this component remains a pure render.
+   */
+  renderResult?: (task: Task) => ReactNode;
   /** Clock for elapsed time; injectable for deterministic tests. */
   now?: number;
 }
 
-export function TaskQueue({ tasks, onCancel, onRetryFailed, onExpand, now = Date.now() }: Props) {
+export function TaskQueue({
+  tasks,
+  onCancel,
+  onRetryFailed,
+  onExpand,
+  renderResult,
+  now = Date.now(),
+}: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) => {
@@ -153,6 +166,7 @@ export function TaskQueue({ tasks, onCancel, onRetryFailed, onExpand, now = Date
                 {task.error}
               </Text>
             )}
+            {renderResult?.(task)}
             {expanded.has(task.id) && (task.children?.length ?? 0) > 0 && (
               <Stack gap={2} ml="md" mt={4} data-testid={`children-${task.id}`}>
                 {task.children!.map((child) => (
@@ -160,9 +174,12 @@ export function TaskQueue({ tasks, onCancel, onRetryFailed, onExpand, now = Date
                     <Text size="xs" truncate>
                       {child.progress.stage ?? TYPE_LABEL[child.type]}
                     </Text>
-                    <Badge size="xs" variant="light" color={STATUS_COLOR[child.status]}>
-                      {child.status}
-                    </Badge>
+                    <Group gap={6} wrap="nowrap">
+                      {renderResult?.(child)}
+                      <Badge size="xs" variant="light" color={STATUS_COLOR[child.status]}>
+                        {child.status}
+                      </Badge>
+                    </Group>
                   </Group>
                 ))}
               </Stack>
