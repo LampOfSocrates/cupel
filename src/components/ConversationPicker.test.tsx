@@ -8,7 +8,7 @@ import { conversationRequests } from "../test/msw/handlers";
 // Contract under test: SelectionItem (openapi.yaml:1250-1259) — "Absent/null =
 // whole conversation; present = just these turns (feature-spec.md:44)".
 // Search is server-side ?search= (openapi.yaml:352-354). Fixtures: c1 has
-// turns t1 (user) + t2 (assistant); c2/c3 have none (handlers.ts:65-102).
+// turns t1 (user) + t2 (assistant); c2 has t8/t9 (since P1-T14); c3 has none.
 
 function renderPicker(onSelectionChange: (items: unknown) => void) {
   return render(

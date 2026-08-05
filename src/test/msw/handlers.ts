@@ -213,12 +213,44 @@ function seedRoots(): Conversation[] {
       },
     ],
   }),
-  conv({ id: "c2", title: "Billing dispute", agent_id: "ag_concierge", fork_count: 2, last_activity_at: "2026-08-04T09:00:00Z" }),
+  conv({
+    id: "c2",
+    title: "Billing dispute",
+    agent_id: "ag_concierge",
+    fork_count: 2,
+    last_activity_at: "2026-08-04T09:00:00Z",
+    // t9 is the turn c2f1/c2f2 forked from — the fork-pivot fixtures (the
+    // seeded re-fire run below + sibling compare) read its content as the
+    // baseline "original" cell.
+    turns: [
+      {
+        id: "t8",
+        role: "user",
+        author: "user",
+        content: "Why was I charged twice for order 4413?",
+        created_at: "2026-08-04T08:58:00Z",
+        envelope,
+      },
+      {
+        id: "t9",
+        role: "assistant",
+        author: "concierge",
+        content: "I see two charges; one is a pending authorization that will drop off.",
+        created_at: "2026-08-04T09:00:00Z",
+        envelope,
+      },
+    ],
+  }),
   conv({ id: "c3", title: "Onboarding help", agent_id: "ag_concierge", last_activity_at: "2026-08-01T10:00:00Z" }),
   ];
 }
 export const mockRoots: Conversation[] = seedRoots();
 
+// Fork transcripts: copied history strictly BEFORE the fork turn (fresh ids,
+// mirroring mock/main.py:664-673) + the regenerated assistant turn appended by
+// the fork task (engine.py:354-363). Endpoint ids use the ep_agent1_* form of
+// the endpoint fixtures (T13 flag resolved — the old "prod"/"staging" ids
+// never existed in mockEndpoints).
 function seedForks(): Record<string, Conversation[]> {
   return {
   c2: [
@@ -228,9 +260,27 @@ function seedForks(): Record<string, Conversation[]> {
       lineage: {
         parent_conversation_id: "c2",
         fork_turn_id: "t9",
-        endpoint_id: "prod",
+        endpoint_id: "ep_agent1_prod",
         config: { instruction_version: 15 },
       },
+      turns: [
+        {
+          id: "c2f1-t8",
+          role: "user",
+          author: "user",
+          content: "Why was I charged twice for order 4413?",
+          created_at: "2026-08-04T08:58:00Z",
+          envelope,
+        },
+        {
+          id: "c2f1-t9",
+          role: "assistant",
+          author: "concierge",
+          content: "Both charges are temporary holds — the duplicate reverses within 24 hours.",
+          created_at: "2026-08-04T09:05:00Z",
+          envelope,
+        },
+      ],
     }),
     conv({
       id: "c2f2",
@@ -238,9 +288,27 @@ function seedForks(): Record<string, Conversation[]> {
       lineage: {
         parent_conversation_id: "c2",
         fork_turn_id: "t9",
-        endpoint_id: "staging",
+        endpoint_id: "ep_agent1_staging",
         config: { instruction_version: 15 },
       },
+      turns: [
+        {
+          id: "c2f2-t8",
+          role: "user",
+          author: "user",
+          content: "Why was I charged twice for order 4413?",
+          created_at: "2026-08-04T08:58:00Z",
+          envelope,
+        },
+        {
+          id: "c2f2-t9",
+          role: "assistant",
+          author: "concierge",
+          content: "One charge is an authorization hold; it is released automatically.",
+          created_at: "2026-08-04T09:06:00Z",
+          envelope,
+        },
+      ],
     }),
   ],
   // Orphan: parent c-gone was soft-deleted — lineage survives and "the parent
@@ -360,6 +428,55 @@ function seedRuns(): StoredRun[] {
           cells: [
             { status: "done", content: "Approved refunds land in 3-5 days." },
             { status: "done", content: "Refunds arrive within 3 business days." },
+          ],
+        },
+      ],
+    },
+    // Finished turn re-fire — the fork-pivot shape (openapi.yaml:636-639:
+    // "a turn re-fire is a run whose grid pivots to 'compare forks of the
+    // same turn across endpoints (column per endpoint)'"). Mirrors the real
+    // mock's completed state: columns labeled with endpoint NAMES
+    // (mock/main.py:634-635), single row, baseline cell carrying the ORIGINAL
+    // conversation/turn (mock/main.py:643-646), endpoint cells carrying the
+    // fork conversation ids (engine.py:361-363; RunCell.conversation_id =
+    // "Fork holding this result", openapi.yaml:1651). Ties into the c2 →
+    // c2f1/c2f2 fork fixtures above.
+    {
+      id: "run-refire-1",
+      tree_id: "agent1",
+      status: "done",
+      created_at: "2026-08-03T14:00:00Z",
+      task_id: "task-run-refire-1",
+      label: "Re-fire · 2 endpoint(s)",
+      columns: [
+        { label: "baseline", config: {} },
+        { label: "prod", config: { instruction_version: 15, endpoint_ids: ["ep_agent1_prod"] } },
+        { label: "staging", config: { instruction_version: 15, endpoint_ids: ["ep_agent1_staging"] } },
+      ],
+      rows: [
+        {
+          source: { conversation_id: "c2", turn_id: "t9" },
+          cells: [
+            {
+              status: "done",
+              content: "I see two charges; one is a pending authorization that will drop off.",
+              conversation_id: "c2",
+              turn_id: "t9",
+            },
+            {
+              status: "done",
+              content: "Both charges are temporary holds — the duplicate reverses within 24 hours.",
+              conversation_id: "c2f1",
+              turn_id: "c2f1-t9",
+              task_id: "task-fork-old-1",
+            },
+            {
+              status: "done",
+              content: "One charge is an authorization hold; it is released automatically.",
+              conversation_id: "c2f2",
+              turn_id: "c2f2-t9",
+              task_id: "task-fork-old-2",
+            },
           ],
         },
       ],
@@ -863,6 +980,42 @@ export const handlers = [
         );
       }
       parent.fork_count += accepted.results.length;
+      // Materialize the pivot run like the real mock (mock/main.py:634-660):
+      // columns labeled with endpoint NAMES, one row whose baseline cell is
+      // done with the ORIGINAL conversation/turn and one pending cell per
+      // endpoint (conversation_id arrives when the fork task finishes,
+      // engine.py:361-363 — not modeled here; T14 tests use the seeded done
+      // fixture for that state).
+      const treeEndpoints = mockEndpoints[params.tree as string] ?? [];
+      mockRuns.unshift({
+        id: accepted.run_id,
+        tree_id: params.tree as string,
+        status: "running",
+        created_at: new Date().toISOString(),
+        task_id: `task-fork-parent-${n}`,
+        label: `Re-fire · ${body.endpoints.length} endpoint(s)`,
+        columns: [
+          { label: "baseline", config: {} },
+          ...body.endpoints.map((id) => ({
+            label: treeEndpoints.find((e) => e.id === id)?.name ?? id,
+            config: { ...(body.config ?? {}), endpoint_ids: [id] },
+          })),
+        ],
+        rows: [
+          {
+            source: { conversation_id: body.conversation_id, turn_id: body.turn_id },
+            cells: [
+              {
+                status: "done",
+                content: forkIndex >= 0 ? turns[forkIndex].content : null,
+                conversation_id: parent.id,
+                turn_id: body.turn_id,
+              },
+              ...body.endpoints.map(() => ({ status: "pending" as const })),
+            ],
+          },
+        ],
+      });
     }
     return HttpResponse.json(accepted, { status: 202 });
   }),

@@ -166,11 +166,35 @@ export function RunDetailPage() {
           which is reserved for T12b score badges). Done cells only — the slot
           is invoked for status done; every row carries its source turn
           (Run.rows[].source, openapi.yaml:1607-1643). Sketch 04: "+ Re-run
-          this turn with… POST …/replay/turn". */}
+          this turn with… POST …/replay/turn".
+
+          P1-T14 fork pivot: for turn re-fire runs the server already delivers
+          the pivoted grid — one row, "column per endpoint" with endpoint-name
+          labels (openapi.yaml:636-639; mock/main.py:634-635) — so no client
+          reshaping is needed; ComparisonView renders whatever columns arrive.
+          The added affordance is "Open in Chat ↗" on any cell that carries a
+          conversation_id ("'Open in Chat' button on every results cell",
+          feature-spec.md:70; annotated sketch 04 shows it in the cell footer):
+          endpoint cells carry the FORK holding the result
+          (RunCell.conversation_id, openapi.yaml:1651) and the baseline cell
+          carries the ORIGINAL conversation + turn (mock/main.py:643-646), so
+          one rule links baseline → original and forks → their conversations.
+          Cells without a conversation_id (plain replay configs) get no link. */}
       <ComparisonView
         run={run}
-        renderCellAction={(_cell, ctx) => (
-          <Group justify="flex-end" mt={2}>
+        renderCellAction={(cell, ctx) => (
+          <Group justify="space-between" mt={2} wrap="nowrap">
+            {cell.conversation_id ? (
+              <Anchor
+                size="xs"
+                data-testid={`open-in-chat-${ctx.rowIndex}-${ctx.columnIndex}`}
+                onClick={() => navigate(`/chat/${cell.conversation_id}`)}
+              >
+                Open in Chat ↗
+              </Anchor>
+            ) : (
+              <span />
+            )}
             <ActionIcon
               size="xs"
               variant="subtle"

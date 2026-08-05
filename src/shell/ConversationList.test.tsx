@@ -43,8 +43,11 @@ describe("ConversationList", () => {
       const forkReq = conversationRequests.find((u) => u.searchParams.get("forks_of") === "c2");
       expect(forkReq).toBeDefined();
     });
-    // Lineage badges per fork (feature-spec.md:5; sketch 07 "↳ prod · v15")
-    expect(await screen.findByText("prod · v15")).toBeInTheDocument();
-    expect(screen.getByText("staging · v15")).toBeInTheDocument();
+    // Lineage badges per fork (feature-spec.md:5; sketch 07 "↳ prod · v15").
+    // Fixture endpoint ids use the ep_agent1_* form of the endpoint fixtures
+    // (normalized in P1-T14); the badge shows the id verbatim (T13 choice —
+    // no per-fork GET /endpoints).
+    expect(await screen.findByText("ep_agent1_prod · v15")).toBeInTheDocument();
+    expect(screen.getByText("ep_agent1_staging · v15")).toBeInTheDocument();
   });
 });

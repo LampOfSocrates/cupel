@@ -12,6 +12,7 @@ import { QueuePage } from "./pages/QueuePage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { EditorPage } from "./pages/EditorPage";
 import { AgentConversationsPage } from "./pages/AgentConversationsPage";
+import { ForkComparePage } from "./pages/ForkComparePage";
 
 const DEFAULT_TREE = "agent1";
 
@@ -102,6 +103,10 @@ export function App() {
           <Route path="/runs" element={<RunsPage />} />
           {/* Step 3 Results — also the detail route for stored runs (P1-T11). */}
           <Route path="/runs/:runId" element={<RunDetailPage />} />
+          {/* P1-T14 sibling fork comparison — "compare forks of the same turn
+              across endpoints" (feature-spec.md:73), reached from a fork's
+              lineage banner (design rationale in ForkComparePage.tsx). */}
+          <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"

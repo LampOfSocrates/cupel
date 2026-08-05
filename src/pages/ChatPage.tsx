@@ -414,6 +414,19 @@ export function ChatPage() {
               Open parent
             </Anchor>
           )}
+          {/* P1-T14 — fork-side entry into the sibling comparison ("compare
+              forks of the same turn across endpoints", feature-spec.md:73).
+              Lineage alone identifies the sibling set (parent + fork turn),
+              so this works even when the parent was deleted; design
+              rationale in ForkComparePage.tsx. */}
+          <Anchor
+            size="xs"
+            onClick={() =>
+              navigate(`/forks/${lineage.parent_conversation_id}/${lineage.fork_turn_id}`)
+            }
+          >
+            Compare siblings
+          </Anchor>
         </Group>
       )}
       <div

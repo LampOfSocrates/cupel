@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Route, Routes } from "react-router";
+import { Route, Routes, useParams } from "react-router";
 import { renderApp } from "../test/render";
 import {
   cancelRequests,
@@ -45,6 +45,12 @@ function seedRunningRun() {
     ],
   });
   return mockRuns[0];
+}
+
+// Navigation probe for cell "Open in Chat ↗" targets.
+function ChatProbe() {
+  const { conversationId } = useParams();
+  return <div>chat-probe {conversationId}</div>;
 }
 
 function renderDetail(runId: string) {
@@ -162,6 +168,58 @@ describe("RunDetailPage", () => {
       endpoints: ["ep_agent1_prod"],
       context_policy: "frozen",
     });
+  });
+
+  // P1-T14 — fork comparison pivot. "a turn re-fire is a run whose grid
+  // pivots to 'compare forks of the same turn across endpoints (column per
+  // endpoint)'" (openapi.yaml:636-639) — the SERVER delivers the pivoted
+  // grid (endpoint-name columns, one row), so the page just renders it plus
+  // "'Open in Chat' button on every results cell" (feature-spec.md:70):
+  // endpoint cells link the fork holding the result (RunCell.conversation_id,
+  // openapi.yaml:1651), the baseline cell links the ORIGINAL conversation
+  // (mock/main.py:643-646). Fixture run-refire-1 mirrors the real mock's
+  // completed re-fire state.
+  it("re-fire run: endpoint-name columns; cell Open in Chat routes to the fork", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/chat/:conversationId" element={<ChatProbe />} />
+      </Routes>,
+      { route: "/runs/run-refire-1" },
+    );
+    await screen.findByText("Run run-refire-1");
+
+    // column labels are endpoint NAMES, server-provided — no client reshaping
+    expect(screen.getByRole("columnheader", { name: /baseline/ })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "prod" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "staging" })).toBeInTheDocument();
+
+    // every done cell carries a conversation_id → one link per cell
+    expect(screen.getAllByText("Open in Chat ↗")).toHaveLength(3);
+    await user.click(screen.getByTestId("open-in-chat-0-1"));
+    await screen.findByText("chat-probe c2f1"); // fork holding the prod result
+  });
+
+  it("re-fire run: the baseline cell's Open in Chat routes to the ORIGINAL conversation", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      <Routes>
+        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/chat/:conversationId" element={<ChatProbe />} />
+      </Routes>,
+      { route: "/runs/run-refire-1" },
+    );
+    await screen.findByText("Run run-refire-1");
+
+    await user.click(screen.getByTestId("open-in-chat-0-0"));
+    await screen.findByText("chat-probe c2"); // original, not a fork
+  });
+
+  it("plain replay runs get no Open in Chat links (cells carry no conversation_id)", async () => {
+    renderDetail("run-old-1");
+    await screen.findByText("Run run-old-1");
+    expect(screen.queryByText("Open in Chat ↗")).not.toBeInTheDocument();
   });
 
   it("terminal stored runs render without a cancel affordance or subscription", async () => {

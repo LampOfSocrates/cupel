@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useParams } from "react-router";
 import { MantineProvider } from "@mantine/core";
 import { ChatPage } from "./ChatPage";
 import { App } from "../App";
@@ -460,9 +460,8 @@ describe("Chat settings", () => {
     // switch conversation via the sidebar — settings are session-scoped,
     // not per-conversation (feature-spec.md:7)
     await user.click(screen.getByText("Billing dispute"));
-    await waitFor(() =>
-      expect(screen.getByText("Send a message to start the conversation.")).toBeInTheDocument(),
-    );
+    // c2's transcript loaded (fixture turns added in P1-T14)
+    await screen.findByText("Why was I charged twice for order 4413?");
     expect(screen.getByTestId("chat-settings-summary")).toHaveTextContent("Claude Haiku 4.5");
 
     await user.type(screen.getByPlaceholderText("Message…"), "still custom{enter}");
@@ -574,13 +573,13 @@ describe("Turn forks (P1-T13)", () => {
 
   it("lineage banner renders for a fork; Open parent navigates to the parent", async () => {
     const user = userEvent.setup();
-    renderChat("/chat/c2f1"); // fork fixture: parent c2, turn t9, endpoint prod
+    renderChat("/chat/c2f1"); // fork fixture: parent c2, turn t9, endpoint ep_agent1_prod
 
     const banner = await screen.findByTestId("lineage-banner");
     // parent title resolves via GET …/conversations/c2
     await waitFor(() => expect(banner).toHaveTextContent("fork of Billing dispute"));
     expect(banner).toHaveTextContent("@ t9");
-    expect(banner).toHaveTextContent("via prod");
+    expect(banner).toHaveTextContent("via ep_agent1_prod");
 
     await user.click(screen.getByText("Open parent"));
     // c2 is not a fork → banner gone once the parent conversation loads
@@ -597,4 +596,27 @@ describe("Turn forks (P1-T13)", () => {
     expect(banner).toHaveTextContent("fork of c-gone"); // id fallback, no title
     expect(screen.queryByText("Open parent")).not.toBeInTheDocument();
   });
+
+  // P1-T14 — fork-side entry into the sibling comparison: lineage alone
+  // (parent + fork_turn_id) identifies the sibling set ("compare forks of the
+  // same turn across endpoints", feature-spec.md:73) — no run id needed.
+  it("Compare siblings on the lineage banner routes to /forks/{parent}/{turn}", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      <Routes>
+        <Route path="/chat/:conversationId" element={<ChatPage />} />
+        <Route path="/forks/:parentId/:turnId" element={<ForksProbe />} />
+      </Routes>,
+      { route: "/chat/c2f1" },
+    );
+    const banner = await screen.findByTestId("lineage-banner");
+
+    await user.click(within(banner).getByText("Compare siblings"));
+    await screen.findByText("forks-probe c2 t9");
+  });
 });
+
+function ForksProbe() {
+  const { parentId, turnId } = useParams();
+  return <div>forks-probe {parentId} {turnId}</div>;
+}
