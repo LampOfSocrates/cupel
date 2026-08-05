@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { api, ApiError, buildUrl, type ChatStreamEvent } from "./client";
-import { BASE } from "./base";
 import { setLlmKey, setLlmModel } from "./llmKey";
 import { server } from "../test/msw/server";
 import {
+  BASE,
   chatRequests,
   conversationRequests,
   llmHeaderCaptures,

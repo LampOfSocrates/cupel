@@ -17,7 +17,7 @@
 // GET/PUT .../agents/{id}/last-selection (:295-332, per-agent remembered
 // selection, P1-T20b).
 import { http, HttpResponse } from "msw";
-import { BASE } from "../../api/base";
+import { getActiveTarget } from "../../api/target";
 import type {
   Agent,
   AgentCreate,
@@ -53,6 +53,11 @@ import type {
   Trace,
   Turn,
 } from "../../api/types";
+
+// The test rig registers handlers at the MOCK target's baseUrl, resolved
+// through the same store the client uses (P2-CONFIG) — vitest is a dev build,
+// so the default active target IS mock (agentic.config.ts defaultTarget.dev).
+export const BASE = getActiveTarget().baseUrl;
 
 export const mockMe: Me = {
   user: { id: "dev", name: "Dev User", email: "dev@example.com" },

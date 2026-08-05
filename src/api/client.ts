@@ -1,6 +1,8 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
-// anywhere else (feature-spec.md:158).
-import { BASE } from "./base";
+// anywhere else (feature-spec.md:158). URLs are built from the ACTIVE backend
+// target (agentic.config.ts via src/api/target.ts) — P2-CONFIG replaced the
+// old hand-edited BASE constant (src/api/base.ts, folded in here).
+import { getActiveTarget } from "./target";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
 import type {
@@ -64,9 +66,12 @@ export class ApiError extends Error {
 }
 
 export function buildUrl(path: string, query?: Query): string {
-  // Production BASE is "" (same-origin, P1-TDEPLOY) — relative URLs need the
-  // page origin as base; absolute BASE values ignore the second argument.
-  const url = new URL(BASE + path, globalThis.location?.origin);
+  // remap first (skein-phases.md:75 — differently-named routes), then prefix
+  // the target's baseUrl. The prod target's baseUrl is "" (same-origin,
+  // P1-TDEPLOY) — relative URLs need the page origin as base; absolute
+  // baseUrl values ignore the second argument.
+  const { baseUrl, remap } = getActiveTarget();
+  const url = new URL(baseUrl + (remap ? remap(path) : path), globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));

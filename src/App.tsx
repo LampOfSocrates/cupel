@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Alert, Center, Loader } from "@mantine/core";
 import { api } from "./api/client";
+import { getActiveTarget } from "./api/target";
 import type { AgentTree, Me, Model } from "./api/types";
 import { AppContext, type ChatSettings } from "./AppContext";
 import { QueueProvider } from "./QueueContext";
@@ -63,10 +64,14 @@ export function App() {
   }, []);
 
   if (error) {
+    // Target-aware hint (P2-CONFIG): the boot error names the ACTIVE backend
+    // target instead of hardcoding the mock host.
+    const target = getActiveTarget();
     return (
       <Center h="100vh">
         <Alert color="red" title="Backend unreachable">
-          {error} — is the mock running on :4010? (npm run mock)
+          {error} — is the {target.label} backend at{" "}
+          {target.baseUrl || "this origin"} running? (mock: npm run mock)
         </Alert>
       </Center>
     );

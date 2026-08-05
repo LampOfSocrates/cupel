@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { BASE } from "./api/base";
 import { server } from "./test/msw/server";
-import { taskListRequests, taskStreamRig } from "./test/msw/handlers";
+import { BASE, taskListRequests, taskStreamRig } from "./test/msw/handlers";
 import { QueueProvider, useQueue } from "./QueueContext";
 import type { Task } from "./api/types";
 
