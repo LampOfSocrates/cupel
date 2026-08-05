@@ -52,6 +52,7 @@
 - [ ] P2-GEN Generator control API + Settings drip-rate controls  [deps: T00, T17]
 - [ ] P2-MEM Memory panel — view/edit/clear per tree, compaction as queued task  [deps: T00]
 - [ ] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
+- [ ] P2-FIXA Review bucket A — run-scoped latest_score bug, /tasks/stream tenant filtering, span-payload ownership check, markdown memo, chatSettings out of AppContext, grid cell memo, object-URL leak, streaming-draft isolation (see docs/review-2026-08-05.md)  [deps: none]
 - [ ] P2-MSW Full MSW parity for unit tests
 - [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
