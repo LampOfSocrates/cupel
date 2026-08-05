@@ -50,10 +50,14 @@
 - [ ] P2-CTX Context policy widening — frozen/today/custom + fallback + recorded-tools playback (extend sketch 03)  [deps: T00]
 - [ ] P2-GEN Generator control API + Settings drip-rate controls  [deps: T00, T17]
 - [ ] P2-MEM Memory panel — view/edit/clear per tree, compaction as queued task  [deps: T00]
+- [ ] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
 - [ ] P2-MSW Full MSW parity for unit tests
 - [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
+
+## After Phase 2 (user decision 2026-08-05): FULL STOP — no Phase 3 (scaffold) or Phase 4 (hosted).
+## Next focus after Phase 2 close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
 
 ## PRO phases (plans only — NOT scheduled; do not build in free phases; user decisions 2026-08-05)
 - PRO-1 "Agents as Code" — repo/PR integration: GitHub connect, instruction diffs as PRs, merge promotes live; mock git server (former P2-T20)
