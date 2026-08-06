@@ -158,6 +158,107 @@ export interface ConversationListParams {
   origin?: "interactive" | "machine";
 }
 
+// openapi.yaml:3129 AdminConversationItem — "Inspector row = an ordinary
+// conversation plus the cross-user dimension (skein-phases.md:78 'filter by
+// user, tree, date, or score')" (:3134-3137). The mock omits `turns` on these
+// rows: the table is a dense index and the inline reader fetches the
+// transcript for the selected row.
+export interface AdminConversationItem extends Conversation {
+  /** ":3139 Owning user." */
+  user_id: string;
+  user_email?: string | null;
+  /** ":3141-3144 Latest judgment score across the conversation's turns." */
+  latest_score?: number | null;
+}
+
+// openapi.yaml:3146 AdminConversationPage
+export interface AdminConversationPage {
+  items: AdminConversationItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+// openapi.yaml:314-340 listAdminConversations query params — the Inspector's
+// filter row (user, tree, date range, score range) plus pagination.
+export interface AdminConversationListParams {
+  user_id?: string;
+  tree?: string;
+  date_from?: string;
+  date_to?: string;
+  score_min?: number;
+  score_max?: number;
+  page?: number;
+  page_size?: number;
+}
+
+// openapi.yaml:3249 CasebookItem — "A REFERENCE to a turn, never a copy …
+// the transcript stays in its conversation; removing the item touches nothing
+// else" (:3252-3255).
+export interface CasebookItem {
+  id: string;
+  tree: string;
+  conversation_id: string;
+  turn_id: string;
+  /** ":3261 Why this turn is noteworthy." */
+  note?: string | null;
+  added_at: string;
+}
+
+// openapi.yaml:3219 Casebook — "A named collection of turn REFERENCES
+// (skein-phases.md:79) — the raw material for eval sets and replay regression
+// suites" (:3222-3225).
+export interface Casebook {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  items: CasebookItem[];
+}
+
+// openapi.yaml:3235 CasebookCreate / :3242 CasebookUpdate ("Metadata only;
+// membership changes go through the items endpoints").
+export interface CasebookCreate {
+  name: string;
+  description?: string | null;
+}
+
+export interface CasebookUpdate {
+  name?: string | null;
+  description?: string | null;
+}
+
+// openapi.yaml:3264 CasebookItemCreate — the ⊞ action's body.
+export interface CasebookItemCreate {
+  tree: string;
+  conversation_id: string;
+  turn_id: string;
+  note?: string | null;
+}
+
+// openapi.yaml:3273 CasebookToEvalSetRequest — ":3276-3278 "Exactly one target
+// (oneOf): set_name creates a new set (version 1); set_id appends a new
+// membership version to an existing set"".
+export type CasebookToEvalSetRequest = { set_name: string } | { set_id: string };
+
+// openapi.yaml:3286 CasebookReplayRequest — "Same engine as ReplayRequest
+// applied to the casebook's referenced turns; context fields carry
+// ReplayRequest's enums and defaults". context_policy is pinned to frozen by
+// the client exactly as on ReplayRequest (widening is P3-CTX).
+export interface CasebookReplayRequest {
+  configs: RunConfig[];
+  context_policy?: "frozen";
+}
+
+// openapi.yaml:3320 CasebookReplayAccepted — "One parent task; one run per
+// tree the casebook's items reference (runs are tree-scoped … a cross-tree
+// casebook therefore yields several runs). Fetch each grid via
+// GET /agenttrees/{tree_id}/runs/{run_id}" (:3323-3327).
+export interface CasebookReplayAccepted {
+  task_id: string;
+  runs: Array<{ tree_id: string; run_id: string }>;
+}
+
 // openapi.yaml:1061 Error — {code, message}; also the SSE `error` event payload
 // (openapi.yaml:476 "event: error — data: Error").
 export interface ErrorBody {

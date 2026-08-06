@@ -7,6 +7,8 @@ import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
 import type {
+  AdminConversationListParams,
+  AdminConversationPage,
   AdminUser,
   AdminUserUpsert,
   Agent,
@@ -14,6 +16,14 @@ import type {
   AgentTree,
   Attachment,
   AuthTokenResponse,
+  Casebook,
+  CasebookCreate,
+  CasebookItem,
+  CasebookItemCreate,
+  CasebookReplayAccepted,
+  CasebookReplayRequest,
+  CasebookToEvalSetRequest,
+  CasebookUpdate,
   ChatDoneEvent,
   ChatRequest,
   ChatResponse,
@@ -271,6 +281,63 @@ export const api = {
     request<AgentTree>(`/admin/agenttrees/${treeId}`, {
       method: "PATCH",
       body: { enabled },
+    }),
+
+  // P2-T12a Inspector — GET /admin/conversations (openapi.yaml:298-348):
+  // "Inspector — every conversation, cross-user … Requires the inspect role
+  // (403 otherwise); EVERY access is audit-logged server-side". Filters are
+  // the contract's own query params (:314-340); the page renders them as its
+  // filter row and mirrors them into the URL.
+  adminConversations: (params: AdminConversationListParams = {}) =>
+    request<AdminConversationPage>("/admin/conversations", { query: params as Query }),
+
+  // P2-T12a casebooks (openapi.yaml:1643-1830). Global, not tree-scoped
+  // (:1654-1656) — no tree in any of these paths.
+  // GET /casebooks — "All casebooks visible to the user, items included".
+  casebooks: () => request<Casebook[]>("/casebooks"),
+
+  // POST /casebooks (:1665-1680) — "Starts empty; add items via POST
+  // /casebooks/{id}/items".
+  createCasebook: (body: CasebookCreate) =>
+    request<Casebook>("/casebooks", { method: "POST", body }),
+
+  // GET /casebooks/{casebookId} (:1683-1699) — "Items are turn REFERENCES —
+  // render transcripts by following each item's tree/conversation_id/turn_id".
+  casebook: (casebookId: string) => request<Casebook>(`/casebooks/${casebookId}`),
+
+  // PATCH /casebooks/{casebookId} (:1700-1717) — "metadata only".
+  updateCasebook: (casebookId: string, body: CasebookUpdate) =>
+    request<Casebook>(`/casebooks/${casebookId}`, { method: "PATCH", body }),
+
+  // DELETE /casebooks/{casebookId} (:1718-1730) — "Removes the casebook and
+  // its item REFERENCES only".
+  deleteCasebook: (casebookId: string) =>
+    request<void>(`/casebooks/${casebookId}`, { method: "DELETE" }),
+
+  // POST /casebooks/{casebookId}/items (:1732-1757) — the ⊞ action. "Re-adding
+  // the same turn is idempotent (returns the existing item)" (:1744), so the
+  // UI never needs to check membership before collecting.
+  addCasebookItem: (casebookId: string, body: CasebookItemCreate) =>
+    request<CasebookItem>(`/casebooks/${casebookId}/items`, { method: "POST", body }),
+
+  // DELETE /casebooks/{casebookId}/items/{itemId} (:1759-1775).
+  removeCasebookItem: (casebookId: string, itemId: string) =>
+    request<void>(`/casebooks/${casebookId}/items/${itemId}`, { method: "DELETE" }),
+
+  // POST /casebooks/{casebookId}/to-eval-set (:1777-1802) — "Materialize the
+  // casebook as an eval set"; 201 EvalSet (new, or the next membership
+  // version of set_id).
+  casebookToEvalSet: (casebookId: string, body: CasebookToEvalSetRequest) =>
+    request<EvalSet>(`/casebooks/${casebookId}/to-eval-set`, { method: "POST", body }),
+
+  // POST /casebooks/{casebookId}/replay (:1804-1830) — 202
+  // CasebookReplayAccepted, "one run per tree touched, all children of a
+  // single parent task". context_policy is hard-set to the contract default
+  // exactly as api.replay does (widening is P3-CTX).
+  replayCasebook: (casebookId: string, body: CasebookReplayRequest) =>
+    request<CasebookReplayAccepted>(`/casebooks/${casebookId}/replay`, {
+      method: "POST",
+      body: { ...body, context_policy: "frozen" as const },
     }),
 
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"

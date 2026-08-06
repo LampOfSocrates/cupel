@@ -68,6 +68,15 @@ test("auth-on: login redirect → admin session → logout → restricted permis
   await expect(page.getByLabel("agent1 enabled")).toBeChecked();
   await expect(page.getByLabel("agent2 enabled")).toBeChecked();
 
+  // --- P2-T12a: the admin also holds the INSPECT role, so the Inspector nav
+  // entry renders and the cross-user table loads ("Requires the inspect role",
+  // openapi.yaml:308). Casebooks is open to everyone. ---
+  await expect(page.getByRole("link", { name: "Inspector" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Casebooks" })).toBeVisible();
+  await page.getByRole("link", { name: "Inspector" }).click();
+  await page.waitForURL(/\/inspector/);
+  await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
+
   // --- Logout: token discarded, back to the login screen ---
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL(/\/login/);
@@ -116,6 +125,17 @@ test("auth-on: login redirect → admin session → logout → restricted permis
   });
   expect(forbidden.status()).toBe(403);
   expect((await forbidden.json()).code).toBe("forbidden");
+
+  // --- P2-T12a: restricted@demo has no `inspect` role either, so the
+  // Inspector nav entry is absent (role-driven, never mode-driven) while
+  // Casebooks stays available — and the endpoint 403s regardless ---
+  await expect(page.getByRole("link", { name: "Casebooks" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inspector" })).toHaveCount(0);
+  const noInspect = await request.get(`${MOCK}/admin/conversations`, {
+    headers: { Authorization: `Bearer ${restrictedToken}` },
+  });
+  expect(noInspect.status()).toBe(403);
+  expect((await noInspect.json()).code).toBe("forbidden");
 });
 
 // P2-SHARE — a turn deep link received by a logged-out user. The frontend has

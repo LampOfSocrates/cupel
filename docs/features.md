@@ -36,7 +36,7 @@
 - ✅ Trust your comparisons — every turn records its context (date, timezone, region) and replays run under the original context by default
 - ✅ Watch the app fill itself with realistic activity for demos
 - ✅ Hand-craft expected answers (or bulk-import a spreadsheet) and have the judge score against them — the eval workbench
-- ⏳ Inspect every conversation as a super user; collect noteworthy turns into casebooks that become eval sets or regression suites
+- ✅ Inspect every conversation as a super user; collect noteworthy turns into casebooks that become eval sets or regression suites
 
 ## Run it, point it at your stack, ship it
 

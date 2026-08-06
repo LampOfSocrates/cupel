@@ -42,11 +42,14 @@ CREATE TABLE IF NOT EXISTS selections (
   agent_id TEXT PRIMARY KEY, items TEXT NOT NULL);
 
 -- ~ ADK sessions. lineage is a JSON Lineage object, present iff fork.
+-- P2-T12a added user_id — the OWNING user, the cross-user dimension the
+-- Inspector filters on (AdminConversationItem.user_id, openapi.yaml:3139).
+-- Pre-existing databases gain it in Db._migrate_conversation_owner below.
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY, tree_id TEXT NOT NULL, title TEXT NOT NULL,
   origin TEXT NOT NULL DEFAULT 'interactive', channel TEXT, agent_id TEXT,
   created_at TEXT NOT NULL, last_activity_at TEXT NOT NULL,
-  deleted INTEGER NOT NULL DEFAULT 0, lineage TEXT);
+  deleted INTEGER NOT NULL DEFAULT 0, lineage TEXT, user_id TEXT);
 
 -- ~ ADK events. conversation_id NULL = detached replay output (grid cell
 -- result that forked no conversation; still traceable by turn id).
@@ -131,6 +134,35 @@ CREATE TABLE IF NOT EXISTS eval_sets (
   case_ids TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (id, version));
 
+-- P2-T12a casebooks (openapi.yaml:3219-3262). A casebook is GLOBAL, not
+-- tree-scoped (openapi.yaml:1654-1656), and its items are turn REFERENCES,
+-- never copies (openapi.yaml:3252-3255) — hence a row of ids and nothing
+-- else. Deleting a casebook or an item touches no turn, conversation, eval
+-- set or run (openapi.yaml:1722-1726, :1764-1769).
+CREATE TABLE IF NOT EXISTS casebooks (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
+  created_by TEXT, created_at TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS casebook_items (
+  id TEXT PRIMARY KEY, casebook_id TEXT NOT NULL, tree TEXT NOT NULL,
+  conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL, note TEXT,
+  added_at TEXT NOT NULL);
+
+-- "Re-adding the same turn is idempotent (returns the existing item)"
+-- (openapi.yaml:1744) — the rule is enforced at the storage layer so no
+-- caller can create a second reference to the same turn.
+CREATE UNIQUE INDEX IF NOT EXISTS casebook_items_ref
+  ON casebook_items (casebook_id, tree, conversation_id, turn_id);
+
+-- P2-T12a audit trail. "EVERY access is audit-logged server-side"
+-- (openapi.yaml:308-309) for GET /admin/conversations. The contract declares
+-- NO endpoint that reads this back, so it is deliberately a server-side store
+-- only (rows here + one stdout line per query, mock/main.py audit_inspect).
+CREATE TABLE IF NOT EXISTS inspect_audit (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, email TEXT,
+  filters TEXT NOT NULL, result_count INTEGER NOT NULL,
+  created_at TEXT NOT NULL);
+
 -- Append-only (skein-phases.md:160); human thumbs share this store.
 CREATE TABLE IF NOT EXISTS judgments (
   id TEXT PRIMARY KEY, case_id TEXT, run_id TEXT, turn_id TEXT,
@@ -162,6 +194,7 @@ class Db:
             self.conn.execute("PRAGMA busy_timeout=5000")
             self.conn.executescript(SCHEMA)
             self._migrate_eval_cases()
+            self._migrate_conversation_owner()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -186,6 +219,26 @@ class Db:
             "   SELECT id, 1, prompt, envelope, output, reference, source, created_at"
             "   FROM eval_cases_pre_t12;"
             " DROP TABLE eval_cases_pre_t12;")
+
+    def _migrate_conversation_owner(self):
+        """P2-T12a: pre-P2-T12a databases carry conversations without user_id,
+        and CREATE TABLE IF NOT EXISTS above is a no-op for them. Adding a
+        column IS possible in place, so this is one ALTER plus a backfill.
+
+        Backfill rule (documented, same rule new rows use — see
+        mock/main.py conversation_owner): the owner is the author of the
+        conversation's FIRST user turn, which is what the generator varies
+        across personas (mock/generator.py:43 PERSONAS) and what interactive
+        chat leaves as "user". Idempotent: the column's presence is the
+        marker."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(conversations)")}
+        if not cols or "user_id" in cols:
+            return
+        self.conn.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT")
+        self.conn.execute(
+            "UPDATE conversations SET user_id = COALESCE("
+            " (SELECT t.author FROM turns t WHERE t.conversation_id = conversations.id"
+            "  AND t.role = 'user' ORDER BY t.rowid LIMIT 1), 'dev')")
 
     def run(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock:

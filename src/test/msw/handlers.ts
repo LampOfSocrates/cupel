@@ -20,12 +20,20 @@ import { http, HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
 import type {
+  AdminConversationItem,
   AdminUser,
   AdminUserUpsert,
   Agent,
   AgentCreate,
   AgentTree,
   Attachment,
+  Casebook,
+  CasebookCreate,
+  CasebookItem,
+  CasebookItemCreate,
+  CasebookReplayRequest,
+  CasebookToEvalSetRequest,
+  CasebookUpdate,
   ChatRequest,
   ChatResponse,
   Conversation,
@@ -648,6 +656,77 @@ let importCounter = 0;
 export const mockRunSummaries: Record<string, RunScoreSummary> = {};
 export const summaryRequests: string[] = [];
 
+// ------------------------------------ P2-T12a Inspector + casebooks (v0.3.0)
+// GET /admin/conversations (openapi.yaml:298-348) — "Inspector — every
+// conversation, cross-user"; the handler applies the contract's six filters and
+// page/page_size so a test can prove a control reaches the right query param.
+// Rows reuse the conversation fixtures (same ids as mockRoots) so selecting a
+// row can then load its transcript through the ordinary conversation route.
+function adminRow(
+  id: string,
+  user_id: string,
+  extra: Partial<AdminConversationItem> = {},
+): AdminConversationItem {
+  const base =
+    mockRoots.find((c) => c.id === id) ??
+    conv({ id, title: id, last_activity_at: "2026-08-04T09:00:00Z" });
+  const { turns: _turns, ...row } = base;
+  return { ...row, user_id, user_email: null, latest_score: null, ...extra };
+}
+
+function seedAdminConversations(): AdminConversationItem[] {
+  return [
+    adminRow("c1", "u_admin", { user_email: "admin@demo", latest_score: 0.92 }),
+    adminRow("c2", "gen-persona-2", { latest_score: 0.31 }),
+    adminRow("c3", "gen-persona-5", { tree_id: "agent2" }),
+  ];
+}
+export const mockAdminConversations: AdminConversationItem[] = seedAdminConversations();
+/** Full request URLs — tests assert the filter → query-param mapping. */
+export const adminConversationRequests: URL[] = [];
+/** Flip to make the endpoint answer 403, as a backend without the role would. */
+export const adminConversationConfig: { forbidden: boolean } = { forbidden: false };
+
+// Casebooks (openapi.yaml:1643-1830). The store mirrors the real mock's rules:
+// items are references, re-adding the same turn returns the EXISTING item
+// (:1744), and delete removes references only.
+function seedCasebooks(): Casebook[] {
+  return [
+    {
+      id: "cb-1",
+      name: "Refund misses",
+      description: null,
+      created_at: "2026-08-04T10:00:00Z",
+      items: [
+        {
+          id: "cbi-1",
+          tree: "agent1",
+          conversation_id: "c1",
+          turn_id: "t2",
+          note: "hedged answer",
+          added_at: "2026-08-04T10:01:00Z",
+        },
+      ],
+    },
+  ];
+}
+export const mockCasebooks: Casebook[] = seedCasebooks();
+export const casebookCreates: CasebookCreate[] = [];
+export const casebookPatches: Array<{ casebookId: string; body: CasebookUpdate }> = [];
+export const casebookDeletes: string[] = [];
+export const casebookItemPosts: Array<{ casebookId: string; body: CasebookItemCreate }> = [];
+export const casebookItemDeletes: Array<{ casebookId: string; itemId: string }> = [];
+export const casebookToEvalSetRequests: Array<{
+  casebookId: string;
+  body: CasebookToEvalSetRequest;
+}> = [];
+export const casebookReplayRequests: Array<{
+  casebookId: string;
+  body: CasebookReplayRequest;
+}> = [];
+let casebookCounter = 0;
+let casebookItemCounter = 0;
+
 // -------------------------------------------------------------- upload state
 // POST /upload knobs (openapi.yaml:523-554). maxBytes mirrors the real mock's
 // Phase-1 limit (mock/config.py:15 MAX_UPLOAD_BYTES = 5 MiB) — tests shrink it
@@ -1107,6 +1186,21 @@ export function resetHandlerState() {
       { row: 2, column: "answer", message: "output is empty — a case needs a candidate response." },
     ],
   };
+  mockAdminConversations.length = 0;
+  mockAdminConversations.push(...seedAdminConversations());
+  adminConversationRequests.length = 0;
+  adminConversationConfig.forbidden = false;
+  mockCasebooks.length = 0;
+  mockCasebooks.push(...seedCasebooks());
+  casebookCreates.length = 0;
+  casebookPatches.length = 0;
+  casebookDeletes.length = 0;
+  casebookItemPosts.length = 0;
+  casebookItemDeletes.length = 0;
+  casebookToEvalSetRequests.length = 0;
+  casebookReplayRequests.length = 0;
+  casebookCounter = 0;
+  casebookItemCounter = 0;
   for (const key of Object.keys(mockRunSummaries)) delete mockRunSummaries[key];
   summaryRequests.length = 0;
   for (const key of Object.keys(mockTraces)) delete mockTraces[key];
@@ -1426,6 +1520,188 @@ export const handlers = [
     lastSelectionPuts.push({ agentId: agent.id, items: body.items });
     mockLastSelections[agent.id] = body.items;
     return HttpResponse.json({ items: body.items } satisfies Selection);
+  }),
+
+  // GET /admin/conversations (openapi.yaml:298-348) — the Inspector table.
+  // Registered before the tree-scoped conversation routes; the paths do not
+  // collide, but keeping the admin family together mirrors the client.
+  http.get(`${BASE}/admin/conversations`, ({ request }) => {
+    const url = new URL(request.url);
+    adminConversationRequests.push(url);
+    if (adminConversationConfig.forbidden) {
+      return HttpResponse.json(
+        { code: "forbidden", message: "The inspect role is required." },
+        { status: 403 },
+      );
+    }
+    const q = url.searchParams;
+    let items = [...mockAdminConversations];
+    const userId = q.get("user_id");
+    if (userId) items = items.filter((i) => i.user_id === userId);
+    const tree = q.get("tree");
+    if (tree) items = items.filter((i) => i.tree_id === tree);
+    const from = q.get("date_from");
+    if (from) items = items.filter((i) => i.last_activity_at.slice(0, 10) >= from);
+    const to = q.get("date_to");
+    if (to) items = items.filter((i) => i.last_activity_at.slice(0, 10) <= to);
+    const min = q.get("score_min");
+    if (min !== null) {
+      items = items.filter((i) => typeof i.latest_score === "number" && i.latest_score >= Number(min));
+    }
+    const max = q.get("score_max");
+    if (max !== null) {
+      items = items.filter((i) => typeof i.latest_score === "number" && i.latest_score <= Number(max));
+    }
+    const page = Number(q.get("page") ?? 1);
+    const pageSize = Number(q.get("page_size") ?? 50);
+    const total = items.length;
+    return HttpResponse.json({
+      items: items.slice((page - 1) * pageSize, page * pageSize),
+      page,
+      page_size: pageSize,
+      total,
+    });
+  }),
+
+  // ------------------------------------------------- casebooks (:1643-1830)
+  http.get(`${BASE}/casebooks`, () => HttpResponse.json(mockCasebooks)),
+
+  http.post(`${BASE}/casebooks`, async ({ request }) => {
+    const body = (await request.json()) as CasebookCreate;
+    casebookCreates.push(body);
+    casebookCounter += 1;
+    const created: Casebook = {
+      id: `cb-new-${casebookCounter}`,
+      name: body.name,
+      description: body.description ?? null,
+      created_at: new Date().toISOString(),
+      items: [],
+    };
+    mockCasebooks.unshift(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  http.get(`${BASE}/casebooks/:casebookId`, ({ params }) => {
+    const found = mockCasebooks.find((c) => c.id === params.casebookId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    return HttpResponse.json(found);
+  }),
+
+  http.patch(`${BASE}/casebooks/:casebookId`, async ({ params, request }) => {
+    const body = (await request.json()) as CasebookUpdate;
+    casebookPatches.push({ casebookId: params.casebookId as string, body });
+    const found = mockCasebooks.find((c) => c.id === params.casebookId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    if (body.name) found.name = body.name;
+    if (body.description !== undefined) found.description = body.description;
+    return HttpResponse.json(found);
+  }),
+
+  http.delete(`${BASE}/casebooks/:casebookId`, ({ params }) => {
+    const id = params.casebookId as string;
+    casebookDeletes.push(id);
+    const index = mockCasebooks.findIndex((c) => c.id === id);
+    if (index < 0) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    mockCasebooks.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // POST …/items — "Re-adding the same turn is idempotent (returns the
+  // existing item)" (openapi.yaml:1744).
+  http.post(`${BASE}/casebooks/:casebookId/items`, async ({ params, request }) => {
+    const casebookId = params.casebookId as string;
+    const body = (await request.json()) as CasebookItemCreate;
+    casebookItemPosts.push({ casebookId, body });
+    const found = mockCasebooks.find((c) => c.id === casebookId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    const existing = found.items.find(
+      (i) =>
+        i.tree === body.tree &&
+        i.conversation_id === body.conversation_id &&
+        i.turn_id === body.turn_id,
+    );
+    if (existing) return HttpResponse.json(existing, { status: 201 });
+    casebookItemCounter += 1;
+    const item: CasebookItem = {
+      id: `cbi-new-${casebookItemCounter}`,
+      tree: body.tree,
+      conversation_id: body.conversation_id,
+      turn_id: body.turn_id,
+      note: body.note ?? null,
+      added_at: new Date().toISOString(),
+    };
+    found.items.push(item);
+    return HttpResponse.json(item, { status: 201 });
+  }),
+
+  http.delete(`${BASE}/casebooks/:casebookId/items/:itemId`, ({ params }) => {
+    const casebookId = params.casebookId as string;
+    const itemId = params.itemId as string;
+    casebookItemDeletes.push({ casebookId, itemId });
+    const found = mockCasebooks.find((c) => c.id === casebookId);
+    const index = found?.items.findIndex((i) => i.id === itemId) ?? -1;
+    if (!found || index < 0) {
+      return HttpResponse.json({ code: "not_found", message: "item not found" }, { status: 404 });
+    }
+    found.items.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // POST …/to-eval-set (openapi.yaml:1777-1802) — 201 EvalSet whose membership
+  // is one case per referenced turn.
+  http.post(`${BASE}/casebooks/:casebookId/to-eval-set`, async ({ params, request }) => {
+    const casebookId = params.casebookId as string;
+    const body = (await request.json()) as CasebookToEvalSetRequest;
+    casebookToEvalSetRequests.push({ casebookId, body });
+    const found = mockCasebooks.find((c) => c.id === casebookId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    evalSetCounter += 1;
+    const created: EvalSet = {
+      id: "set_id" in body ? body.set_id : `set-cb-${evalSetCounter}`,
+      name: "set_name" in body ? body.set_name : "existing set",
+      version: "set_id" in body ? 2 : 1,
+      case_ids: found.items.map((i) => `case-for-${i.turn_id}`),
+      created_at: new Date().toISOString(),
+    };
+    const index = mockEvalSets.findIndex((s) => s.id === created.id);
+    if (index >= 0) mockEvalSets[index] = created;
+    else mockEvalSets.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // POST …/replay (openapi.yaml:1804-1830) — 202 CasebookReplayAccepted, "one
+  // run per tree the casebook's items reference … all children of a single
+  // parent task".
+  http.post(`${BASE}/casebooks/:casebookId/replay`, async ({ params, request }) => {
+    const casebookId = params.casebookId as string;
+    const body = (await request.json()) as CasebookReplayRequest;
+    casebookReplayRequests.push({ casebookId, body });
+    const found = mockCasebooks.find((c) => c.id === casebookId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "casebook not found" }, { status: 404 });
+    }
+    replayCounter += 1;
+    const trees = [...new Set(found.items.map((i) => i.tree))];
+    return HttpResponse.json(
+      {
+        task_id: `task-cb-${replayCounter}`,
+        runs: trees.map((tree_id, i) => ({
+          tree_id,
+          run_id: `run-cb-${replayCounter}-${i + 1}`,
+        })),
+      },
+      { status: 202 },
+    );
   }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations`, ({ request }) => {

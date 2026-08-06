@@ -12,6 +12,7 @@ import { server } from "../test/msw/server";
 import {
   BASE,
   cancelRequests,
+  casebookItemPosts,
   chatConfig,
   chatRequests,
   feedbackRequests,
@@ -1124,5 +1125,38 @@ describe("Disabled tree (P2-T07c)", () => {
       "This agent tree is disabled — history is read-only.",
     );
     expect(alert).toBeInTheDocument();
+  });
+});
+
+// P2-T12a ⊞ — "Entry points: ⊞ on any turn, Chat, the Inspector … and results
+// cells" (openapi.yaml:1742-1743). The chat action row gains one glyph; the
+// picker behind it is the same CollectModal the Inspector opens, and what it
+// posts is a REFERENCE {tree, conversation_id, turn_id} (openapi.yaml:1739).
+describe("⊞ collect from the chat turn action row (P2-T12a)", () => {
+  it("posts the turn as a casebook item reference", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+
+    // Only the assistant turn carries the action row → exactly one ⊞.
+    const collect = screen.getAllByRole("button", { name: "Collect into casebook" });
+    expect(collect).toHaveLength(1);
+    await user.click(collect[0]);
+
+    expect(await screen.findByTestId("collect-target")).toHaveTextContent("agent1 · c1 · t2");
+    await user.click(await screen.findByRole("button", { name: "⊞ Add" }));
+    await waitFor(() => expect(casebookItemPosts).toHaveLength(1));
+    expect(casebookItemPosts[0]).toEqual({
+      casebookId: "cb-1",
+      body: { tree: "agent1", conversation_id: "c1", turn_id: "t2", note: null },
+    });
+  });
+
+  it("no ⊞ on a brand-new chat — there is no turn reference to store yet", async () => {
+    renderChat("/chat");
+    await screen.findByText("Send a message to start the conversation.");
+    expect(
+      screen.queryByRole("button", { name: "Collect into casebook" }),
+    ).not.toBeInTheDocument();
   });
 });

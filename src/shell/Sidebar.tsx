@@ -13,10 +13,18 @@ import { ConversationList } from "./ConversationList";
 // P2-T12 adds Eval — the workbench is described as "a tab inside Runs"
 // (feature-spec.md:63), so it sits directly under Runs and its presets, and
 // carries no tree in its route (eval cases are global, feature-spec.md:115).
+// P2-T12a adds Casebooks (next to Eval — a casebook's whole point is becoming
+// an eval set or a replay suite) and Inspector, which is ROLE-gated: it renders
+// only when /me.roles includes `inspect` (openapi.yaml:308 "Requires the
+// inspect role"), never on the auth mode — an off-mode backend simply answers
+// /me with the dev user's roles (feature-spec.md:17 "default admin = all trees,
+// all rights").
 const NAV = [
   { to: "/chat", label: "Chat" },
   { to: "/runs", label: "Runs" },
   { to: "/eval", label: "Eval" },
+  { to: "/casebooks", label: "Casebooks" },
+  { to: "/inspector", label: "Inspector", role: "inspect" as const },
   { to: "/queue", label: "Queue" },
   { to: "/agents", label: "Agents" },
 ];
@@ -79,7 +87,7 @@ export function Sidebar() {
           <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
             + New chat
           </Button>
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.role || (me.roles?.includes(item.role) ?? false)).map((item) => (
             <Fragment key={item.to}>
               <NavLink
                 component={RouterNavLink}

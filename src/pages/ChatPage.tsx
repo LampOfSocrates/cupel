@@ -37,8 +37,16 @@ import {
 import { api, ApiError } from "../api/client";
 import { getSseEnabled } from "../api/backendPrefs";
 import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
-import type { Attachment, Judgment, Lineage, Model, Turn } from "../api/types";
+import type {
+  Attachment,
+  CasebookItemCreate,
+  Judgment,
+  Lineage,
+  Model,
+  Turn,
+} from "../api/types";
 import { EnvelopeChip, ForkModal } from "../components";
+import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
@@ -176,6 +184,9 @@ export function ChatPage() {
   const [parent, setParent] = useState<{ title: string } | "deleted" | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
+  // P2-T12a ⊞ — the turn a collect dialog is open for (CasebookItemCreate, the
+  // POST body of openapi.yaml:1732-1757).
+  const [collectTarget, setCollectTarget] = useState<CasebookItemCreate | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   // Lazy init: one store per ChatPage instance, stable for its lifetime.
@@ -704,6 +715,22 @@ export function ChatPage() {
                 // per feature-spec.md:11), so ⌁ ships there — documented
                 // design choice matching the sketch.
                 onTrace={() => navigate(`/trace/${turn.id}`)}
+                // P2-T12a ⊞ — "Collect noteworthy turns into Casebooks"
+                // (skein-phases.md:79); "Entry points: ⊞ on any turn, Chat,
+                // the Inspector … and results cells" (openapi.yaml:1742-1743).
+                // Needs a persisted conversation, like ⑂ and 🔗 — an item is a
+                // REFERENCE {tree, conversation_id, turn_id}, so there is
+                // nothing to point at until the first send lands.
+                onCollect={
+                  conversationId
+                    ? () =>
+                        setCollectTarget({
+                          tree,
+                          conversation_id: conversationId,
+                          turn_id: turn.id,
+                        })
+                    : undefined
+                }
                 // P2-SHARE — the 🔗 action copies this turn's deep link.
                 // Needs a persisted conversation, like ⑂.
                 shareUrl={conversationId ? turnShareUrl(conversationId, turn.id) : undefined}
@@ -845,6 +872,12 @@ export function ChatPage() {
           onClose={() => setForkTurnId(null)}
         />
       )}
+      {/* P2-T12a ⊞ — same picker the Inspector uses (create-new inline). */}
+      <CollectModal
+        opened={collectTarget !== null}
+        target={collectTarget}
+        onClose={() => setCollectTarget(null)}
+      />
     </Stack>
   );
 }
@@ -1090,6 +1123,7 @@ function TurnBubble({
   onDismissComment,
   onFork,
   onTrace,
+  onCollect,
   shareUrl,
   shareTarget = false,
   shareFlash = false,
@@ -1104,6 +1138,7 @@ function TurnBubble({
   onDismissComment?: () => void;
   onFork?: () => void;
   onTrace?: () => void;
+  onCollect?: () => void;
   shareUrl?: string;
   shareTarget?: boolean;
   shareFlash?: boolean;
@@ -1239,6 +1274,20 @@ function TurnBubble({
               onClick={onFork}
             >
               ⑂
+            </ActionIcon>
+          )}
+          {/* P2-T12a ⊞ — the collect action. One glyph in the existing row
+              (its density is unchanged: same size, same subtle variant), which
+              is the whole point of "one keystroke" (skein-phases.md:79). */}
+          {onCollect && (
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              aria-label="Collect into casebook"
+              onClick={onCollect}
+            >
+              ⊞
             </ActionIcon>
           )}
           {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results grid

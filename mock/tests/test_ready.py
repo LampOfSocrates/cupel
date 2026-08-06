@@ -129,24 +129,33 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     # Sentinels that are certainly unimplemented today (P2-T07 implemented
     # /auth/token + /auth/logout; P2-T07b/07c implemented /admin/users,
     # /admin/users/{userId}/permissions and /admin/agenttrees/{treeId};
-    # P2-T12 implemented the eval workbench surface — each left this list,
-    # so the missing set shrinks task by task, as documented above).
-    for sentinel in ("/settings", "/casebooks",
+    # P2-T12 implemented the eval workbench surface; P2-T12a implemented
+    # /admin/conversations and the whole /casebooks family — each left this
+    # list, so the missing set shrinks task by task, as documented above).
+    for sentinel in ("/settings",
                      "/agenttrees/{tree}/memory", "/admin/generator"):
         assert sentinel in missing_paths, f"{sentinel} should be missing today"
-    # And the auth + admin + eval-workbench endpoints are conformant, not missing.
+    # And the auth + admin + eval-workbench + inspector/casebook endpoints are
+    # conformant, not missing.
     for implemented in ("/auth/token", "/auth/logout", "/admin/users",
                         "/admin/users/{userId}/permissions",
                         "/admin/agenttrees/{treeId}",
                         "/eval/cases", "/eval/cases/import", "/eval/cases/{caseId}",
-                        "/eval/sets", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}"):
+                        "/eval/sets", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}",
+                        "/admin/conversations", "/casebooks", "/casebooks/{casebookId}",
+                        "/casebooks/{casebookId}/items",
+                        "/casebooks/{casebookId}/items/{itemId}",
+                        "/casebooks/{casebookId}/to-eval-set",
+                        "/casebooks/{casebookId}/replay"):
         assert implemented not in missing_paths
-    # P2-T12 shrink, recorded so a regression is loud: 44 -> 51 conformant
-    # operations of the same 69 checked (7 new: POST /eval/cases,
-    # POST /eval/cases/import, PUT /eval/cases/{caseId}, GET + POST /eval/sets,
-    # PUT /eval/sets/{setId}, PUT /eval/rubrics/{rubricId}).
+    # P2-T12a shrink, recorded so a regression is loud: 51 -> 61 conformant
+    # operations of the same 69 checked (10 new: GET /admin/conversations,
+    # GET + POST /casebooks, GET + PATCH + DELETE /casebooks/{casebookId},
+    # POST /casebooks/{casebookId}/items,
+    # DELETE /casebooks/{casebookId}/items/{itemId},
+    # POST …/to-eval-set, POST …/replay).
     # >= not ==, keeping this test's tolerant design: later tasks only add.
-    assert report["conformant"] >= 51
+    assert report["conformant"] >= 61
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):

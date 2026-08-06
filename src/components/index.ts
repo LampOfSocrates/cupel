@@ -11,4 +11,7 @@ export { EnvelopeChip, envelopeSummary } from "./EnvelopeChip";
 export { ForkModal } from "./ForkModal";
 export { ScoreChip, scoreColor } from "./ScoreChip";
 export { JudgmentDrawer } from "./JudgmentDrawer";
+// P2-T12a — the one ⊞ picker behind every collect entry point (Chat's turn
+// action row, the Inspector's reader).
+export { CollectModal } from "./CollectModal";
 export { STATUS_COLOR, type LifecycleStatus } from "./status";

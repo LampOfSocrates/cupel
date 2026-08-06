@@ -375,6 +375,55 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if "admin" not in request_roles(request):
             err(403, "forbidden", "The admin role is required.")
 
+    def need_inspect(request: Request) -> None:
+        """P2-T12a: 403 unless the caller holds the INSPECT role — "Requires
+        the inspect role (403 otherwise)" (openapi.yaml:308). Deliberately a
+        separate role from admin (openapi.yaml roles enum): a super-user
+        reader is not necessarily a tenant administrator. Mirrors need_admin;
+        in off mode the dev user carries admin+inspect (request_roles)."""
+        if "inspect" not in request_roles(request):
+            err(403, "forbidden", "The inspect role is required.")
+
+    def conversation_owner(request: Request, body: dict) -> str:
+        """The owning user stamped on a new conversation
+        (AdminConversationItem.user_id, openapi.yaml:3139).
+
+        Resolution order (documented, one code path — never a mode branch):
+        1. the AuthGate-verified user — a real signed-in owner;
+        2. else the chat body's `author`, which is how machine callers name the
+           end user they act for (mock/generator.py:43 seeds six personas, so
+           the Inspector's cross-user filter has real variety in the demo);
+        3. else "dev", the off-mode identity GET /me already advertises.
+        Forks inherit the parent conversation's owner."""
+        user = request_user(request)
+        if user:
+            return user["id"]
+        author = (body or {}).get("author")
+        if isinstance(author, str) and author.strip() and author != "user":
+            return author
+        return "dev"
+
+    def audit_inspect(request: Request, filters: dict, result_count: int) -> None:
+        """"EVERY access is audit-logged server-side" (openapi.yaml:308-309).
+
+        Chosen mechanism (documented): a durable `inspect_audit` row (who,
+        the exact filters, how many rows came back, when) PLUS one stdout line
+        so it also lands in the container log. The contract declares no
+        endpoint that reads audit records back, and inventing one would break
+        the "implement the contract exactly" rule — so the trail is
+        server-side only: `sqlite3 skein.sqlite 'SELECT * FROM inspect_audit'`
+        or the server log. A real backend would ship these to its SIEM."""
+        user = request_user(request)
+        uid = user["id"] if user else "dev"
+        email = user["email"] if user else "dev@skein.local"
+        db.run(
+            "INSERT INTO inspect_audit (id, user_id, email, filters, result_count,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (new_id("audit"), uid, email, j(filters), result_count, now_iso()))
+        print(f"[audit] inspect user={uid} email={email} "
+              f"filters={json.dumps(filters, sort_keys=True)} results={result_count}",
+              flush=True)
+
     def need_enabled_tree(tree: str) -> dict:
         """need_tree + the P2-T07c disable gate for WRITE work: a disabled
         tree answers 409 tree_disabled (openapi.yaml:1974-1979) on new work,
@@ -623,6 +672,106 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 engine.cancel(t["id"])
         return {"id": row["id"], "name": row["name"], "enabled": enabled}
 
+    # --------------------------------------------- P2-T12a Inspector (admin)
+    # GET /admin/conversations (openapi.yaml:298-348) — "Inspector — every
+    # conversation, cross-user … filter by user, tree, date, or score …
+    # requires the inspect role, audit-logged".
+    #
+    # Latest-judgment score per conversation, as SQL so score_min/score_max can
+    # filter on it. Judgments attach either to the conversation (human thumbs,
+    # POST /feedback) or to one of its turns (LLM judging) — both count
+    # (openapi.yaml:3141-3144 "Latest judgment score across the conversation's
+    # turns"). Newest wins: judgments are append-only, so MAX(rowid).
+    LATEST_SCORE_SQL = (
+        "(SELECT jg.score FROM judgments jg WHERE jg.conversation_id = c.id"
+        "  OR jg.turn_id IN (SELECT t.id FROM turns t WHERE t.conversation_id = c.id)"
+        " ORDER BY jg.rowid DESC LIMIT 1)")
+
+    @app.get("/admin/conversations")
+    async def list_admin_conversations(
+            request: Request, user_id: str | None = None, tree: str | None = None,
+            date_from: str | None = None, date_to: str | None = None,
+            score_min: float | None = None, score_max: float | None = None,
+            page: int = 1, page_size: int = 50):
+        """Cross-user conversation listing behind the inspect role.
+
+        Two scoping decisions, documented because the contract leaves them
+        open:
+
+        1. The inspect role widens the USER dimension, not the TREE dimension.
+           A caller still sees only trees their permission matrix grants
+           (permitted_trees) — the same "omitting beats leaking" rule the
+           /tasks/stream filter follows (Broker docstring) and the same rule
+           casebook items follow below. In off mode the dev user holds every
+           tree, so the demo shows everything.
+        2. Rows are ALL conversations, forks included (unlike the sidebar
+           listing, which is roots-only, openapi.yaml:346-349) — "Inspect
+           every conversation in the system" (skein-phases.md:78). Deleted
+           conversations stay hidden; a tombstone is not history to browse.
+        """
+        need_inspect(request)
+        page, page_size = max(1, page), min(max(1, page_size), 100)
+        where, params = ["c.deleted = 0"], []
+        allowed = permitted_trees(request)
+        if allowed is not None:
+            if not allowed:
+                where.append("0")
+            else:
+                where.append(f"c.tree_id IN ({','.join('?' * len(allowed))})")
+                params += sorted(allowed)
+        if user_id:
+            where.append("c.user_id = ?")
+            params.append(user_id)
+        if tree:
+            where.append("c.tree_id = ?")
+            params.append(tree)
+        # Date filters compare the DATE part of last_activity_at — "activity
+        # on/after this date" (openapi.yaml:323); substr, not SQLite's DATE(),
+        # so the stored ISO-8601-with-Z stamps need no timezone parsing.
+        if date_from:
+            where.append("substr(c.last_activity_at, 1, 10) >= ?")
+            params.append(date_from)
+        if date_to:
+            where.append("substr(c.last_activity_at, 1, 10) <= ?")
+            params.append(date_to)
+
+        # c.rowid is projected as `ord` because a subquery's rows have no
+        # implicit rowid — it is the stable tiebreaker for equal timestamps.
+        inner = (f"SELECT c.*, c.rowid AS ord, {LATEST_SCORE_SQL} AS latest_score"
+                 f" FROM conversations c WHERE {' AND '.join(where)}")
+        outer, outer_params = ["1=1"], []
+        # Unscored conversations are outside any score range, not silently
+        # included — a score filter is a triage tool (feature-spec.md:64).
+        if score_min is not None:
+            outer.append("latest_score IS NOT NULL AND latest_score >= ?")
+            outer_params.append(score_min)
+        if score_max is not None:
+            outer.append("latest_score IS NOT NULL AND latest_score <= ?")
+            outer_params.append(score_max)
+        base = f"FROM ({inner}) WHERE {' AND '.join(outer)}"
+        total = db.one(f"SELECT COUNT(*) AS n {base}", [*params, *outer_params])["n"]
+        rows = db.all(
+            f"SELECT * {base} ORDER BY last_activity_at DESC, ord DESC LIMIT ? OFFSET ?",
+            [*params, *outer_params, page_size, (page - 1) * page_size])
+
+        emails = {u["id"]: u["email"] for u in db.all("SELECT id, email FROM users")}
+        items = []
+        for row in rows:
+            # include_turns=False: the Inspector table is a dense INDEX; the
+            # inline reader fetches the transcript for the selected row via
+            # GET /agenttrees/{tree}/conversations/{id}.
+            d = conversation_dict(row, include_turns=False)
+            d["user_id"] = row["user_id"] or "dev"
+            d["user_email"] = emails.get(row["user_id"])
+            d["latest_score"] = row["latest_score"]
+            items.append(d)
+        audit_inspect(request, {
+            "user_id": user_id, "tree": tree, "date_from": date_from,
+            "date_to": date_to, "score_min": score_min, "score_max": score_max,
+            "page": page, "page_size": page_size,
+        }, len(items))
+        return {"items": items, "page": page, "page_size": page_size, "total": total}
+
     # -------------------------------------------------------------- agents
     @app.get("/agenttrees/{tree}/agents")
     async def list_agents(tree: str):
@@ -841,9 +990,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             now = now_iso()
             db.run(
                 "INSERT INTO conversations (id, tree_id, title, origin, channel, agent_id,"
-                " created_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " created_at, last_activity_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (conv_id, tree, canned_title(message), body.get("origin") or "interactive",
-                 body.get("channel"), root["id"] if root else None, now, now))
+                 body.get("channel"), root["id"] if root else None, now, now,
+                 conversation_owner(request, body)))
             conv = db.one("SELECT * FROM conversations WHERE id = ?", (conv_id,))
 
         agent_row = (db.one("SELECT * FROM agents WHERE id = ?", (conv["agent_id"],))
@@ -1107,9 +1257,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                        "endpoint_id": ep["id"], "config": cfg or None}
             db.run(
                 "INSERT INTO conversations (id, tree_id, title, origin, channel, agent_id,"
-                " created_at, last_activity_at, lineage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " created_at, last_activity_at, lineage, user_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (fork_id, tree, f"{conv['title']} · fork ({ep['name']})", conv["origin"],
-                 conv["channel"], conv["agent_id"], now, now, j(lineage)))
+                 conv["channel"], conv["agent_id"], now, now, j(lineage),
+                 conv["user_id"]))  # a fork belongs to the parent's owner
             for t in turns:
                 if t["id"] == fork_turn["id"]:
                     break
@@ -1737,6 +1889,321 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                             "mean": round(g["mean"], 4), "count": g["count"],
                             "distribution": distribution})
         return {"run_id": runId, "rubrics": rubrics}
+
+    # ----------------------------------------------------- P2-T12a casebooks
+    # openapi.yaml:1643-1830. "Collect noteworthy turns into Casebooks with one
+    # keystroke, then turn a casebook into an eval set, a replay regression
+    # suite, or few-shot examples for an agent" (skein-phases.md:79).
+    #
+    # Items are turn REFERENCES, never copies (openapi.yaml:1739-1741, 3252-
+    # 3255): {tree, conversation_id, turn_id} + an optional note. Nothing here
+    # ever writes a turn's content anywhere.
+    #
+    # CROSS-TREE VISIBILITY (openapi.yaml:1654-1656 "a casebook may reference
+    # turns across trees; per-item visibility still follows the viewer's tree
+    # permissions" — the contract notes this is under-specified). Decision,
+    # documented: items in trees the viewer cannot view are OMITTED from every
+    # response, and every derived action (to-eval-set, replay) operates on the
+    # visible subset only. Omitting beats leaking — the same rule the SSE
+    # broker follows (mock/engine.py Broker docstring). A viewer therefore
+    # never learns that a turn they may not read exists; the casebook simply
+    # looks shorter to them.
+    def visible_trees(request: Request) -> set[str] | None:
+        return permitted_trees(request)
+
+    def item_dict(i: dict) -> dict:
+        return {"id": i["id"], "tree": i["tree"],
+                "conversation_id": i["conversation_id"], "turn_id": i["turn_id"],
+                "note": i["note"], "added_at": i["added_at"]}
+
+    def casebook_items(casebook_id: str, request: Request) -> list[dict]:
+        rows = db.all(
+            "SELECT * FROM casebook_items WHERE casebook_id = ? ORDER BY rowid",
+            (casebook_id,))
+        allowed = visible_trees(request)
+        if allowed is not None:
+            rows = [r for r in rows if r["tree"] in allowed]
+        return rows
+
+    def casebook_dict(c: dict, request: Request) -> dict:
+        return {"id": c["id"], "name": c["name"], "description": c["description"],
+                "created_at": c["created_at"],
+                "items": [item_dict(i) for i in casebook_items(c["id"], request)]}
+
+    def need_casebook(casebook_id: str) -> dict:
+        row = db.one("SELECT * FROM casebooks WHERE id = ?", (casebook_id,))
+        if not row:
+            err(404, "not_found", f"Casebook '{casebook_id}' not found.")
+        return row
+
+    @app.get("/casebooks")
+    async def list_casebooks(request: Request):
+        """"All casebooks visible to the user, items included"
+        (openapi.yaml:1659)."""
+        return [casebook_dict(c, request)
+                for c in db.all("SELECT * FROM casebooks ORDER BY rowid DESC")]
+
+    @app.post("/casebooks", status_code=201)
+    async def create_casebook(request: Request):
+        """"Starts empty; add items via POST /casebooks/{id}/items"
+        (openapi.yaml:1669)."""
+        body = await body_json(request)
+        name = body.get("name")
+        if not isinstance(name, str) or not name.strip():
+            err(422, "invalid", "name is required (openapi.yaml:3237).")
+        cid = new_id("cb")
+        user = request_user(request)
+        db.run("INSERT INTO casebooks (id, name, description, created_by, created_at)"
+               " VALUES (?, ?, ?, ?, ?)",
+               (cid, name.strip(), body.get("description"),
+                user["id"] if user else "dev", now_iso()))
+        return casebook_dict(db.one("SELECT * FROM casebooks WHERE id = ?", (cid,)), request)
+
+    @app.get("/casebooks/{casebookId}")
+    async def get_casebook(casebookId: str, request: Request):
+        return casebook_dict(need_casebook(casebookId), request)
+
+    @app.patch("/casebooks/{casebookId}")
+    async def update_casebook(casebookId: str, request: Request):
+        """"metadata only; membership changes go through the items endpoints"
+        (openapi.yaml:1704). Null/absent fields leave the value unchanged."""
+        row = need_casebook(casebookId)
+        body = await body_json(request)
+        name = body.get("name")
+        if name is not None and (not isinstance(name, str) or not name.strip()):
+            err(422, "invalid", "name must be a non-empty string when supplied.")
+        description = body.get("description") if "description" in body else row["description"]
+        db.run("UPDATE casebooks SET name = ?, description = ? WHERE id = ?",
+               (name.strip() if name else row["name"], description, casebookId))
+        return casebook_dict(db.one("SELECT * FROM casebooks WHERE id = ?", (casebookId,)),
+                             request)
+
+    @app.delete("/casebooks/{casebookId}", status_code=204)
+    async def delete_casebook(casebookId: str):
+        """"Removes the casebook and its item REFERENCES only: the referenced
+        turns/conversations, and any eval sets or runs already materialized
+        from this casebook, are untouched" (openapi.yaml:1723-1726)."""
+        need_casebook(casebookId)
+        db.run("DELETE FROM casebook_items WHERE casebook_id = ?", (casebookId,))
+        db.run("DELETE FROM casebooks WHERE id = ?", (casebookId,))
+        return Response(status_code=204)
+
+    def need_visible_turn(request: Request, tree: str, conversation_id: str,
+                          turn_id: str) -> dict:
+        """The referenced turn, or 404 — including when the viewer may not view
+        the tree (unpermitted = indistinguishable from absent,
+        openapi.yaml:1948)."""
+        allowed = visible_trees(request)
+        if allowed is not None and tree not in allowed:
+            err(404, "not_found", f"Turn '{turn_id}' not found.")
+        need_tree(tree)
+        turn = db.one(
+            "SELECT * FROM turns WHERE id = ? AND tree_id = ? AND conversation_id = ?",
+            (turn_id, tree, conversation_id))
+        if not turn:
+            err(404, "not_found",
+                f"Turn '{turn_id}' not found in conversation '{conversation_id}'.")
+        return turn
+
+    @app.post("/casebooks/{casebookId}/items", status_code=201)
+    async def add_casebook_item(casebookId: str, request: Request):
+        """The ⊞ action (openapi.yaml:1732-1757). "Re-adding the same turn is
+        idempotent (returns the existing item)" (:1744) — the DUPLICATE RULE,
+        implemented literally: a second POST for the same
+        {tree, conversation_id, turn_id} returns the FIRST item unchanged
+        (same id, same added_at, original note kept) with the contract's 201.
+        A UNIQUE index backs it (mock/db.py casebook_items_ref), so two
+        concurrent ⊞ presses cannot create a pair."""
+        need_casebook(casebookId)
+        body = await body_json(request)
+        for field in ("tree", "conversation_id", "turn_id"):
+            if not body.get(field):
+                err(422, "invalid",
+                    "tree, conversation_id and turn_id are required "
+                    "(openapi.yaml:3266).")
+        need_visible_turn(request, body["tree"], body["conversation_id"], body["turn_id"])
+        existing = db.one(
+            "SELECT * FROM casebook_items WHERE casebook_id = ? AND tree = ?"
+            " AND conversation_id = ? AND turn_id = ?",
+            (casebookId, body["tree"], body["conversation_id"], body["turn_id"]))
+        if existing:
+            return JSONResponse(item_dict(existing), status_code=201)
+        iid = new_id("cbi")
+        db.run("INSERT INTO casebook_items (id, casebook_id, tree, conversation_id,"
+               " turn_id, note, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+               (iid, casebookId, body["tree"], body["conversation_id"],
+                body["turn_id"], body.get("note"), now_iso()))
+        return item_dict(db.one("SELECT * FROM casebook_items WHERE id = ?", (iid,)))
+
+    @app.delete("/casebooks/{casebookId}/items/{itemId}", status_code=204)
+    async def remove_casebook_item(casebookId: str, itemId: str, request: Request):
+        """"Removes only the reference; the turn, its conversation, and
+        anything already materialized from the casebook are untouched"
+        (openapi.yaml:1766-1769)."""
+        need_casebook(casebookId)
+        row = db.one("SELECT * FROM casebook_items WHERE id = ? AND casebook_id = ?",
+                     (itemId, casebookId))
+        allowed = visible_trees(request)
+        if not row or (allowed is not None and row["tree"] not in allowed):
+            err(404, "not_found", f"Casebook item '{itemId}' not found.")
+        db.run("DELETE FROM casebook_items WHERE id = ?", (itemId,))
+        return Response(status_code=204)
+
+    def case_for_turn(item: dict) -> str:
+        """"the server reuses the existing eval case for that turn or creates
+        one sourced from it (same semantics as POST /eval/cases with source)"
+        (openapi.yaml:1785-1787). Lookup is on the stored source triple, so a
+        case created here, by POST /eval/cases, or by run judging all count as
+        the same case — a casebook never duplicates one."""
+        source = {"tree": item["tree"], "conversation_id": item["conversation_id"],
+                  "turn_id": item["turn_id"]}
+        found = db.one(
+            "SELECT id FROM eval_cases WHERE json_extract(source, '$.tree') = ?"
+            " AND json_extract(source, '$.conversation_id') = ?"
+            " AND json_extract(source, '$.turn_id') = ? ORDER BY rowid DESC LIMIT 1",
+            (source["tree"], source["conversation_id"], source["turn_id"]))
+        if found:
+            return found["id"]
+        prompt, envelope, output = case_from_source(source)
+        return insert_case(new_id("case"), 1, prompt, envelope, output, None,
+                           j(source))["id"]
+
+    @app.post("/casebooks/{casebookId}/to-eval-set", status_code=201)
+    async def casebook_to_eval_set(casebookId: str, request: Request):
+        """openapi.yaml:1777-1802 — "For each item the server reuses the
+        existing eval case for that turn or creates one sourced from it …
+        then creates a new set (set_name) or appends a new membership version
+        to an existing one (set_id — versioned membership)".
+
+        set_id path (documented): the new version carries the existing
+        membership UNION the casebook's cases, in that order. A set version
+        carries its FULL membership (openapi.yaml:1533-1536), so "append"
+        cannot mean "replace" without silently dropping cases."""
+        need_casebook(casebookId)
+        body = await body_json(request)
+        set_name, set_id = body.get("set_name"), body.get("set_id")
+        if bool(set_name) == bool(set_id):
+            err(422, "invalid",
+                "Exactly one of set_name / set_id is required "
+                "(openapi.yaml:3279-3281).")
+        items = casebook_items(casebookId, request)
+        if not items:
+            err(422, "invalid",
+                "This casebook has no items you can see — nothing to materialize.")
+        case_ids = []
+        for item in items:
+            need_visible_turn(request, item["tree"], item["conversation_id"],
+                              item["turn_id"])
+            cid = case_for_turn(item)
+            if cid not in case_ids:
+                case_ids.append(cid)
+        if set_name:
+            if not isinstance(set_name, str) or not set_name.strip():
+                err(422, "invalid", "set_name must be a non-empty string.")
+            return insert_set(new_id("set"), 1, set_name.strip(), case_ids)
+        latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
+                        (set_id,))
+        if not latest:
+            err(404, "not_found", f"Eval set '{set_id}' not found.")
+        merged = list(unj(latest["case_ids"], []))
+        merged += [c for c in case_ids if c not in merged]
+        return insert_set(set_id, latest["version"] + 1, latest["name"], merged)
+
+    @app.post("/casebooks/{casebookId}/replay", status_code=202)
+    async def replay_casebook(casebookId: str, request: Request):
+        """openapi.yaml:1804-1830 — "Replays every referenced turn under the
+        given configs — same engine as POST /agenttrees/{tree}/replay … A
+        casebook may reference several trees, so the response carries one run
+        per tree touched, all children of a single parent task".
+
+        Fan-out shape: ONE parent task; per tree one run whose columns are
+        baseline + one per config, and one replay_unit child per (tree,
+        config) — the same children mock/engine.py already drives for
+        /agenttrees/{tree}/replay, so there is no second replay path."""
+        need_casebook(casebookId)
+        body = await body_json(request)
+        configs = body.get("configs")
+        if not configs or not isinstance(configs, list):
+            err(422, "invalid", "configs must be a non-empty array.")
+        if body.get("context_policy", "frozen") != "frozen":
+            # Widening the policy is P3-CTX; the tree-scoped replay pins the
+            # same way (see /agenttrees/{tree}/replay above).
+            err(422, "invalid", "Replays currently run frozen (openapi.yaml:3300-3304).")
+
+        items = casebook_items(casebookId, request)
+        if not items:
+            err(422, "invalid",
+                "This casebook has no items you can see — nothing to replay.")
+
+        # Group into per-tree units, preserving item order. Each item resolves
+        # to the ASSISTANT turn of its invocation plus the prompt that produced
+        # it — exactly the rows a tree-scoped replay builds (assistant_rows).
+        by_tree: dict[str, list[dict]] = {}
+        for item in items:
+            turn = need_visible_turn(request, item["tree"], item["conversation_id"],
+                                     item["turn_id"])
+            conv = need_conversation(item["tree"], item["conversation_id"])
+            target = turn["id"]
+            if turn["role"] != "assistant":
+                sibling = db.one(
+                    "SELECT id FROM turns WHERE invocation_id = ? AND role = 'assistant'"
+                    " ORDER BY rowid LIMIT 1", (turn["invocation_id"],))
+                if not sibling:
+                    continue  # a prompt with no answer has nothing to replay
+                target = sibling["id"]
+            rows = assistant_rows(conv, [target])
+            if rows:
+                by_tree.setdefault(item["tree"], []).extend(rows)
+        if not by_tree:
+            err(422, "invalid", "Casebook items resolve to no assistant turns to replay.")
+        for tree in by_tree:
+            need_enabled_tree(tree)  # 409 tree_disabled (openapi.yaml:1830)
+
+        trees = list(by_tree)
+        columns = [{"label": "baseline", "config": {}}] + [
+            {"label": config_label(cfg, i), "config": cfg} for i, cfg in enumerate(configs)]
+        # A cross-tree parent belongs to no single tree, so its /tasks/stream
+        # events are withheld from partially-permitted callers (Broker
+        # docstring); a single-tree casebook keeps its tree and streams
+        # normally. Children always carry their own tree in the payload.
+        parent = engine.create_task("replay", total=len(trees) * len(configs),
+                                    payload={"result": None},
+                                    tree_id=trees[0] if len(trees) == 1 else None)
+        register_live(parent["id"], request)
+
+        runs = []
+        for ti, tree in enumerate(trees, start=1):
+            rows = by_tree[tree]
+            for idx, row in enumerate(rows):
+                row["row_idx"] = idx
+            run_id = build_run(tree, parent["id"],
+                               f"Casebook · {len(configs)} config(s)", columns, rows)
+            for row in rows:
+                db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status, content,"
+                       " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
+                       (run_id, row["row_idx"], row["content"], row["conversation_id"],
+                        row["turn_id"]))
+                for col_idx in range(1, len(columns)):
+                    db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status)"
+                           " VALUES (?, ?, ?, 'pending')", (run_id, row["row_idx"], col_idx))
+            agent_row = root_agent(tree)
+            for col_idx, cfg in enumerate(configs, start=1):
+                cfg_agent = (db.one("SELECT * FROM agents WHERE id = ?", (cfg.get("agent_id"),))
+                             if cfg.get("agent_id") else None) or agent_row
+                engine.create_task("replay", parent_id=parent["id"], payload={
+                    "kind": "replay_unit", "run_id": run_id, "tree_id": tree,
+                    "col_idx": col_idx, "config": cfg,
+                    "agent": cfg_agent["name"] if cfg_agent else "assistant",
+                    "conv_index": ti, "conv_total": len(trees),
+                    "rows": [{"row_idx": r["row_idx"], "prompt": r["prompt"],
+                              "envelope": r.get("envelope")} for r in rows],
+                })
+            runs.append({"tree_id": tree, "run_id": run_id})
+
+        db.run("UPDATE tasks SET payload = ? WHERE id = ?",
+               (j({"result": {"runs": runs}}), parent["id"]))
+        engine.spawn(engine.run_batch(parent["id"]))
+        return JSONResponse({"task_id": parent["id"], "runs": runs}, status_code=202)
 
     # ------------------------------------------------- static SPA (last!)
     # P1-TDEPLOY: the built Vite bundle, when present, mounts AFTER every API

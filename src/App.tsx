@@ -20,6 +20,8 @@ import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 import { ForkComparePage } from "./pages/ForkComparePage";
 import { TracePage } from "./pages/TracePage";
 import { EvalPage } from "./pages/EvalPage";
+import { InspectorPage } from "./pages/InspectorPage";
+import { CasebooksPage } from "./pages/CasebooksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
@@ -228,6 +230,19 @@ export function App() {
               (feature-spec.md:63). Global, not tree-scoped
               (feature-spec.md:115), so the route carries no tree. */}
           <Route path="/eval" element={<EvalPage />} />
+          {/* P2-T12a Casebooks — global like Eval (a casebook may reference
+              turns across trees, openapi.yaml:1654-1656), so no tree in the
+              route. Open to any signed-in user: the contract role-gates the
+              Inspector, not /casebooks. */}
+          <Route path="/casebooks" element={<CasebooksPage />} />
+          {/* P2-T12a Inspector — ROLE-gated, never mode-gated: the route
+              exists only when /me.roles includes `inspect` (openapi.yaml:308
+              "Requires the inspect role"). Without it the path falls through
+              to the index redirect, so a hand-typed /inspector cannot render
+              a screen whose every request would 403. */}
+          {me.roles?.includes("inspect") && (
+            <Route path="/inspector" element={<InspectorPage />} />
+          )}
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"
