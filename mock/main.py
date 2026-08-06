@@ -938,11 +938,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if not turn:
             err(404, "not_found", f"Turn '{body['message_id']}' not found.")
         jid, now = new_id("judg"), now_iso()
+        # P2-CHATUX: the optional comment rides on `reasoning` — the same field
+        # the LLM judge explains itself in (FeedbackRequest.comment, openapi.yaml).
+        # Empty/whitespace-only stays NULL so a bare thumb is byte-identical to
+        # before. Append-only: a re-rating inserts a NEW row, never an UPDATE.
+        comment = body.get("comment")
+        reasoning = comment.strip() if isinstance(comment, str) and comment.strip() else None
         # Thumbs persist as type:human judgments in the single store (openapi.yaml:562-571).
         db.run(
-            "INSERT INTO judgments (id, turn_id, conversation_id, type, score, created_at)"
-            " VALUES (?, ?, ?, 'human', ?, ?)",
-            (jid, turn["id"], turn["conversation_id"], 1.0 if rating == "up" else 0.0, now))
+            "INSERT INTO judgments (id, turn_id, conversation_id, type, score, reasoning, created_at)"
+            " VALUES (?, ?, ?, 'human', ?, ?, ?)",
+            (jid, turn["id"], turn["conversation_id"], 1.0 if rating == "up" else 0.0,
+             reasoning, now))
         return judgment_dict(db.one("SELECT * FROM judgments WHERE id = ?", (jid,)))
 
     # ---------------------------------------------------------------- runs

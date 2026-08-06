@@ -342,6 +342,51 @@ def test_feedback_appends_human_judgment():
     run(case())
 
 
+# P2-CHATUX — the optional FeedbackRequest.comment rides on Judgment.reasoning
+# (the same field the LLM judge explains itself in). Bare thumbs are unchanged;
+# re-rating APPENDS a second judgment, newest first (openapi.yaml:994).
+def test_feedback_comment_stores_as_reasoning_and_appends():
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=1)
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            turn_id = conv["turns"][1]["id"]
+
+            # no comment → reasoning stays null, exactly as before
+            bare = (await c.post("/feedback",
+                                 json={"message_id": turn_id, "rating": "up"})).json()
+            assert bare["reasoning"] is None and bare["score"] == 1.0
+
+            # with a comment → stored on reasoning, readable via the history
+            r = await c.post("/feedback", json={"message_id": turn_id, "rating": "down",
+                                                "comment": "  wrong refund window  "})
+            assert r.status_code == 201
+            judg = r.json()
+            assert judg["type"] == "human" and judg["score"] == 0.0
+            assert judg["reasoning"] == "wrong refund window"  # trimmed
+            assert judg["case_id"] is None and judg["rubric_id"] is None
+
+            # append-only: two judgments for the turn, newest first
+            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            assert [g["id"] for g in got] == [judg["id"], bare["id"]]
+            assert [g["reasoning"] for g in got] == ["wrong refund window", None]
+
+            # re-rating with a new comment appends a third — nothing overwritten
+            again = (await c.post("/feedback",
+                                  json={"message_id": turn_id, "rating": "up",
+                                        "comment": "fixed, thanks"})).json()
+            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            assert len(got) == 3
+            assert got[0]["id"] == again["id"] and got[0]["reasoning"] == "fixed, thanks"
+            assert got[2]["reasoning"] is None  # the original bare thumb, untouched
+
+            # blank comment is treated as no comment
+            blank = (await c.post("/feedback", json={"message_id": turn_id, "rating": "up",
+                                                     "comment": "   "})).json()
+            assert blank["reasoning"] is None
+    run(case())
+
+
 # -------------------------------------------------------------- conversations
 def test_conversation_list_search_rename_delete():
     async def case():

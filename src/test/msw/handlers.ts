@@ -495,6 +495,8 @@ export function pushHumanJudgment(
   conversation_id: string,
   rating: "up" | "down",
   created_at: string,
+  // P2-CHATUX: the thumb's optional comment, stored on reasoning.
+  reasoning: string | null = null,
 ): Judgment {
   // Judgment type human: rubric/case fields null; score 1 = 👍, 0 = 👎
   // (openapi.yaml:1881-1907).
@@ -509,7 +511,7 @@ export function pushHumanJudgment(
     rubric_id: null,
     rubric_version: null,
     score: rating === "up" ? 1 : 0,
-    reasoning: null,
+    reasoning,
     created_at,
   };
   mockJudgments.unshift(judgment);
@@ -1607,7 +1609,9 @@ export const handlers = [
       rubric_id: null,
       rubric_version: null,
       score: body.rating === "up" ? 1 : 0,
-      reasoning: null,
+      // P2-CHATUX: FeedbackRequest.comment lands on reasoning, mirroring the
+      // real mock (mock/main.py feedback handler); blank = no comment.
+      reasoning: body.comment?.trim() || null,
       created_at: new Date().toISOString(),
     };
     mockJudgments.unshift(judgment);

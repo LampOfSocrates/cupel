@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ClipboardEvent as ReactClipboardEvent,
   type Dispatch,
   type RefObject,
   type SetStateAction,
@@ -126,15 +127,29 @@ export interface ChatSettings {
 
 type Rating = "up" | "down";
 
+// P2-CHATUX: a thumb plus the optional note the rater left with it. The note
+// is NOT a Turn — turns are what gets replayed, forked and judged, and
+// Turn.role is user|assistant — so it lives on the human judgment
+// (FeedbackRequest.comment → Judgment.reasoning) and renders under its turn.
+interface ThumbState {
+  rating: Rating;
+  comment: string | null;
+}
+
 // P1-T03: per-turn thumb state from judgment history. Judgments arrive
 // "newest first" (openapi.yaml:994) and are append-only, so the current thumb
 // is the FIRST type:human judgment per turn_id; "For type human, 1 = 👍 and
-// 0 = 👎" (openapi.yaml:1905).
-function deriveThumbs(judgments: Judgment[]): Record<string, Rating> {
-  const thumbs: Record<string, Rating> = {};
+// 0 = 👎" (openapi.yaml:1905). P2-CHATUX carries that judgment's reasoning
+// along under the same newest-wins rule — a later bare thumb supersedes an
+// earlier comment, because it IS the newer judgment.
+function deriveThumbs(judgments: Judgment[]): Record<string, ThumbState> {
+  const thumbs: Record<string, ThumbState> = {};
   for (const j of judgments) {
     if (j.type !== "human" || !j.turn_id || j.turn_id in thumbs) continue;
-    thumbs[j.turn_id] = j.score === 1 ? "up" : "down";
+    thumbs[j.turn_id] = {
+      rating: j.score === 1 ? "up" : "down",
+      comment: j.reasoning ?? null,
+    };
   }
   return thumbs;
 }
@@ -167,7 +182,10 @@ export function ChatPage() {
   const [draft] = useState(createDraftStore);
   const [sendError, setSendError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [thumbs, setThumbs] = useState<Record<string, Rating>>({});
+  const [thumbs, setThumbs] = useState<Record<string, ThumbState>>({});
+  // P2-CHATUX: turn id whose comment box is open (null = none). Only ever one
+  // — a thumb elsewhere moves the box rather than stacking prompts.
+  const [commentFor, setCommentFor] = useState<string | null>(null);
   // Session-scoped chat settings (feature-spec.md:7, :278). They live HERE,
   // not in AppContext: only this page reads them, and in the context every
   // keystroke in the settings popover re-rendered the entire app
@@ -243,6 +261,8 @@ export function ChatPage() {
     setLineage(null);
     setAgentId(null);
     setForkTurnId(null);
+    // An open comment box belongs to the turn we're leaving.
+    setCommentFor(null);
     if (!conversationId) {
       attachedConvRef.current = null;
       setTurns([]);
@@ -363,6 +383,29 @@ export function ChatPage() {
           );
         });
     }
+  };
+
+  // P2-CHATUX: clipboard files go through addFiles above — the SAME path the
+  // picker and drag-drop use, so chips, the 413 message and the send gate all
+  // behave identically. A pasted screenshot arrives with a generic or empty
+  // name ("image.png" on Chromium, "" elsewhere), which would render a blank
+  // chip and store a blank filename, so those get a generated one.
+  const pasteCountRef = useRef(0);
+  const namePasted = (file: File): File => {
+    if (file.name && !/^image\.[a-z0-9]+$/i.test(file.name)) return file;
+    const ext = (file.type.split("/")[1] ?? "").replace(/[^a-z0-9]/gi, "") || "png";
+    return new File([file], `pasted-image-${++pasteCountRef.current}.${ext}`, {
+      type: file.type || "application/octet-stream",
+      lastModified: file.lastModified,
+    });
+  };
+  const pasteFiles = (e: ReactClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.files ?? []);
+    // Text pastes are untouched: no preventDefault, so the textarea inserts
+    // the text exactly as it does today.
+    if (files.length === 0) return;
+    e.preventDefault();
+    addFiles(files.map(namePasted));
   };
 
   const removePending = (key: number) => {
@@ -489,9 +532,14 @@ export function ChatPage() {
   // 👍/👎 → POST /feedback {message_id, rating} (openapi.yaml:1475-1480;
   // feature-spec.md:276). Optimistic; judgments are append-only (no un-vote
   // endpoint), so re-clicking the same thumb simply appends again.
+  // P2-CHATUX: the rating is submitted on the click ITSELF — a user who only
+  // wants to rate still does exactly one click — and the comment box is
+  // merely revealed alongside it. The new judgment carries no comment, so the
+  // rendered note clears until one is submitted (newest judgment wins).
   const rate = (turnId: string, rating: Rating) => {
     const previous = thumbs[turnId];
-    setThumbs((m) => ({ ...m, [turnId]: rating }));
+    setThumbs((m) => ({ ...m, [turnId]: { rating, comment: null } }));
+    setCommentFor(turnId);
     api.postFeedback({ message_id: turnId, rating }).catch(() => {
       // Revert the optimistic thumb — the judgment was never appended.
       setThumbs((m) => {
@@ -500,7 +548,26 @@ export function ChatPage() {
         else next[turnId] = previous;
         return next;
       });
+      setCommentFor((open) => (open === turnId ? null : open));
     });
+  };
+
+  // P2-CHATUX: the comment is a SECOND feedback post carrying the same rating
+  // plus the note — an append, never an update (there is no judgment PATCH,
+  // openapi.yaml /eval/judgments is GET-only). Newest-wins in deriveThumbs
+  // then makes this judgment the one that renders.
+  const submitComment = (turnId: string, text: string) => {
+    const comment = text.trim();
+    const previous = thumbs[turnId];
+    if (!comment || !previous) return;
+    setThumbs((m) => ({ ...m, [turnId]: { rating: previous.rating, comment } }));
+    setCommentFor(null);
+    api
+      .postFeedback({ message_id: turnId, rating: previous.rating, comment })
+      .catch(() => {
+        // Nothing was appended — fall back to the thumb-only judgment.
+        setThumbs((m) => ({ ...m, [turnId]: previous }));
+      });
   };
 
   if (loadError) {
@@ -619,8 +686,14 @@ export function ChatPage() {
               <TurnBubble
                 key={turn.id}
                 turn={turn}
-                thumb={thumbs[turn.id]}
+                thumb={thumbs[turn.id]?.rating}
                 onRate={(rating) => rate(turn.id, rating)}
+                // P2-CHATUX — the note left with the current thumb, plus the
+                // box that collects it right after a rating.
+                comment={thumbs[turn.id]?.comment ?? null}
+                commentOpen={commentFor === turn.id}
+                onComment={(text) => submitComment(turn.id, text)}
+                onDismissComment={() => setCommentFor(null)}
                 // ⑂ needs a persisted conversation to re-fire against; a brand
                 // new chat gains the id (and the affordance) after the first
                 // send navigates to /chat/{id}.
@@ -721,6 +794,9 @@ export function ChatPage() {
             placeholder="Message…"
             value={input}
             onChange={(e) => setInput(e.currentTarget.value)}
+            // P2-CHATUX — paste images/files straight into the composer; text
+            // pastes fall through untouched.
+            onPaste={pasteFiles}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -1008,6 +1084,10 @@ function TurnBubble({
   turn,
   thumb,
   onRate,
+  comment = null,
+  commentOpen = false,
+  onComment,
+  onDismissComment,
   onFork,
   onTrace,
   shareUrl,
@@ -1018,6 +1098,10 @@ function TurnBubble({
   turn: Turn;
   thumb?: Rating;
   onRate: (rating: Rating) => void;
+  comment?: string | null;
+  commentOpen?: boolean;
+  onComment?: (text: string) => void;
+  onDismissComment?: () => void;
   onFork?: () => void;
   onTrace?: () => void;
   shareUrl?: string;
@@ -1173,6 +1257,85 @@ function TurnBubble({
           )}
         </Group>
       )}
+      {/* P2-CHATUX — the note that came with the current thumb, rendered as a
+          small quoted line under the turn it judges. It survives reload
+          because it IS the judgment (Judgment.reasoning), refetched with the
+          conversation's judgments; a receiver of a shared link sees it for
+          the same reason, with no special-casing. */}
+      {turn.role === "assistant" && comment && !commentOpen && (
+        <Text
+          size="xs"
+          c="dimmed"
+          mt={4}
+          data-testid={`turn-comment-${turn.id}`}
+          style={{
+            borderLeft: "2px solid var(--mantine-color-gray-4)",
+            paddingLeft: 8,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {thumb === "up" ? "\u{1F44D}" : "\u{1F44E}"} {comment}
+        </Text>
+      )}
+      {turn.role === "assistant" && commentOpen && onComment && (
+        <FeedbackCommentBox
+          rating={thumb}
+          onSubmit={onComment}
+          onDismiss={onDismissComment ?? (() => {})}
+        />
+      )}
     </Paper>
+  );
+}
+
+// P2-CHATUX — the "tell us more" box revealed by a thumb. Optional and
+// dismissible: the rating is already saved by the time this renders, so
+// closing it costs nothing. Its draft is LOCAL state so a keystroke re-renders
+// this box only, not the transcript (same reasoning as the streaming draft
+// store, docs/review-2026-08-05.md A8). Enter submits / Shift+Enter newlines,
+// matching the composer's convention (feature-spec.md:12).
+function FeedbackCommentBox({
+  rating,
+  onSubmit,
+  onDismiss,
+}: {
+  rating?: Rating;
+  onSubmit: (text: string) => void;
+  onDismiss: () => void;
+}) {
+  const [text, setText] = useState("");
+  const submit = () => {
+    if (text.trim()) onSubmit(text);
+  };
+  return (
+    <Stack gap={4} mt={6} data-testid="feedback-comment-box">
+      <Group gap={6} wrap="nowrap" align="flex-end">
+        <Textarea
+          size="xs"
+          style={{ flex: 1 }}
+          autosize
+          minRows={1}
+          maxRows={4}
+          autoFocus
+          aria-label="Feedback comment"
+          placeholder={rating === "up" ? "What made this good?" : "What went wrong?"}
+          value={text}
+          onChange={(e) => setText(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <Button size="compact-xs" onClick={submit} disabled={!text.trim()}>
+          Send
+        </Button>
+        {/* Label deliberately avoids the words "feedback comment" — that is
+            the textarea's accessible name, and a substring-matching locator
+            (Playwright getByLabel) would otherwise resolve to both. */}
+        <CloseButton size="sm" aria-label="Close comment box" onClick={onDismiss} />
+      </Group>
+    </Stack>
   );
 }

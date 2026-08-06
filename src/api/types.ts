@@ -217,6 +217,10 @@ export interface ChatDoneEvent {
 export interface FeedbackRequest {
   message_id: string;
   rating: "up" | "down";
+  // P2-CHATUX: optional free-text note stored as the appended judgment's
+  // `reasoning`. Additive and optional in the contract, so a bare thumb sends
+  // exactly the two fields it always did — omit the key, never send null.
+  comment?: string;
 }
 
 // openapi.yaml:1881 Judgment — "Append-only, never overwritten"; "type human =

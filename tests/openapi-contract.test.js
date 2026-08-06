@@ -385,6 +385,24 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(storage.properties.restored.type).toBe("boolean");
   });
 
+  // P2-CHATUX — FeedbackRequest.comment is the ONLY contract change in that
+  // task, additive by construction: a new optional property on an existing
+  // request schema, so v0.3.0 clients that only send {message_id, rating}
+  // remain conformant and the version does not move.
+  it("FeedbackRequest.comment is optional and additive (P2-CHATUX)", () => {
+    const feedback = doc.components.schemas.FeedbackRequest;
+    // required untouched — the comment can never be demanded of a client
+    expect(feedback.required).toEqual(["message_id", "rating"]);
+    const comment = feedback.properties.comment;
+    expect(comment.type).toBe("string");
+    expect(comment.nullable).toBe(true);
+    // the comment lands on the human judgment's reasoning, not on a Turn
+    expect(comment.description).toMatch(/reasoning/);
+    expect(doc.components.schemas.Judgment.properties.reasoning.nullable).toBe(true);
+    // ...and the thumb store stays append-only: read-only judgment history
+    expect(Object.keys(doc.paths["/eval/judgments"])).toEqual(["get"]);
+  });
+
   it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
       expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);

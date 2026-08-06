@@ -317,6 +317,72 @@ describe("Composer attachments", () => {
     }
   });
 
+  // P2-CHATUX (b) — clipboard paste reuses the SAME upload path as the picker
+  // and drag-drop; only files are intercepted, so text paste is untouched.
+  it("paste with files uploads through the existing path and chips a generated filename", async () => {
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    // A pasted screenshot: Chromium hands over image/png named "image.png".
+    const composer = screen.getByPlaceholderText("Message…");
+    const cancelled = !fireEvent.paste(composer, {
+      clipboardData: { files: [makeFile("pngbytes", "image.png", "image/png")] },
+    });
+    // default prevented ONLY because files were handled
+    expect(cancelled).toBe(true);
+
+    await waitFor(() => expect(uploadRequests).toHaveLength(1));
+    // generated name, so neither the chip nor the stored attachment is blank
+    expect(uploadRequests[0]).toEqual({ filename: "pasted-image-1.png", size: 8 });
+    const chips = await screen.findByTestId("pending-attachments");
+    expect(chips).toHaveTextContent("pasted-image-1.png (8 B)");
+    await waitFor(() =>
+      expect(within(chips).queryByTestId("chip-uploading")).not.toBeInTheDocument(),
+    );
+
+    // second paste keeps counting, and a NAMED pasted file keeps its own name
+    fireEvent.paste(composer, {
+      clipboardData: { files: [makeFile("more", "image.png", "image/png")] },
+    });
+    await waitFor(() => expect(uploadRequests).toHaveLength(2));
+    expect(uploadRequests[1].filename).toBe("pasted-image-2.png");
+    fireEvent.paste(composer, {
+      clipboardData: { files: [makeFile("doc", "report.pdf", "application/pdf")] },
+    });
+    await waitFor(() => expect(uploadRequests).toHaveLength(3));
+    expect(uploadRequests[2].filename).toBe("report.pdf");
+  });
+
+  it("paste of plain text inserts normally and uploads nothing", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    const composer = screen.getByPlaceholderText("Message…");
+    await user.click(composer);
+    await user.paste("pasted prose");
+
+    // text landed in the textarea; the file path was never entered
+    expect(composer).toHaveValue("pasted prose");
+    expect(uploadRequests).toHaveLength(0);
+    expect(screen.queryByTestId("pending-attachments")).not.toBeInTheDocument();
+  });
+
+  it("a pasted oversize file surfaces the server's 413 message on its chip", async () => {
+    uploadConfig.maxBytes = 10;
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+
+    fireEvent.paste(screen.getByPlaceholderText("Message…"), {
+      clipboardData: { files: [makeFile("x".repeat(50), "image.png", "image/png")] },
+    });
+    // same error surfacing as the picker path (openapi.yaml:535-536)
+    expect(
+      await screen.findByText("File exceeds the 0 MB upload limit."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("pending-attachments")).toHaveTextContent("pasted-image-1.png");
+  });
+
   it("renders stored attachments on a user turn from Turn.attachments", async () => {
     renderChat("/chat/c1");
     await screen.findByText("How do refunds work?");
@@ -398,6 +464,131 @@ describe("Turn actions", () => {
       (u) => u.searchParams.get("conversation_id") === "c1",
     );
     expect(calls).toHaveLength(1);
+  });
+
+  // P2-CHATUX (a) — the comment box. Design (agreed with the user 2026-08-06):
+  // the comment is NOT a Turn — it rides on the type:human judgment's
+  // `reasoning` (FeedbackRequest.comment) and renders under its assistant
+  // turn. The rating itself is still ONE click; the box is optional extra.
+  it("a thumb saves the rating immediately AND reveals the comment box", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    expect(screen.queryByTestId("feedback-comment-box")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Thumbs up" }));
+    // rating went out on the click — a rater who wants nothing more is done
+    await waitFor(() => expect(feedbackRequests).toHaveLength(1));
+    expect(feedbackRequests[0]).toEqual({ message_id: "t2", rating: "up" });
+
+    const box = await screen.findByTestId("feedback-comment-box");
+    // prompt follows the sentiment
+    expect(within(box).getByPlaceholderText("What made this good?")).toBeInTheDocument();
+
+    // 👎 re-prompts with the negative wording
+    await user.click(screen.getByRole("button", { name: "Thumbs down" }));
+    await waitFor(() => expect(feedbackRequests).toHaveLength(2));
+    expect(
+      within(screen.getByTestId("feedback-comment-box")).getByPlaceholderText(
+        "What went wrong?",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("submitting the comment APPENDS a second judgment carrying rating + comment, and renders it", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+
+    await user.click(screen.getByRole("button", { name: "Thumbs down" }));
+    await waitFor(() => expect(feedbackRequests).toHaveLength(1));
+
+    await user.type(screen.getByLabelText("Feedback comment"), "It missed the SLA");
+    await user.keyboard("{Enter}"); // Enter submits, per the composer convention
+    await waitFor(() => expect(feedbackRequests).toHaveLength(2));
+    // a NEW post with the same rating + the comment — never an edit of the first
+    expect(feedbackRequests[1]).toEqual({
+      message_id: "t2",
+      rating: "down",
+      comment: "It missed the SLA",
+    });
+    // box closes, note renders under the turn it judges
+    await waitFor(() =>
+      expect(screen.queryByTestId("feedback-comment-box")).not.toBeInTheDocument(),
+    );
+    const note = screen.getByTestId("turn-comment-t2");
+    expect(note).toHaveTextContent("It missed the SLA");
+    expect(note).toHaveTextContent("\u{1F44E}"); // the thumb it accompanied
+  });
+
+  it("Shift+Enter newlines instead of submitting; dismissing posts nothing extra", async () => {
+    const user = userEvent.setup();
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+
+    await user.click(screen.getByRole("button", { name: "Thumbs up" }));
+    await waitFor(() => expect(feedbackRequests).toHaveLength(1));
+
+    const field = screen.getByLabelText("Feedback comment");
+    await user.type(field, "line one");
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    await user.type(field, "line two");
+    expect(field).toHaveValue("line one\nline two");
+    expect(feedbackRequests).toHaveLength(1); // still nothing submitted
+
+    // dismiss: optional means optional — the rating stands, no second post
+    await user.click(screen.getByRole("button", { name: "Close comment box" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("feedback-comment-box")).not.toBeInTheDocument(),
+    );
+    expect(feedbackRequests).toHaveLength(1);
+    expect(screen.queryByTestId("turn-comment-t2")).not.toBeInTheDocument();
+    // the thumb itself is untouched
+    expect(screen.getByRole("button", { name: "Thumbs up" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("comments survive reload: the newest human judgment's reasoning renders under its turn", async () => {
+    // oldest → newest; pushHumanJudgment unshifts, so the store is newest-first
+    pushHumanJudgment("t2", "c1", "up", "2026-08-03T10:00:00Z", "first take");
+    pushHumanJudgment("t2", "c1", "down", "2026-08-04T10:00:00Z", "actually wrong");
+    // a judgment for a turn in ANOTHER conversation must not leak in here
+    pushHumanJudgment("t9", "c2", "up", "2026-08-04T11:00:00Z", "other conversation");
+
+    renderChat("/chat/c1");
+    const bubble = (await screen.findByText("Approved refunds land in 3-5 days."))
+      .closest("[class*='Paper']")!;
+
+    // newest wins for BOTH the thumb and its comment
+    await waitFor(() => expect(screen.getByTestId("turn-comment-t2")).toBeInTheDocument());
+    const note = screen.getByTestId("turn-comment-t2");
+    expect(note).toHaveTextContent("actually wrong");
+    expect(note).not.toHaveTextContent("first take");
+    expect(screen.getByRole("button", { name: "Thumbs down" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // rendered inside the assistant turn it belongs to, not floating elsewhere
+    expect(bubble).toContainElement(note);
+    expect(screen.queryByTestId("turn-comment-t9")).not.toBeInTheDocument();
+    expect(screen.queryByText("other conversation")).not.toBeInTheDocument();
+  });
+
+  it("a later bare thumb supersedes the earlier comment (newest judgment wins)", async () => {
+    pushHumanJudgment("t2", "c1", "down", "2026-08-03T10:00:00Z", "old complaint");
+    pushHumanJudgment("t2", "c1", "up", "2026-08-04T10:00:00Z"); // newest, no comment
+
+    renderChat("/chat/c1");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Thumbs up" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(screen.queryByTestId("turn-comment-t2")).not.toBeInTheDocument();
   });
 
   it("copy puts the turn's raw markdown on the clipboard and confirms", async () => {

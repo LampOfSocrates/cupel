@@ -2445,6 +2445,28 @@ components:
       properties:
         message_id: { type: string, description: "= Turn.id (spec wording per feature-spec.md:276)." }
         rating: { type: string, enum: [up, down] }
+        comment:
+          type: string
+          nullable: true
+          description: >
+            Optional free-text note the rater adds alongside the thumb. Stored
+            as the appended judgment's `reasoning` — the same field the LLM
+            judge writes its explanation into (feature-spec.md:59) — so thumbs
+            and their reasons stay in the one judgment store
+            (feature-spec.md:60, :123).
+
+            The comment is deliberately NOT a Turn: turns are the unit that
+            gets replayed and re-judged ("take stored conversations or
+            individual turns, re-execute them under a changed config",
+            feature-spec.md:41) and Turn.role is user|assistant, so feedback
+            in that stream would be re-executed on replay and imported into
+            eval cases. As a judgment it renders beneath its assistant turn
+            and survives reload via GET /eval/judgments?conversation_id=.
+
+            Additive and optional — NOT in `required`, so existing clients
+            stay valid and conformance (which compares `required` keys) is
+            unaffected. The spec version therefore stays 0.3.0.
+            Append-only holds: re-rating posts a NEW judgment, never an edit.
 
     # ------------------------------------------------------------------- runs
     RunConfig:

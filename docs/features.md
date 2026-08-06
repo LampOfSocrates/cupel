@@ -10,6 +10,8 @@
 - ✅ Stop a reply mid-stream and keep what it wrote so far
 - ✅ Attach files and images to a message, remove them before sending
 - ✅ Thumb up/down any reply — ratings are kept forever, never overwritten
+- ✅ Say why: a thumb opens an optional comment box, and your note stays under that reply for good (it's stored as the rating's reasoning, so it survives reload and travels with a shared link)
+- ✅ Paste screenshots and files straight from the clipboard into the composer
 - ✅ Copy any reply as clean markdown
 - ✅ Set model, temperature, and system prompt for your chat session
 - ✅ Bring your own LLM key (OpenRouter) so replies come from a real model — the key stays in your browser, is never stored or logged server-side
