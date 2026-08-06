@@ -53,6 +53,7 @@
 - [ ] P2-MEM Memory panel — view/edit/clear per tree, compaction as queued task  [deps: T00]
 - [ ] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
 - [ ] P2-FIXA Review bucket A — run-scoped latest_score bug, /tasks/stream tenant filtering, span-payload ownership check, markdown memo, chatSettings out of AppContext, grid cell memo, object-URL leak, streaming-draft isolation (see docs/review-2026-08-05.md)  [deps: none]
+- [ ] P2-DEVSTART One-command start + explicit local-mock flag — agentic.config.ts `localMock {enabled, port, dbPath}` (dev-machine only, filesystem SQLite, never production); `npm start` boots UI + mock per the flag with a startup banner naming the backend and storage location; adopters flip enabled:false and their own backend holds persistence (user decision 2026-08-06)  [deps: none]
 - [ ] P2-MSW Full MSW parity for unit tests
 - [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
