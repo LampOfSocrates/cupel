@@ -8,7 +8,9 @@
 // un-skip themselves.
 import { spawnSync } from "node:child_process";
 
-const result = spawnSync("npx", ["playwright", "test", "--grep", "@auth-on"], {
+// --project=chromium: P2-RECORD added a second `record` project, and Playwright
+// runs every project unless one is named.
+const result = spawnSync("npx", ["playwright", "test", "--project=chromium", "--grep", "@auth-on"], {
   stdio: "inherit",
   shell: true,
   env: { ...process.env, AUTH_E2E: "1" },

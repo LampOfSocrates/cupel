@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 7 (feature-spec.md:212):
 // "Editor: edit draft → Test in Runs (snapshot) → back → save v16 → run
@@ -22,6 +23,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
   request,
   api,
 }) => {
+  const step = filmed(page, "Journey 7", 7);
   await seedChat(request, CONV);
 
   await page.goto("/agents");
@@ -35,7 +37,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
   const nextVersion = Number((await saveButton.innerText()).match(/v(\d+)$/)![1]);
   const liveVersion = nextVersion - 1;
 
-  await test.step("edit the draft: dirty state, nothing written yet", async () => {
+  await step("edit the draft: dirty state, nothing written yet", async () => {
     await instructions.fill(
       `${await instructions.inputValue()}\n- Editor journey: confirm the slot in writing.`,
     );
@@ -44,14 +46,14 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     api.expectNotCalled("PUT /agenttrees/{tree}/agents/{agent}/instructions");
   });
 
-  await test.step("Snapshot draft: the text is frozen immutably", async () => {
+  await step("Snapshot draft: the text is frozen immutably", async () => {
     await page.getByRole("button", { name: "Snapshot draft" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/agents/{agent}/snapshots");
     // snapshot ids are 4 chars (mock/main.py:852) → data-testid="snapshot-a3f1"
     await expect(page.locator('[data-testid^="snapshot-"]').first()).toContainText("-draft (");
   });
 
-  await test.step("diff the draft against the live version", async () => {
+  await step("diff the draft against the live version", async () => {
     // Mantine's SegmentedControl parks the radio input off-screen; the label
     // is the control a user actually clicks.
     await page.getByText("Diff", { exact: true }).click();
@@ -59,7 +61,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     await page.getByText("Edit", { exact: true }).click();
   });
 
-  await test.step(`Save as v${nextVersion}: append-only, and labelled from its snapshot`, async () => {
+  await step(`Save as v${nextVersion}: append-only, and labelled from its snapshot`, async () => {
     await saveButton.click();
     await api.expectCalled("PUT /agenttrees/{tree}/agents/{agent}/instructions");
     const row = page.getByTestId(`version-${nextVersion}`);
@@ -74,7 +76,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     await expect(previous.getByText("live")).toHaveCount(0);
   });
 
-  await test.step("Test in Runs: the DRAFT is snapshotted into the run config", async () => {
+  await step("Test in Runs: the DRAFT is snapshotted into the run config", async () => {
     await instructions.fill(
       `${await instructions.inputValue()}\n- Editor journey: untested draft under test.`,
     );
@@ -93,7 +95,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     await expect(page.getByTestId("snapshot-badge")).toContainText("draft");
   });
 
-  await test.step("queue it: the run fills against the snapshotted text", async () => {
+  await step("queue it: the run fills against the snapshotted text", async () => {
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("PUT /agenttrees/{tree}/agents/{agent}/last-selection");
     await api.expectCalled("POST /agenttrees/{tree}/replay");
@@ -103,7 +105,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     });
   });
 
-  await test.step("repeating the test is two taps (last-selection remembered)", async () => {
+  await step("repeating the test is two taps (last-selection remembered)", async () => {
     await page.goto("/agents");
     await page.getByRole("button", { name: "Open Refunds" }).click();
     await page.getByRole("button", { name: "Test in Runs ▸" }).click();

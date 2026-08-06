@@ -22,7 +22,9 @@ import { spawnSync } from "node:child_process";
 function run(label, args, env) {
   console.log(`\n=== e2e: ${label} ===`);
   const started = Date.now();
-  const result = spawnSync("npx", ["playwright", "test", ...args], {
+  // --project=chromium: P2-RECORD added a second `record` project, and
+  // Playwright runs every project unless one is named.
+  const result = spawnSync("npx", ["playwright", "test", "--project=chromium", ...args], {
     stdio: "inherit",
     shell: true,
     env: { ...process.env, ...env },

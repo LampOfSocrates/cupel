@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/api";
 import { seedChat, seedTurnFork, awaitTask } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 1 (feature-spec.md:206):
 // "Shell: sidebar collapse, presets route to Runs, conversation list
@@ -20,13 +21,14 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
   request,
   api,
 }) => {
+  const step = filmed(page, "Journey 1", 6);
   // A conversation of our own with a fork, so the nesting step never depends
   // on which seeded conversation happens to be on page 1.
   const chat = await seedChat(request, UNIQUE);
   const fork = await seedTurnFork(request, chat, ["ep_agent1_prod"]);
   await awaitTask(request, fork.results[0].task_id);
 
-  await test.step("boot: /me, tree list, recent conversations and the task stream", async () => {
+  await step("boot: /me, tree list, recent conversations and the task stream", async () => {
     await page.goto("/");
     await expect(page.getByRole("button", { name: "+ New chat" })).toBeVisible();
     await expect(page.getByText("agent1 · Recent")).toBeVisible();
@@ -36,7 +38,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await api.expectCalled("GET /tasks/stream"); // one app-wide SSE (P1-T08)
   });
 
-  await test.step("sidebar collapse: desktop keeps the fixed column", async () => {
+  await step("sidebar collapse: desktop keeps the fixed column", async () => {
     // The collapse control is the phone burger — Mantine renders the navbar as
     // a full-width overlay below the breakpoint. mobile.spec.ts owns that walk
     // (P2-MOBILE-SHELL); here we assert the desktop side of the same state.
@@ -44,7 +46,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
   });
 
-  await test.step("presets route to Runs (Tune → version axis, Evaluate → judge open)", async () => {
+  await step("presets route to Runs (Tune → version axis, Evaluate → judge open)", async () => {
     await page.getByRole("link", { name: "Tune", exact: true }).click();
     await expect(page).toHaveURL(/\/runs$/);
     // A preset lands straight in the stepper, not the run list (P1-T15).
@@ -63,7 +65,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  await test.step("conversation list searches (?search= reaches the backend)", async () => {
+  await step("conversation list searches (?search= reaches the backend)", async () => {
     api.clear();
     const search = page.getByPlaceholder("Search");
     await search.fill("Zephyr");
@@ -78,7 +80,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await search.fill("");
   });
 
-  await test.step("fork nesting expands (?forks_of= lists them, lineage badge on each)", async () => {
+  await step("fork nesting expands (?forks_of= lists them, lineage badge on each)", async () => {
     api.clear();
     const expander = page.getByTestId(`forks-${chat.conversationId}`);
     await expect(expander).toHaveText(/1 forks/);
@@ -91,7 +93,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await expect(page.getByTestId("app-navbar").getByText("prod").first()).toBeVisible();
   });
 
-  await test.step("conversation ⋯ menu: rename, copy link, delete", async () => {
+  await step("conversation ⋯ menu: rename, copy link, delete", async () => {
     await page.getByRole("button", { name: `Actions for ${UNIQUE}` }).click();
     await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();

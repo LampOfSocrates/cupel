@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 3 (feature-spec.md:208):
 // "Runs: select conversations + single turns → configure (endpoints
@@ -20,6 +21,7 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
   request,
   api,
 }) => {
+  const step = filmed(page, "Journey 3", 4);
   // Two conversations, two assistant turns each — enough rows that the grid is
   // observably partial when it first renders.
   const a = await seedChat(request, CONV_A);
@@ -29,7 +31,7 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     conversationId: b.conversationId,
   });
 
-  await test.step("1 Select: a whole conversation plus a single turn of another", async () => {
+  await step("1 Select: a whole conversation plus a single turn of another", async () => {
     await page.goto("/runs");
     await page.getByRole("button", { name: "New run" }).click();
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
@@ -39,7 +41,7 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     await expect(page.getByTestId("picker-summary")).toHaveText("1 conversation · 1 turn");
   });
 
-  await test.step("2 Configure: dropdown data loads; a version change is highlighted", async () => {
+  await step("2 Configure: dropdown data loads; a version change is highlighted", async () => {
     await page.getByRole("button", { name: "Configure ▸" }).click();
     // Sketch 03's data sources. NOT endpoints: the endpoints multi-select
     // "only applies to turn re-fire" (openapi.yaml:1490), so the stepper never
@@ -75,7 +77,7 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     await page.getByRole("option", { name: "DeepSeek V3" }).click();
   });
 
-  await test.step("Queue: the run is accepted and the grid fills incrementally", async () => {
+  await step("Queue: the run is accepted and the grid fills incrementally", async () => {
     api.clear();
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
@@ -95,7 +97,7 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     await expect(page.getByText("done", { exact: true })).toBeVisible();
   });
 
-  await test.step("the finished run is listed and re-openable", async () => {
+  await step("the finished run is listed and re-openable", async () => {
     const runUrl = page.url();
     // The back control is a Mantine Anchor with an onClick and no href, so it
     // has no link role — matched by text (noted for the UX phase).

@@ -1,6 +1,7 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { awaitTask, seedChat, seedReplay, signInApi } from "./helpers/seed";
 import { signIn } from "./helpers/auth";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 11 (feature-spec.md:216):
 // "Tree disable: admin disables tree 2 → hidden for non-admin, chat against it
@@ -46,6 +47,7 @@ test(
   "tree disable: agent2 goes read-only — hidden, 409s, queued work cancelled — then restores",
   { tag: "@auth-on" },
   async ({ page, request, api }) => {
+    const step = filmed(page, "Journey 11", 5);
     const admin = await signInApi(request, "admin@demo");
     const adminAuth = { Authorization: `Bearer ${admin}` };
 
@@ -69,7 +71,7 @@ test(
     });
     let inFlight: { task_id: string; run_id: string };
 
-    await test.step("an admin disables the tree from Settings", async () => {
+    await step("an admin disables the tree from Settings", async () => {
       await page.goto("/");
       await page.waitForURL(/\/login/);
       await signIn(page, "admin@demo");
@@ -102,12 +104,12 @@ test(
       await expect(page.getByText("disabled", { exact: true })).toBeVisible();
     });
 
-    await test.step("its queued work is cancelled", async () => {
+    await step("its queued work is cancelled", async () => {
       const task = await awaitTask(request, inFlight.task_id, admin);
       expect(task.status).toBe("cancelled");
     });
 
-    await test.step("new work 409s with tree_disabled; history still reads", async () => {
+    await step("new work 409s with tree_disabled; history still reads", async () => {
       const chat = await request.post(`${API_ORIGIN}/agenttrees/agent2/chat`, {
         data: { message: "should be refused", stream: false },
         headers: adminAuth,
@@ -138,7 +140,7 @@ test(
       expect(rename.status()).toBe(409);
     });
 
-    await test.step("hidden for the non-admin, still listed for the admin", async () => {
+    await step("hidden for the non-admin, still listed for the admin", async () => {
       const forRestricted = await request.get(`${API_ORIGIN}/agenttrees`, {
         headers: restrictedAuth,
       });
@@ -148,7 +150,7 @@ test(
       expect(agent2.enabled).toBe(false);
     });
 
-    await test.step("re-enable restores everything", async () => {
+    await step("re-enable restores everything", async () => {
       await page.getByLabel("agent2 enabled").check({ force: true }); // no confirm to enable
       await expect(page.getByLabel("agent2 enabled")).toBeChecked();
       const forRestricted = await request.get(`${API_ORIGIN}/agenttrees`, {

@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/api";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 2 (feature-spec.md:207):
 // "Chat: send → SSE tokens render; 👍/👎 posts feedback; copy; attach +
@@ -19,17 +20,18 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
   page,
   api,
 }) => {
+  const step = filmed(page, "Journey 2", 8);
   await page.goto("/chat");
   await expect(page.getByPlaceholder("Message…")).toBeVisible();
 
-  await test.step("chat settings load the model list", async () => {
+  await step("chat settings load the model list", async () => {
     await page.getByRole("button", { name: "Chat settings" }).click();
     await expect(page.getByRole("combobox", { name: "Model" })).toBeVisible();
     await api.expectCalled("GET /models");
     await page.keyboard.press("Escape");
   });
 
-  await test.step("attach a file: it uploads and becomes a chip", async () => {
+  await step("attach a file: it uploads and becomes a chip", async () => {
     await page.getByLabel("Attach files input").setInputFiles({
       name: "shipping-label.txt",
       mimeType: "text/plain",
@@ -39,7 +41,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
     await api.expectCalled("POST /upload");
   });
 
-  await test.step("send: the reply streams in token by token", async () => {
+  await step("send: the reply streams in token by token", async () => {
     await page.getByPlaceholder("Message…").fill(MSG);
     await page.getByRole("button", { name: "Send" }).click();
     const streaming = page.getByTestId("streaming-turn");
@@ -58,7 +60,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
 
   const transcript = page.getByTestId("transcript");
 
-  await test.step("👍 posts feedback and the optional comment sticks", async () => {
+  await step("👍 posts feedback and the optional comment sticks", async () => {
     api.clear();
     await transcript.getByRole("button", { name: "Thumbs up" }).click();
     await api.expectCalled("POST /feedback");
@@ -78,7 +80,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
     await api.expectCalled("POST /feedback", 2);
   });
 
-  await test.step("👎 is the other half of the same control", async () => {
+  await step("👎 is the other half of the same control", async () => {
     await transcript.getByRole("button", { name: "Thumbs down" }).click();
     await expect(transcript.getByRole("button", { name: "Thumbs down" })).toHaveAttribute(
       "aria-pressed",
@@ -87,13 +89,13 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
     await page.getByTestId("feedback-comment-box").getByLabel("Close comment box").click();
   });
 
-  await test.step("copy the reply as markdown", async () => {
+  await step("copy the reply as markdown", async () => {
     await transcript.getByRole("button", { name: "Copy message" }).click();
     await expect(transcript.getByRole("button", { name: "Copied" })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("**");
   });
 
-  await test.step("copy a link to the turn and open it (P2-SHARE, off-mode)", async () => {
+  await step("copy a link to the turn and open it (P2-SHARE, off-mode)", async () => {
     await transcript.getByRole("button", { name: "Copy link to turn" }).click();
     await expect(transcript.getByRole("button", { name: "Link copied" })).toBeVisible();
     const link = await page.evaluate(() => navigator.clipboard.readText());
@@ -104,7 +106,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
     await expect(target.getByRole("button", { name: "Copy link to turn" })).toBeVisible();
   });
 
-  await test.step("stop generation mid-stream: partial text is kept", async () => {
+  await step("stop generation mid-stream: partial text is kept", async () => {
     api.clear();
     await page.getByPlaceholder("Message…").fill(MSG_2);
     await page.getByRole("button", { name: "Send" }).click();

@@ -1,5 +1,6 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 4 (feature-spec.md:209):
 // "Forks: 🔀 a turn against 2 endpoints → 2 new conversations with lineage →
@@ -18,11 +19,12 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
   request,
   api,
 }) => {
+  const step = filmed(page, "Journey 4", 6);
   const chat = await seedChat(request, MSG);
   await page.goto(`/chat/${chat.conversationId}`);
   await expect(page.getByTestId("transcript")).toContainText(MSG);
 
-  await test.step("⑂ a turn against prod + staging", async () => {
+  await step("⑂ a turn against prod + staging", async () => {
     await page.getByRole("button", { name: "Fork turn" }).click();
     await api.expectCalled("GET /agenttrees/{tree}/endpoints");
     await page.getByRole("combobox", { name: "Endpoints" }).click();
@@ -33,13 +35,13 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
     await api.expectCalled("POST /agenttrees/{tree}/replay/turn");
   });
 
-  await test.step("2 new conversations come back, one per endpoint", async () => {
+  await step("2 new conversations come back, one per endpoint", async () => {
     const results = page.getByTestId("fork-results");
     await expect(results).toBeVisible();
     await expect(results.getByText("Open in Chat ↗")).toHaveCount(2);
   });
 
-  await test.step("Open in Chat: the fork is a real conversation with lineage", async () => {
+  await step("Open in Chat: the fork is a real conversation with lineage", async () => {
     await page.getByTestId("fork-results").getByText("Open in Chat ↗").first().click();
     await page.waitForURL(/\/chat\/conv_/);
     const lineage = page.getByTestId("lineage-banner");
@@ -48,7 +50,7 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
     await expect(lineage).toContainText(chat.turnId);
   });
 
-  await test.step("continue the fork: it takes new turns like any conversation", async () => {
+  await step("continue the fork: it takes new turns like any conversation", async () => {
     api.clear();
     await page.getByPlaceholder("Message…").fill("Fork journey: and then what happened?");
     await page.getByRole("button", { name: "Send" }).click();
@@ -59,7 +61,7 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
     await expect(page.getByTestId("lineage-banner")).toBeVisible();
   });
 
-  await test.step("Compare siblings: both endpoints' forks side by side", async () => {
+  await step("Compare siblings: both endpoints' forks side by side", async () => {
     await page.getByText("Compare siblings").click();
     await page.waitForURL(/\/forks\//);
     await expect(page.getByTestId("sibling-grid")).toBeVisible();
@@ -67,7 +69,7 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
     await expect(page.locator('[data-testid^="sibling-conv_"]')).toHaveCount(2);
   });
 
-  await test.step("both forks are conversations of their own, with lineage", async () => {
+  await step("both forks are conversations of their own, with lineage", async () => {
     // The nesting UI is journey 1's; here the claim is the data one — two NEW
     // conversations, each stamped with the endpoint it was fired at.
     const res = await request.get(

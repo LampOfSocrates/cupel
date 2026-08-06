@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/api";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 9 (feature-spec.md:214):
 // "Backend switcher: swap target, healthz reflects, non-prod banner shows"
@@ -12,7 +13,8 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
   page,
   api,
 }) => {
-  await test.step("the mock target is active and announces itself in the chrome", async () => {
+  const step = filmed(page, "Journey 9", 5);
+  await step("the mock target is active and announces itself in the chrome", async () => {
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(page.getByText("Backend", { exact: true })).toBeVisible();
@@ -22,7 +24,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await expect(page.getByLabel("Base URL")).toHaveValue("http://localhost:4010");
   });
 
-  await test.step("healthz reflects the live backend, and Re-check re-probes", async () => {
+  await step("healthz reflects the live backend, and Re-check re-probes", async () => {
     await expect(page.getByTestId("health-result")).toContainText("ok");
     await api.expectCalled("GET /healthz");
     api.clear();
@@ -31,7 +33,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await expect(page.getByTestId("health-result")).toContainText("ok");
   });
 
-  await test.step("a custom base URL is a target of its own", async () => {
+  await step("a custom base URL is a target of its own", async () => {
     await page.getByRole("radio", { name: "Custom" }).check();
     // Selected but not yet usable — nothing to connect to.
     await expect(page.getByTestId("health-result")).toContainText("enter a base URL");
@@ -43,7 +45,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await expect(page.getByTestId("health-result")).toContainText("ok", { timeout: 30_000 });
   });
 
-  await test.step("swapping to a dead target strands the app — with a way back", async () => {
+  await step("swapping to a dead target strands the app — with a way back", async () => {
     // click, not check: the boot against the dead target replaces the whole
     // app (including this radio) before check() could verify it.
     await page.getByRole("radio", { name: "Local" }).click();
@@ -57,7 +59,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await expect(page.getByRole("button", { name: "+ New chat" })).toBeVisible();
   });
 
-  await test.step("the choice is device-local and survives a reload", async () => {
+  await step("the choice is device-local and survives a reload", async () => {
     await page.goto("/settings");
     await page.reload();
     await expect(page.getByRole("radio", { name: "Mock" })).toBeChecked();

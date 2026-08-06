@@ -1,5 +1,6 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { signIn, storedToken } from "./helpers/auth";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 12 (feature-spec.md:217):
 // "Auth: suite runs twice — AUTH_MODE=off (dev user), and AUTH_MODE=on (login
@@ -20,14 +21,15 @@ test(
   "auth-on: 401 at boot → login → admin session → a chat under the token → logout",
   { tag: "@auth-on" },
   async ({ page, request, api }) => {
-    await test.step("no token: /me 401s and the app lands on login", async () => {
+    const step = filmed(page, "Journey 12", 6);
+    await step("no token: /me 401s and the app lands on login", async () => {
       await page.goto("/");
       await page.waitForURL(/\/login/);
       await expect(page.getByText("Sign in to continue")).toBeVisible();
       await api.expectCalled("GET /me");
     });
 
-    await test.step("sign in with the seeded admin", async () => {
+    await step("sign in with the seeded admin", async () => {
       api.clear();
       await signIn(page, "admin@demo");
       await api.expectCalled("POST /auth/token");
@@ -38,7 +40,7 @@ test(
       expect(await storedToken(page)).toBeTruthy();
     });
 
-    await test.step("the admin sees both trees", async () => {
+    await step("the admin sees both trees", async () => {
       const token = await storedToken(page);
       const trees = await request.get(`${API_ORIGIN}/agenttrees`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -49,7 +51,7 @@ test(
       ]);
     });
 
-    await test.step("admin-only surfaces render, role-driven not mode-driven", async () => {
+    await step("admin-only surfaces render, role-driven not mode-driven", async () => {
       await page.goto("/settings");
       await expect(page.getByText("Members", { exact: true })).toBeVisible();
       await expect(page.getByText("Agent trees", { exact: true })).toBeVisible();
@@ -60,7 +62,7 @@ test(
       await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
     });
 
-    await test.step("a core journey still works with the token attached", async () => {
+    await step("a core journey still works with the token attached", async () => {
       api.clear();
       await page.getByRole("button", { name: "+ New chat" }).click();
       await page.getByPlaceholder("Message…").fill("Auth journey: still streaming?");
@@ -71,7 +73,7 @@ test(
       await api.expectCalled("POST /agenttrees/{tree}/chat");
     });
 
-    await test.step("sign out discards the token and returns to login", async () => {
+    await step("sign out discards the token and returns to login", async () => {
       await page.getByRole("button", { name: "Sign out" }).click();
       await page.waitForURL(/\/login/);
       await expect(page.getByText("Sign in to continue")).toBeVisible();

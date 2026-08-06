@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 13 — the last numbered journey in the Phase-2 test
 // deliverable list (skein-phases.md:98) is the "authoring/PR loop", which is
@@ -26,10 +27,11 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
   page,
   api,
 }) => {
+  const step = filmed(page, "Journey 13", 5);
   await page.goto("/eval");
   await expect(page.getByRole("heading", { name: "Eval workbench" })).toBeVisible();
 
-  await test.step("rubrics: create one, then save a second version of it", async () => {
+  await step("rubrics: create one, then save a second version of it", async () => {
     await page.getByRole("tab", { name: "Rubrics" }).click();
     // A rubric IS its scoring prompt — both fields are required to create one.
     await page.getByLabel("Rubric prompt").fill("Score 0-1: is the reply helpful?");
@@ -47,7 +49,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await expect(page.getByTestId("rubric-notice")).toBeVisible();
   });
 
-  await test.step("cases: hand-craft one with a reference answer", async () => {
+  await step("cases: hand-craft one with a reference answer", async () => {
     await page.getByRole("tab", { name: "Cases" }).click();
     await page.getByRole("button", { name: "+ New case" }).click();
     await page.getByLabel("Input (prompt)").fill("Do you price match a competitor?");
@@ -58,7 +60,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await expect(page.locator('[data-testid^="case-row-"]').first()).toBeVisible();
   });
 
-  await test.step("judge the case against the rubric; history is append-only", async () => {
+  await step("judge the case against the rubric; history is append-only", async () => {
     await page.getByRole("combobox", { name: "Rubric" }).click();
     await page.getByRole("option", { name: /Workbench rubric/ }).click();
     await page.getByRole("combobox", { name: "Judge model" }).click();
@@ -79,7 +81,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await api.expectCalled("GET /eval/judgments");
   });
 
-  await test.step("import a spreadsheet into a brand-new set", async () => {
+  await step("import a spreadsheet into a brand-new set", async () => {
     await page.getByRole("button", { name: "⇪ Import" }).click();
     // Scoped to the modal: the case editor behind it has same-named fields.
     const modal = page.getByRole("dialog");
@@ -110,7 +112,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await modal.getByRole("button", { name: "Close" }).click();
   });
 
-  await test.step("sets: the imported set exists and membership versions append", async () => {
+  await step("sets: the imported set exists and membership versions append", async () => {
     await page.getByRole("tab", { name: "Sets" }).click();
     await api.expectCalled("GET /eval/sets");
     const row = page.locator('[data-testid^="set-row-"]', { hasText: "Imported policy cases" });
@@ -124,13 +126,14 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
 });
 
 test("inspector → casebook → eval set + replay suite", async ({ page, request, api }) => {
+  const step = filmed(page, "Journey 13", 4);
   // Real traffic to notice: a machine-origin conversation, exactly what the
   // generator drips in (mock/generator.py).
   const noticed = await seedChat(request, "Inspector journey: refund denied", {
     origin: "machine",
   });
 
-  await test.step("Inspector lists conversations across users", async () => {
+  await step("Inspector lists conversations across users", async () => {
     await page.goto("/");
     await page.getByRole("link", { name: "Inspector" }).click();
     await page.waitForURL(/\/inspector/);
@@ -139,7 +142,7 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     await expect(page.getByTestId("inspector-count")).toContainText("conversations");
   });
 
-  await test.step("read a conversation and collect a turn into a new casebook", async () => {
+  await step("read a conversation and collect a turn into a new casebook", async () => {
     await page
       .getByTestId("inspector-row")
       .filter({ hasText: "Inspector journey" })
@@ -154,7 +157,7 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     await expect(page.getByTestId("collect-done")).toBeVisible();
   });
 
-  await test.step("the casebook becomes an eval set", async () => {
+  await step("the casebook becomes an eval set", async () => {
     await page.goto("/casebooks");
     await api.expectCalled("GET /casebooks");
     await page.getByTestId("casebook-row").filter({ hasText: "Journey casebook" }).click();
@@ -165,7 +168,7 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     await expect(page.getByTestId("casebook-set-created")).toBeVisible();
   });
 
-  await test.step("and a replay suite: the same turns re-fired as a run", async () => {
+  await step("and a replay suite: the same turns re-fired as a run", async () => {
     await page.getByRole("button", { name: "Replay", exact: true }).click();
     await api.expectCalled("POST /casebooks/{casebook}/replay");
     const accepted = page.getByTestId("casebook-replay-accepted");

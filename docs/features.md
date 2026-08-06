@@ -50,7 +50,7 @@
 - ✅ Control who can view, tune, or evaluate each agent tree; disable a tree so new work stops but history stays readable
 - ⏳ Keep the hosted demo's data across restarts — SQLite replicated to object storage
 - ✅ Trust every release — the full end-to-end suite walks every journey in both auth modes (`npm run e2e`)
-- ⏳ Watch the tests instead of reading them — recorded films of each journey, pass/fail
+- ✅ Watch the tests instead of reading them — `npm run e2e:record` films every journey with an on-screen step caption, into Playwright's own report
 - 🗓️ Choose the context a replay runs under — original / today / custom — and replay recorded tool results so only your change varies
 - 🗓️ Tune the demo generator's pace from Settings
 - 🗓️ Manage what the app remembers per agent tree — view, edit, clear

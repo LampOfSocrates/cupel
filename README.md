@@ -78,6 +78,7 @@ You can also switch targets live in Settings → Backend without restarting.
 | `npm run e2e` | full Playwright suite — every journey, both auth modes |
 | `npm run e2e:smoke` | the fast Playwright smoke subset only |
 | `npm run e2e:auth` | just the `AUTH_MODE=on` journeys |
+| `npm run e2e:record` | film the journeys into Playwright's HTML report |
 | `npm run ready -- <openapi>` | check a backend against the contract |
 
 ## End-to-end suite
@@ -124,6 +125,34 @@ Both passes boot their own mock and vite on a scratch SQLite
 (`playwright.config.ts`), never the dev DB, and load the deterministic
 generator dataset (seed 42) so journeys that need pre-existing data get the
 same data every run.
+
+### Watch the journeys — `npm run e2e:record`
+
+`npm run e2e:record` replays the 13 journey specs (not the smoke/DoD/mobile
+walks) under Playwright's `record` project — video on, trace on, a 300ms
+`slowMo`, and the mock running ~3× slower so replies actually stream on camera.
+Each named `test.step` also paints a caption into the page —
+`Journey 5 · Step 2/4 — queue: cells and SCORES both stream into the grid` — so
+a film narrates itself if it is watched outside the report. The caption sits in
+a closed shadow root (`e2e/helpers/hud.ts`, ~40 lines) that no locator can see,
+and it paints only under the `record` project: `npm run e2e` is unchanged.
+
+The run leaves Playwright's own HTML report — **that is the review gallery**,
+one row per journey with its film, its end screenshot and its step-by-step
+trace:
+
+```
+npx playwright show-report      # films are in playwright-report/data/*.webm
+```
+
+A film is **evidence, not verification**: the assertions decide pass/fail, the
+video only shows what happened while they ran. Everything the run writes
+(`playwright-report/`, `test-results/`, `blob-report/`) is gitignored.
+
+Filming the whole set takes about 3 minutes and produces ~16 clips of 5–16s
+(~5MB of video, ~67MB of report including traces). The full product version of
+this — a journeys.yaml contract, cursor rendering, chapters, a standalone CLI,
+hosted runs — is Phase 4 "Reels", not this.
 
 ## Deployment
 

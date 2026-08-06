@@ -1,5 +1,6 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 8 (feature-spec.md:213):
 // "Trace: ⌁ opens tree + waterfall, span drawer lazy-loads payload, totals
@@ -14,6 +15,7 @@ test("trace: ⌁ → call tree + waterfall → span drawer lazy-loads its payloa
   request,
   api,
 }) => {
+  const step = filmed(page, "Journey 8", 5);
   const chat = await seedChat(request, CONV);
 
   // The totals the header must match, straight from the contract response.
@@ -26,14 +28,14 @@ test("trace: ⌁ → call tree + waterfall → span drawer lazy-loads its payloa
   const { totals, spans } = await traceRes.json();
   expect(spans.length).toBeGreaterThan(0);
 
-  await test.step("⌁ on a turn opens its trace", async () => {
+  await step("⌁ on a turn opens its trace", async () => {
     await page.goto(`/chat/${chat.conversationId}`);
     await page.getByTestId("transcript").getByRole("button", { name: "Open trace" }).click();
     await page.waitForURL(/\/trace\//);
     await api.expectCalled("GET /agenttrees/{tree}/turns/{turn}/trace");
   });
 
-  await test.step("totals in the header match the seeded trace exactly", async () => {
+  await step("totals in the header match the seeded trace exactly", async () => {
     // "Trace · <turn> · 4.9s · 6410→1240 tok · $0.0110" (sketch 08).
     const header = page.getByRole("heading", { level: 4 });
     await expect(header).toContainText(`Trace · ${chat.turnId}`);
@@ -42,13 +44,13 @@ test("trace: ⌁ → call tree + waterfall → span drawer lazy-loads its payloa
     await expect(page.getByTestId("envelope-chip")).toBeVisible();
   });
 
-  await test.step("call tree and waterfall both render every span", async () => {
+  await step("call tree and waterfall both render every span", async () => {
     await expect(page.getByTestId("call-tree")).toBeVisible();
     await expect(page.getByTestId("waterfall")).toBeVisible();
     await expect(page.locator('[data-testid^="wf-bar-"]')).toHaveCount(spans.length);
   });
 
-  await test.step("the span payload is LAZY — fetched only when a span is opened", async () => {
+  await step("the span payload is LAZY — fetched only when a span is opened", async () => {
     api.expectNotCalled("GET /spans/{id}/payload");
     await page.getByTestId("call-tree").getByRole("button").last().click();
     await expect(page.getByTestId("span-drawer")).toBeVisible();
@@ -59,7 +61,7 @@ test("trace: ⌁ → call tree + waterfall → span drawer lazy-loads its payloa
     await expect(page.getByTestId("span-model")).toBeVisible();
   });
 
-  await test.step("the waterfall selects the same spans", async () => {
+  await step("the waterfall selects the same spans", async () => {
     await page.keyboard.press("Escape");
     const bar = page.getByTestId("wf-bar-0");
     await bar.click();

@@ -55,7 +55,7 @@
 - [x] P2-CHATUX Chat feedback comment + clipboard paste — (a) 👍/👎 opens an optional comment box; the comment stores as Judgment.reasoning on the type:human judgment (additive contract change: FeedbackRequest.comment) and renders beneath that assistant turn, surviving reload; NOT a Turn (turns are what gets replayed/judged/traced — user agreed 2026-08-06). (b) paste images/files from the clipboard into the composer, reusing the existing /upload + chip flow (no onPaste handler exists today)  [deps: none]
 - [x] P2-MSW Full MSW parity for unit tests
 - [x] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
-- [ ] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
+- [x] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
 
 ## ══ FULL STOP after Phase 2 (user decision 2026-08-05, amended 08-06) ══

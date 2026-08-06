@@ -1,5 +1,6 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { awaitTask, seedChat, seedReplay } from "./helpers/seed";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 6 (feature-spec.md:211):
 // "Queue: parent/child progress via SSE, cancel cascades, injected failure →
@@ -21,7 +22,8 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
   request,
   api,
 }) => {
-  await test.step("a big batch shows live parent + child progress", async () => {
+  const step = filmed(page, "Journey 6", 3);
+  await step("a big batch shows live parent + child progress", async () => {
     // Enough work that the batch is genuinely in flight while we watch it —
     // the deterministic seed dataset (global-setup) supplies the conversations.
     const list = await request.get(`${API_ORIGIN}/agenttrees/agent1/conversations`);
@@ -76,7 +78,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
   ]);
   const failRow = page.getByTestId(`task-${failRun.task_id}`);
 
-  await test.step("an injected failure fails one child, not the batch", async () => {
+  await step("an injected failure fails one child, not the batch", async () => {
     await awaitTask(request, failRun.task_id);
     await page.goto("/queue");
     await failRow.getByRole("button", { name: "Toggle children of Replay" }).click();
@@ -85,7 +87,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
     await expect(failRow).toContainText("done");
   });
 
-  await test.step("retry-failed re-runs just the failure, and it succeeds", async () => {
+  await step("retry-failed re-runs just the failure, and it succeeds", async () => {
     api.clear();
     await failRow.getByRole("button", { name: "Retry failed" }).click();
     await api.expectCalled("POST /tasks/{id}/retry-failed");

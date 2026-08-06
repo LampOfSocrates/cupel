@@ -20,6 +20,12 @@ if (!process.env.SKEIN_E2E_SCRATCH_READY) {
   process.env.SKEIN_E2E_SCRATCH_READY = "1";
 }
 
+// P2-RECORD — `npm run e2e:record` (scripts/e2e-record.mjs) sets this. It picks
+// the `record` project AND swaps the reporter: two passes write blob shards
+// that merge into ONE built-in HTML report, which is the review gallery. The
+// normal suites never see it.
+const RECORDING = process.env.SKEIN_E2E_RECORD === "1";
+
 export default defineConfig({
   testDir: "e2e",
   // P2-E2E — the deterministic generator dataset (seed 42), loaded once the
@@ -30,12 +36,38 @@ export default defineConfig({
   fullyParallel: false,
   timeout: 180_000,
   expect: { timeout: 15_000 },
-  reporter: [["list"]],
+  reporter: RECORDING ? [["list"], ["blob"]] : [["list"]],
   use: {
     baseURL: "http://localhost:5173",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    // The normal suites. Every npm script pins --project=chromium so adding a
+    // second project below cannot silently double their work.
+    { name: "chromium", use: { browserName: "chromium" } },
+    {
+      // P2-RECORD — the film rig. Same browser, same specs; only the capture
+      // settings and the pace differ.
+      name: "record",
+      use: {
+        browserName: "chromium",
+        // Keep every film, passing or not — a green run is the point.
+        video: "on",
+        // `on` (not retain-on-failure) so the HTML report doubles as a
+        // step-by-step trace viewer next to each video.
+        trace: "on",
+        screenshot: "on",
+        // 300ms per browser operation. Below ~150 the clicks read as jump
+        // cuts; much above this a 9-step journey outlasts anyone's patience.
+        // The step captions get their own dwell (e2e/helpers/hud.ts).
+        launchOptions: { slowMo: 300 },
+      },
+      // slowMo taxes every action and every assertion retry, so the record
+      // project gets its own budget rather than inflating the normal one.
+      timeout: 600_000,
+      expect: { timeout: 30_000 },
+    },
+  ],
   webServer: [
     {
       command: "python -m uvicorn mock.main:app --port 4010",
@@ -46,8 +78,15 @@ export default defineConfig({
         SKEIN_MOCK_DB: path.join(scratchDir, "mock.sqlite"),
         // Faster than dev defaults (mock/config.py:17-18) but slow enough
         // that the smoke test can observe tokens streaming before `done`.
-        MOCK_TOKEN_DELAY: "0.01",
-        MOCK_STEP_DELAY: "0.03",
+        //
+        // P2-RECORD films run the mock ~3x slower. Two reasons, both about the
+        // browser being slower under slowMo + video + trace: a reply that
+        // materialises in one frame is a bad film, and a replay that finishes
+        // server-side BEFORE the run page mounts skips RunDetailPage's
+        // auto-judge (it fires only on a live non-terminal → done transition,
+        // RunDetailPage.tsx:156-159), which journey 5 films.
+        MOCK_TOKEN_DELAY: RECORDING ? "0.03" : "0.01",
+        MOCK_STEP_DELAY: RECORDING ? "0.09" : "0.03",
         // P2-E2E failure injection (mock/config.py fail_marker): the FIRST
         // attempt at any batch child whose payload mentions this string fails,
         // the retry succeeds. Inert unless a spec deliberately puts the marker

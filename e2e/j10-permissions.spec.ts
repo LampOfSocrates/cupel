@@ -1,6 +1,7 @@
 import { API_ORIGIN, expect, test } from "./helpers/api";
 import { signInApi } from "./helpers/seed";
 import { signIn } from "./helpers/auth";
+import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 10 (feature-spec.md:215):
 // "Permissions: second seeded tree hidden for restricted test user"
@@ -18,7 +19,8 @@ test(
   "permissions: agent2 is invisible to the restricted user, and a matrix edit takes effect",
   { tag: "@auth-on" },
   async ({ page, request, api }) => {
-    await test.step("restricted@demo sees agent1 only — agent2 never renders", async () => {
+    const step = filmed(page, "Journey 10", 5);
+    await step("restricted@demo sees agent1 only — agent2 never renders", async () => {
       await page.goto("/");
       await page.waitForURL(/\/login/);
       await signIn(page, "restricted@demo");
@@ -39,7 +41,7 @@ test(
       expect(denied.status()).toBe(404);
     });
 
-    await test.step("no admin role → no Members section, and the API refuses too", async () => {
+    await step("no admin role → no Members section, and the API refuses too", async () => {
       await page.goto("/settings");
       await expect(page.getByText("Backend", { exact: true })).toBeVisible();
       await expect(page.getByText("Members", { exact: true })).toHaveCount(0);
@@ -51,7 +53,7 @@ test(
       expect((await forbidden.json()).code).toBe("forbidden");
     });
 
-    await test.step("as admin, the Members matrix shows the seeded rights", async () => {
+    await step("as admin, the Members matrix shows the seeded rights", async () => {
       await page.getByRole("button", { name: "Sign out" }).click();
       await page.waitForURL(/\/login/);
       await signIn(page, "admin@demo");
@@ -66,7 +68,7 @@ test(
       await expect(page.getByLabel("restricted@demo agent1 tune")).not.toBeChecked();
     });
 
-    await test.step("granting `tune` takes effect on the user's next request", async () => {
+    await step("granting `tune` takes effect on the user's next request", async () => {
       api.clear();
       await page.getByLabel("restricted@demo agent1 tune").check();
       await api.expectCalled("PUT /admin/users/{user}/permissions");
@@ -79,7 +81,7 @@ test(
       expect((await me.json()).permissions.agent1).toContain("tune");
     });
 
-    await test.step("revoking it takes effect the same way (state restored)", async () => {
+    await step("revoking it takes effect the same way (state restored)", async () => {
       await page.getByLabel("restricted@demo agent1 tune").uncheck();
       await api.expectCalled("PUT /admin/users/{user}/permissions", 2);
       await expect(page.getByLabel("restricted@demo agent1 tune")).not.toBeChecked();
