@@ -63,6 +63,9 @@
 ## Next: a UX polish phase, desktop-first, planned WITH the user before any task runs.
 ## The UX phase absorbs review bucket B (docs/review-2026-08-05.md) and the
 ## user-approved "whitelabel-lite" candidate (npm run init + product.label wiring).
+## UX-phase item raised by P2-T12a: there is NO tree switcher in the UI — the app has one
+## active tree from config, so cross-tree results (e.g. a casebook replay spanning trees)
+## can only be linked for the active tree. Needs a real tree selector in the shell.
 ## Phase 3 begins only after the UX phase closes and the user says so.
 
 ## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
