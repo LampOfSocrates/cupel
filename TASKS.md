@@ -53,17 +53,24 @@
 - [x] P2-DEVSTART One-command start + explicit local-mock flag — agentic.config.ts `localMock {enabled, port, dbPath}`; `npm start` boots UI + mock per the flag with a startup banner naming the backend AND its storage mode/location; adopters flip enabled:false and their own backend holds persistence (user decision 2026-08-06)  [deps: none]
 - [ ] P2-PERSIST Mock storage modes — SKEIN_STORAGE=local|s3; local = plain SQLite file (dev machine); s3 = Litestream continuous replication to an S3-compatible bucket (Cloudflare R2 or AWS) with restore-on-boot, for the hosted demo where the mock IS the whole backend on ephemeral disk. Seed-on-boot becomes seed-only-if-empty; document the single-writer constraint loudly; banner + /healthz report the active mode (user decision 2026-08-06)  [deps: none]
 - [ ] P2-MSW Full MSW parity for unit tests
-- [ ] P2-T19b k8s manifests + Helm post-upgrade Playwright job (artifacts + local validation; no live cluster)  [deps: E2E suite]
 - [ ] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
 - [ ] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
 
-## Phase 3 — deferred features (moved out of Phase 2 by user decision 2026-08-06).
+## ══ FULL STOP after Phase 2 (user decision 2026-08-05, amended 08-06) ══
+## When the last Phase-2 box is ticked, STOP. Do not start Phase 3.
+## Next: a UX polish phase, desktop-first, planned WITH the user before any task runs.
+## The UX phase absorbs review bucket B (docs/review-2026-08-05.md) and the
+## user-approved "whitelabel-lite" candidate (npm run init + product.label wiring).
+## Phase 3 begins only after the UX phase closes and the user says so.
+
+## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
 ## NOTE: this is NOT the original "Phase 3 = create-agentic-app scaffolder", which stays parked (see below).
-## Contract support for all three already shipped in v0.3.0 — these are implementation only.
+## Contract support for CTX/GEN/MEM already shipped in v0.3.0 — those are implementation only.
 - [ ] P3-CTX Context policy widening — frozen/today/custom + fallback for envelope-less turns + recorded-tools playback (extend sketch 03)  [deps: P2-T00]
 - [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
 - [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
+- [ ] P3-K8S k8s manifests + Helm post-upgrade Playwright job that gates the release (artifacts + local validation; no live cluster)  [deps: P2-E2E] (moved from Phase 2 by user decision 2026-08-06)
 
 ## Phase 4 — PRO tier (user decision 2026-08-06: the pro shelf becomes Phase 4).
 ## NOT scheduled — do NOT build any of this during Phases 2-3 or the UX phase.
@@ -73,8 +80,6 @@
 - [ ] P4-REELS "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-RECORD ships only the minimal recording rig; this is the product.
 - [ ] P4-HYBRID "Hybrid backend fill" — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins).
 
-## After Phase 3 (user decision 2026-08-05, amended 08-06): FULL STOP on new features.
-## No create-agentic-app scaffolder (the ORIGINAL Phase 3) and no hosted multi-tenant platform (the ORIGINAL Phase 4) — both remain parked indefinitely.
-## Next focus after the free phases close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
-## UX-phase candidate (user-approved 2026-08-05): "whitelabel-lite" — npm run init (asks name/label/backend, writes agentic.config.ts) + wire product.label through all UI strings; the full scaffolder stays parked.
-## UX phase also absorbs review bucket B (docs/review-2026-08-05.md); bucket C = a future contract v0.4.0; bucket D = persistence docs.
+## Parked indefinitely: the ORIGINAL Phase 3 (create-agentic-app scaffolder) and the
+## ORIGINAL Phase 4 (hosted multi-tenant platform). Neither is on any roadmap.
+## Review buckets: B = the UX phase · C = a future contract v0.4.0 · D = persistence docs.
