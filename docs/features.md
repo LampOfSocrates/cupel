@@ -53,6 +53,8 @@
 - 🗓️ Tune the demo generator's pace from Settings
 - 🗓️ Manage what the app remembers per agent tree — view, edit, clear
 - 🗓️ Deploy to Kubernetes with a Helm-gated test job that blocks a bad release
+- 🗓️ Drive any conformant backend from the terminal — `skein-cli chat`, `replay`, `run --watch`, `tasks --watch`, `--json` for scripts
+- 🗓️ Generate your own project from this repo — `skein create-agentic-app --name myapp --mybackend <your-openapi>`, with the bundled mock filling whatever your backend doesn't implement yet
 
 ## Pro tier (Phase 4)
 
@@ -63,4 +65,4 @@
 
 ---
 
-**Not planned:** a project scaffolder (`create-agentic-app`) and a hosted multi-tenant platform. Skein is a repo you clone, configure in one file, and run.
+**Not planned:** a hosted multi-tenant platform. Skein is a repo you clone, configure in one file, and run — or generate a project from, once the Phase-3 CLIs land.
