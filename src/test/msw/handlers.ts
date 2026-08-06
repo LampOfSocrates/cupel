@@ -1,4 +1,22 @@
-// MSW handlers derived from openapi.yaml v0.2.0 — reused by later tasks.
+// MSW handlers — the fake backend every ui-project test runs against.
+//
+// P2-MSW made the agreement with openapi.yaml v0.3.0 MACHINE-CHECKED rather
+// than by-hand: parity.test.ts (same folder) exercises every method on
+// src/api/client.ts through these handlers and validates each response
+// against the contract schema the operation declares. Read that file before
+// adding a handler — a new api.* method with no exercise, an invented route,
+// a missing required key, an undeclared status or an out-of-enum value all
+// fail there. Contract operations the UI cannot reach are deliberately NOT
+// faked; each is listed with a reason in that file's UNEXERCISED_OPS.
+//
+// Behavioural rules the handlers mirror from the reference implementation
+// (mock/main.py), because a UI test can lean on any of them: append-only
+// judgments/versions with latest-version-wins reads, newest-first collections,
+// idempotent casebook item add, 404-never-403 for absent or unpermitted trees,
+// and the 409 tree_disabled write set. Deliberate divergences are marked
+// "DELIBERATE DIVERGENCE" at the handler that makes them.
+//
+// Originally derived from openapi.yaml v0.2.0 — reused by later tasks.
 // Covers: GET /me (openapi.yaml:62), GET /agenttrees (:115), GET /models (:98),
 // GET /agenttrees/{tree}/conversations (:335, params search/page/page_size/
 // forks_of/agent_id/origin), GET/PATCH/DELETE .../conversations/{id} (:387),
@@ -312,6 +330,58 @@ function findAgent(tree: string, agentId: string): Agent | undefined {
   return mockAgents[tree]?.find((a) => a.id === agentId);
 }
 
+// ------------------------------------------------------- tree access gates
+// P2-MSW: the two tree rules the real backend centralises in middleware
+// (mock/main.py AuthGate + need_tree/need_enabled_tree). MSW enforced neither
+// before, so a page could "work" against a tree the server would refuse.
+//
+// notFoundTree: an absent tree AND a tree the caller cannot view both answer
+// 404 not_found — "unpermitted trees never render", never 403
+// (openapi.yaml NotFound: "Resource not found (or tree not permitted)";
+// mock/main.py:116-119, :161-164). mockMe grants view on agent1 + agent2, so
+// this is invisible to every existing test and only bites on a bad tree id.
+export function treeGate(tree: string): Response | null {
+  const known = mockTrees.some((t) => t.id === tree);
+  const permitted = (mockMe.permissions[tree] ?? []).includes("view");
+  if (known && permitted) return null;
+  return HttpResponse.json(
+    { code: "not_found", message: `Agent tree '${tree}' not found.` },
+    { status: 404 },
+  );
+}
+
+// enabledTreeGate: treeGate, then the P2-T07c disable gate for NEW WORK — a
+// disabled tree answers 409 tree_disabled while every read keeps working
+// ("existing conversations stay READABLE", feature-spec.md:20). The blocked
+// set mirrors mock/main.py:426-441 exactly: chat, replay, replay/turn,
+// judge-on-a-run-of-this-tree, create agent, PUT instructions, POST snapshots,
+// PUT last-selection, and conversation rename/delete. POST /feedback is NOT in
+// the set — a thumb annotates existing history, it creates no new work.
+// 404 (absent tree) wins over 409, as in the real mock.
+//
+// KNOWN CONTRACT GAP (P2-MSW, deliberate divergence): openapi.yaml v0.3.0
+// declares 409 on only five of these — chat, replay, replay/turn, /eval/judge
+// and casebook replay. The other six (POST agents, PUT instructions, POST
+// snapshots, PUT last-selection, PATCH/DELETE conversation) emit an
+// UNDECLARED 409 in mock/main.py:784-932. MSW follows the reference
+// implementation rather than the under-declared contract, because the
+// behaviour is the specified one (feature-spec.md:20 "history is read-only").
+// Pinned by a test in parity.test.ts so a v0.4.0 contract fix retires it.
+export function enabledTreeGate(tree: string): Response | null {
+  const missing = treeGate(tree);
+  if (missing) return missing;
+  if (mockTrees.find((t) => t.id === tree)?.enabled === false) {
+    return HttpResponse.json(
+      {
+        code: "tree_disabled",
+        message: `Agent tree '${tree}' is disabled — history is read-only.`,
+      },
+      { status: 409 },
+    );
+  }
+  return null;
+}
+
 const envelope = {
   system_date: "2026-08-02",
   timezone: "Europe/London",
@@ -585,6 +655,10 @@ function seedEvalCases(): Record<string, EvalCase> {
       output: "Refunds arrive within 3 business days.",
       reference: null,
       source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+      // P2-MSW: cases are versioned append-only server-side and every stored
+      // case carries one (mock/main.py:1477 ORDER BY version DESC) — the
+      // fixture omitted it, so a PUT's "version + 1" had nothing to build on.
+      version: 1,
       created_at: "2026-08-03T12:05:00Z",
     },
   };
@@ -1380,10 +1454,9 @@ export const handlers = [
   // GET /agenttrees/{tree}/endpoints — "Deploy targets for replay"
   // (openapi.yaml:158; feature-spec.md:121).
   http.get(`${BASE}/agenttrees/:tree/endpoints`, ({ params }) => {
-    const endpoints = mockEndpoints[params.tree as string];
-    if (!endpoints) {
-      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
-    }
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
+    const endpoints = mockEndpoints[params.tree as string] ?? [];
     endpointsRequests.push(params.tree as string);
     return HttpResponse.json(endpoints);
   }),
@@ -1400,11 +1473,9 @@ export const handlers = [
   // GET /agenttrees/{tree}/agents — "Flat list of agents with parent links
   // (root has parent_id null)" (openapi.yaml:188).
   http.get(`${BASE}/agenttrees/:tree/agents`, ({ params }) => {
-    const agents = mockAgents[params.tree as string];
-    if (!agents) {
-      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
-    }
-    return HttpResponse.json(agents);
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
+    return HttpResponse.json(mockAgents[params.tree as string] ?? []);
   }),
 
   // POST /agenttrees/{tree}/agents — 201 "The created agent (live_version 0
@@ -1413,10 +1484,9 @@ export const handlers = [
   http.post(`${BASE}/agenttrees/:tree/agents`, async ({ params, request }) => {
     const body = (await request.json()) as AgentCreate;
     agentCreateRequests.push(body);
-    const agents = mockAgents[params.tree as string];
-    if (!agents) {
-      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
-    }
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
+    const agents = (mockAgents[params.tree as string] ??= []);
     const agent: Agent = {
       id: `ag-new-${++agentCounter}`,
       name: body.name,
@@ -1434,6 +1504,8 @@ export const handlers = [
   // (for diff/rollback)" (openapi.yaml:235). Agents with no saved versions
   // yet get live_version 0 + empty versions (openapi.yaml:215).
   http.get(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, ({ params }) => {
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
       return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
@@ -1451,6 +1523,8 @@ export const handlers = [
   // (openapi.yaml:243); 201 = "The newly created version (now live)" (:262);
   // snapshot_id promotes a draft (:245-249) → promoted_from_snapshot_id set.
   http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, async ({ params, request }) => {
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
       return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
@@ -1482,6 +1556,8 @@ export const handlers = [
   // format "v15-draft (a3f2)" (openapi.yaml:1237, feature-spec.md:86); ids
   // mirror the real mock's 4-char form (mock/main.py:275).
   http.post(`${BASE}/agenttrees/:tree/agents/:agentId/snapshots`, async ({ params, request }) => {
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
       return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
@@ -1502,6 +1578,8 @@ export const handlers = [
   // GET .../last-selection — "Remembered selection (empty items = first-time
   // testing)" (openapi.yaml:309-311).
   http.get(`${BASE}/agenttrees/:tree/agents/:agentId/last-selection`, ({ params }) => {
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
       return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
@@ -1512,6 +1590,8 @@ export const handlers = [
   // PUT .../last-selection — "Remember the conversation selection for this
   // agent" (openapi.yaml:315-317); 200 → "Stored selection" (:329).
   http.put(`${BASE}/agenttrees/:tree/agents/:agentId/last-selection`, async ({ params, request }) => {
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
       return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
@@ -1704,9 +1784,11 @@ export const handlers = [
     );
   }),
 
-  http.get(`${BASE}/agenttrees/:tree/conversations`, ({ request }) => {
+  http.get(`${BASE}/agenttrees/:tree/conversations`, ({ params, request }) => {
     const url = new URL(request.url);
     conversationRequests.push(url);
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const forksOf = url.searchParams.get("forks_of");
     const search = url.searchParams.get("search")?.toLowerCase();
     const page = Number(url.searchParams.get("page") ?? 1);
@@ -1718,6 +1800,9 @@ export const handlers = [
     const agentId = url.searchParams.get("agent_id");
     if (agentId) items = items.filter((c) => c.agent_id === agentId);
     if (search) items = items.filter((c) => c.title.toLowerCase().includes(search));
+    // P2-MSW: server-side sort (openapi.yaml:381; mock/main.py:754, :910
+    // ORDER BY last_activity_at DESC) — not a property of the fixture order.
+    items = items.slice().sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
     const total = items.length;
     items = items.slice((page - 1) * pageSize, page * pageSize);
     // Listing strips full turns? Contract includes turns in listings
@@ -1726,6 +1811,8 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const all = [...mockRoots, ...Object.values(mockForks).flat()];
     const found = all.find((c) => c.id === params.id);
     if (!found) {
@@ -1734,26 +1821,36 @@ export const handlers = [
     return HttpResponse.json(found);
   }),
 
+  // PATCH/DELETE are in the disable gate's write set: "history is read-only,
+  // not just readable" (mock/main.py:426-441).
   http.patch(`${BASE}/agenttrees/:tree/conversations/:id`, async ({ params, request }) => {
     const body = (await request.json()) as { title?: string };
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     const found = mockRoots.find((c) => c.id === params.id);
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
     }
+    // `turns` is optional on Conversation (openapi.yaml Conversation.required)
+    // and PATCH answers metadata only — JSON.stringify drops the undefined.
     return HttpResponse.json({ ...found, title: body.title ?? found.title, turns: undefined });
   }),
 
-  http.delete(`${BASE}/agenttrees/:tree/conversations/:id`, () =>
-    new HttpResponse(null, { status: 204 }),
-  ),
+  http.delete(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   // POST /agenttrees/{tree}/chat (openapi.yaml:452-521): stream=true → SSE
   // frames task/token/done/error; stream=false → single JSON ChatResponse.
   // Omitting conversation_id starts a new conversation (openapi.yaml:488).
-  http.post(`${BASE}/agenttrees/:tree/chat`, async ({ request }) => {
+  http.post(`${BASE}/agenttrees/:tree/chat`, async ({ params, request }) => {
     captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ChatRequest;
     chatRequests.push(body);
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     const isNew = !body.conversation_id;
     const convId = body.conversation_id ?? `c-new-${++newConvCounter}`;
     const taskId = `task-${convId}`;
@@ -1877,8 +1974,15 @@ export const handlers = [
       case_id: null,
       run_id: null,
       turn_id: body.message_id,
-      // Streamed turns aren't in the fixtures' turn lists — accept them with a
-      // null conversation_id rather than 404ing (the real mock enforces 404).
+      // DELIBERATE DIVERGENCE (kept, P2-MSW): the real mock 404s an unknown
+      // message_id (mock/main.py:1089). MSW accepts it with a null
+      // conversation_id because a JUST-STREAMED assistant turn only exists in
+      // the SSE frames — it was never added to the conversation fixtures — and
+      // thumbing it is the single most-tested chat interaction. Narrow and
+      // safe: the divergence only makes MSW more permissive on a field the UI
+      // does not read back. Note POST /feedback is deliberately NOT in the
+      // tree_disabled write set (mock/main.py:426-441 "a thumb annotates
+      // existing history"), which MSW matches exactly.
       conversation_id: owner?.id ?? null,
       type: "human",
       judge_model: null,
@@ -2114,6 +2218,17 @@ export const handlers = [
         { status: 422 },
       );
     }
+    // P2-T07c disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
+    // judging is blocked when the RUN'S tree is disabled; case_ids/set_id
+    // judging is NOT tree-gated (eval cases are global, feature-spec.md:115).
+    if (body.run_id) {
+      const run = mockRuns.find((r) => r.id === body.run_id);
+      if (!run) {
+        return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+      }
+      const denied = enabledTreeGate(run.tree_id);
+      if (denied) return denied;
+    }
     return HttpResponse.json({ task_id: `task-judge-${++judgeCounter}` }, { status: 202 });
   }),
 
@@ -2136,6 +2251,8 @@ export const handlers = [
     captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ReplayTurnRequest;
     replayTurnRequests.push({ tree: params.tree as string, body });
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
       return HttpResponse.json(
         { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1570-1574)." },
@@ -2224,6 +2341,8 @@ export const handlers = [
     captureLlmHeaders(request); // P1-T18c
     const body = (await request.json()) as ReplayRequest;
     replayRequests.push({ tree: params.tree as string, body });
+    const denied = enabledTreeGate(params.tree as string);
+    if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
       return HttpResponse.json(
         { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1540-1546)." },
@@ -2255,8 +2374,15 @@ export const handlers = [
   // (cells omitted; fetch a run for the grid)".
   http.get(`${BASE}/agenttrees/:tree/runs`, ({ params }) => {
     runListRequests.push(params.tree as string);
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
+    // P2-MSW: "Runs, newest first" is a SERVER rule (openapi.yaml:663;
+    // mock/main.py:1291 ORDER BY rowid DESC), so sort here rather than trust
+    // the fixture array's order. Stable — equal timestamps keep insert order.
     const items: RunSummaryItem[] = mockRuns
       .filter((r) => r.tree_id === params.tree)
+      .slice()
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map(({ id, tree_id, status, created_at, task_id, label }) => ({
         id,
         tree_id,
@@ -2271,6 +2397,8 @@ export const handlers = [
   // GET /agenttrees/{tree}/runs/{runId} (openapi.yaml:671-693) — full grid.
   http.get(`${BASE}/agenttrees/:tree/runs/:runId`, ({ params }) => {
     runDetailRequests.push(params.runId as string);
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const found = mockRuns.find((r) => r.id === params.runId);
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
@@ -2284,6 +2412,8 @@ export const handlers = [
   http.get(`${BASE}/agenttrees/:tree/turns/:turnId/trace`, ({ params }) => {
     const id = params.turnId as string;
     traceRequests.push(id);
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
     const found = mockTraces[id];
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "turn not found" }, { status: 404 });
@@ -2314,7 +2444,13 @@ export const handlers = [
     const limit = Number(url.searchParams.get("limit") ?? "50");
     let list: Task[] = parentId
       ? (mockTasks.find((t) => t.id === parentId)?.children ?? [])
-      : mockTasks.map(({ children: _children, ...task }) => task);
+      : mockTasks
+          .slice()
+          // "Tasks, newest first" (openapi.yaml:769; mock/main.py:1363 ORDER BY
+          // rowid DESC). Children keep insertion order, as in the real mock
+          // (mock/main.py:1405 ORDER BY rowid).
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .map(({ children: _children, ...task }) => task);
     if (status) list = list.filter((t) => t.status === status);
     return HttpResponse.json(list.slice(0, limit));
   }),
