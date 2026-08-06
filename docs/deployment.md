@@ -1,5 +1,23 @@
 # Phase-1 demo deployment (decided 2026-08-04)
 
+## The same mock, two roles (P2-DEVSTART, 2026-08-06)
+The FastAPI mock in `mock/` is used in two different ways — keep them apart
+when reading this document:
+- **On your machine**: the bundled DEMO BACKEND for local development. Boot it
+  with the UI in one command — `npm start` — which reads `localMock
+  {enabled, port, dbPath}` from `agentic.config.ts` (the one config artifact),
+  passes `dbPath` as `SKEIN_MOCK_DB`, and prints the backend and its storage
+  location at startup. Storage is a plain SQLite file on your filesystem
+  (`mock/skein-mock.sqlite`, git-ignored). See README.md.
+- **Deployed (this document)**: the mock IS the whole backend of the hosted
+  demo — it also serves the built bundle from the same origin. Everything
+  below is about that role.
+
+Adopters connecting Skein to their own backend set `localMock.enabled: false`
+and point `defaultTarget.dev` at their target; `npm start` then runs the UI
+only and their backend holds all persistence. `npm run dev` / `npm run mock`
+still exist for anyone who prefers two terminals.
+
 ## Host: Render free tier
 - One Docker container: FastAPI mock serves the API AND the built Vite bundle.
 - Free tier constraints, accepted:

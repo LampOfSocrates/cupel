@@ -60,6 +60,38 @@ export interface BackendTarget {
   adapter?: string;
 }
 
+/**
+ * The BUNDLED DEMO BACKEND — the FastAPI mock in `mock/` (P2-DEVSTART).
+ *
+ * `npm start` reads this block (scripts/dev.mjs) and, when `enabled`, boots
+ * the mock alongside the Vite dev server and prints what it is and where its
+ * data lives. It is a DEMO backend for local development: it keeps
+ * everything — conversations, runs, versions, judgments, uploads — in ONE
+ * SQLite file on this machine's filesystem (`dbPath`). Nothing is synced
+ * anywhere; delete the file and you are back to the seed.
+ *
+ * WHEN YOU CONNECT SKEIN TO YOUR OWN BACKEND: set `enabled: false` and point
+ * `defaultTarget.dev` at your target above. `npm start` then runs the UI
+ * only, and YOUR backend holds all persistence — Skein itself stores nothing
+ * server-side (the only client-side state is device-local: the chosen target,
+ * an auth token, a BYOK LLM key).
+ *
+ * NOT ONLY LOCAL: the hosted demo deployment (Render, docs/deployment.md)
+ * runs this same mock as its WHOLE backend — there it is the real thing, with
+ * its own storage mode. This block configures the local developer copy.
+ */
+export interface LocalMockConfig {
+  /** Boot the bundled demo backend as part of `npm start`. */
+  enabled: boolean;
+  /** Port it listens on. Must match the target you point the app at. */
+  port: number;
+  /**
+   * SQLite file, relative to the repo root — the mock's entire persistence
+   * (passed to the mock as SKEIN_MOCK_DB, mock/config.py:51). Git-ignored.
+   */
+  dbPath: string;
+}
+
 export interface AgenticConfig {
   /** Product identity — name for code/config, label for chrome/branding. */
   product: { name: string; label: string };
@@ -71,6 +103,8 @@ export interface AgenticConfig {
    * (preserving src/api/base.ts's original PROD-flag semantic).
    */
   defaultTarget: { dev: string; production: string };
+  /** The bundled demo backend `npm start` boots — see LocalMockConfig. */
+  localMock: LocalMockConfig;
 }
 
 export const agenticConfig: AgenticConfig = {
@@ -111,4 +145,12 @@ export const agenticConfig: AgenticConfig = {
   ],
 
   defaultTarget: { dev: "mock", production: "prod" },
+
+  // Bundled demo backend for local development — see LocalMockConfig above.
+  // Using your own backend? enabled: false + defaultTarget.dev = your target.
+  localMock: {
+    enabled: true,
+    port: 4010,
+    dbPath: "mock/skein-mock.sqlite",
+  },
 };

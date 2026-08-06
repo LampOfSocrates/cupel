@@ -8,6 +8,7 @@
   },
   "scripts": {
     "ready": "node scripts/skein-ready.mjs",
+    "start": "node scripts/dev.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -18,6 +19,9 @@
     "mock": "python -m uvicorn mock.main:app --port 4010",
     "simulate": "python -m mock.generator simulate",
     "test:mock": "python -m pytest mock/tests -q"
+  },
+  "engines": {
+    "node": ">=22.18"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",

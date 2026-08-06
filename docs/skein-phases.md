@@ -102,7 +102,9 @@ Full Playwright suite: checklist items 1–13 (shell, chat, runs, forks, judge, 
 
 ### Runnable at end of Phase 2
 ```
-npm run mock && npm run dev          # as Phase 1, now full contract
+npm start                            # ONE command: UI + bundled demo backend
+                                     # (agentic.config.ts localMock.enabled;
+                                     #  set false → UI only, your backend)
 npm run e2e                          # full suite, both auth modes
 npx skein-ready http://localhost:4010/openapi.json   # conformance: PASS
 # edit agentic.config.ts → add your backend → switch target in Settings
