@@ -6,7 +6,9 @@ FROM node:22-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html tsconfig.json vite.config.ts ./
+# agentic.config.ts is the one config artifact and src/ imports it (P2-CONFIG,
+# src/api/target.ts) — without it `vite build` fails with UNRESOLVED_IMPORT.
+COPY index.html tsconfig.json vite.config.ts agentic.config.ts ./
 COPY src ./src
 RUN npm run build
 
