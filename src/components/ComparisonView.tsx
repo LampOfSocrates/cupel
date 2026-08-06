@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { Badge, Group, Loader, Table, Text } from "@mantine/core";
 import { Markdown } from "../lib/markdown";
 import type { Run, RunCell, RunRow } from "../api/types";
@@ -33,17 +33,46 @@ interface Props {
   renderCellAction?: (cell: RunCell, ctx: CellContext) => ReactNode;
 }
 
-function CellContent({
-  cell,
-  ctx,
-  renderAnnotation,
-  renderCellAction,
-}: {
+interface CellProps {
   cell: RunCell;
   ctx: CellContext;
   renderAnnotation?: Props["renderAnnotation"];
   renderCellAction?: Props["renderCellAction"];
-}) {
+}
+
+// A live-filling grid refetches the WHOLE Run every ~300 ms
+// (RunDetailPage.tsx:239, the documented baseline), so every cell object
+// arrives with a fresh identity even when nothing about it changed — a default
+// shallow compare would never hit, and 360 unchanged cells would re-parse
+// their markdown three times a second (docs/review-2026-08-05.md A6). Compare
+// RunCell by value (openapi.yaml:1644-1664) plus the ctx primitives.
+// The render props must be referentially stable (useCallback at the call site)
+// for this to bite.
+function sameCell(a: CellProps, b: CellProps): boolean {
+  return (
+    a.cell.status === b.cell.status &&
+    a.cell.content === b.cell.content &&
+    a.cell.conversation_id === b.cell.conversation_id &&
+    a.cell.turn_id === b.cell.turn_id &&
+    a.cell.task_id === b.cell.task_id &&
+    a.cell.case_id === b.cell.case_id &&
+    a.cell.latest_score === b.cell.latest_score &&
+    a.cell.error === b.cell.error &&
+    a.ctx.rowIndex === b.ctx.rowIndex &&
+    a.ctx.columnIndex === b.ctx.columnIndex &&
+    a.ctx.source.conversation_id === b.ctx.source.conversation_id &&
+    a.ctx.source.turn_id === b.ctx.source.turn_id &&
+    a.renderAnnotation === b.renderAnnotation &&
+    a.renderCellAction === b.renderCellAction
+  );
+}
+
+const CellContent = memo(function CellContent({
+  cell,
+  ctx,
+  renderAnnotation,
+  renderCellAction,
+}: CellProps) {
   switch (cell.status) {
     case "pending":
       // pending spinner (task scope; sketch 04 shows spinners pre-fill)
@@ -72,7 +101,7 @@ function CellContent({
         </>
       );
   }
-}
+}, sameCell);
 
 export function ComparisonView({ run, renderAnnotation, renderCellAction }: Props) {
   return (

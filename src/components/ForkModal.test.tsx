@@ -44,8 +44,6 @@ function renderModal(
           refreshConversations: refreshSpy,
           models: mockModels,
           ensureModels: () => {},
-          chatSettings: {},
-          setChatSettings: () => {},
         }}
       >
         <MemoryRouter initialEntries={["/origin"]}>

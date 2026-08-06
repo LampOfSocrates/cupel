@@ -353,6 +353,22 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         user = request_user(request)
         return unj(user["roles"], []) if user else ["admin", "inspect"]
 
+    def permitted_trees(request: Request) -> set[str] | None:
+        """Trees the caller may view, or None for "every tree, present and
+        future". Same matrix GET /me and GET /agenttrees (:454-457) answer
+        with — a verified user gets their own permissions, an unverified
+        caller is the dev user, who holds view everywhere
+        (feature-spec.md:17). One code path, not a mode branch: the answer
+        comes from the permission matrix in both modes.
+
+        Used by the endpoints that address data OUTSIDE /agenttrees/{tree}/…,
+        where the AuthGate has no tree in the path to enforce on:
+        /tasks/stream and /spans/{id}/payload."""
+        user = request_user(request)
+        if not user:
+            return None
+        return {t for t, perms in unj(user["permissions"], {}).items() if "view" in perms}
+
     def need_admin(request: Request) -> None:
         """403 Forbidden unless the caller holds the admin role — "admin for
         /admin/* management" (openapi.yaml:1966-1970, code forbidden)."""
@@ -836,7 +852,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                 "content_type": att["content_type"], "size": att["size"],
                                 "url": None})
 
-        task = engine.create_task("chat")
+        task = engine.create_task("chat", tree_id=tree)
         inv, now = new_id("inv"), now_iso()
         user_turn_id, assistant_turn_id = new_id("turn"), new_id("turn")
         # Envelope stamped at receipt for inbound turns (openapi.yaml:31, :1322-1324).
@@ -975,7 +991,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             {"label": config_label(cfg, i), "config": cfg} for i, cfg in enumerate(configs)]
 
         parent = engine.create_task("replay", total=len(units) * len(configs),
-                                    payload={"result": None})
+                                    payload={"result": None}, tree_id=tree)
         register_live(parent["id"], request)
         row_specs = []
         for conv, rows in units:
@@ -1052,7 +1068,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         columns = [{"label": "baseline", "config": {}}] + [
             {"label": ep["name"], "config": {**cfg, "endpoint_ids": [ep["id"]]}} for ep in ep_rows]
-        parent = engine.create_task("replay_turn", total=len(ep_rows), payload={"result": None})
+        parent = engine.create_task("replay_turn", total=len(ep_rows),
+                                    payload={"result": None}, tree_id=tree)
         register_live(parent["id"], request)
         row = {"conversation_id": conv["id"], "turn_id": fork_turn["id"], "prompt": prompt,
                "envelope": unj(fork_turn["envelope"])}
@@ -1146,10 +1163,20 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         }
 
     @app.get("/spans/{spanId}/payload")
-    async def get_span_payload(spanId: str):
+    async def get_span_payload(spanId: str, request: Request):
+        """Span payloads hold full prompts and responses, and the path carries
+        no tree for the AuthGate to enforce on — so ownership is checked here
+        (docs/review-2026-08-05.md A3): the span's turn must live in a tree the
+        caller can view. Unpermitted answers 404, indistinguishable from
+        absent, like every other tree-scoped resource (openapi.yaml:1948)."""
         s = db.one("SELECT * FROM spans WHERE id = ?", (spanId,))
         if not s:
             err(404, "not_found", f"Span '{spanId}' not found.")
+        permitted = permitted_trees(request)
+        if permitted is not None:
+            turn = db.one("SELECT tree_id FROM turns WHERE id = ?", (s["turn_id"],))
+            if not turn or turn["tree_id"] not in permitted:
+                err(404, "not_found", f"Span '{spanId}' not found.")
         return {"span_id": s["id"], "prompt": s["prompt"], "response": s["response"],
                 "args": unj(s["args"]), "result": unj(s["result"])}
 
@@ -1172,16 +1199,31 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return [task_dict(t) for t in rows]
 
     @app.get("/tasks/stream", responses=SSE_RESPONSES)
-    async def stream_tasks():
+    async def stream_tasks(request: Request):
+        """One global channel (openapi.yaml:1183-1219 declares no parameters),
+        so every event is authorized per subscriber here
+        (docs/review-2026-08-05.md A2): judgments carry reasoning, spans carry
+        turn ids and task results carry conversation ids, none of which may
+        cross a permission boundary. Each event is published with its tree
+        (Broker.publish); a subscriber sees an event only if its tree is one
+        they hold view on. Events whose tree cannot be resolved are withheld
+        from limited callers rather than leaked.
+
+        Subscription-side filters (tree/run_id/task_id query params) are a
+        contract change and stay open for v0.4.0 (bucket C)."""
+        permitted = permitted_trees(request)
+
         async def gen():
             q = broker.subscribe()
             try:
                 yield ": connected\n\n"
                 while True:
                     try:
-                        event, data = await asyncio.wait_for(q.get(), timeout=15)
+                        event, data, tree_id = await asyncio.wait_for(q.get(), timeout=15)
                     except asyncio.TimeoutError:
                         yield ": keepalive\n\n"
+                        continue
+                    if permitted is not None and (tree_id is None or tree_id not in permitted):
                         continue
                     yield sse(event, data)
             finally:
@@ -1273,10 +1315,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             rubric = versions[-1]
 
         cases = []  # (case_id, run_id, turn_id, conversation_id)
+        run_tree = None
         if run_id:
             r = db.one("SELECT * FROM runs WHERE id = ?", (run_id,))
             if not r:
                 err(404, "not_found", f"Run '{run_id}' not found.")
+            run_tree = r["tree_id"]
             # P2-T07c disable rule for judge (cheapest honest rule, documented):
             # judging is blocked when the RUN'S TREE is disabled — "new
             # chat/replay/judge against it return 409 tree_disabled"
@@ -1313,8 +1357,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 source = unj(c["source"]) or {}
                 cases.append((cid, None, source.get("turn_id"), source.get("conversation_id")))
 
+        # Judging a run is tree-scoped; judging standalone eval cases is not
+        # (they are global resources, feature-spec.md:115) — its events then
+        # reach holders of every tree only (Broker docstring).
         parent = engine.create_task("judge", total=len(cases),
-                                    payload={"result": {"run_id": run_id}})
+                                    payload={"result": {"run_id": run_id}},
+                                    tree_id=run_tree)
         register_live(parent["id"], request)
         for i, (case_id, rid_, turn_id, conversation_id) in enumerate(cases, start=1):
             engine.create_task("judge", parent_id=parent["id"], payload={

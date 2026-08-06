@@ -592,6 +592,58 @@ def test_rubrics_append_only_versions():
     run(case())
 
 
+def test_judge_score_update_is_scoped_to_its_run():
+    """docs/review-2026-08-05.md A1 — `UPDATE run_cells SET latest_score = ?
+    WHERE case_id = ?` carried no run scope, so judging one run overwrote the
+    score on every OTHER run's cell that shares the case. RunCell.latest_score
+    is a per-run denormalization ("score column reads latest judgment per
+    (case, rubric)", feature-spec.md:62); it must move only for the run being
+    judged."""
+    async def case():
+        app = create_app(db_path=":memory:", token_delay=0.01, step_delay=0.01)
+        async with httpx.AsyncClient(transport=StreamingASGITransport(app),
+                                     base_url="http://t") as c:
+            conv_id = await seed_conversation(c, n=1)
+            run_ids = []
+            for _ in range(2):
+                acc = (await c.post("/agenttrees/agent1/replay", json={
+                    "selection": [{"conversation_id": conv_id}],
+                    "configs": [{"model": "deepseek-v3"}],
+                })).json()
+                await wait_task(c, acc["task_id"])
+                run_ids.append(acc["run_id"])
+
+            rubric = (await c.post("/eval/rubrics",
+                                   json={"name": "Accuracy", "prompt": "Is it right?"})).json()
+            first = (await c.post("/eval/judge", json={
+                "run_id": run_ids[0], "judge_model": "claude-haiku-4-5",
+                "rubric_id": rubric["id"]})).json()
+            await wait_task(c, first["task_id"])
+            grid_a = (await c.get(f"/agenttrees/agent1/runs/{run_ids[0]}")).json()
+            case_id = grid_a["rows"][0]["cells"][1]["case_id"]
+            assert case_id
+
+            # Make the two runs share the case. No endpoint attaches an
+            # existing case to a cell (cases are auto-created per cell,
+            # openapi.yaml:938-941), so the sharing is planted directly — the
+            # defect under test is the UPDATE's scope, not how cells are paired.
+            app.state.db.run(
+                "UPDATE run_cells SET case_id = ?, latest_score = NULL"
+                " WHERE run_id = ? AND row_idx = 0 AND col_idx = 1",
+                (case_id, run_ids[1]))
+
+            second = (await c.post("/eval/judge", json={
+                "run_id": run_ids[0], "judge_model": "claude-sonnet-5",
+                "rubric_id": rubric["id"]})).json()
+            await wait_task(c, second["task_id"])
+
+            judged = (await c.get(f"/agenttrees/agent1/runs/{run_ids[0]}")).json()
+            untouched = (await c.get(f"/agenttrees/agent1/runs/{run_ids[1]}")).json()
+            assert judged["rows"][0]["cells"][1]["latest_score"] is not None
+            assert untouched["rows"][0]["cells"][1]["latest_score"] is None
+    run(case())
+
+
 def test_judge_run_auto_cases_judgments_summary():
     async def case():
         async with client_pair() as c:

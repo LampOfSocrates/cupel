@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
   ActionIcon,
@@ -31,7 +39,7 @@ import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
 import type { Attachment, Judgment, Lineage, Model, Turn } from "../api/types";
 import { EnvelopeChip, ForkModal } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
-import { useApp, type ChatSettings } from "../AppContext";
+import { useApp } from "../AppContext";
 import { formatBytes } from "../lib/formatBytes";
 import { Markdown } from "../lib/markdown";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
@@ -49,9 +57,41 @@ import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 // stop-generation button while streaming."
 
 interface StreamState {
-  draft: string;
   taskId: string | null; // null until the `task` event arrives
 }
+
+// The in-flight draft is an EXTERNAL STORE, not page state: as ChatPage state,
+// every token re-rendered the whole page — transcript, composer, header — so a
+// stream cost O(turns) per token instead of O(1) (docs/review-2026-08-05.md
+// A8). Only <StreamingBubble> subscribes, so a token re-renders one bubble.
+// ChatPage keeps "a stream is running" + its task id, which change three times
+// per stream (start, task event, done), not once per token.
+function createDraftStore() {
+  let text = "";
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const listener of listeners) listener();
+  };
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    get: () => text,
+    append(delta: string) {
+      text += delta;
+      emit();
+    },
+    reset() {
+      text = "";
+      emit();
+    },
+  };
+}
+
+type DraftStore = ReturnType<typeof createDraftStore>;
 
 // P1-T04: one composer chip per picked file. Files upload immediately on pick
 // ("multipart upload to /upload before send", feature-spec.md:277); a 413/415
@@ -66,6 +106,22 @@ interface PendingUpload {
   attachment?: Attachment; // set when status === "done"
   error?: string; // server message when status === "error"
   previewUrl?: string; // object URL for image/* (client-side only — url is null in Phase 1, openapi.yaml:1284)
+}
+
+// P1-T05: "Chat has its own Settings submenu (model, temperature, system
+// prompt — session-scoped)" (feature-spec.md:7); "sent with each /chat call"
+// (feature-spec.md:278). Session-scoped = React state for the app session:
+// survives conversation switches, NOT reloads — Phase 1 has no /settings
+// endpoint (openapi.yaml:38-40 lists it under "Deferred to later phases") and
+// no localStorage persistence is specced.
+// Keys mirror ChatRequest field names (openapi.yaml:1425-1430) so the send
+// spreads them straight into the body; unset settings are ABSENT keys — the
+// contract fields are nullable but untouched settings are omitted entirely,
+// never sent as null.
+export interface ChatSettings {
+  model?: string;
+  temperature?: number;
+  system_prompt?: string;
 }
 
 type Rating = "up" | "down";
@@ -85,7 +141,7 @@ function deriveThumbs(judgments: Judgment[]): Record<string, Rating> {
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { tree, refreshConversations, chatSettings } = useApp();
+  const { tree, refreshConversations } = useApp();
   const navigate = useNavigate();
   // P2-SHARE — a received turn link: /chat/{id}?turn={turnId}. Read-only here;
   // the param is never written back, so the URL a receiver shares onward is
@@ -107,9 +163,19 @@ export function ChatPage() {
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
+  // Lazy init: one store per ChatPage instance, stable for its lifetime.
+  const [draft] = useState(createDraftStore);
   const [sendError, setSendError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [thumbs, setThumbs] = useState<Record<string, Rating>>({});
+  // Session-scoped chat settings (feature-spec.md:7, :278). They live HERE,
+  // not in AppContext: only this page reads them, and in the context every
+  // keystroke in the settings popover re-rendered the entire app
+  // (docs/review-2026-08-05.md A5). Session scope still holds — this
+  // component instance survives /chat ↔ /chat/:id (the route pair renders the
+  // same element, so React keeps the instance and its state across the
+  // post-send navigate).
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({});
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const pendingKeyRef = useRef(0);
 
@@ -123,10 +189,12 @@ export function ChatPage() {
   // (feature-spec.md:13 "Auto-scroll on stream").
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinnedRef = useRef(true);
+  // Tokens scroll from inside StreamingBubble now that they no longer render
+  // here; this covers new turns and stream start/end.
   useEffect(() => {
     const el = scrollRef.current;
     if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [turns, stream?.draft]);
+  }, [turns, stream]);
 
   // P2-SHARE highlight. Design (documented choice): the targeted turn keeps a
   // PERSISTENT left accent marker (data-share-target) for the whole visit —
@@ -218,8 +286,25 @@ export function ChatPage() {
     };
   }, [tree, conversationId]);
 
-  // Abort an in-flight stream when the page unmounts.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // Unmount cleanup. Besides aborting an in-flight stream, this releases the
+  // image previews still held by composer chips: they are revoked on remove,
+  // on send and on conversation switch, but leaving the page mid-compose
+  // leaked one blob per picked image (docs/review-2026-08-05.md A7). The ref
+  // is synced in an effect rather than during render so the cleanup sees the
+  // last committed chips without a render-phase write.
+  const pendingRef = useRef<PendingUpload[]>([]);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      for (const p of pendingRef.current) {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      }
+    },
+    [],
+  );
 
   // P1-T13: resolve the parent's title for the lineage banner. Delete is a
   // tombstone (openapi.yaml:438-443) — a 404 here means the parent was
@@ -320,7 +405,8 @@ export function ChatPage() {
       envelope: null,
     };
     setTurns((prev) => [...(prev ?? []), optimistic]);
-    setStream({ draft: "", taskId: null });
+    draft.reset();
+    setStream({ taskId: null });
     const abort = new AbortController();
     abortRef.current = abort;
     try {
@@ -369,7 +455,8 @@ export function ChatPage() {
             break;
           }
           case "token":
-            setStream((s) => s && { ...s, draft: s.draft + ev.data.delta });
+            // Straight to the draft store — no page render (A8).
+            draft.append(ev.data.delta);
             break;
           case "done":
             // completed AND cancelled both deliver the final Turn; on
@@ -444,7 +531,7 @@ export function ChatPage() {
           annotated 01-chat.svg shows "model · temp ⚙" in the same spot. */}
       <Group justify="space-between" wrap="nowrap">
         <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
-        <ChatSettingsMenu />
+        <ChatSettingsMenu settings={chatSettings} onChange={setChatSettings} />
       </Group>
       {/* P2-T07c: a disabled tree keeps history readable while every new turn
           409s (feature-spec.md:20 "read-only banner"). */}
@@ -540,13 +627,7 @@ export function ChatPage() {
               />
             ))}
             {stream && (
-              <Paper p="sm" radius="md" withBorder mr="10%" data-testid="streaming-turn">
-                {stream.draft === "" ? (
-                  <Loader size="xs" type="dots" />
-                ) : (
-                  <Markdown content={stream.draft} />
-                )}
-              </Paper>
+              <StreamingBubble draft={draft} scrollRef={scrollRef} pinnedRef={pinnedRef} />
             )}
             {sendError && (
               <Alert color="red" title="Generation failed">
@@ -679,6 +760,33 @@ export function ChatPage() {
   );
 }
 
+// The in-flight assistant bubble (openapi.yaml:466-476 token events). It owns
+// the draft by subscribing to the store, so a token re-renders THIS and
+// nothing else (docs/review-2026-08-05.md A8) — with the memoized Markdown
+// (A4) a token's cost is one parse, independent of transcript length.
+// Auto-scroll lives here for the same reason: the page-level effect no longer
+// sees per-token change ("Auto-scroll on stream", feature-spec.md:13).
+function StreamingBubble({
+  draft,
+  scrollRef,
+  pinnedRef,
+}: {
+  draft: DraftStore;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  pinnedRef: RefObject<boolean>;
+}) {
+  const text = useSyncExternalStore(draft.subscribe, draft.get);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [text, scrollRef, pinnedRef]);
+  return (
+    <Paper p="sm" radius="md" withBorder mr="10%" data-testid="streaming-turn">
+      {text === "" ? <Loader size="xs" type="dots" /> : <Markdown content={text} />}
+    </Paper>
+  );
+}
+
 // P1-T05 — chat settings submenu. "Chat has its own Settings submenu (model,
 // temperature, system prompt — session-scoped)" (feature-spec.md:7); "sent
 // with each /chat call" (feature-spec.md:278). Model options from GET /models
@@ -691,8 +799,14 @@ export function ChatPage() {
 // deferred to Phase 2 (openapi.yaml:38-40) — Phase 1 keeps the values in
 // React state only: they persist across conversation switches within the
 // session, not across reloads. Unset = absent key = omitted from ChatRequest.
-function ChatSettingsMenu() {
-  const { models, ensureModels, chatSettings, setChatSettings } = useApp();
+function ChatSettingsMenu({
+  settings: chatSettings,
+  onChange: setChatSettings,
+}: {
+  settings: ChatSettings;
+  onChange: Dispatch<SetStateAction<ChatSettings>>;
+}) {
+  const { models, ensureModels } = useApp();
   const [opened, setOpened] = useState(false);
   // NumberInput emits partial strings mid-typing ("0.") — keep the raw value
   // locally so typing isn't clobbered; only committed numbers reach context.

@@ -1,8 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+import { marked } from "marked";
 import { ComparisonView } from "./ComparisonView";
 import type { Run, RunCell } from "../api/types";
+
+// Live fill refetches the whole Run (~300 ms), so cells arrive as fresh
+// objects with identical content — see the memoization test at the bottom
+// (docs/review-2026-08-05.md A6).
+vi.mock("marked", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("marked")>();
+  return { marked: vi.fn(actual.marked) };
+});
 
 // Contract under test: Run (openapi.yaml:1607-1643) — "columns: Index 0 =
 // baseline"; "cells: One per column, same order; fills incrementally"; RunCell
@@ -109,5 +118,40 @@ describe("ComparisonView", () => {
     const cell = screen.getByTestId("cell-1-0");
     expect(cell).toHaveAttribute("data-status", "done");
     expect(cell).toHaveTextContent("Escalation offered.");
+  });
+
+  // docs/review-2026-08-05.md A6: "Live-filling grid rebuilds every cell every
+  // 300 ms". RunDetailPage refetches the whole Run on every stream event, so
+  // the identical grid arrives as brand-new objects. Cells whose content did
+  // not change must not re-render (the annotation slot is the observable proxy
+  // — it is invoked once per done-cell render) and must not re-parse markdown.
+  it("a refetch of unchanged cells re-renders and re-parses nothing", () => {
+    const annotations = vi.fn(() => <span data-testid="annotation" />);
+    const actions = vi.fn(() => <span data-testid="action" />);
+    const view = (r: Run) => (
+      <MantineProvider env="test">
+        <ComparisonView run={r} renderAnnotation={annotations} renderCellAction={actions} />
+      </MantineProvider>
+    );
+    const { rerender } = render(view(run));
+    const parsesAfterMount = vi.mocked(marked).mock.calls.length;
+    expect(parsesAfterMount).toBeGreaterThan(0);
+    expect(annotations).toHaveBeenCalledTimes(1); // one done cell
+
+    // Same grid, fresh objects — exactly what GET /runs/{id} returns again.
+    const refetched: Run = structuredClone(run);
+    rerender(view(refetched));
+    rerender(view(structuredClone(run)));
+    expect(vi.mocked(marked).mock.calls.length).toBe(parsesAfterMount);
+    expect(annotations).toHaveBeenCalledTimes(1);
+    expect(actions).toHaveBeenCalledTimes(1);
+
+    // …but a cell that actually filled still updates.
+    const filled: Run = structuredClone(run);
+    filled.rows[1].cells[0] = { status: "done", content: "Escalation offered." };
+    rerender(view(filled));
+    expect(vi.mocked(marked).mock.calls.length).toBe(parsesAfterMount + 1);
+    expect(annotations).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("cell-1-0")).toHaveTextContent("Escalation offered.");
   });
 });

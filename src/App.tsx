@@ -7,7 +7,7 @@ import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api
 import { onAuthRequired, useAuthToken } from "./api/auth";
 import { loginPath, RETURN_TO_PARAM, sanitizeReturnTo } from "./lib/returnTo";
 import type { AgentTree, Me, Model } from "./api/types";
-import { AppContext, type ChatSettings } from "./AppContext";
+import { AppContext } from "./AppContext";
 import { QueueProvider } from "./QueueContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
@@ -83,10 +83,6 @@ export function App() {
       modelsRequested.current = false;
     });
   }, []);
-
-  // Session-scoped chat settings (feature-spec.md:7, :278) — plain React
-  // state, so they persist across conversation switches but not reloads.
-  const [chatSettings, setChatSettings] = useState<ChatSettings>({});
 
   // P2-T17 live switch: the boot fetch is KEYED ON THE ACTIVE TARGET. On
   // switch (Settings → Backend), me/trees reset to null → the loader renders
@@ -199,8 +195,6 @@ export function App() {
         refreshConversations,
         models,
         ensureModels,
-        chatSettings,
-        setChatSettings,
       }}
     >
       {/* P1-T08: ONE app-wide /tasks/stream subscription, opened on boot —

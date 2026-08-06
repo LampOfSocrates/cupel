@@ -62,7 +62,19 @@ def span_dict(s: dict) -> dict:
 
 class Broker:
     """Fan-out for /tasks/stream events: task | progress | span | judgment
-    (openapi.yaml:789-806)."""
+    (openapi.yaml:789-806).
+
+    Every event is published WITH the tree it belongs to so the endpoint can
+    authorize it per subscriber: the stream is one global channel with no tree
+    in its path, so without this it fanned every judgment (reasoning included),
+    span and task result to every subscriber regardless of their permission
+    matrix (docs/review-2026-08-05.md A2).
+
+    tree_id None = "not resolvable from what the event references" (e.g. a
+    judge task over standalone eval cases, which are global resources with no
+    tree — feature-spec.md:115). Such events are DROPPED for a caller whose
+    permissions are limited, never broadcast: omitting beats leaking.
+    """
 
     def __init__(self):
         self.subs: set[asyncio.Queue] = set()
@@ -75,9 +87,9 @@ class Broker:
     def unsubscribe(self, q: asyncio.Queue):
         self.subs.discard(q)
 
-    def publish(self, event: str, data: dict):
+    def publish(self, event: str, data: dict, tree_id: str | None = None):
         for q in list(self.subs):
-            q.put_nowait((event, data))
+            q.put_nowait((event, data, tree_id))
 
 
 class Engine:
@@ -95,23 +107,76 @@ class Engine:
         # server restart loses them, so orphaned children fall back to canned
         # content — acceptable and documented for Phase 1.
         self.live_keys: dict[str, dict] = {}  # task_id -> {"key", "model"}
+        # Resolved task -> tree, memoized for the SSE authorization filter
+        # (see task_tree). Cache only, never the source of truth: a restart
+        # re-resolves from the DB.
+        self._task_trees: dict[str, str] = {}
 
     def spawn(self, coro):
         t = asyncio.get_running_loop().create_task(coro)
         self._bg.add(t)
         t.add_done_callback(self._bg.discard)
 
+    # ------------------------------------------------- event authorization
+    def turn_tree(self, turn_id: str | None) -> str | None:
+        """Tree owning a turn — the scope span/judgment events are filtered on."""
+        if not turn_id:
+            return None
+        row = self.db.one("SELECT tree_id FROM turns WHERE id = ?", (turn_id,))
+        return row["tree_id"] if row else None
+
+    def run_tree(self, run_id: str | None) -> str | None:
+        if not run_id:
+            return None
+        row = self.db.one("SELECT tree_id FROM runs WHERE id = ?", (run_id,))
+        return row["tree_id"] if row else None
+
+    def task_tree(self, task_id: str) -> str | None:
+        """Tree a task's events belong to (docs/review-2026-08-05.md A2).
+
+        Resolution order, cheapest first: the tree stamped at creation, the
+        payload's tree_id/run_id/turn_id, a turn the task produced, then the
+        parent task. None = unresolvable → the event is withheld from any
+        caller who does not hold every tree (Broker docstring)."""
+        cached = self._task_trees.get(task_id)
+        if cached:
+            return cached
+        task = self.get_task(task_id)
+        if not task:
+            return None
+        payload = unj(task["payload"], {}) or {}
+        result = payload.get("result") or {}
+        tree = (payload.get("tree_id")
+                or self.run_tree(payload.get("run_id") or result.get("run_id"))
+                or self.turn_tree(payload.get("turn_id") or result.get("turn_id")))
+        if not tree:
+            row = self.db.one("SELECT tree_id FROM turns WHERE task_id = ? LIMIT 1", (task_id,))
+            tree = row["tree_id"] if row else None
+        if not tree and task["parent_id"]:
+            tree = self.task_tree(task["parent_id"])
+        if tree:
+            self._task_trees[task_id] = tree
+        return tree
+
+    def _publish_task(self, event: str, data: dict, task_id: str):
+        self.broker.publish(event, data, self.task_tree(task_id))
+
     # ------------------------------------------------------------- tasks
     def create_task(self, type_: str, parent_id: str | None = None, total: int = 1,
-                    payload: dict | None = None) -> dict:
+                    payload: dict | None = None, tree_id: str | None = None) -> dict:
+        """`tree_id` scopes this task's /tasks/stream events (A2). Tasks whose
+        work is not tree-scoped (judging standalone eval cases) pass None and
+        their events reach holders of every tree only."""
         tid = new_id("task")
         self.db.run(
             "INSERT INTO tasks (id, type, status, done, total, parent_id, payload, created_at)"
             " VALUES (?, ?, 'queued', 0, ?, ?, ?, ?)",
             (tid, type_, total, parent_id, j(payload), now_iso()),
         )
+        if tree_id:
+            self._task_trees[tid] = tree_id
         task = self.get_task(tid)
-        self.broker.publish("task", task_dict(task))
+        self._publish_task("task", task_dict(task), tid)
         return task
 
     def get_task(self, task_id: str) -> dict | None:
@@ -143,14 +208,14 @@ class Engine:
         if status in ("done", "failed", "cancelled"):
             # BYOK key lifetime ends with the task (docs/deployment.md:27).
             self.live_keys.pop(task_id, None)
-        self.broker.publish("task", task_dict(self.get_task(task_id)))
+        self._publish_task("task", task_dict(self.get_task(task_id)), task_id)
 
     def tick(self, task_id: str, stage: str | None = None):
         self.db.run("UPDATE tasks SET done = done + 1 WHERE id = ?", (task_id,))
         if stage is not None:
             self.db.run("UPDATE tasks SET stage = ? WHERE id = ?", (stage, task_id))
         task = self.get_task(task_id)
-        self.broker.publish("task", task_dict(task))
+        self._publish_task("task", task_dict(task), task_id)
         self.progress(task_id, stage)
 
     def progress(self, task_id: str, stage: str | None = None):
@@ -158,10 +223,10 @@ class Engine:
         if stage is not None and stage != task["stage"]:
             self.db.run("UPDATE tasks SET stage = ? WHERE id = ?", (stage, task_id))
             task["stage"] = stage
-        self.broker.publish("progress", {
+        self._publish_task("progress", {
             "task_id": task_id,
             "progress": {"done": task["done"], "total": task["total"], "stage": task["stage"]},
-        })
+        }, task_id)
 
     def is_cancelled(self, task_id: str) -> bool:
         task = self.get_task(task_id)
@@ -191,15 +256,18 @@ class Engine:
              cost, model, status, error, prompt, response, j(args), j(result)),
         )
         span = self.db.one("SELECT * FROM spans WHERE id = ?", (sid,))
-        # Spans stream live on the tasks channel (feature-spec.md:150).
-        self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)})
+        # Spans stream live on the tasks channel (feature-spec.md:150); the
+        # span's turn carries the tree that may see it (A2).
+        self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)},
+                            self.turn_tree(turn_id))
         return span
 
     def _close_span(self, span_id: str, turn_id: str, **fields):
         sets = ", ".join(f"{k} = ?" for k in fields)
         self.db.run(f"UPDATE spans SET {sets} WHERE id = ?", (*fields.values(), span_id))
         span = self.db.one("SELECT * FROM spans WHERE id = ?", (span_id,))
-        self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)})
+        self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)},
+                            self.turn_tree(turn_id))
 
     def _emit_trace(self, *, turn_id, agent, model, prompt_full, content, span_timing,
                     note=None):
@@ -496,10 +564,25 @@ class Engine:
              payload.get("conversation_id"), payload["judge_model"],
              payload["rubric_id"], payload["rubric_version"], score, reasoning, now),
         )
-        self.db.run("UPDATE run_cells SET latest_score = ? WHERE case_id = ?", (score, case_id))
+        # A judgment scores ONE run's cell. Unscoped, this overwrote
+        # latest_score on every other run's cell sharing the case
+        # (docs/review-2026-08-05.md A1). Judging standalone eval cases
+        # (openapi.yaml:1865-1867 case_ids) carries no run — there the case is
+        # the only addressable scope, so that path keeps the case-wide update.
+        run_id = payload.get("run_id")
+        if run_id:
+            self.db.run(
+                "UPDATE run_cells SET latest_score = ? WHERE case_id = ? AND run_id = ?",
+                (score, case_id, run_id))
+        else:
+            self.db.run("UPDATE run_cells SET latest_score = ? WHERE case_id = ?",
+                        (score, case_id))
         judgment = self.db.one("SELECT * FROM judgments WHERE id = ?", (jid,))
-        # Scores stream into the grid live (feature-spec.md:64).
-        self.broker.publish("judgment", {"judgment": judgment_dict(judgment)})
+        # Scores stream into the grid live (feature-spec.md:64), to the tree
+        # holding the judged run/turn only (A2).
+        self.broker.publish(
+            "judgment", {"judgment": judgment_dict(judgment)},
+            self.run_tree(run_id) or self.turn_tree(payload.get("turn_id")))
         payload["result"] = {"run_id": payload.get("run_id"), "turn_id": payload.get("turn_id")}
         self.db.run("UPDATE tasks SET payload = ? WHERE id = ?", (j(payload), child["id"]))
         self.progress(child["parent_id"], f"Case {payload['case_index']}/{payload['case_total']}")
@@ -516,7 +599,7 @@ class Engine:
             (parent_id,))["n"]
         self.db.run("UPDATE tasks SET done = ?, error = NULL, finished_at = NULL,"
                     " status = 'running' WHERE id = ?", (done, parent_id))
-        self.broker.publish("task", task_dict(self.get_task(parent_id)))
+        self._publish_task("task", task_dict(self.get_task(parent_id)), parent_id)
         for child in failed:
             if self.is_cancelled(parent_id):
                 return

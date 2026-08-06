@@ -18,6 +18,7 @@ import pytest
 
 from mock import auth
 from mock.main import create_app
+from mock.tests.test_mock import StreamingASGITransport, parse_sse
 
 
 def make_client(db_path=":memory:", **kwargs):
@@ -218,6 +219,133 @@ def test_restricted_user_tree_filtering_and_404(monkeypatch):
             admin = (await login(c))["access_token"]
             r = await c.get("/agenttrees", headers=bearer(admin))
             assert [t["id"] for t in r.json()] == ["agent1", "agent2"]
+    run(case())
+
+
+# ------------------------------------- cross-tree leaks (review bucket A)
+async def wait_task_as(c, task_id, token, timeout=15):
+    deadline = time.monotonic() + timeout
+    task = None
+    while time.monotonic() < deadline:
+        r = await c.get(f"/tasks/{task_id}", headers=bearer(token))
+        assert r.status_code == 200, r.text
+        task = r.json()
+        if task["status"] in ("done", "failed", "cancelled"):
+            return task
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"task {task_id} did not finish: {task}")
+
+
+def test_tasks_stream_only_emits_events_of_permitted_trees(monkeypatch):
+    """docs/review-2026-08-05.md A2 — GET /tasks/stream is ONE global channel
+    (openapi.yaml:1183-1219 declares no parameters), and it fanned every task
+    result, span and judgment to every subscriber. "Unpermitted trees never
+    render" (feature-spec.md:32) has to hold on the stream too, so each event
+    is authorized against the subscriber's permission matrix.
+
+    restricted@demo holds view on agent1 only; work happens on agent2 first,
+    then on agent1 — so the agent1 event both subscribers stop on proves the
+    agent2 events were dropped for restricted, not merely late."""
+    monkeypatch.setenv("AUTH_MODE", "on")
+
+    async def case():
+        app = create_app(db_path=":memory:", token_delay=0, step_delay=0,
+                         static_dir="__no_dist__")
+        async with httpx.AsyncClient(transport=StreamingASGITransport(app),
+                                     base_url="http://t") as c:
+            admin = (await login(c))["access_token"]
+            limited = (await login(c, "restricted@demo"))["access_token"]
+            ids, seen_limited, seen_admin = {}, [], []
+            subscribed = asyncio.Event()
+            ready = 0
+
+            def done_task_ids(events):
+                return {d["id"] for ev, d in events
+                        if ev == "task" and d["status"] == "done"}
+
+            async def consume(token, sink, want_done):
+                nonlocal ready
+                async with c.stream("GET", "/tasks/stream",
+                                    headers=bearer(token)) as r:
+                    assert r.status_code == 200
+                    buf = ""
+                    async for chunk in r.aiter_text():
+                        buf += chunk
+                        ready += 1
+                        if ready >= 2:
+                            subscribed.set()
+                        sink[:] = parse_sse(buf)
+                        if len(done_task_ids(sink)) >= want_done:
+                            return
+
+            async def produce():
+                await subscribed.wait()
+                r = await c.post("/agenttrees/agent2/chat", headers=bearer(admin),
+                                 json={"message": "agent2 only", "stream": False})
+                assert r.status_code == 200, r.text
+                ids["agent2_task"] = r.json()["task_id"]
+                await wait_task_as(c, ids["agent2_task"], admin)
+                r = await c.post("/agenttrees/agent1/chat", headers=bearer(limited),
+                                 json={"message": "agent1 shared", "stream": False})
+                assert r.status_code == 200, r.text
+                ids["agent1_task"] = r.json()["task_id"]
+                ids["agent1_conv"] = r.json()["conversation_id"]
+                await wait_task_as(c, ids["agent1_task"], limited)
+
+            await asyncio.wait_for(asyncio.gather(
+                consume(limited, seen_limited, 1),
+                consume(admin, seen_admin, 2),
+                produce()), timeout=25)
+
+            # The permitted subscriber saw agent1's task family and nothing else.
+            limited_tasks = ({d["id"] for ev, d in seen_limited if ev == "task"}
+                             | {d["task_id"] for ev, d in seen_limited if ev == "progress"})
+            assert limited_tasks == {ids["agent1_task"]}
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{ids['agent1_conv']}",
+                                headers=bearer(limited))).json()
+            agent1_turns = {t["id"] for t in conv["turns"]}
+            assert {d["turn_id"] for ev, d in seen_limited if ev == "span"} <= agent1_turns
+            # …while a holder of both trees still receives both.
+            admin_tasks = {d["id"] for ev, d in seen_admin if ev == "task"}
+            assert {ids["agent1_task"], ids["agent2_task"]} <= admin_tasks
+    run(case())
+
+
+def test_span_payload_requires_view_on_the_spans_tree(monkeypatch):
+    """docs/review-2026-08-05.md A3 — GET /spans/{spanId}/payload is globally
+    addressable and holds the full prompt/response, but had no ownership check.
+    The span's turn decides: no view on its tree → 404, indistinguishable from
+    absent, like every tree-scoped resource (openapi.yaml:1948)."""
+    monkeypatch.setenv("AUTH_MODE", "on")
+
+    async def case():
+        async with make_client() as c:
+            admin = (await login(c))["access_token"]
+            limited = (await login(c, "restricted@demo"))["access_token"]
+
+            async def span_of(tree, token):
+                r = await c.post(f"/agenttrees/{tree}/chat", headers=bearer(token),
+                                 json={"message": "trace me", "stream": False})
+                assert r.status_code == 200, r.text
+                turn_id = r.json()["turn"]["id"]
+                await wait_task_as(c, r.json()["task_id"], token)
+                trace = (await c.get(f"/agenttrees/{tree}/turns/{turn_id}/trace",
+                                     headers=bearer(token))).json()
+                llm = next(s for s in trace["spans"] if s["type"] == "llm")
+                return llm["payload_ref"]
+
+            secret = await span_of("agent2", admin)
+            shared = await span_of("agent1", limited)
+
+            r = await c.get(f"/spans/{secret}/payload", headers=bearer(limited))
+            assert r.status_code == 404
+            assert r.json() == {"code": "not_found",
+                                "message": f"Span '{secret}' not found."}
+            assert (await c.get(f"/spans/{secret}/payload",
+                                headers=bearer(admin))).status_code == 200
+            r = await c.get(f"/spans/{shared}/payload", headers=bearer(limited))
+            assert r.status_code == 200
+            assert r.json()["prompt"]
     run(case())
 
 

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { MantineProvider } from "@mantine/core";
 import { api } from "../api/client";
 import type { Model } from "../api/types";
-import { AppContext, type ChatSettings } from "../AppContext";
+import { AppContext } from "../AppContext";
 import { QueueProvider } from "../QueueContext";
 import type { AgentTree, Me } from "../api/types";
 import { mockMe, mockTrees } from "./msw/handlers";
@@ -24,9 +24,9 @@ export interface AppStateOverrides {
 }
 
 // Working refreshConversations, so tests exercise the real sidebar-reload
-// signal (AppContext.conversationsVersion). Models + chatSettings mirror
-// App.tsx: lazy fetch-once GET /models cache and session-scoped settings
-// state (P1-T05, feature-spec.md:7).
+// signal (AppContext.conversationsVersion). Models mirrors App.tsx's lazy
+// fetch-once GET /models cache. Chat settings are NOT here — they are
+// ChatPage's own state (docs/review-2026-08-05.md A5).
 function TestAppProvider({
   children,
   overrides,
@@ -47,7 +47,6 @@ function TestAppProvider({
       modelsRequested.current = false;
     });
   }, []);
-  const [chatSettings, setChatSettings] = useState<ChatSettings>({});
   return (
     <AppContext.Provider
       value={{
@@ -59,8 +58,6 @@ function TestAppProvider({
         refreshConversations,
         models,
         ensureModels,
-        chatSettings,
-        setChatSettings,
       }}
     >
       {children}

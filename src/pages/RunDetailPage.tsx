@@ -16,8 +16,9 @@ import {
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { JudgeConfig, Rubric, Run, RunScoreSummary } from "../api/types";
+import type { JudgeConfig, Rubric, Run, RunCell, RunScoreSummary } from "../api/types";
 import {
+  type CellContext,
   ComparisonView,
   ForkModal,
   JudgmentDrawer,
@@ -267,6 +268,70 @@ export function RunDetailPage() {
     }
   };
 
+  // The grid's cells are memoized on their content (ComparisonView.sameCell),
+  // which only holds while these two slots keep their identity across the
+  // ~300 ms refetch cycle — inline arrows made every cell re-render and
+  // re-parse its markdown three times a second (docs/review-2026-08-05.md A6).
+  // Both close over nothing but stable setters and `navigate`.
+  const renderAnnotation = useCallback(
+    (cell: RunCell, ctx: CellContext) =>
+      cell.latest_score != null ? (
+        <ScoreChip
+          score={cell.latest_score}
+          testId={`score-chip-${ctx.rowIndex}-${ctx.columnIndex}`}
+          onClick={cell.case_id != null ? () => setDrawerCaseId(cell.case_id!) : undefined}
+        />
+      ) : null,
+    [],
+  );
+
+  const renderCellAction = useCallback(
+    (cell: RunCell, ctx: CellContext) => (
+      <Group justify="space-between" mt={2} wrap="nowrap">
+        {cell.conversation_id ? (
+          <Anchor
+            size="xs"
+            data-testid={`open-in-chat-${ctx.rowIndex}-${ctx.columnIndex}`}
+            onClick={() => navigate(`/chat/${cell.conversation_id}`)}
+          >
+            Open in Chat ↗
+          </Anchor>
+        ) : (
+          <span />
+        )}
+        <Group gap={2} wrap="nowrap">
+          {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results
+              grid cells, and drill-in. Works on originals, forks, and
+              replays alike" (feature-spec.md:145): done cells that carry
+              the produced turn's id (RunCell.turn_id, openapi.yaml:1652)
+              route to its trace — the baseline cell to the original
+              turn's, endpoint cells to the fork replays'. */}
+          {cell.turn_id && (
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="gray"
+              aria-label={`Open trace for turn ${cell.turn_id}`}
+              onClick={() => navigate(`/trace/${cell.turn_id}`)}
+            >
+              ⌁
+            </ActionIcon>
+          )}
+          <ActionIcon
+            size="xs"
+            variant="subtle"
+            color="gray"
+            aria-label={`Re-run turn ${ctx.source.turn_id} with…`}
+            onClick={() => setForkSource(ctx.source)}
+          >
+            ⑂
+          </ActionIcon>
+        </Group>
+      </Group>
+    ),
+    [navigate],
+  );
+
   if (error) {
     return (
       <Alert color="red" title="Error" m="md" maw={640}>
@@ -426,60 +491,8 @@ export function RunDetailPage() {
           (openapi.yaml:1654-1664); chip tap opens the judgment drawer. */}
       <ComparisonView
         run={run}
-        renderAnnotation={(cell, ctx) =>
-          cell.latest_score != null ? (
-            <ScoreChip
-              score={cell.latest_score}
-              testId={`score-chip-${ctx.rowIndex}-${ctx.columnIndex}`}
-              onClick={
-                cell.case_id != null ? () => setDrawerCaseId(cell.case_id!) : undefined
-              }
-            />
-          ) : null
-        }
-        renderCellAction={(cell, ctx) => (
-          <Group justify="space-between" mt={2} wrap="nowrap">
-            {cell.conversation_id ? (
-              <Anchor
-                size="xs"
-                data-testid={`open-in-chat-${ctx.rowIndex}-${ctx.columnIndex}`}
-                onClick={() => navigate(`/chat/${cell.conversation_id}`)}
-              >
-                Open in Chat ↗
-              </Anchor>
-            ) : (
-              <span />
-            )}
-            <Group gap={2} wrap="nowrap">
-              {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results
-                  grid cells, and drill-in. Works on originals, forks, and
-                  replays alike" (feature-spec.md:145): done cells that carry
-                  the produced turn's id (RunCell.turn_id, openapi.yaml:1652)
-                  route to its trace — the baseline cell to the original
-                  turn's, endpoint cells to the fork replays'. */}
-              {cell.turn_id && (
-                <ActionIcon
-                  size="xs"
-                  variant="subtle"
-                  color="gray"
-                  aria-label={`Open trace for turn ${cell.turn_id}`}
-                  onClick={() => navigate(`/trace/${cell.turn_id}`)}
-                >
-                  ⌁
-                </ActionIcon>
-              )}
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="gray"
-                aria-label={`Re-run turn ${ctx.source.turn_id} with…`}
-                onClick={() => setForkSource(ctx.source)}
-              >
-                ⑂
-              </ActionIcon>
-            </Group>
-          </Group>
-        )}
+        renderAnnotation={renderAnnotation}
+        renderCellAction={renderCellAction}
       />
       {forkSource && (
         <ForkModal

@@ -280,6 +280,43 @@ describe("Composer attachments", () => {
     expect(screen.queryByTestId("pending-attachments")).not.toBeInTheDocument();
   });
 
+  // docs/review-2026-08-05.md A7: image chips take an object URL for their
+  // thumbnail, revoked on remove/send/conversation switch — but leaving the
+  // page mid-compose leaked one blob per picked image.
+  it("revokes image-preview object URLs when the page unmounts", async () => {
+    const created: string[] = [];
+    const revoked: string[] = [];
+    const create = vi.fn((_: Blob) => {
+      const url = `blob:preview-${created.length}`;
+      created.push(url);
+      return url;
+    });
+    const revoke = vi.fn((url: string) => void revoked.push(url));
+    // Patch the two statics only — replacing global URL breaks fetch/MSW.
+    // jsdom implements neither (hence the guard in ChatPage.addFiles).
+    const original = {
+      create: URL.createObjectURL,
+      revoke: URL.revokeObjectURL,
+    };
+    URL.createObjectURL = create as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = revoke;
+    try {
+      const { unmount } = renderChat("/chat/c1");
+      await screen.findByText("How do refunds work?");
+      pickFiles([makeFile("img", "shot.png", "image/png")]);
+      await waitFor(() => expect(uploadRequests).toHaveLength(1));
+      await screen.findByTestId("pending-attachments");
+      expect(created).toHaveLength(1);
+      expect(revoked).toEqual([]);
+
+      unmount();
+      expect(revoked).toEqual(created);
+    } finally {
+      URL.createObjectURL = original.create;
+      URL.revokeObjectURL = original.revoke;
+    }
+  });
+
   it("renders stored attachments on a user turn from Turn.attachments", async () => {
     renderChat("/chat/c1");
     await screen.findByText("How do refunds work?");
@@ -371,9 +408,13 @@ describe("Turn actions", () => {
     // stream a markdown reply to completion (tokens "Hello streaming **world**.")
     await user.type(screen.getByPlaceholderText("Message…"), "md please");
     await user.click(screen.getByRole("button", { name: "Send" }));
+    // Wait for the DRAFT to be replaced by the done turn: the draft bubble
+    // renders the same text, so waiting on the text alone can catch the
+    // last-token frame (the draft owns its own state since A8).
     await waitFor(() =>
-      expect(screen.getByTestId("transcript")).toHaveTextContent("Hello streaming world."),
+      expect(screen.queryByTestId("streaming-turn")).not.toBeInTheDocument(),
     );
+    expect(screen.getByTestId("transcript")).toHaveTextContent("Hello streaming world.");
 
     const copyButtons = screen.getAllByRole("button", { name: "Copy message" });
     expect(copyButtons).toHaveLength(2); // t2 + the streamed turn
