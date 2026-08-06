@@ -48,9 +48,6 @@
 - [x] P2-SHARE Copy-link sharing — conversation ⋯ menu + turn action links (/chat/{id}?turn=), scroll+highlight on open, no-access state; works in both AUTH_MODEs via T07's return_to redirect (user feature 2026-08-05)  [deps: T07]
 - [ ] P2-T12 Eval workbench — cases/sets/rubrics CRUD, hand-crafted references, CSV/XLSX import (sketch 10)  [deps: T00]
 - [ ] P2-T12a Inspector + Casebooks (inspect role, audit-logged; casebook → eval set / replay suite)  [deps: T07, T12]
-- [ ] P2-CTX Context policy widening — frozen/today/custom + fallback + recorded-tools playback (extend sketch 03)  [deps: T00]
-- [ ] P2-GEN Generator control API + Settings drip-rate controls  [deps: T00, T17]
-- [ ] P2-MEM Memory panel — view/edit/clear per tree, compaction as queued task  [deps: T00]
 - [ ] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
 - [x] P2-FIXA Review bucket A — run-scoped latest_score bug, /tasks/stream tenant filtering, span-payload ownership check, markdown memo, chatSettings out of AppContext, grid cell memo, object-URL leak, streaming-draft isolation (see docs/review-2026-08-05.md)  [deps: none]
 - [x] P2-DEVSTART One-command start + explicit local-mock flag — agentic.config.ts `localMock {enabled, port, dbPath}`; `npm start` boots UI + mock per the flag with a startup banner naming the backend AND its storage mode/location; adopters flip enabled:false and their own backend holds persistence (user decision 2026-08-06)  [deps: none]
@@ -61,7 +58,14 @@
 - [ ] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
 
-## After Phase 2 (user decision 2026-08-05): FULL STOP — no Phase 3 (scaffold) or Phase 4 (hosted).
+## Phase 3 — deferred features (moved out of Phase 2 by user decision 2026-08-06).
+## NOTE: this is NOT the original "Phase 3 = create-agentic-app scaffolder", which stays parked (see below).
+## Contract support for all three already shipped in v0.3.0 — these are implementation only.
+- [ ] P3-CTX Context policy widening — frozen/today/custom + fallback for envelope-less turns + recorded-tools playback (extend sketch 03)  [deps: P2-T00]
+- [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
+- [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
+
+## After Phase 2 (user decision 2026-08-05): FULL STOP — no scaffolder (original Phase 3) or hosted platform (Phase 4).
 ## Next focus after Phase 2 close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
 ## UX-phase candidate (user-approved 2026-08-05): "whitelabel-lite" — npm run init (asks name/label/backend, writes agentic.config.ts) + wire product.label through all UI strings; full Phase-3 scaffolder stays parked.
 
