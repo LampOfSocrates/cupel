@@ -65,12 +65,16 @@
 - [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
 - [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
 
-## After Phase 2 (user decision 2026-08-05): FULL STOP — no scaffolder (original Phase 3) or hosted platform (Phase 4).
-## Next focus after Phase 2 close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
-## UX-phase candidate (user-approved 2026-08-05): "whitelabel-lite" — npm run init (asks name/label/backend, writes agentic.config.ts) + wire product.label through all UI strings; full Phase-3 scaffolder stays parked.
+## Phase 4 — PRO tier (user decision 2026-08-06: the pro shelf becomes Phase 4).
+## NOT scheduled — do NOT build any of this during Phases 2-3 or the UX phase.
+## Everything here is paid-tier; the free build must stay complete and useful without it.
+- [ ] P4-REPO "Agents as Code" — GitHub connect, instruction changes as PR diffs, merge promotes the version live; mock git server (former P2-T20)
+- [ ] P4-SHARE "Public Sharing" — anonymous tokenized share links for conversations/turns, with expiry and revocation (the free tier keeps in-app deep links only, P2-SHARE)
+- [ ] P4-REELS "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-RECORD ships only the minimal recording rig; this is the product.
+- [ ] P4-HYBRID "Hybrid backend fill" — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins).
 
-## PRO phases (plans only — NOT scheduled; do not build in free phases; user decisions 2026-08-05)
-- PRO-1 "Agents as Code" — repo/PR integration: GitHub connect, instruction diffs as PRs, merge promotes live; mock git server (former P2-T20)
-- PRO-2 "Public Sharing" — anonymous tokenized share links for conversations/turns (expiry, revocation); free tier keeps in-app deep links only (P2-SHARE)
-- PRO-3 "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-E2E deliberately excludes this video harness.
-- FUTURE "Hybrid backend fill" (skipped 2026-08-05, keep) — per-feature-family routing: implemented endpoints → user backend, missing families → bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins).
+## After Phase 3 (user decision 2026-08-05, amended 08-06): FULL STOP on new features.
+## No create-agentic-app scaffolder (the ORIGINAL Phase 3) and no hosted multi-tenant platform (the ORIGINAL Phase 4) — both remain parked indefinitely.
+## Next focus after the free phases close = a UX polish phase, desktop-first, planned WITH the user before any task runs.
+## UX-phase candidate (user-approved 2026-08-05): "whitelabel-lite" — npm run init (asks name/label/backend, writes agentic.config.ts) + wire product.label through all UI strings; the full scaffolder stays parked.
+## UX phase also absorbs review bucket B (docs/review-2026-08-05.md); bucket C = a future contract v0.4.0; bucket D = persistence docs.
