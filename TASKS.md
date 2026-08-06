@@ -66,6 +66,14 @@
 ## UX-phase item raised by P2-T12a: there is NO tree switcher in the UI — the app has one
 ## active tree from config, so cross-tree results (e.g. a casebook replay spanning trees)
 ## can only be linked for the active tree. Needs a real tree selector in the shell.
+## UX-phase item raised by P2-RECORD: RunDetailPage auto-fires the judge ONLY on a live
+## non-terminal -> done transition (RunDetailPage.tsx:156-159). Open a run link after the
+## run already finished and the judge never fires — no scores, no explanation. Real
+## fragility, reproducible by loading a finished run slowly; needs a deliberate rule.
+## Also from P2-RECORD's coverage assessment — gaps a reviewer should know about:
+## no visual-regression/snapshot testing at all; e2e films run against the Vite dev server,
+## never the built bundle Render serves; chromium only; portrait filmed nowhere; BYOK live
+## mode, SKEIN_STORAGE=s3 restore, a11y/keyboard paths and SSE-drop/5xx surfaces untested.
 ## Phase 3 begins only after the UX phase closes and the user says so.
 
 ## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
