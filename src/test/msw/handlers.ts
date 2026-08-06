@@ -31,6 +31,12 @@ import type {
   Conversation,
   Endpoint,
   EvalCase,
+  EvalCaseCreate,
+  EvalCaseImportReport,
+  EvalCaseUpdate,
+  EvalSet,
+  EvalSetCreate,
+  EvalSetUpdate,
   FeedbackRequest,
   Health,
   InstructionHistory,
@@ -44,6 +50,8 @@ import type {
   ReplayTurnAccepted,
   ReplayTurnRequest,
   Rubric,
+  RubricCreate,
+  RubricUpdate,
   Run,
   RunConfig,
   RunScoreSummary,
@@ -579,6 +587,60 @@ export const evalCaseRequests: string[] = [];
 export const judgeRequests: JudgeRequest[] = [];
 let judgeCounter = 0;
 
+// ------------------------------------------- P2-T12 eval workbench (v0.3.0)
+// POST /eval/cases (openapi.yaml:1340-1369), PUT /eval/cases/{caseId}
+// (:1455-1483), GET/POST /eval/sets (:1484-1523), PUT /eval/sets/{setId}
+// (:1524-1547), PUT /eval/rubrics/{rubricId} (:1313-1338),
+// POST /eval/cases/import (:1370-1429). Mirrors the real mock's rules:
+// append-only versions (latest wins), full-membership set versions, and
+// per-row import errors that never abort the batch.
+export const evalCaseCreates: unknown[] = [];
+export const evalCasePuts: Array<{ caseId: string; body: unknown }> = [];
+export const evalSetCreates: unknown[] = [];
+export const evalSetPuts: Array<{ setId: string; body: unknown }> = [];
+export const rubricCreates: unknown[] = [];
+export const rubricPuts: Array<{ rubricId: string; body: unknown }> = [];
+export const importRequests: Array<{
+  filename: string;
+  mapping: string;
+  set_id: string | null;
+  set_name: string | null;
+}> = [];
+
+function seedEvalSets(): EvalSet[] {
+  return [
+    {
+      id: "set-refunds",
+      name: "refund-fails",
+      version: 3,
+      case_ids: ["case-1"],
+      created_at: "2026-08-03T12:00:00Z",
+    },
+  ];
+}
+export const mockEvalSets: EvalSet[] = seedEvalSets();
+
+// Import knob: `queued` flips the endpoint to the 202 path so tests can drive
+// "Above the server's size threshold: 202 TaskRef" (openapi.yaml:1386-1389)
+// without building a 200-row fixture; `report` is what the 200 path returns.
+export const importConfig: {
+  queued: boolean;
+  report: EvalCaseImportReport;
+} = {
+  queued: false,
+  report: {
+    set_id: null,
+    rows_total: 3,
+    rows_imported: 2,
+    created_case_ids: ["case-imp-1", "case-imp-2"],
+    errors: [{ row: 2, column: "answer", message: "output is empty — a case needs a candidate response." }],
+  },
+};
+let evalCaseCounter = 0;
+let evalSetCounter = 0;
+let rubricCounter = 0;
+let importCounter = 0;
+
 // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — mutable per-run
 // summaries; unset runs answer the empty aggregate (no judgments yet).
 export const mockRunSummaries: Record<string, RunScoreSummary> = {};
@@ -1020,6 +1082,29 @@ export function resetHandlerState() {
   evalCaseRequests.length = 0;
   judgeRequests.length = 0;
   judgeCounter = 0;
+  mockEvalSets.length = 0;
+  mockEvalSets.push(...seedEvalSets());
+  evalCaseCreates.length = 0;
+  evalCasePuts.length = 0;
+  evalSetCreates.length = 0;
+  evalSetPuts.length = 0;
+  rubricCreates.length = 0;
+  rubricPuts.length = 0;
+  importRequests.length = 0;
+  evalCaseCounter = 0;
+  evalSetCounter = 0;
+  rubricCounter = 0;
+  importCounter = 0;
+  importConfig.queued = false;
+  importConfig.report = {
+    set_id: null,
+    rows_total: 3,
+    rows_imported: 2,
+    created_case_ids: ["case-imp-1", "case-imp-2"],
+    errors: [
+      { row: 2, column: "answer", message: "output is empty — a case needs a candidate response." },
+    ],
+  };
   for (const key of Object.keys(mockRunSummaries)) delete mockRunSummaries[key];
   summaryRequests.length = 0;
   for (const key of Object.keys(mockTraces)) delete mockTraces[key];
@@ -1550,6 +1635,141 @@ export const handlers = [
     return HttpResponse.json(mockRubrics);
   }),
 
+  // POST /eval/rubrics (openapi.yaml:1293-1311) — "new name = v1"; an existing
+  // name appends the next version.
+  http.post(`${BASE}/eval/rubrics`, async ({ request }) => {
+    const body = (await request.json()) as RubricCreate;
+    rubricCreates.push(body);
+    if (!body?.name || !body?.prompt) {
+      return HttpResponse.json({ code: "invalid", message: "name and prompt are required." }, { status: 422 });
+    }
+    const existing = mockRubrics.find((r) => r.name === body.name);
+    const created: Rubric = {
+      id: existing?.id ?? `rub-new-${++rubricCounter}`,
+      name: body.name,
+      version: (existing?.version ?? 0) + 1,
+      prompt: body.prompt,
+      created_at: "2026-08-06T10:00:00Z",
+    };
+    if (existing) Object.assign(existing, created);
+    else mockRubrics.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Appends the next
+  // version of this rubric id — never overwrites"; 201 = the new version.
+  http.put(`${BASE}/eval/rubrics/:rubricId`, async ({ params, request }) => {
+    const rubricId = params.rubricId as string;
+    const body = (await request.json()) as RubricUpdate;
+    rubricPuts.push({ rubricId, body });
+    const existing = mockRubrics.find((r) => r.id === rubricId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "rubric not found" }, { status: 404 });
+    }
+    if (!body?.prompt) {
+      return HttpResponse.json({ code: "invalid", message: "prompt is required." }, { status: 422 });
+    }
+    existing.version += 1;
+    existing.prompt = body.prompt;
+    return HttpResponse.json(existing, { status: 201 });
+  }),
+
+  // POST /eval/cases/import (openapi.yaml:1370-1429) — multipart; 200 with the
+  // per-row report inline, or 202 TaskRef above the server's threshold
+  // (importConfig.queued drives the branch). Registered BEFORE
+  // /eval/cases/:caseId so the literal path wins.
+  http.post(`${BASE}/eval/cases/import`, async ({ request }) => {
+    const form = await request.formData();
+    const file = form.get("file") as File | null;
+    importRequests.push({
+      filename: file?.name ?? "",
+      mapping: String(form.get("mapping") ?? ""),
+      set_id: (form.get("set_id") as string | null) ?? null,
+      set_name: (form.get("set_name") as string | null) ?? null,
+    });
+    if (importConfig.queued) {
+      return HttpResponse.json({ task_id: `task-import-${++importCounter}` }, { status: 202 });
+    }
+    return HttpResponse.json(importConfig.report, { status: 200 });
+  }),
+
+  // POST /eval/cases (openapi.yaml:1340-1369) — oneOf: (input + output) or
+  // source; the sourced mode derives input/output server-side (:3322-3326).
+  http.post(`${BASE}/eval/cases`, async ({ request }) => {
+    const body = (await request.json()) as EvalCaseCreate;
+    evalCaseCreates.push(body);
+    const sourced = "source" in body && Boolean(body.source);
+    const handcrafted = "input" in body && Boolean(body.input);
+    if (sourced === handcrafted) {
+      return HttpResponse.json(
+        { code: "invalid", message: "Exactly one of (input + output) / source is required." },
+        { status: 422 },
+      );
+    }
+    const id = `case-new-${++evalCaseCounter}`;
+    const created: EvalCase = sourced
+      ? {
+          id,
+          input: { prompt: "Derived prompt from the sourced turn", envelope },
+          output: "Derived response from the sourced turn",
+          reference: (body as { reference?: string | null }).reference ?? null,
+          source: (body as { source: EvalCase["source"] }).source,
+          version: 1,
+          created_at: "2026-08-06T10:00:00Z",
+        }
+      : {
+          id,
+          input: (body as { input: EvalCase["input"] }).input,
+          output: (body as { output: string }).output,
+          reference: (body as { reference?: string | null }).reference ?? null,
+          source: null,
+          version: 1,
+          created_at: "2026-08-06T10:00:00Z",
+        };
+    mockEvalCases[id] = created;
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // GET /eval/sets (openapi.yaml:1484-1503) — "Latest version of every set".
+  http.get(`${BASE}/eval/sets`, () => HttpResponse.json(mockEvalSets)),
+
+  // POST /eval/sets (openapi.yaml:1504-1523) — created at version 1.
+  http.post(`${BASE}/eval/sets`, async ({ request }) => {
+    const body = (await request.json()) as EvalSetCreate;
+    evalSetCreates.push(body);
+    if (!body?.name) {
+      return HttpResponse.json({ code: "invalid", message: "name is required." }, { status: 422 });
+    }
+    const created: EvalSet = {
+      id: `set-new-${++evalSetCounter}`,
+      name: body.name,
+      version: 1,
+      case_ids: body.case_ids ?? [],
+      created_at: "2026-08-06T10:00:00Z",
+    };
+    mockEvalSets.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // PUT /eval/sets/{setId} (openapi.yaml:1524-1547) — "each save is a new
+  // version carrying its full case_ids list"; 201 = the new version.
+  http.put(`${BASE}/eval/sets/:setId`, async ({ params, request }) => {
+    const setId = params.setId as string;
+    const body = (await request.json()) as EvalSetUpdate;
+    evalSetPuts.push({ setId, body });
+    const existing = mockEvalSets.find((s) => s.id === setId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    if (!body || body.case_ids == null) {
+      return HttpResponse.json({ code: "invalid", message: "case_ids is required." }, { status: 422 });
+    }
+    existing.version += 1;
+    existing.case_ids = body.case_ids;
+    if (body.name) existing.name = body.name;
+    return HttpResponse.json(existing, { status: 201 });
+  }),
+
   // GET /eval/cases/{caseId} (openapi.yaml:907-929) — judgment-drawer case doc.
   http.get(`${BASE}/eval/cases/:caseId`, ({ params }) => {
     const id = params.caseId as string;
@@ -1559,6 +1779,33 @@ export const handlers = [
       return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
     }
     return HttpResponse.json(found);
+  }),
+
+  // PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "each save appends the
+  // next version, never overwrites"; 201 = the new version (now latest).
+  http.put(`${BASE}/eval/cases/:caseId`, async ({ params, request }) => {
+    const caseId = params.caseId as string;
+    const body = (await request.json()) as EvalCaseUpdate;
+    evalCasePuts.push({ caseId, body });
+    const existing = mockEvalCases[caseId];
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
+    }
+    if (!body?.input?.prompt || body.output == null) {
+      return HttpResponse.json(
+        { code: "invalid", message: "input.prompt and output are required." },
+        { status: 422 },
+      );
+    }
+    const next: EvalCase = {
+      ...existing,
+      input: body.input,
+      output: body.output,
+      reference: body.reference ?? null,
+      version: (existing.version ?? 1) + 1,
+    };
+    mockEvalCases[caseId] = next;
+    return HttpResponse.json(next, { status: 201 });
   }),
 
   // POST /eval/judge (openapi.yaml:931-954) — 202 TaskRef "(parent task +
@@ -1575,9 +1822,15 @@ export const handlers = [
         { status: 422 },
       );
     }
-    if (Boolean(body.run_id) === Boolean(body.case_ids)) {
+    // v0.3.0 widened the oneOf to run_id | case_ids | set_id
+    // (openapi.yaml:2926-2929), matching mock/main.py's judge handler.
+    const selectors = [body.run_id, body.case_ids, body.set_id].filter(Boolean).length;
+    if (selectors !== 1) {
       return HttpResponse.json(
-        { code: "invalid", message: "Exactly one of run_id / case_ids is required (openapi.yaml:1865-1867)." },
+        {
+          code: "invalid",
+          message: "Exactly one of run_id / case_ids / set_id is required (openapi.yaml:2926-2929).",
+        },
         { status: 422 },
       );
     }

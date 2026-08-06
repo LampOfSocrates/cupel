@@ -14,6 +14,12 @@ MODELS = [
 # artifact and the server enforces them (openapi.yaml:533-536).
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
+# P2-T12 bulk import: "Small files: 200 with the per-row report inline. Above
+# the server's size threshold: 202 TaskRef" (openapi.yaml:1385-1389). The
+# threshold is DATA ROWS, not bytes — it is row work that makes an import slow,
+# and it makes the boundary testable without building multi-MB fixtures.
+IMPORT_SYNC_MAX_ROWS = int(os.environ.get("MOCK_IMPORT_SYNC_MAX_ROWS", "200"))
+
 TOKEN_DELAY = float(os.environ.get("MOCK_TOKEN_DELAY", "0.02"))
 STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 

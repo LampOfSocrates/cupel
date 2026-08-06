@@ -28,6 +28,11 @@ const TYPE_LABEL: Record<Task["type"], string> = {
   replay: "Replay",
   replay_turn: "Turn fork",
   judge: "Judging",
+  // Additive in contract v0.3.0 (openapi.yaml:2770-2782): compact = memory
+  // compaction (P3-MEM), import = a large POST /eval/cases/import running in
+  // the background (P2-T12).
+  compact: "Compaction",
+  import: "Import",
 };
 
 // Sketch 05 elapsed format: "2m14s".

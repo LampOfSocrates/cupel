@@ -19,6 +19,7 @@ import { EditorPage } from "./pages/EditorPage";
 import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 import { ForkComparePage } from "./pages/ForkComparePage";
 import { TracePage } from "./pages/TracePage";
+import { EvalPage } from "./pages/EvalPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
@@ -222,6 +223,11 @@ export function App() {
               forks, and replays alike", feature-spec.md:145); tree from
               context like all pages. */}
           <Route path="/trace/:turnId" element={<TracePage />} />
+          {/* P2-T12 Eval workbench (sketch 10) — "manage the eval domain
+              directly: case editor …, set manager …, rubric editor"
+              (feature-spec.md:63). Global, not tree-scoped
+              (feature-spec.md:115), so the route carries no tree. */}
+          <Route path="/eval" element={<EvalPage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"

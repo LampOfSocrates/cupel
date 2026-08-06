@@ -356,13 +356,96 @@ export interface JudgeConfig {
 // reference?}' — input 'prompt + context (frozen)', reference nullable
 // (reference-free rubrics allowed)"; source ":1848-1850 set when auto-created
 // from a conversation turn".
+export interface EvalCaseInput {
+  prompt: string;
+  envelope?: ContextEnvelope | null;
+}
+
+export interface EvalCaseSource {
+  tree: string;
+  conversation_id: string;
+  turn_id: string;
+}
+
 export interface EvalCase {
   id: string;
-  input: { prompt: string; envelope?: ContextEnvelope | null };
+  input: EvalCaseInput;
   output: string;
   reference?: string | null;
-  source?: { tree?: string; conversation_id?: string; turn_id?: string } | null;
+  source?: Partial<EvalCaseSource> | null;
+  /** openapi.yaml:2903-2909 — "Additive in v0.3.0 (not required — Phase-1
+   * backends omit it, read as 1): versions append on PUT /eval/cases/{id}". */
+  version?: number;
   created_at?: string;
+}
+
+// openapi.yaml:3319 EvalCaseCreate — ":3328-3330 oneOf: handcrafted =
+// input + output typed in the editor; sourced = the server derives input …
+// and output … from the referenced turn".
+export type EvalCaseCreate =
+  | { input: EvalCaseInput; output: string; reference?: string | null }
+  | { source: EvalCaseSource; reference?: string | null };
+
+// openapi.yaml:3354 EvalCaseUpdate — "Full content for the NEW version
+// (append-only … ) — prior versions and the judgments recorded against them
+// are untouched".
+export interface EvalCaseUpdate {
+  input: EvalCaseInput;
+  output: string;
+  reference?: string | null;
+}
+
+// openapi.yaml:3373 EvalCaseImportReport — ":3376-3379 "Per-row error report
+// … valid rows import even when others fail"". The identical shape arrives
+// inline (200) or as Task.result.import_report (202) — openapi.yaml:1386-1389.
+export interface EvalImportRowError {
+  /** ":3396 1-based data-row number in the uploaded file." */
+  row: number;
+  column?: string | null;
+  message: string;
+}
+
+export interface EvalCaseImportReport {
+  set_id?: string | null;
+  rows_total: number;
+  rows_imported: number;
+  created_case_ids: string[];
+  errors: EvalImportRowError[];
+}
+
+// openapi.yaml:3400 EvalSet — ":3403-3408 "named collection of cases
+// (versioned, reusable across runs/models)". Membership is versioned …: each
+// PUT appends a new version with its own full case_ids".
+export interface EvalSet {
+  id: string;
+  name: string;
+  version: number;
+  case_ids: string[];
+  created_at: string;
+}
+
+export interface EvalSetCreate {
+  name: string;
+  /** ":3427 Initial membership; empty/omitted = start empty." */
+  case_ids?: string[];
+}
+
+// openapi.yaml:3431 EvalSetUpdate — "The full membership for the NEW version";
+// ":3441 Optional name carries a rename into the new version".
+export interface EvalSetUpdate {
+  case_ids: string[];
+  name?: string | null;
+}
+
+// openapi.yaml:2867 RubricCreate — ":2870 Existing name appends the next
+// version"; :3444 RubricUpdate — "The prompt text for the NEW rubric version".
+export interface RubricCreate {
+  name: string;
+  prompt: string;
+}
+
+export interface RubricUpdate {
+  prompt: string;
 }
 
 // openapi.yaml:1857 JudgeRequest — ":1861-1864 Exactly one of run_id /
@@ -372,6 +455,11 @@ export interface EvalCase {
 export interface JudgeRequest {
   run_id?: string | null;
   case_ids?: string[] | null;
+  /** openapi.yaml:2934-2936 — "Judge every case in this eval set"; the oneOf
+   * became run_id | case_ids | set_id in v0.3.0 (:2926-2929). */
+  set_id?: string | null;
+  /** ":2939-2941 Pin a set membership version; omit for latest." */
+  set_version?: number | null;
   judge_model: string;
   rubric_id: string;
   rubric_version?: number | null;
@@ -579,7 +667,9 @@ export interface TaskListParams {
 // (openapi.yaml:832-847 "Cancel a task ... also stop-generation").
 export interface Task {
   id: string;
-  type: "chat" | "replay" | "replay_turn" | "judge";
+  // openapi.yaml:2770-2782 — compact and import are additive in v0.3.0;
+  // "import = a large POST /eval/cases/import processed in the background".
+  type: "chat" | "replay" | "replay_turn" | "judge" | "compact" | "import";
   status: "queued" | "running" | "done" | "failed" | "cancelled";
   progress: TaskProgress;
   parent_id?: string | null;
@@ -587,6 +677,9 @@ export interface Task {
     run_id?: string | null;
     conversation_id?: string | null;
     turn_id?: string | null;
+    /** openapi.yaml:2795-2802 — "the same per-row report a small synchronous
+     * POST /eval/cases/import returns inline". */
+    import_report?: EvalCaseImportReport | null;
   } | null;
   error?: string | null;
   created_at: string;

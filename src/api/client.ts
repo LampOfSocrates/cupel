@@ -24,6 +24,12 @@ import type {
   Endpoint,
   ErrorBody,
   EvalCase,
+  EvalCaseCreate,
+  EvalCaseImportReport,
+  EvalCaseUpdate,
+  EvalSet,
+  EvalSetCreate,
+  EvalSetUpdate,
   FeedbackRequest,
   Health,
   InstructionHistory,
@@ -41,6 +47,8 @@ import type {
   ReplayTurnAccepted,
   ReplayTurnRequest,
   Rubric,
+  RubricCreate,
+  RubricUpdate,
   Run,
   RunScoreSummary,
   RunSummaryItem,
@@ -498,10 +506,76 @@ export const api = {
   // EDITOR UI is Phase 2 (:874-875).
   rubrics: () => request<Rubric[]>("/eval/rubrics"),
 
+  // POST /eval/rubrics (openapi.yaml:1293-1311) — "Create a rubric
+  // (append-only; new name = v1) … Posting an existing rubric's name appends
+  // the next version".
+  createRubric: (body: RubricCreate) =>
+    request<Rubric>("/eval/rubrics", { method: "POST", body }),
+
+  // PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Save a rubric as
+  // a NEW version (append-only) … Appends the next version of this rubric id —
+  // never overwrites"; 201 = "The new rubric version (now latest)".
+  updateRubric: (rubricId: string, body: RubricUpdate) =>
+    request<Rubric>(`/eval/rubrics/${rubricId}`, { method: "PUT", body }),
+
   // GET /eval/cases/{caseId} (openapi.yaml:907-929) — "One eval case (judgment
   // drawer) … Phase 1 cases are auto-created from conversation turns during
-  // judging (feature-spec.md:61)".
+  // judging (feature-spec.md:61)". "Returns the LATEST version" (:1441-1442).
   evalCase: (caseId: string) => request<EvalCase>(`/eval/cases/${caseId}`),
+
+  // POST /eval/cases (openapi.yaml:1340-1369) — "Create an eval case
+  // (handcrafted or sourced from a turn) … Exactly one creation mode".
+  createEvalCase: (body: EvalCaseCreate) =>
+    request<EvalCase>("/eval/cases", { method: "POST", body }),
+
+  // PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "Save an eval case as
+  // a NEW version (append-only) … Rollback = PUT the old content again (a new
+  // version)"; 201 = "The new case version (now latest)".
+  updateEvalCase: (caseId: string, body: EvalCaseUpdate) =>
+    request<EvalCase>(`/eval/cases/${caseId}`, { method: "PUT", body }),
+
+  // GET /eval/sets (openapi.yaml:1484-1503) — "Latest version of every set,
+  // membership included".
+  evalSets: () => request<EvalSet[]>("/eval/sets"),
+
+  // POST /eval/sets (openapi.yaml:1504-1523) — "Create an eval set (version
+  // 1)"; membership changes afterwards go through PUT (:1510-1511).
+  createEvalSet: (body: EvalSetCreate) =>
+    request<EvalSet>("/eval/sets", { method: "POST", body }),
+
+  // PUT /eval/sets/{setId} (openapi.yaml:1524-1547) — "Save set membership as
+  // a NEW version (append-only) … each save is a new version carrying its full
+  // case_ids list".
+  updateEvalSet: (setId: string, body: EvalSetUpdate) =>
+    request<EvalSet>(`/eval/sets/${setId}`, { method: "PUT", body }),
+
+  // POST /eval/cases/import (openapi.yaml:1370-1429) — multipart file +
+  // mapping (+ set_id | set_name). "Small files: 200 with the per-row report
+  // inline. Above the server's size threshold: 202 TaskRef" — the caller gets
+  // the status alongside the body so it can follow the queued path.
+  // No Content-Type header: the browser sets the multipart boundary itself
+  // (same rule as upload above).
+  importEvalCases: async (
+    file: File,
+    mapping: { input: string; output: string; reference?: string },
+    target?: { set_id?: string; set_name?: string },
+  ): Promise<{ status: 200; report: EvalCaseImportReport } | { status: 202; task: TaskRef }> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("mapping", JSON.stringify(mapping));
+    if (target?.set_id) form.append("set_id", target.set_id);
+    if (target?.set_name) form.append("set_name", target.set_name);
+    const res = await fetch(buildUrl("/eval/cases/import"), {
+      method: "POST",
+      headers: authHeaders(),
+      body: form,
+    });
+    if (!res.ok) throw await errorFromResponse(res, "/eval/cases/import");
+    const body = await res.json();
+    return res.status === 202
+      ? { status: 202, task: body as TaskRef }
+      : { status: 200, report: body as EvalCaseImportReport };
+  },
 
   // POST /eval/judge (openapi.yaml:931-954) — "Enqueue LLM judging …
   // {set_id | case_ids | run_id, judge_model, rubric_id} → enqueued),

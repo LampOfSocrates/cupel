@@ -10,9 +10,13 @@ import { ConversationList } from "./ConversationList";
 // Nav entries: Chat carries the recent list (feature-spec.md:5 "Expanded
 // sidebar shows recent conversations under Chat"); Queue carries the pending
 // badge + running spinner (feature-spec.md:111, P1-T08).
+// P2-T12 adds Eval — the workbench is described as "a tab inside Runs"
+// (feature-spec.md:63), so it sits directly under Runs and its presets, and
+// carries no tree in its route (eval cases are global, feature-spec.md:115).
 const NAV = [
   { to: "/chat", label: "Chat" },
   { to: "/runs", label: "Runs" },
+  { to: "/eval", label: "Eval" },
   { to: "/queue", label: "Queue" },
   { to: "/agents", label: "Agents" },
 ];

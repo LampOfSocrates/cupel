@@ -539,7 +539,11 @@ class Engine:
         # canned reasoning, never a failed task.
         live = self.live_keys.get(child["parent_id"])
         if live:
-            case = self.db.one("SELECT * FROM eval_cases WHERE id = ?", (case_id,))
+            # P2-T12: eval_cases is versioned (id, version) — judge the LATEST
+            # content, matching GET /eval/cases/{id} (openapi.yaml:1441-1442).
+            case = self.db.one(
+                "SELECT * FROM eval_cases WHERE id = ? ORDER BY version DESC LIMIT 1",
+                (case_id,))
             rubric = self.db.one(
                 "SELECT prompt FROM rubrics WHERE id = ? AND version = ?",
                 (payload["rubric_id"], payload["rubric_version"]))

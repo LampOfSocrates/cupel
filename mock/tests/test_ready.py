@@ -123,20 +123,30 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     missing_paths = {m["path"] for m in report["missing"]}
     assert missing_paths, "expected Phase-2 endpoints to be missing today"
     # Subset (not equality): implemented-later endpoints simply drop out.
-    assert missing_paths <= phase2_paths | {"/eval/cases/{caseId}"}  # P2 PUT on a P1 path
+    # P2-T12 implemented the PUT on the Phase-1 path /eval/cases/{caseId}, so
+    # that path is fully conformant now and the old exemption is gone.
+    assert missing_paths <= phase2_paths
     # Sentinels that are certainly unimplemented today (P2-T07 implemented
     # /auth/token + /auth/logout; P2-T07b/07c implemented /admin/users,
-    # /admin/users/{userId}/permissions and /admin/agenttrees/{treeId}, so
-    # they left this list — the missing set shrinks task by task, as
-    # documented above).
+    # /admin/users/{userId}/permissions and /admin/agenttrees/{treeId};
+    # P2-T12 implemented the eval workbench surface — each left this list,
+    # so the missing set shrinks task by task, as documented above).
     for sentinel in ("/settings", "/casebooks",
                      "/agenttrees/{tree}/memory", "/admin/generator"):
         assert sentinel in missing_paths, f"{sentinel} should be missing today"
-    # And the auth + admin endpoints are now conformant, not missing.
+    # And the auth + admin + eval-workbench endpoints are conformant, not missing.
     for implemented in ("/auth/token", "/auth/logout", "/admin/users",
                         "/admin/users/{userId}/permissions",
-                        "/admin/agenttrees/{treeId}"):
+                        "/admin/agenttrees/{treeId}",
+                        "/eval/cases", "/eval/cases/import", "/eval/cases/{caseId}",
+                        "/eval/sets", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}"):
         assert implemented not in missing_paths
+    # P2-T12 shrink, recorded so a regression is loud: 44 -> 51 conformant
+    # operations of the same 69 checked (7 new: POST /eval/cases,
+    # POST /eval/cases/import, PUT /eval/cases/{caseId}, GET + POST /eval/sets,
+    # PUT /eval/sets/{setId}, PUT /eval/rubrics/{rubricId}).
+    # >= not ==, keeping this test's tolerant design: later tasks only add.
+    assert report["conformant"] >= 51
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):

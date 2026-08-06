@@ -109,9 +109,27 @@ CREATE TABLE IF NOT EXISTS rubrics (
   prompt TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (id, version));
 
+-- P2-T12 versioning choice (documented): eval_cases moved from "PK id" to the
+-- SAME append-only shape rubrics already use — composite PRIMARY KEY
+-- (id, version), latest = MAX(version) — rather than a mutated "latest" row
+-- plus a history side-table. One shape for every versioned store keeps the
+-- invariant machine-obvious ("versions append-only", skein-phases.md:160) and
+-- GET /eval/cases/{id} "Returns the LATEST version" (openapi.yaml:1442) is one
+-- ORDER BY. Pre-existing databases are migrated in Db._migrate_eval_cases
+-- below: every existing row becomes version 1, so Phase-1 cases (and the
+-- judgments pointing at them) keep working untouched.
 CREATE TABLE IF NOT EXISTS eval_cases (
-  id TEXT PRIMARY KEY, prompt TEXT NOT NULL, envelope TEXT,
-  output TEXT NOT NULL, reference TEXT, source TEXT, created_at TEXT NOT NULL);
+  id TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+  prompt TEXT NOT NULL, envelope TEXT,
+  output TEXT NOT NULL, reference TEXT, source TEXT, created_at TEXT NOT NULL,
+  PRIMARY KEY (id, version));
+
+-- Append-only versioned MEMBERSHIP (openapi.yaml:1533-1536: "each save is a
+-- new version carrying its full case_ids list"); case_ids is a JSON array.
+CREATE TABLE IF NOT EXISTS eval_sets (
+  id TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
+  case_ids TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (id, version));
 
 -- Append-only (skein-phases.md:160); human thumbs share this store.
 CREATE TABLE IF NOT EXISTS judgments (
@@ -143,7 +161,31 @@ class Db:
             self.conn.execute("PRAGMA synchronous=NORMAL")
             self.conn.execute("PRAGMA busy_timeout=5000")
             self.conn.executescript(SCHEMA)
+            self._migrate_eval_cases()
             self.conn.commit()
+
+    def _migrate_eval_cases(self):
+        """P2-T12: pre-P2-T12 databases carry eval_cases with PRIMARY KEY (id)
+        and no version column; CREATE TABLE IF NOT EXISTS above is a no-op for
+        them. SQLite cannot change a primary key in place, so rebuild once and
+        stamp every existing row as version 1 — Phase-1 cases stay readable and
+        the judgments referencing them are untouched (they key on case id, not
+        on this table). Idempotent: the column's presence is the marker."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(eval_cases)")}
+        if not cols or "version" in cols:
+            return
+        self.conn.executescript(
+            "ALTER TABLE eval_cases RENAME TO eval_cases_pre_t12;"
+            " CREATE TABLE eval_cases ("
+            "   id TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,"
+            "   prompt TEXT NOT NULL, envelope TEXT,"
+            "   output TEXT NOT NULL, reference TEXT, source TEXT,"
+            "   created_at TEXT NOT NULL, PRIMARY KEY (id, version));"
+            " INSERT INTO eval_cases"
+            "   (id, version, prompt, envelope, output, reference, source, created_at)"
+            "   SELECT id, 1, prompt, envelope, output, reference, source, created_at"
+            "   FROM eval_cases_pre_t12;"
+            " DROP TABLE eval_cases_pre_t12;")
 
     def run(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock:

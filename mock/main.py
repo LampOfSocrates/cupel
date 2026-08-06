@@ -7,13 +7,13 @@ import asyncio
 import json
 import os
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import auth, config, storage
+from . import auth, config, storage, tabular
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -1292,24 +1292,333 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return {"id": rid, "name": body["name"], "version": version,
                 "prompt": body["prompt"], "created_at": now}
 
-    @app.get("/eval/cases/{caseId}")
-    async def get_case(caseId: str):
-        c = db.one("SELECT * FROM eval_cases WHERE id = ?", (caseId,))
-        if not c:
-            err(404, "not_found", f"Eval case '{caseId}' not found.")
+    @app.put("/eval/rubrics/{rubricId}", status_code=201)
+    async def update_rubric(rubricId: str, request: Request):
+        """PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Save a
+        rubric as a NEW version (append-only) … Appends the next version of
+        this rubric id — never overwrites"."""
+        body = await body_json(request)
+        prompt = body.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            err(422, "invalid", "prompt is required (openapi.yaml:3444-3450).")
+        latest = db.one("SELECT * FROM rubrics WHERE id = ? ORDER BY version DESC LIMIT 1",
+                        (rubricId,))
+        if not latest:
+            err(404, "not_found", f"Rubric '{rubricId}' not found.")
+        version, now = latest["version"] + 1, now_iso()
+        db.run("INSERT INTO rubrics (id, name, version, prompt, created_at)"
+               " VALUES (?, ?, ?, ?, ?)", (rubricId, latest["name"], version, prompt, now))
+        return {"id": rubricId, "name": latest["name"], "version": version,
+                "prompt": prompt, "created_at": now}
+
+    # -------------------------------------------------------- eval cases
+    def latest_case(case_id: str) -> dict | None:
+        """GET "Returns the LATEST version" (openapi.yaml:1441-1442); the store
+        is append-only so latest = MAX(version) (db.py eval_cases note)."""
+        return db.one("SELECT * FROM eval_cases WHERE id = ? ORDER BY version DESC LIMIT 1",
+                      (case_id,))
+
+    def case_dict(c: dict) -> dict:
         return {"id": c["id"],
                 "input": {"prompt": c["prompt"], "envelope": unj(c["envelope"])},
                 "output": c["output"], "reference": c["reference"],
-                "source": unj(c["source"]), "created_at": c["created_at"]}
+                "source": unj(c["source"]), "version": c["version"],
+                "created_at": c["created_at"]}
+
+    def insert_case(case_id: str, version: int, prompt: str, envelope,
+                    output: str, reference, source) -> dict:
+        db.run("INSERT INTO eval_cases (id, version, prompt, envelope, output,"
+               " reference, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+               (case_id, version, prompt, envelope, output, reference, source, now_iso()))
+        return case_dict(db.one("SELECT * FROM eval_cases WHERE id = ? AND version = ?",
+                                (case_id, version)))
+
+    def case_from_source(source: dict) -> tuple[str, str | None, str]:
+        """(prompt, envelope_json, output) derived from a stored turn —
+        "sourced = the server derives input (the turn's prompt + envelope) and
+        output (its response) from the referenced turn" (openapi.yaml:3322-3326).
+        A turn row is one message (db.py:53 "~ ADK events"), so the pair is
+        rejoined via invocation_id whichever half was referenced."""
+        for field in ("tree", "conversation_id", "turn_id"):
+            if not source.get(field):
+                err(422, "invalid",
+                    "source requires tree, conversation_id and turn_id "
+                    "(openapi.yaml:3345-3353).")
+        need_tree(source["tree"])
+        turn = db.one("SELECT * FROM turns WHERE id = ? AND tree_id = ? AND conversation_id = ?",
+                      (source["turn_id"], source["tree"], source["conversation_id"]))
+        if not turn:
+            err(404, "not_found",
+                f"Turn '{source['turn_id']}' not found in conversation "
+                f"'{source['conversation_id']}'.")
+        sibling_role = "user" if turn["role"] == "assistant" else "assistant"
+        sibling = db.one(
+            "SELECT * FROM turns WHERE invocation_id = ? AND role = ? ORDER BY rowid LIMIT 1",
+            (turn["invocation_id"], sibling_role))
+        prompt_turn = turn if turn["role"] == "user" else sibling
+        answer_turn = turn if turn["role"] == "assistant" else sibling
+        if prompt_turn is None:
+            err(422, "invalid",
+                f"Turn '{turn['id']}' has no prompt half to use as the case input.")
+        envelope = (answer_turn or {}).get("envelope") or prompt_turn["envelope"]
+        return prompt_turn["content"], envelope, (answer_turn or {}).get("content") or ""
+
+    @app.post("/eval/cases", status_code=201)
+    async def create_case(request: Request):
+        """POST /eval/cases (openapi.yaml:1340-1369) — "Exactly one creation
+        mode (request oneOf): handcrafted = input + output supplied; sourced =
+        source supplied and the server derives input … and output"."""
+        body = await body_json(request)
+        source = body.get("source")
+        handcrafted = body.get("input") is not None or body.get("output") is not None
+        if bool(source) == bool(handcrafted):
+            err(422, "invalid",
+                "Exactly one of (input + output) / source is required "
+                "(openapi.yaml:3328-3330).")
+        if source:
+            if not isinstance(source, dict):
+                err(422, "invalid", "source must be an object.")
+            prompt, envelope, output = case_from_source(source)
+            source_json = j({"tree": source["tree"],
+                             "conversation_id": source["conversation_id"],
+                             "turn_id": source["turn_id"]})
+        else:
+            data = body.get("input")
+            if not isinstance(data, dict) or not isinstance(data.get("prompt"), str) \
+                    or not data["prompt"].strip():
+                err(422, "invalid", "input.prompt is required (openapi.yaml:3334-3341).")
+            if not isinstance(body.get("output"), str):
+                err(422, "invalid", "output is required (openapi.yaml:3328-3329).")
+            prompt, envelope, output = data["prompt"], j(data.get("envelope")), body["output"]
+            source_json = None
+        reference = body.get("reference")
+        if reference is not None and not isinstance(reference, str):
+            err(422, "invalid", "reference must be a string or null.")
+        return insert_case(new_id("case"), 1, prompt, envelope, output,
+                           reference, source_json)
+
+    @app.post("/eval/cases/import")
+    async def import_cases(request: Request, file: UploadFile = File(...),
+                           mapping: str = Form(...),
+                           set_id: str | None = Form(None),
+                           set_name: str | None = Form(None)):
+        """POST /eval/cases/import (openapi.yaml:1370-1429) — "Failed rows
+        never abort the import; valid rows land". 422 is reserved for
+        WHOLE-file failures ("Unparseable file or invalid mapping", :1421);
+        per-row problems travel in the report instead."""
+        data = await file.read()
+        if len(data) > config.MAX_UPLOAD_BYTES:
+            err(413, "too_large",
+                f"File exceeds the {config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB upload limit.")
+        try:
+            spec = json.loads(mapping)
+        except Exception:
+            err(422, "invalid", "mapping must be a JSON object string "
+                                "(openapi.yaml:3392-3399).")
+        if not isinstance(spec, dict) or not isinstance(spec.get("input"), str) \
+                or not isinstance(spec.get("output"), str):
+            err(422, "invalid",
+                "mapping must name the columns feeding input and output "
+                "(reference optional) — openapi.yaml:1409-1414.")
+        if set_id and set_name:
+            err(422, "invalid", "Pass set_id (extend) or set_name (create), not both.")
+        if set_id and not db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
+            err(404, "not_found", f"Eval set '{set_id}' not found.")
+        try:
+            header, rows = tabular.parse_table(file.filename or "", data)
+        except tabular.TableError as exc:
+            err(422, "invalid", str(exc))
+
+        columns = {name: i for i, name in enumerate(header)}
+        missing = [spec[k] for k in ("input", "output", "reference")
+                   if spec.get(k) and spec[k] not in columns]
+        if missing:
+            err(422, "invalid",
+                f"Mapped column(s) not present in the file header: {', '.join(missing)}. "
+                f"Header is: {', '.join(header)}.")
+
+        if len(rows) > config.IMPORT_SYNC_MAX_ROWS:
+            # "Above the server's size threshold: 202 TaskRef — an 'import'
+            # task whose result.import_report carries the identical report
+            # shape on completion" (openapi.yaml:1386-1389). Cases are global,
+            # so the task carries no tree (Broker docstring).
+            task = engine.create_task("import", total=len(rows))
+            engine.spawn(run_import(task["id"], header, rows, spec, set_id, set_name))
+            return JSONResponse({"task_id": task["id"]}, status_code=202)
+        return JSONResponse(apply_import(header, rows, spec, set_id, set_name),
+                            status_code=200)
+
+    def apply_import(header, rows, spec, set_id, set_name) -> dict:
+        """The one report builder both paths use, so a 200 body and a finished
+        task's result.import_report are byte-identical in shape
+        (openapi.yaml:1386-1389, 2795-2802)."""
+        columns = {name: i for i, name in enumerate(header)}
+        created, errors = [], []
+        for number, row in enumerate(rows, start=1):
+            def cell(field):
+                idx = columns.get(spec.get(field) or "")
+                return (row[idx].strip() if idx is not None and idx < len(row) else "")
+            prompt, output, reference = cell("input"), cell("output"), cell("reference")
+            if not prompt:
+                errors.append({"row": number, "column": spec["input"],
+                               "message": "input is empty — a case needs a prompt."})
+                continue
+            if not output:
+                errors.append({"row": number, "column": spec["output"],
+                               "message": "output is empty — a case needs a candidate response."})
+                continue
+            case = insert_case(new_id("case"), 1, prompt, None, output,
+                               reference or None, None)
+            created.append(case["id"])
+
+        target_set = None
+        if set_id or set_name:
+            if set_id:
+                latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC"
+                                " LIMIT 1", (set_id,))
+                if latest:
+                    # "extend an existing set — new membership version"
+                    # (openapi.yaml:1415-1416).
+                    target_set = insert_set(set_id, latest["version"] + 1, latest["name"],
+                                            unj(latest["case_ids"], []) + created)
+            else:
+                target_set = insert_set(new_id("set"), 1, set_name, created)
+        return {"set_id": target_set["id"] if target_set else None,
+                "rows_total": len(rows), "rows_imported": len(created),
+                "created_case_ids": created, "errors": errors}
+
+    async def run_import(task_id, header, rows, spec, set_id, set_name):
+        """Large-file path: the SAME report, delivered as task result. Defined
+        here (not in engine.py) so the engine keeps no eval knowledge."""
+        engine.set_status(task_id, "running")
+        try:
+            await asyncio.sleep(engine.step_delay)
+            report = apply_import(header, rows, spec, set_id, set_name)
+            engine.progress(task_id, f"Imported {report['rows_imported']}/{len(rows)} rows")
+            # set_status("done") sets done = total (engine.set_status).
+            engine.set_status(task_id, "done", result={"import_report": report})
+        except Exception as exc:  # a broken import must not wedge the queue
+            engine.set_status(task_id, "failed", error=str(exc))
+
+    @app.get("/eval/cases/{caseId}")
+    async def get_case(caseId: str):
+        c = latest_case(caseId)
+        if not c:
+            err(404, "not_found", f"Eval case '{caseId}' not found.")
+        return case_dict(c)
+
+    @app.put("/eval/cases/{caseId}", status_code=201)
+    async def update_case(caseId: str, request: Request):
+        """PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "each save
+        appends the next version, never overwrites. Prior versions stay
+        readable and existing judgments keep pointing at the content they
+        actually judged"."""
+        body = await body_json(request)
+        latest = latest_case(caseId)
+        if not latest:
+            err(404, "not_found", f"Eval case '{caseId}' not found.")
+        data = body.get("input")
+        if not isinstance(data, dict) or not isinstance(data.get("prompt"), str) \
+                or not data["prompt"].strip():
+            err(422, "invalid", "input.prompt is required (openapi.yaml:3354-3372).")
+        if not isinstance(body.get("output"), str):
+            err(422, "invalid", "output is required (openapi.yaml:3356).")
+        reference = body.get("reference")
+        if reference is not None and not isinstance(reference, str):
+            err(422, "invalid", "reference must be a string or null.")
+        return insert_case(caseId, latest["version"] + 1, data["prompt"],
+                           j(data.get("envelope")), body["output"], reference,
+                           latest["source"])
+
+    # --------------------------------------------------------- eval sets
+    def set_dict(s: dict) -> dict:
+        return {"id": s["id"], "name": s["name"], "version": s["version"],
+                "case_ids": unj(s["case_ids"], []), "created_at": s["created_at"]}
+
+    def insert_set(set_id: str, version: int, name: str, case_ids: list) -> dict:
+        db.run("INSERT INTO eval_sets (id, name, version, case_ids, created_at)"
+               " VALUES (?, ?, ?, ?, ?)",
+               (set_id, name, version, j(case_ids), now_iso()))
+        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ? AND version = ?",
+                               (set_id, version)))
+
+    def need_cases(case_ids) -> list:
+        if case_ids is None:
+            return []
+        if not isinstance(case_ids, list) or any(not isinstance(c, str) for c in case_ids):
+            err(422, "invalid", "case_ids must be an array of case ids.")
+        for cid in case_ids:
+            if not latest_case(cid):
+                err(404, "not_found", f"Eval case '{cid}' not found.")
+        return case_ids
+
+    @app.get("/eval/sets")
+    async def list_sets():
+        """"Returns the latest version of each set, membership included"
+        (openapi.yaml:1493-1495)."""
+        rows = db.all("SELECT s.* FROM eval_sets s WHERE s.version ="
+                      " (SELECT MAX(version) FROM eval_sets WHERE id = s.id)"
+                      " ORDER BY s.rowid")
+        return [set_dict(r) for r in rows]
+
+    @app.post("/eval/sets", status_code=201)
+    async def create_set(request: Request):
+        body = await body_json(request)
+        name = body.get("name")
+        if not isinstance(name, str) or not name.strip():
+            err(422, "invalid", "name is required (openapi.yaml:3421-3424).")
+        return insert_set(new_id("set"), 1, name, need_cases(body.get("case_ids")))
+
+    @app.put("/eval/sets/{setId}", status_code=201)
+    async def update_set(setId: str, request: Request):
+        """"each save is a new version carrying its full case_ids list; earlier
+        versions remain queryable" (openapi.yaml:1533-1536)."""
+        body = await body_json(request)
+        latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
+                        (setId,))
+        if not latest:
+            err(404, "not_found", f"Eval set '{setId}' not found.")
+        if body.get("case_ids") is None:
+            err(422, "invalid", "case_ids is required — a set version carries its FULL"
+                                " membership (openapi.yaml:3431-3437).")
+        name = body.get("name")
+        if name is not None and (not isinstance(name, str) or not name.strip()):
+            err(422, "invalid", "name must be a non-empty string when supplied.")
+        return insert_set(setId, latest["version"] + 1, name or latest["name"],
+                          need_cases(body["case_ids"]))
 
     @app.post("/eval/judge", status_code=202)
     async def judge(request: Request):
         body = await body_json(request)
         if not body.get("judge_model") or not body.get("rubric_id"):
             err(422, "invalid", "judge_model and rubric_id are required.")
-        run_id, case_ids = body.get("run_id"), body.get("case_ids")
-        if bool(run_id) == bool(case_ids):
-            err(422, "invalid", "Exactly one of run_id / case_ids is required (openapi.yaml:1865-1867).")
+        run_id, case_ids, set_id = body.get("run_id"), body.get("case_ids"), body.get("set_id")
+        # v0.3.0 widened the oneOf to run_id | case_ids | set_id
+        # (openapi.yaml:2926-2929).
+        if sum(1 for sel in (run_id, case_ids, set_id) if sel) != 1:
+            err(422, "invalid",
+                "Exactly one of run_id / case_ids / set_id is required "
+                "(openapi.yaml:2926-2929).")
+        if set_id:
+            # "set_id … judges the set's latest membership version unless
+            # set_version pins one" (openapi.yaml:2921-2923).
+            if body.get("set_version") is not None:
+                pinned = db.one("SELECT * FROM eval_sets WHERE id = ? AND version = ?",
+                                (set_id, body["set_version"]))
+                if not pinned and db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
+                    err(404, "not_found",
+                        f"Eval set '{set_id}' has no version {body['set_version']}.")
+                eval_set = pinned
+            else:
+                eval_set = db.one(
+                    "SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
+                    (set_id,))
+            if not eval_set:
+                err(404, "not_found", f"Eval set '{set_id}' not found.")
+            case_ids = unj(eval_set["case_ids"], [])
+            if not case_ids:
+                err(422, "invalid",
+                    f"Eval set '{set_id}' v{eval_set['version']} has no cases to judge.")
         versions = db.all("SELECT * FROM rubrics WHERE id = ? ORDER BY version", (body["rubric_id"],))
         if not versions:
             err(404, "not_found", f"Rubric '{body['rubric_id']}' not found.")
@@ -1358,7 +1667,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 err(422, "invalid", "Run has no finished cells to judge yet.")
         else:
             for cid in case_ids:
-                c = db.one("SELECT * FROM eval_cases WHERE id = ?", (cid,))
+                c = latest_case(cid)
                 if not c:
                     err(404, "not_found", f"Eval case '{cid}' not found.")
                 source = unj(c["source"]) or {}
