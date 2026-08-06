@@ -71,6 +71,7 @@
 - [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
 - [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
 - [ ] P3-K8S k8s manifests + Helm post-upgrade Playwright job that gates the release (artifacts + local validation; no live cluster)  [deps: P2-E2E] (moved from Phase 2 by user decision 2026-08-06)
+- [ ] P3-CLI2 skein-cli — terminal client to ANY conformant backend: `skein-cli --mybackend XXXX <cmd>`; chat with live token streaming, conversations/agents/instructions/replay/run --watch/judge/trace/tasks --watch, `--json` for scripts, delegates `ready` to the existing comparator. In cli/skein-cli/. PLAN: docs/plan-skein-cli.md (4 sub-tasks A-D; 3 open questions). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
 - [ ] P3-CLI agentic-app-maker — `skein create-agentic-app|ui|backend --name X --same-repo --gap-as-mock server --mybackend <openapi>` in cli/agentic-app-maker/; generates a runnable project + prints test/run/change-my-backend next steps; no backend given = mock does everything. PLAN: docs/plan-agentic-app-maker.md (5 sub-tasks A-E; 5 open questions need answers BEFORE building). Un-parks the original scaffolder; may absorb P4-HYBRID (see plan §1, Q1). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
 
 ## Phase 4 — PRO tier (user decision 2026-08-06: the pro shelf becomes Phase 4).
