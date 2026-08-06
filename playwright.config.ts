@@ -22,7 +22,10 @@ if (!process.env.SKEIN_E2E_SCRATCH_READY) {
 
 export default defineConfig({
   testDir: "e2e",
-  // One worker: both specs share the one mock instance + scratch DB.
+  // P2-E2E — the deterministic generator dataset (seed 42), loaded once the
+  // mock is up. Skipped in AUTH_MODE=on runs; see e2e/global-setup.ts.
+  globalSetup: "./e2e/global-setup.ts",
+  // One worker: every spec shares the one mock instance + scratch DB.
   workers: 1,
   fullyParallel: false,
   timeout: 180_000,
@@ -45,6 +48,11 @@ export default defineConfig({
         // that the smoke test can observe tokens streaming before `done`.
         MOCK_TOKEN_DELAY: "0.01",
         MOCK_STEP_DELAY: "0.03",
+        // P2-E2E failure injection (mock/config.py fail_marker): the FIRST
+        // attempt at any batch child whose payload mentions this string fails,
+        // the retry succeeds. Inert unless a spec deliberately puts the marker
+        // in a prompt — only e2e/j06-queue.spec.ts does.
+        MOCK_FAIL_MARKER: "SKEIN-E2E-INJECTED-FAILURE",
         // P2-T07: `npm run e2e:auth` (scripts/e2e-auth.mjs) sets AUTH_E2E=1,
         // which boots THIS mock with AUTH_MODE=on and runs e2e/auth.spec.ts
         // only; auth.spec skips itself otherwise, so the plain e2e:smoke run

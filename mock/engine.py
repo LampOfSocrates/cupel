@@ -111,6 +111,9 @@ class Engine:
         # (see task_tree). Cache only, never the source of truth: a restart
         # re-resolves from the DB.
         self._task_trees: dict[str, str] = {}
+        # Child ids already failed once by MOCK_FAIL_MARKER (config.fail_marker)
+        # — in-memory so the RETRY of an injected failure succeeds.
+        self._injected: set[str] = set()
 
     def spawn(self, coro):
         t = asyncio.get_running_loop().create_task(coro)
@@ -435,6 +438,7 @@ class Engine:
         kind = payload.get("kind")
         self.set_status(child_id, "running")
         try:
+            self._inject_failure(child)
             if kind == "replay_unit":
                 await self._run_replay_unit(child, payload)
             elif kind == "fork_unit":
@@ -447,6 +451,17 @@ class Engine:
                 self.set_status(child["id"], "done", result=payload.get("result"))
         except Exception as exc:  # child failure must not kill the batch (feature-spec.md:110)
             self.set_status(child["id"], "failed", error=str(exc))
+
+    def _inject_failure(self, child: dict):
+        """Fail this child once if MOCK_FAIL_MARKER is set and its payload
+        mentions the marker — see config.fail_marker for the contract."""
+        marker = config.fail_marker()
+        if not marker or marker not in (child["payload"] or ""):
+            return
+        if child["id"] in self._injected:
+            return  # already failed once; the retry proceeds normally
+        self._injected.add(child["id"])
+        raise RuntimeError(f"injected failure (MOCK_FAIL_MARKER '{marker}')")
 
     async def _live_generation(self, parent_id, prompt, cfg):
         """(content, model, note) for one batch child generation. The key is

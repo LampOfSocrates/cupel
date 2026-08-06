@@ -116,6 +116,9 @@ export function ConversationList({ tree }: Props) {
               color="gray"
               size="compact-xs"
               ml="md"
+              // Addressable per conversation: the label ("⑂ 2 forks") repeats
+              // across rows, so e2e needs the id to target one (P2-E2E).
+              data-testid={`forks-${conv.id}`}
               onClick={() => void toggleForks(conv)}
             >
               &#x2442; {conv.fork_count} forks {forks[conv.id] ? "▴" : "▸"}

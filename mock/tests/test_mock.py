@@ -790,6 +790,54 @@ def test_task_listing_defaults_to_parents():
     run(case())
 
 
+def test_fail_marker_injects_one_failure_then_retry_succeeds(monkeypatch):
+    """P2-E2E failure injection (config.fail_marker): a child whose payload
+    mentions MOCK_FAIL_MARKER fails its FIRST attempt only, so retry-failed is
+    exercisable end-to-end and deterministically."""
+    monkeypatch.setenv("MOCK_FAIL_MARKER", "BOOM-MARKER")
+
+    async def case():
+        async with client_pair() as c:
+            r = (await c.post("/agenttrees/agent1/chat", json={
+                "message": "BOOM-MARKER please fail once", "stream": False,
+            })).json()
+            await wait_task(c, r["task_id"])
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": r["conversation_id"]}],
+                "configs": [{"model": "deepseek-v3"}],
+            })).json()
+            # Partial failure: the batch itself completes (feature-spec.md:110
+            # "failed children don't kill the batch") — the FAILURE is on the
+            # child, which is what retry-failed and the UI's retry button read.
+            parent = await wait_task(c, acc["task_id"])
+            assert parent["status"] == "done"
+            children = (await c.get("/tasks", params={"parent_id": acc["task_id"]})).json()
+            assert [ch["status"] for ch in children] == ["failed"]
+            assert "injected failure" in children[0]["error"]
+
+            assert (await c.post(f"/tasks/{acc['task_id']}/retry-failed")).status_code == 202
+            retried = await wait_task(c, acc["task_id"])
+            assert retried["status"] == "done"
+    run(case())
+
+
+def test_fail_marker_is_inert_when_unset(monkeypatch):
+    monkeypatch.delenv("MOCK_FAIL_MARKER", raising=False)
+
+    async def case():
+        async with client_pair() as c:
+            r = (await c.post("/agenttrees/agent1/chat", json={
+                "message": "BOOM-MARKER but no marker configured", "stream": False,
+            })).json()
+            await wait_task(c, r["task_id"])
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": r["conversation_id"]}],
+                "configs": [{"model": "deepseek-v3"}],
+            })).json()
+            assert (await wait_task(c, acc["task_id"]))["status"] == "done"
+    run(case())
+
+
 def test_persistence_across_app_restart(tmp_path):
     async def case():
         db_file = str(tmp_path / "mock.sqlite")

@@ -23,6 +23,27 @@ IMPORT_SYNC_MAX_ROWS = int(os.environ.get("MOCK_IMPORT_SYNC_MAX_ROWS", "200"))
 TOKEN_DELAY = float(os.environ.get("MOCK_TOKEN_DELAY", "0.02"))
 STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 
+
+def fail_marker() -> str:
+    """FAILURE INJECTION for the e2e suite (skein-phases.md:98 "failure/latency
+    injection env vars"; feature-spec.md:203 "e2e runs with failure-injection ON
+    at fixed seed, so retry-failed and error states are exercised
+    reproducibly").
+
+    MOCK_FAIL_MARKER names a string. The FIRST attempt at any batch child whose
+    payload contains it fails; a retry of that same child succeeds. Marker-based
+    and attempt-based rather than a percentage, because a percentage is only
+    reproducible with an RNG the test cannot see — this way a spec chooses
+    exactly which work fails by what it puts in the prompt, and can assert exact
+    counts. Unset (the default, and every deployment) = completely inert.
+
+    The Settings → "Random task failures (5%)" control stays greyed out: that is
+    the generator control API, Phase 3 (P3-GEN).
+
+    Read per call, not at import, so tests can flip it (mirrors live_disabled).
+    """
+    return os.environ.get("MOCK_FAIL_MARKER", "")
+
 # --- Live-LLM BYOK mode (P1-T18c, docs/deployment.md:17-31) ---------------
 # "Mock stays the backend of record ...; only the generation call inside
 # chat/replay/judge goes to a real provider when a key is present."

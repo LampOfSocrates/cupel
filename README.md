@@ -75,8 +75,55 @@ You can also switch targets live in Settings → Backend without restarting.
 | `npm run simulate` | seed + drip fake traffic into the demo backend |
 | `npm test` | vitest (contract + UI) |
 | `npm run test:mock` | pytest for the mock |
-| `npm run e2e:smoke` | Playwright smoke (boots its own mock on a scratch DB) |
+| `npm run e2e` | full Playwright suite — every journey, both auth modes |
+| `npm run e2e:smoke` | the fast Playwright smoke subset only |
+| `npm run e2e:auth` | just the `AUTH_MODE=on` journeys |
 | `npm run ready -- <openapi>` | check a backend against the contract |
+
+## End-to-end suite
+
+`npm run e2e` walks the 13 user journeys of the coverage checklist
+(`feature-spec.md:205-218`), one spec file per journey, in `e2e/`:
+
+| | journey | spec |
+|---|---|---|
+| 1 | Shell — nav, presets, search, fork nesting | `j01-shell.spec.ts` |
+| 2 | Chat — SSE, feedback, copy, upload, stop | `j02-chat.spec.ts` |
+| 3 | Runs — select, configure, queue, grid fills | `j03-runs.spec.ts` |
+| 4 | Forks — re-fire at 2 endpoints, continue one | `j04-forks.spec.ts` |
+| 5 | Judge — scores stream in, drawer, re-score | `j05-judge.spec.ts` |
+| 6 | Queue — progress, cancel cascade, retry-failed | `j06-queue.spec.ts` |
+| 7 | Editor — draft, snapshot, new version, Test in Runs | `j07-editor.spec.ts` |
+| 8 | Trace — call tree, waterfall, lazy span payload | `j08-trace.spec.ts` |
+| 9 | Backend switcher — targets, healthz, banners | `j09-backend.spec.ts` |
+| 10 | Permissions — hidden tree, matrix edit takes effect | `j10-permissions.spec.ts` |
+| 11 | Tree disable — 409s, cancels, read-only, restore | `j11-tree-disable.spec.ts` |
+| 12 | Auth — login, 401 redirect, deep link, logout | `j12-auth.spec.ts` |
+| 13 | Authoring — eval workbench + inspector → casebook → eval set | `j13-authoring.spec.ts` |
+
+Plus the Phase-1 regression walks (`smoke.spec.ts`, `dod.spec.ts`) and the
+portrait shell (`mobile.spec.ts`).
+
+**Both auth modes, two passes** (`scripts/e2e-full.mjs`) — `AUTH_MODE` is the
+mock's boot env, so one Playwright run cannot host both:
+
+- pass 1, `AUTH_MODE=off`: everything except the `@auth-on` specs. Off is the
+  demo's mode and the one adopters start in.
+- pass 2, `AUTH_MODE=on`: only journeys 10–12. The auth-independent journeys are
+  not re-run under a token — no component branches on the auth mode, the token
+  is attached in one place (`src/api/client.ts`), and journey 12 walks a full
+  chat with it attached to cover that seam.
+
+Each spec asserts the **endpoint tags** its sketch documents — not just that the
+screen looks right, but that the journey really called
+`POST /agenttrees/{tree}/replay` and friends. The recorder is
+`e2e/helpers/api.ts` (~90 lines); patterns are written exactly as the sketches
+write them, with `{placeholder}` matching one path segment.
+
+Both passes boot their own mock and vite on a scratch SQLite
+(`playwright.config.ts`), never the dev DB, and load the deterministic
+generator dataset (seed 42) so journeys that need pre-existing data get the
+same data every run.
 
 ## Deployment
 

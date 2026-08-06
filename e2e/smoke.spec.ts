@@ -13,7 +13,8 @@ const MOCK = "http://localhost:4010";
 const MSG_A = "Smoke chat one about parcel delays";
 const MSG_B = "Smoke chat two about refunds";
 
-test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judge → score", async ({
+// @smoke — the subset `npm run e2e:smoke` runs (see package.json).
+test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judge → score", { tag: "@smoke" }, async ({
   page,
   request,
 }) => {

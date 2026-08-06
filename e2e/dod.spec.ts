@@ -182,7 +182,8 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
   // The forked conversations remain real, continuable chats (skein-phases.md:20).
   await test.step("fork is a real conversation (lineage banner in Chat)", async () => {
     await page.goto(conversationUrl);
-    const forksToggle = page.getByRole("button", { name: /2 forks/ });
-    await expect(forksToggle).toBeVisible();
+    // By id, not by label: "⑂ 2 forks" repeats across the seeded dataset.
+    const conversationId = new URL(conversationUrl).pathname.split("/").pop()!;
+    await expect(page.getByTestId(`forks-${conversationId}`)).toHaveText(/2 forks/);
   });
 });

@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 // Off-mode (no AUTH_MODE) so it runs in the plain `npm run e2e:smoke` suite.
 test.use({ viewport: { width: 390, height: 844 } });
 
-test("portrait: burger opens the sidebar, New chat closes it and shows the chat", async ({
+test("portrait: burger opens the sidebar, New chat closes it and shows the chat", { tag: "@smoke" }, async ({
   page,
 }) => {
   await page.goto("/");
