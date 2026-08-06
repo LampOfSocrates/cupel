@@ -30,6 +30,10 @@ directly) and Python 3.11+ with the mock's deps (`pip install -r mock/requiremen
 
 Fill the app with data while it runs: `npm run simulate`.
 
+The chat half works on a phone in portrait (the sidebar becomes a burger menu);
+the studio half — runs, comparison grids, traces, the instruction editor — is
+desktop-first by design.
+
 ## Using your own backend
 
 Everything about where the API lives is declared in ONE file,

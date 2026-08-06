@@ -14,6 +14,7 @@
 - ✅ Find any past conversation by search or recency; rename or delete it
 - ✅ See forked conversations nested under their parent
 - ✅ Share a link to a conversation or a single turn — the receiver sees exactly that spot, or logs in first
+- ✅ Use the chat half on a phone in portrait — the sidebar becomes a burger menu and closes itself the moment you start a new chat or open a conversation (the studio half below is desktop-first: run grids, trace waterfalls, version diffs and the admin tables want a wide screen)
 
 ## The studio half — build and trust your agents
 

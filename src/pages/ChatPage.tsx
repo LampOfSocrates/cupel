@@ -525,12 +525,25 @@ export function ChatPage() {
   }
 
   return (
-    <Stack gap="sm" maw={760} mx="auto" h="calc(100vh - 2 * var(--mantine-spacing-md))">
+    // P2-MOBILE-SHELL — the page owns a viewport-height column so the composer
+    // sits at the bottom and only the transcript scrolls. Two portrait fixes:
+    // dvh (100vh is the LARGE viewport on phones, so the composer hid behind
+    // the browser's own bottom chrome), and subtracting the AppShell header
+    // offset (banner + burger bar), which the old 100vh never accounted for —
+    // the composer sat exactly that far below the fold.
+    <Stack
+      gap="sm"
+      maw={760}
+      mx="auto"
+      h="calc(100dvh - var(--app-shell-header-offset, 0rem) - 2 * var(--mantine-spacing-md))"
+    >
       {/* Header per sketches: title left, settings affordance right —
           clean/01-chat.svg header shows a bare "⚙" at the right edge;
           annotated 01-chat.svg shows "model · temp ⚙" in the same spot. */}
       <Group justify="space-between" wrap="nowrap">
-        <Title order={4}>{title ?? (conversationId ? " " : "New chat")}</Title>
+        {/* lineClamp + minWidth:0 — a long title truncates instead of shoving
+            the ⚙ off a phone screen. */}
+        <Title order={4} lineClamp={1} style={{ minWidth: 0 }}>{title ?? (conversationId ? " " : "New chat")}</Title>
         <ChatSettingsMenu settings={chatSettings} onChange={setChatSettings} />
       </Group>
       {/* P2-T07c: a disabled tree keeps history readable while every new turn
@@ -1019,8 +1032,11 @@ function TurnBubble({
       radius="md"
       withBorder={turn.role === "assistant"}
       bg={turn.role === "user" ? "blue.0" : undefined}
-      ml={turn.role === "user" ? "20%" : 0}
-      mr={turn.role === "assistant" ? "10%" : 0}
+      // P2-MOBILE-SHELL — the desktop indents (20% / 10%) cost ~80px of a
+      // 390px phone screen; keep the left/right asymmetry that distinguishes
+      // the roles but shrink it in portrait.
+      ml={turn.role === "user" ? { base: "8%", sm: "20%" } : 0}
+      mr={turn.role === "assistant" ? { base: "4%", sm: "10%" } : 0}
       // P2-SHARE arrival marker: persistent left accent for the whole visit,
       // plus a ring that fades ~2.5s after landing.
       data-share-target={shareTarget ? "true" : undefined}
