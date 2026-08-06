@@ -2031,6 +2031,28 @@ components:
           type: string
           nullable: true
           description: Loaded seed dataset — mock only (feature-spec.md:159).
+        storage:
+          type: object
+          description: |
+            P2-PERSIST — how this backend persists its data, surfaced where a
+            human already looks (the backend switcher's health check). OPTIONAL
+            and purely additive: a backend that does not report it stays
+            conformant, and no client may require it.
+          required: [mode]
+          properties:
+            mode:
+              type: string
+              enum: [local, s3]
+              description: |
+                local = a plain file on the machine running the backend;
+                s3 = the same SQLite file continuously replicated to an
+                S3-compatible bucket (Litestream) and restored on boot.
+            restored:
+              type: boolean
+              description: |
+                s3 only — whether this boot restored the database from the
+                replica. false on the first ever boot, or after a failed
+                restore (which degrades to a fresh, re-seeded database).
 
     Model:
       type: object

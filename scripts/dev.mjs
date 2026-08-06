@@ -34,17 +34,34 @@ import path from "node:path";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const UI_PORT = 5173;
 
+// P2-PERSIST — the demo backend's storage mode. `local` (the default, and the
+// only thing a developer checkout ever wants) is a plain SQLite file; `s3`
+// replicates that same file to an S3-compatible bucket with Litestream, which
+// is what the hosted demo runs. The mode is an ENV choice, not a config-file
+// choice: it is a property of the machine you are on, not of the product, and
+// the deploy sets it. Mirrors mock/storage.py — keep the names in step.
+const S3_ENV = [
+  "SKEIN_S3_BUCKET",
+  "SKEIN_S3_ENDPOINT",
+  "SKEIN_S3_ACCESS_KEY_ID",
+  "SKEIN_S3_SECRET_ACCESS_KEY",
+];
+const DEFAULT_S3_PATH = "skein-mock"; // mock/storage.py DEFAULT_S3_PATH
+
 /**
  * Pure planner — what `npm start` will run and print, derived from the one
- * config artifact. Split out from the spawning so it is testable without
- * booting anything (tests/dev-start.test.js).
+ * config artifact plus the storage env. Split out from the spawning so it is
+ * testable without booting anything (tests/dev-start.test.js).
  *
+ * @param {object} config the agentic.config.ts object
+ * @param {Record<string,string|undefined>} env process env (SKEIN_STORAGE, SKEIN_S3_*)
  * @returns {{commands: {name: string, command: string, args: string[], env: Record<string,string>}[], bannerLines: string[]}}
  */
-export function buildStartupPlan(config) {
+export function buildStartupPlan(config, env = {}) {
   const label = config?.product?.label ?? "Skein";
   const localMock = config?.localMock;
   const enabled = Boolean(localMock?.enabled);
+  const s3 = String(env.SKEIN_STORAGE ?? "").trim().toLowerCase() === "s3";
 
   const ui = {
     name: "ui",
@@ -58,15 +75,35 @@ export function buildStartupPlan(config) {
 
   if (enabled) {
     // Backend first: it is the slower boot, and vite needs nothing from it.
+    // s3 mode needs the storage wrapper (restore from the bucket, then
+    // litestream replicate -exec uvicorn), so it boots mock.boot instead of
+    // uvicorn directly and passes the port the way a container would.
     commands.push({
       name: "mock",
       command: "python",
-      args: ["-m", "uvicorn", "mock.main:app", "--port", String(localMock.port)],
-      env: { SKEIN_MOCK_DB: localMock.dbPath },
+      args: s3
+        ? ["-m", "mock.boot"]
+        : ["-m", "uvicorn", "mock.main:app", "--port", String(localMock.port)],
+      env: s3
+        ? { SKEIN_MOCK_DB: localMock.dbPath, PORT: String(localMock.port) }
+        : { SKEIN_MOCK_DB: localMock.dbPath },
     });
+    bannerLines.push(`  Backend  bundled demo mock · http://localhost:${localMock.port}`);
+    if (s3) {
+      const missing = S3_ENV.filter((key) => !env[key]);
+      const replica = missing.length
+        ? `NOT configured — set ${missing.join(", ")} (docs/deployment.md)`
+        : `s3://${env.SKEIN_S3_BUCKET}/${env.SKEIN_S3_PATH || DEFAULT_S3_PATH}`;
+      bannerLines.push(
+        `           storage: s3 · ${localMock.dbPath} → Litestream replica ${replica}`,
+        "           SINGLE WRITER — never point a second instance at that bucket",
+      );
+    } else {
+      bannerLines.push(
+        `           storage: local · ${localMock.dbPath} (local file, this machine only)`,
+      );
+    }
     bannerLines.push(
-      `  Backend  bundled demo mock · http://localhost:${localMock.port}`,
-      `           storage: ${localMock.dbPath} (local file, this machine only)`,
       "           agentic.config.ts localMock.enabled = true — set it to false",
       "           when you point Skein at your own backend",
     );
@@ -135,7 +172,7 @@ function killTree(child) {
 
 async function main() {
   const config = await loadConfig();
-  const { commands, bannerLines } = buildStartupPlan(config);
+  const { commands, bannerLines } = buildStartupPlan(config, process.env);
 
   console.log("");
   for (const line of bannerLines) console.log(line);

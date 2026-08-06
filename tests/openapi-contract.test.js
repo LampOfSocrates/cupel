@@ -368,6 +368,23 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(settings.properties.chat_defaults).toBeDefined();
   });
 
+  // P2-PERSIST — Health.storage is the ONLY contract change in that task, and
+  // it is additive by construction: a new optional property on an existing
+  // response schema. These assertions are what makes "additive" checkable,
+  // not just claimed.
+  it("Health.storage is optional and additive (P2-PERSIST)", () => {
+    const health = doc.components.schemas.Health;
+    // required is untouched — a backend that omits storage stays conformant,
+    // which is also what skein-ready compares (scripts/conformance.mjs checks
+    // the contract's `required` keys only).
+    expect(health.required).toEqual(["status", "version"]);
+    const storage = health.properties.storage;
+    expect(storage.type).toBe("object");
+    expect(storage.properties.mode.enum).toEqual(["local", "s3"]);
+    expect(storage.required).toEqual(["mode"]);
+    expect(storage.properties.restored.type).toBe("boolean");
+  });
+
   it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
       expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);

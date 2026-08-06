@@ -18,13 +18,26 @@ const base = {
   localMock: { enabled: true, port: 4010, dbPath: "mock/skein-mock.sqlite" },
 };
 
-const enabled = () => buildStartupPlan(base);
-const disabled = (dev = "local") =>
-  buildStartupPlan({
-    ...base,
-    defaultTarget: { ...base.defaultTarget, dev },
-    localMock: { ...base.localMock, enabled: false },
-  });
+const enabled = (env = {}) => buildStartupPlan(base, env);
+const disabled = (dev = "local", env = {}) =>
+  buildStartupPlan(
+    {
+      ...base,
+      defaultTarget: { ...base.defaultTarget, dev },
+      localMock: { ...base.localMock, enabled: false },
+    },
+    env,
+  );
+
+// P2-PERSIST — SKEIN_STORAGE picks how durable the demo backend's SQLite file
+// is; s3 replicates it to a bucket with Litestream (the hosted demo).
+const S3_ENV = {
+  SKEIN_STORAGE: "s3",
+  SKEIN_S3_BUCKET: "skein-demo",
+  SKEIN_S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+  SKEIN_S3_ACCESS_KEY_ID: "AKIAEXAMPLE",
+  SKEIN_S3_SECRET_ACCESS_KEY: "s3cr3t",
+};
 
 describe("buildStartupPlan — localMock enabled", () => {
   it("runs the mock (with SKEIN_MOCK_DB + port) and the UI", () => {
@@ -48,9 +61,62 @@ describe("buildStartupPlan — localMock enabled", () => {
     expect(banner).toContain(`UI       http://localhost:${UI_PORT}`);
     expect(banner).toContain("Backend  bundled demo mock · http://localhost:4010");
     expect(banner).toContain(
-      "storage: mock/skein-mock.sqlite (local file, this machine only)",
+      "storage: local · mock/skein-mock.sqlite (local file, this machine only)",
     );
     expect(banner).toContain("localMock.enabled = true");
+  });
+});
+
+describe("buildStartupPlan — storage mode (P2-PERSIST)", () => {
+  it("defaults to local: plain uvicorn, plain SQLite file, no S3 anything", () => {
+    for (const env of [{}, { SKEIN_STORAGE: "local" }, { SKEIN_STORAGE: "nonsense" }]) {
+      const { commands, bannerLines } = enabled(env);
+      expect(commands[0].args).toEqual([
+        "-m", "uvicorn", "mock.main:app", "--port", "4010",
+      ]);
+      expect(commands[0].env).toEqual({ SKEIN_MOCK_DB: "mock/skein-mock.sqlite" });
+      const banner = bannerLines.join("\n");
+      expect(banner).toContain("storage: local · mock/skein-mock.sqlite");
+      expect(banner).not.toContain("Litestream");
+      expect(banner).not.toContain("s3://");
+    }
+  });
+
+  it("s3 boots the storage wrapper and names the replica + the single-writer rule", () => {
+    const { commands, bannerLines } = enabled(S3_ENV);
+    // mock.boot restores from the bucket, then runs litestream replicate -exec.
+    expect(commands[0].args).toEqual(["-m", "mock.boot"]);
+    expect(commands[0].env).toEqual({
+      SKEIN_MOCK_DB: "mock/skein-mock.sqlite",
+      PORT: "4010",
+    });
+    const banner = bannerLines.join("\n");
+    expect(banner).toContain(
+      "storage: s3 · mock/skein-mock.sqlite → Litestream replica s3://skein-demo/skein-mock",
+    );
+    expect(banner).toContain("SINGLE WRITER");
+    // secrets are never echoed to the terminal
+    expect(banner).not.toContain("s3cr3t");
+    expect(banner).not.toContain("AKIAEXAMPLE");
+  });
+
+  it("s3 honours SKEIN_S3_PATH", () => {
+    expect(
+      enabled({ ...S3_ENV, SKEIN_S3_PATH: "demo/db" }).bannerLines.join("\n"),
+    ).toContain("s3://skein-demo/demo/db");
+  });
+
+  it("s3 with missing env says exactly which vars are unset", () => {
+    const banner = enabled({ SKEIN_STORAGE: "s3", SKEIN_S3_BUCKET: "b" })
+      .bannerLines.join("\n");
+    expect(banner).toContain("NOT configured — set SKEIN_S3_ENDPOINT, SKEIN_S3_ACCESS_KEY_ID, SKEIN_S3_SECRET_ACCESS_KEY");
+    expect(banner).toContain("docs/deployment.md");
+  });
+
+  it("storage mode is irrelevant when the bundled mock is off", () => {
+    const banner = disabled("local", S3_ENV).bannerLines.join("\n");
+    expect(banner).not.toContain("storage:");
+    expect(banner).not.toContain("Litestream");
   });
 });
 

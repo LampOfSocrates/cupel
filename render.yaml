@@ -1,6 +1,11 @@
 # P1-TDEPLOY Render blueprint (docs/deployment.md "How to deploy").
 # One free-tier Docker web service: FastAPI mock + built Vite bundle,
-# deterministic re-seed on boot, shared-token gate.
+# seed-if-empty on boot, shared-token gate.
+#
+# SINGLE WRITER — DO NOT SCALE (P2-PERSIST). With SKEIN_STORAGE=s3 this
+# service is one SQLite database replicated by Litestream. Two instances
+# writing the same replica CORRUPT it; they do not degrade gracefully. Never
+# raise numInstances, and never run a second service against the same bucket.
 services:
   - type: web
     name: skein-demo
@@ -13,9 +18,26 @@ services:
       # unguessable value; share the URL as https://<app>.onrender.com/?token=<value>.
       - key: DEMO_TOKEN
         generateValue: true
-      # No persistent disk on free tier -> re-seed deterministically on boot
-      # (docs/deployment.md:8-10; mock/entrypoint.py).
+      # Seed the demo dataset deterministically, but ONLY when the database
+      # comes up empty (mock/entrypoint.py should_seed) — with SKEIN_STORAGE=s3
+      # a restored database must not be seeded on top of.
       - key: SKEIN_SEED_ON_BOOT
         value: "1"
       - key: SKEIN_SEED
         value: "42"
+      # P2-PERSIST storage mode. "local" = plain SQLite on the container's
+      # ephemeral disk: every restart/cold start starts from nothing and the
+      # boot seed refills it. That is the current, working default.
+      - key: SKEIN_STORAGE
+        value: local
+      # To make the demo's data SURVIVE restarts, set SKEIN_STORAGE=s3 and add
+      # these in the Render dashboard (Environment tab — secrets do not belong
+      # in this file, and sync:false here would block blueprint applies).
+      # Full walkthrough incl. R2 bucket creation: docs/deployment.md
+      # "Storage modes".
+      #   SKEIN_S3_BUCKET             skein-demo
+      #   SKEIN_S3_ENDPOINT           https://<account>.r2.cloudflarestorage.com
+      #   SKEIN_S3_ACCESS_KEY_ID      <R2 API token access key id>
+      #   SKEIN_S3_SECRET_ACCESS_KEY  <R2 API token secret>
+      #   SKEIN_S3_PATH               skein-mock          (optional, default)
+      #   SKEIN_S3_REGION             auto                (optional, default)

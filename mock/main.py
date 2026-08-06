@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import auth, config
+from . import auth, config, storage
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -446,7 +446,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.get("/healthz")
     async def healthz():
-        return {"status": "ok", "version": config.VERSION, "seed": app.state.seed}
+        """P2-PERSIST: `storage` reports the EFFECTIVE storage mode and, in s3
+        mode, whether this boot restored the database from the replica
+        (openapi.yaml Health.storage — optional, additive; backends that omit
+        it stay conformant). Read from the env per call, like
+        config.live_disabled(), so it reflects what mock/boot.py actually
+        decided rather than what was requested at import time."""
+        return {"status": "ok", "version": config.VERSION, "seed": app.state.seed,
+                "storage": storage.health_storage()}
 
     @app.get("/models")
     async def models(request: Request):

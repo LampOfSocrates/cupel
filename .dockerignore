@@ -6,7 +6,14 @@ dist/
 coverage/
 .pytest_cache/
 **/__pycache__/
-*.sqlite
+# `*.sqlite` alone matches root level ONLY, so mock/skein-mock.sqlite was
+# being baked into the image — harmless while the disk was ephemeral, fatal
+# for SKEIN_STORAGE=s3 (a database that already exists makes `litestream
+# restore -if-db-not-exists` skip the restore, so the demo would silently boot
+# on a developer's stale data instead of the replica). P2-PERSIST.
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
 mock/tests/
 tests/
 sketches/

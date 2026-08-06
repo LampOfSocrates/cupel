@@ -18,7 +18,7 @@ npm start          # UI on :5173 + the bundled demo backend on :4010
 Skein
   UI       http://localhost:5173
   Backend  bundled demo mock · http://localhost:4010
-           storage: mock/skein-mock.sqlite (local file, this machine only)
+           storage: local · mock/skein-mock.sqlite (local file, this machine only)
 ```
 
 That backend is the demo mock in `mock/` (FastAPI). It is a real, stateful
@@ -27,6 +27,11 @@ it keeps **everything in one SQLite file on your machine** (`mock/skein-mock.sql
 git-ignored). Nothing leaves the machine; delete the file and you are back to
 the seed. Requirements: Node >= 22.18 (`npm start` reads the TypeScript config
 directly) and Python 3.11+ with the mock's deps (`pip install -r mock/requirements.txt`).
+
+That same mock is also what the hosted demo runs, where it has no persistent
+disk and replicates its SQLite file to object storage instead
+(`SKEIN_STORAGE=s3`, Litestream). You never need that locally — see
+[docs/deployment.md](docs/deployment.md) "Storage modes".
 
 Fill the app with data while it runs: `npm run simulate`.
 

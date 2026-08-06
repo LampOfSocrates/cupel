@@ -1,26 +1,30 @@
-"""P1-TDEPLOY container entrypoint: serve + deterministic re-seed on boot.
+"""P1-TDEPLOY container entrypoint: serve + seed a fresh database on boot.
 
-Run: python -m mock.entrypoint  (the Docker CMD; also works locally)
-
-docs/deployment.md:8-10 — the free tier has "no persistent disk → SQLite is
-ephemeral. Mitigation: mock re-seeds deterministically on boot (generator
-seed mode, fixed --seed), so a restart resets to seeded state".
+Run: python -m mock.entrypoint  (invoked by mock/boot.py, which picks the
+storage mode first; also works standalone and locally)
 
 Behavior:
   1. uvicorn serves mock.main:app on 0.0.0.0:$PORT (Render injects PORT;
      default 4010) in the MAIN thread, so SIGTERM handling stays uvicorn's.
   2. A background thread polls /healthz on localhost until the server is up.
-  3. If SKEIN_SEED_ON_BOOT=1, it then runs the generator's seed mode against
-     localhost (--seed $SKEIN_SEED, default 42; --token $DEMO_TOKEN when the
-     gate is on — the generator writes through the public API, so it must
-     pass the gate like any other client). Progress is logged; the server
-     just keeps serving during and after.
+  3. It then seeds — but only when should_seed() says so (see below). Seeding
+     runs the generator's seed mode against localhost (--seed $SKEIN_SEED,
+     default 42; --token $DEMO_TOKEN when the gate is on — the generator
+     writes through the public API, so it must pass the gate like any other
+     client). Progress is logged; the server just keeps serving during and
+     after.
 
-Idempotency (generator module docstring): re-running seed dedupes chats via
-deterministic client_message_id and check-before-create skips, so a warm
-restart with a surviving DB converges to the same dataset. Runs/judgments
-CAN accrete across restarts in edge cases — acceptable per deployment.md:
-the DB is ephemeral anyway, "a restart resets to seeded state".
+SEED ONLY IF EMPTY (P2-PERSIST). SKEIN_SEED_ON_BOOT=1 used to mean "re-seed
+on every boot" — the mitigation for a disk that lost everything anyway
+(docs/deployment.md). With SKEIN_STORAGE=s3 the database now SURVIVES a
+restart, so the flag reads as "make sure this backend has data", and seeding
+is skipped whenever the database already holds conversations. Otherwise every
+restart would layer a fresh seed on top of real demo data: the generator's
+idempotency covers chats (deterministic client_message_id) and skips forks /
+replays / judgments by check-before-create, but runs and judgments can still
+accrete — which was tolerable only while the disk was ephemeral. The
+deterministic seed is unchanged for the empty case, so a first boot (or a
+boot after a failed restore) still lands on the same dataset as before.
 """
 
 import os
@@ -30,7 +34,7 @@ import time
 import httpx
 import uvicorn
 
-from . import generator
+from . import config, generator, storage
 
 HEALTH_TIMEOUT_S = 120.0
 
@@ -51,15 +55,29 @@ def wait_healthz(base: str, timeout: float = HEALTH_TIMEOUT_S) -> bool:
     return False
 
 
+def should_seed(env, db_path: str) -> tuple[bool, str]:
+    """(seed?, why) — the seed-if-empty rule, pure apart from reading the DB
+    file read-only. See the module docstring."""
+    if env.get("SKEIN_SEED_ON_BOOT") != "1":
+        return False, "SKEIN_SEED_ON_BOOT != 1"
+    if not storage.database_is_empty(db_path):
+        return False, ("database already holds conversations (restored replica "
+                       "or warm restart) — not seeding on top of it")
+    return True, "database is empty"
+
+
 def seed_when_ready(port: int) -> None:
     base = f"http://127.0.0.1:{port}"
     if not wait_healthz(base):
         log(f"healthz never came up on {base}; skipping boot seed")
         return
     log(f"server healthy on {base}")
-    if os.environ.get("SKEIN_SEED_ON_BOOT") != "1":
-        log("SKEIN_SEED_ON_BOOT != 1 — skipping boot seed")
+    db_path = os.environ.get("SKEIN_MOCK_DB") or config.DB_PATH
+    seed_it, why = should_seed(os.environ, db_path)
+    if not seed_it:
+        log(f"skipping boot seed: {why}")
         return
+    log(f"boot seed will run: {why}")
     seed = os.environ.get("SKEIN_SEED", "42")
     token = os.environ.get("DEMO_TOKEN")
     argv = ["seed", "--base", base, "--seed", seed]

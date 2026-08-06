@@ -4,7 +4,7 @@ Read these before any work, in order:
 2. skein-phases.md — we build phase by phase; NEVER build ahead of the current phase
 3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
-Current phase: 2. Current task: P2-PERSIST Mock storage modes — SKEIN_STORAGE=local|s3 (local SQLite file vs Litestream replication for the hosted demo); banner + /healthz report the mode.
+Current phase: 2. Current task: P2-T12 Eval workbench — cases/sets/rubrics CRUD, hand-crafted references, CSV/XLSX import (sketch 10).
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.

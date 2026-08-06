@@ -128,6 +128,20 @@ class Db:
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         with self.lock:
+            # P2-PERSIST: WAL is REQUIRED by SKEIN_STORAGE=s3 — Litestream
+            # replicates by shipping WAL frames, and refuses a rollback-journal
+            # database. Enabled unconditionally so both modes run the same
+            # engine settings and the hosted path is never a special case.
+            # ":memory:" silently stays "memory"; that is fine, tests use it.
+            # synchronous=NORMAL is the documented WAL+Litestream pairing
+            # (durability comes from the replica, not from fsync-per-commit);
+            # busy_timeout guards the second connection database_is_empty()
+            # opens at boot. The process-wide RLock below still serializes all
+            # access, so WAL changes no concurrency assumption in this file.
+            self.journal_mode = self.conn.execute(
+                "PRAGMA journal_mode=WAL").fetchone()[0]
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            self.conn.execute("PRAGMA busy_timeout=5000")
             self.conn.executescript(SCHEMA)
             self.conn.commit()
 

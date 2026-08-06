@@ -1,0 +1,167 @@
+"""P2-PERSIST — the mock's two storage modes.
+
+The bundled mock plays two roles (docs/deployment.md "The same mock, two
+roles"), and only the DURABILITY of its SQLite file differs between them.
+SQLite is the database in BOTH cases:
+
+  SKEIN_STORAGE=local  (default)  a plain SQLite file on the machine running
+                                  it. A developer checkout gets exactly this,
+                                  with no S3 code path and no extra env.
+  SKEIN_STORAGE=s3                the same SQLite file, continuously
+                                  replicated to an S3-compatible bucket by
+                                  Litestream, and restored from that bucket on
+                                  boot. This is for the hosted demo, where the
+                                  mock IS the whole backend and the disk is
+                                  ephemeral (Render free tier: every restart
+                                  starts from nothing).
+
+This module is deliberately pure-ish: env in, config/plan out. Nothing here
+opens a network connection, so the s3 wiring is unit-testable without a
+bucket (mock/tests/test_storage.py). The process wiring lives in mock/boot.py.
+
+SINGLE WRITER. SQLite + Litestream replicates ONE writing process. Two
+instances writing the same replica corrupt it — they do not merely degrade.
+Never scale the demo service past one instance (docs/deployment.md).
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+from pathlib import Path
+
+LOCAL = "local"
+S3 = "s3"
+MODES = (LOCAL, S3)
+
+# Litestream's own default config location; overridable for tests/dev.
+DEFAULT_CONFIG_PATH = "/etc/litestream.yml"
+# Key prefix inside the bucket when SKEIN_S3_PATH is not set. Mirrored by
+# scripts/dev.mjs (banner) — keep the two in step.
+DEFAULT_S3_PATH = "skein-mock"
+# R2 has no meaningful region; "auto" is what Cloudflare documents.
+DEFAULT_S3_REGION = "auto"
+
+REQUIRED_S3_ENV = (
+    "SKEIN_S3_BUCKET",
+    "SKEIN_S3_ENDPOINT",
+    "SKEIN_S3_ACCESS_KEY_ID",
+    "SKEIN_S3_SECRET_ACCESS_KEY",
+)
+
+
+def _env(env=None):
+    return os.environ if env is None else env
+
+
+def mode(env=None) -> str:
+    """The REQUESTED mode. Unknown/blank values mean local: a typo must not
+    take the demo down, and local is the safe reading of "I did not ask for
+    replication"."""
+    raw = (_env(env).get("SKEIN_STORAGE") or "").strip().lower()
+    return raw if raw in MODES else LOCAL
+
+
+def health_storage(env=None) -> dict:
+    """The `storage` object on GET /healthz (openapi.yaml Health.storage —
+    optional and additive). Reports the EFFECTIVE mode: mock/boot.py rewrites
+    SKEIN_STORAGE to "local" in the child env when an s3 boot had to degrade,
+    so /healthz never claims durability it does not have.
+
+    `restored` answers "did this boot pull the database back from the bucket?"
+    — the one thing a human wants to know about an ephemeral-disk demo."""
+    env = _env(env)
+    active = mode(env)
+    out: dict = {"mode": active}
+    if active == S3:
+        out["restored"] = env.get("SKEIN_STORAGE_RESTORED") == "1"
+    return out
+
+
+def s3_settings(env=None) -> tuple[dict, list[str]]:
+    """(settings, missing) from the SKEIN_S3_* env. `missing` names the
+    required vars that are unset — the caller decides whether that is fatal
+    (it is not: boot degrades to local and says so loudly)."""
+    env = _env(env)
+    missing = [name for name in REQUIRED_S3_ENV if not (env.get(name) or "").strip()]
+    settings = {
+        "bucket": (env.get("SKEIN_S3_BUCKET") or "").strip(),
+        "endpoint": (env.get("SKEIN_S3_ENDPOINT") or "").strip(),
+        "path": (env.get("SKEIN_S3_PATH") or "").strip() or DEFAULT_S3_PATH,
+        "region": (env.get("SKEIN_S3_REGION") or "").strip() or DEFAULT_S3_REGION,
+        "access_key_id": (env.get("SKEIN_S3_ACCESS_KEY_ID") or "").strip(),
+        "secret_access_key": (env.get("SKEIN_S3_SECRET_ACCESS_KEY") or "").strip(),
+    }
+    return settings, missing
+
+
+def _yaml_str(value: str) -> str:
+    """Double-quoted YAML scalar. Everything we emit is a bucket name, a URL
+    or a path, but quoting + escaping keeps a stray `#` or `:` from turning
+    the generated file into a parse error."""
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def litestream_yml(db_path: str, settings: dict) -> str:
+    """Render litestream.yml for one database with one S3 replica.
+
+    Credentials are deliberately NOT written into the file: Litestream reads
+    LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY straight from the
+    environment, so the secrets never touch the disk of the container and
+    cannot leak through a `cat` in a support session. Single `replica:` key —
+    the list form (`replicas:`) is deprecated since Litestream 0.5.
+    """
+    return "\n".join(
+        [
+            "# GENERATED by mock/storage.py from the SKEIN_S3_* environment",
+            "# (P2-PERSIST). Rewritten on every boot — do not edit by hand.",
+            "# Credentials are NOT in this file: Litestream reads",
+            "# LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY from env.",
+            "dbs:",
+            f"  - path: {_yaml_str(db_path)}",
+            "    replica:",
+            "      type: s3",
+            f"      bucket: {_yaml_str(settings['bucket'])}",
+            f"      path: {_yaml_str(settings['path'])}",
+            f"      endpoint: {_yaml_str(settings['endpoint'])}",
+            f"      region: {_yaml_str(settings['region'])}",
+            "",
+        ]
+    )
+
+
+def litestream_env(settings: dict) -> dict:
+    """Credential env for the litestream process (and, via -exec, its child)."""
+    return {
+        "LITESTREAM_ACCESS_KEY_ID": settings["access_key_id"],
+        "LITESTREAM_SECRET_ACCESS_KEY": settings["secret_access_key"],
+    }
+
+
+def database_is_empty(db_path: str) -> bool:
+    """True when the database holds no conversations — i.e. nothing a restore
+    brought back and nothing a user made. Drives seed-if-empty
+    (mock/entrypoint.py): a restored database must never be re-seeded on top of.
+
+    Anything unreadable (absent, truncated, half-restored, not a database)
+    counts as empty: the caller's response is to seed, which is exactly the
+    right recovery. Opened read-only in its own connection so this can run
+    while the server holds the file.
+    """
+    if not db_path or db_path == ":memory:":
+        return True
+    path = Path(db_path)
+    if not path.exists():
+        return True
+    try:
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return True
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM conversations").fetchone()
+    except sqlite3.Error:
+        return True  # no table yet, or the file is not a database
+    finally:
+        conn.close()
+    return not row or row[0] == 0

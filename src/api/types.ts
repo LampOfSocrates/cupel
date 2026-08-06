@@ -72,6 +72,12 @@ export interface Health {
   status: "ok";
   version: string;
   seed?: string | null; // "Loaded seed dataset — mock only" (openapi.yaml:1100)
+  // P2-PERSIST Health.storage — optional and additive; a conformant backend
+  // may omit it entirely, so every read must tolerate undefined.
+  storage?: {
+    mode: "local" | "s3";
+    restored?: boolean; // s3 only: did this boot restore from the replica?
+  };
 }
 
 // openapi.yaml:1102 Model — GET /models feeds the chat model dropdown
