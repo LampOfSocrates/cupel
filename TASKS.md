@@ -100,6 +100,17 @@
 ##  - README/first-run must lead with "bring your own agent"; cupel-ready --init is the on-ramp
 ##  - NO tree switcher exists (raised by P2-T12a): the app has one active tree from config, so
 ##    cross-tree results (e.g. a casebook replay spanning trees) cannot be linked
+##  - Auto-judge fragility raised by P2-RECORD — FIXED 2026-08-07, do not re-plan it.
+##    RunDetailPage used to auto-judge only on a live non-terminal -> done transition, so
+##    opening a finished run's link gave no scores and no explanation. The rule is now
+##    "done + a judge in the config + not already judged", read from the append-only store
+##    (GET /eval/judgments?run_id=&rubric_id=) plus any queued/running judge task for the run
+##    (adopted, never re-fired): reload, remount and a second tab cannot append duplicate
+##    judgments. failed/cancelled runs never auto-judge; a partially-failed run does (the
+##    server judges its finished cells only). Residual, not closable client-side: two tabs
+##    that both probe before either POST lands still double-judge — that needs an
+##    Idempotency-Key on the 202, which is P3-T00 (bucket C). Journey 5 no longer depends on
+##    the record-mode mock slowdown; that slowdown is film pacing only now
 ##  - Coverage gaps (P2-RECORD): no visual-regression/snapshot testing at all; e2e films run
 ##    against the Vite dev server, never the built bundle Render serves; chromium only;
 ##    portrait filmed nowhere; BYOK live mode, CUPEL_STORAGE=s3 restore, a11y/keyboard paths

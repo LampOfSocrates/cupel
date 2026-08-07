@@ -53,6 +53,8 @@ import { useApp } from "../AppContext";
 // affordance only; the queue PANEL is P1-T08.
 
 const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
+// A judging task still owns the run's scores while it is queued or running.
+const TASK_IN_FLIGHT = new Set(["queued", "running"]);
 const REFETCH_DEBOUNCE_MS = 300;
 
 export function RunDetailPage() {
@@ -82,9 +84,18 @@ export function RunDetailPage() {
   const [judgeDraft, setJudgeDraft] = useState<Partial<JudgeConfig>>({});
   // Chip tap target — "Tap a badge → judgment drawer" (feature-spec.md:64).
   const [drawerCaseId, setDrawerCaseId] = useState<string | null>(null);
-  // Auto-judge bookkeeping (see the judge-trigger note below).
-  const prevStatus = useRef<Run["status"] | null>(null);
+  // Auto-judge bookkeeping (see the judge-trigger note below). judgeFired is
+  // the per-mount latch; alive stops a check that outlives the page from
+  // POSTing (it is re-armed by the effect body so React's StrictMode
+  // double-invoke in dev cannot leave it false).
   const judgeFired = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   // Out-of-order guard (found by the P1-TE2E DoD walk): loads overlap (mount
   // double-fetch, debounced refetches, judge handler) and a SLOW stale
@@ -117,7 +128,6 @@ export function RunDetailPage() {
     setJudgeTaskId(null);
     setJudgeFormOpen(false);
     setDrawerCaseId(null);
-    prevStatus.current = null;
     judgeFired.current = false;
     void load();
   }, [load]);
@@ -131,7 +141,11 @@ export function RunDetailPage() {
   }, [ensureModels]);
 
   const fireJudge = useCallback(
-    async (judge_model: string, rubric_id: string) => {
+    // `silent`: the AUTO path must never replace the page with an error Alert
+    // — a background judge that 422s ("Run has no finished cells to judge
+    // yet") leaves the grid readable and the manual form available. The manual
+    // path still surfaces its error, unchanged.
+    async (judge_model: string, rubric_id: string, silent = false) => {
       try {
         // POST /eval/judge {run_id, judge_model, rubric_id} → 202 "Judging
         // enqueued (parent task + child per case)" (openapi.yaml:931-954);
@@ -140,7 +154,7 @@ export function RunDetailPage() {
         const ref = await api.judge({ run_id: runId, judge_model, rubric_id });
         setJudgeTaskId(ref.task_id);
       } catch (e) {
-        setError((e as Error).message);
+        if (!silent) setError((e as Error).message);
       }
     },
     [runId],
@@ -148,27 +162,80 @@ export function RunDetailPage() {
 
   // T12b judge trigger. The contract's judging path is POST /eval/judge —
   // replay configs carry `judge` (JudgeConfig, openapi.yaml:1508-1514) as the
-  // UI's recorded intent, and the CLIENT fires the judge once it observes this
-  // run transition into terminal 'done'. SIMPLIFICATIONS (documented):
-  // - the judge is taken from the FIRST config that has one — one judging pass
-  //   per run (per-config judges would need per-column case partitioning the
-  //   Phase-1 contract doesn't model);
-  // - only a LIVE transition fires (prevStatus non-terminal → done), so
-  //   reopening an already-done run never re-judges; leaving the page before
-  //   the run finishes skips the auto-fire — the manual "Judge this run" form
-  //   below covers both.
+  // UI's recorded intent, and the CLIENT fires it.
+  //
+  // THE RULE (rewritten in the UX phase; P2-RECORD found the old one): judge a
+  // run that IS done and carries a judge config and has not been judged yet —
+  // NOT "judge a run I happened to watch finish". The old trigger keyed off a
+  // live non-terminal → done transition, so opening a run link after the run
+  // had already finished silently produced no scores at all.
+  //
+  // AUTO-JUDGE PREDICATE — all five must hold:
+  //   1. run.id === runId && run.status === "done" — the aggregate replay
+  //      succeeded. `failed`/`cancelled` never auto-judge (there is nothing
+  //      the user asked to score, and the manual affordance is hidden for
+  //      them too). A PARTIALLY-failed run reports status `done` (the batch
+  //      parent goes done with failed children, mock/engine.py:431-433) and
+  //      DOES auto-judge: the server judges only the finished cells
+  //      (mock/main.py:1805-1807), so the failures are simply not scored, and
+  //      a run whose cells ALL failed answers 422 — swallowed above.
+  //   2. some column config carries a JudgeConfig — the judge is taken from
+  //      the FIRST config that has one, one judging pass per run (per-config
+  //      judges would need per-column case partitioning the contract doesn't
+  //      model).
+  //   3. GET /eval/judgments?run_id&rubric_id is EMPTY — "already judged" is
+  //      read from the append-only store, not from client state, so it
+  //      survives reload/remount/another tab. Scope: this run × this rubric,
+  //      ANY version and ANY judge_model (JudgeConfig pins neither, and a
+  //      rubric that has since versioned is still "this rubric"). Thumbs
+  //      can't collide: type human judgments carry run_id null
+  //      (openapi.yaml:1886-1887).
+  //   4. no judge task for this run is queued/running — closes the window
+  //      between POST /eval/judge and the first judgment landing (a reload
+  //      mid-judging). The in-flight task is ADOPTED instead: the judging…
+  //      badge and the live subscription come back on reload.
+  //   5. judgeFired — a per-mount latch, set synchronously before the first
+  //      await so a re-render mid-check cannot start a second one.
+  //
+  // RESIDUAL RACE (cannot be closed client-side): two tabs that both reach
+  // step 3 before either's POST creates its task will both judge, appending
+  // duplicates. Only a server-side Idempotency-Key on the 202 fixes that —
+  // it is bucket C / P3-T00, and openapi.yaml is frozen here.
+  const autoJudge =
+    run?.id === runId && run.status === "done"
+      ? (run.columns.map((c) => c.config.judge).find((j): j is JudgeConfig => j != null) ?? null)
+      : null;
+  const autoJudgeModel = autoJudge?.judge_model ?? null;
+  const autoRubricId = autoJudge?.rubric_id ?? null;
   useEffect(() => {
-    if (!run) return;
-    const prev = prevStatus.current;
-    prevStatus.current = run.status;
-    if (prev == null || TERMINAL.has(prev) || run.status !== "done") return;
-    const judge = run.columns
-      .map((c) => c.config.judge)
-      .find((j): j is JudgeConfig => j != null);
-    if (!judge || judgeFired.current) return;
-    judgeFired.current = true;
-    void fireJudge(judge.judge_model, judge.rubric_id);
-  }, [run, fireJudge]);
+    if (autoJudgeModel == null || autoRubricId == null || judgeFired.current) return;
+    judgeFired.current = true; // latch BEFORE any await
+    void (async () => {
+      try {
+        const prior = await api.judgments({
+          run_id: runId,
+          rubric_id: autoRubricId,
+          page_size: 1,
+        });
+        if (!alive.current || prior.length > 0) return;
+        const inFlight = (await api.tasks({ limit: 50 })).find(
+          (t) =>
+            t.type === "judge" &&
+            TASK_IN_FLIGHT.has(t.status) &&
+            t.result?.run_id === runId,
+        );
+        if (!alive.current) return;
+        if (inFlight) {
+          setJudgeTaskId(inFlight.id); // adopt: badge + live subscription
+          return;
+        }
+        await fireJudge(autoJudgeModel, autoRubricId, true);
+      } catch {
+        // A failed pre-check must not fire blind and must not blank the page
+        // — the manual "Judge this run" affordance stays.
+      }
+    })();
+  }, [runId, autoJudgeModel, autoRubricId, fireJudge]);
 
   const taskId = run?.task_id;
   const terminal = run != null && TERMINAL.has(run.status);
@@ -203,8 +270,25 @@ export function RunDetailPage() {
             // Reconcile on every (re)connect — frames published before the
             // subscription opened (or while disconnected) are gone for good,
             // so a run that finished in that gap would otherwise never
-            // refetch (same rule as QueueProvider's onOpen).
-            onOpen: () => void load(),
+            // refetch (same rule as QueueProvider's onOpen). Same hole for
+            // the judging badge: a judge task that went terminal before this
+            // subscription opened (or was adopted after it had) emits no
+            // further frame, so its status is re-read once per connect rather
+            // than leaving "judging…" stuck forever.
+            onOpen: () => {
+              void load();
+              if (judgeTaskId != null) {
+                void api
+                  .task(judgeTaskId)
+                  .then((t) => {
+                    if (!TASK_IN_FLIGHT.has(t.status)) {
+                      setJudgeTaskId(null);
+                      void load();
+                    }
+                  })
+                  .catch(() => {});
+              }
+            },
           })) {
             let belongs: boolean;
             if (ev.event === "judgment") {

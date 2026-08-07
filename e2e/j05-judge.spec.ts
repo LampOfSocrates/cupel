@@ -1,5 +1,5 @@
-import { expect, test } from "./helpers/api";
-import { seedChat, seedRubric } from "./helpers/seed";
+import { API_ORIGIN, expect, test } from "./helpers/api";
+import { awaitTask, seedChat, seedReplay, seedRubric } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 5 (feature-spec.md:210):
@@ -89,5 +89,81 @@ test("judge: run with the judge on → scores stream in → drawer reasoning + a
       await expect(page.getByTestId("judgment-entry")).toHaveCount(2, { timeout: 5_000 });
     }).toPass({ timeout: 120_000 });
     await page.keyboard.press("Escape");
+  });
+});
+
+// UX phase — the reload path. The old auto-judge fired only when an OPEN page
+// watched a live non-terminal → done transition, so a run that finished before
+// anyone opened its link was never judged (no scores, no explanation). The rule
+// is now "done + judge configured + not already judged", which makes the same
+// page load idempotent: this journey proves both halves — it judges a run it
+// never watched finish, and a reload does NOT append a second judging pass.
+test("judge: a run that finished before its page was opened is judged, once", async ({
+  page,
+  request,
+  api,
+}) => {
+  const step = filmed(page, "Journey 5b", 3);
+  const rubric = await seedRubric(request, "Reload rubric");
+  const chat = await seedChat(request, "Reload journey: is my parcel late?");
+
+  // Queued OUTSIDE the browser and awaited to completion — nobody is watching
+  // the run page while it finishes, which is exactly the case that used to
+  // produce a permanently unjudged run.
+  const replay = await seedReplay(
+    request,
+    [{ conversation_id: chat.conversationId }],
+    [{ model: "claude-haiku-4-5", judge: { judge_model: "claude-haiku-4-5", rubric_id: rubric.id } }],
+  );
+  await awaitTask(request, replay.task_id);
+
+  const judgmentCount = async () => {
+    const res = await request.get(`${API_ORIGIN}/eval/judgments?run_id=${replay.run_id}&page_size=200`);
+    expect(res.ok(), await res.text()).toBeTruthy();
+    return ((await res.json()) as unknown[]).length;
+  };
+  expect(await judgmentCount(), "the run is unjudged until the page opens").toBe(0);
+
+  let judged = 0;
+  await step("open the finished run's link — the judge fires anyway", async () => {
+    await page.goto(`/runs/${replay.run_id}`);
+    await expect(page.getByTestId("comparison-grid")).toBeVisible();
+    // The idempotency probe, then the judging pass it did not veto.
+    await api.expectCalled("GET /eval/judgments");
+    await api.expectCalled("POST /eval/judge");
+    await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
+      timeout: 120_000,
+    });
+    await expect(page.getByTestId("run-summary")).toBeVisible();
+    await expect(page.getByTestId("judging-badge")).toBeHidden({ timeout: 120_000 });
+    judged = await judgmentCount();
+    expect(judged).toBeGreaterThan(0);
+  });
+
+  await step("reload: scores are still there and NO second pass is appended", async () => {
+    api.clear();
+    await page.reload();
+    await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
+      timeout: 120_000,
+    });
+    // The probe runs again and this time finds judgments → no POST.
+    await api.expectCalled("GET /eval/judgments");
+    api.expectNotCalled("POST /eval/judge");
+    expect(await judgmentCount(), "judging is append-only — a reload must not duplicate").toBe(
+      judged,
+    );
+  });
+
+  await step("navigating away and back is idempotent too", async () => {
+    api.clear();
+    await page.getByRole("link", { name: "Runs" }).first().click();
+    await page.waitForURL(/\/runs$/);
+    await page.goto(`/runs/${replay.run_id}`);
+    await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
+      timeout: 120_000,
+    });
+    await api.expectCalled("GET /eval/judgments");
+    api.expectNotCalled("POST /eval/judge");
+    expect(await judgmentCount()).toBe(judged);
   });
 });

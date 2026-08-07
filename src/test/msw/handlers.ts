@@ -2229,7 +2229,20 @@ export const handlers = [
       const denied = enabledTreeGate(run.tree_id);
       if (denied) return denied;
     }
-    return HttpResponse.json({ task_id: `task-judge-${++judgeCounter}` }, { status: 202 });
+    // The 202 is a PARENT TASK, and the real mock records the judged run on
+    // it (payload {"result": {"run_id": …}}, mock/main.py:1836-1838). The
+    // auto-judge idempotency check reads exactly that to spot judging already
+    // in flight, so the fixture store must carry it too.
+    const taskId = `task-judge-${++judgeCounter}`;
+    mockTasks.unshift({
+      id: taskId,
+      type: "judge",
+      status: "queued",
+      progress: { done: 0, total: 1 },
+      result: { run_id: body.run_id ?? null },
+      created_at: "2026-08-04T11:00:00Z",
+    });
+    return HttpResponse.json({ task_id: taskId }, { status: 202 });
   }),
 
   // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — per-rubric

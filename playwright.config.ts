@@ -79,12 +79,16 @@ export default defineConfig({
         // Faster than dev defaults (mock/config.py:17-18) but slow enough
         // that the smoke test can observe tokens streaming before `done`.
         //
-        // P2-RECORD films run the mock ~3x slower. Two reasons, both about the
-        // browser being slower under slowMo + video + trace: a reply that
-        // materialises in one frame is a bad film, and a replay that finishes
-        // server-side BEFORE the run page mounts skips RunDetailPage's
-        // auto-judge (it fires only on a live non-terminal → done transition,
-        // RunDetailPage.tsx:156-159), which journey 5 films.
+        // P2-RECORD films run the mock ~3x slower: under slowMo + video +
+        // trace the browser lags, and a reply that materialises in one frame
+        // is a bad film.
+        //
+        // It USED to carry a second, load-bearing reason — a replay that
+        // finished server-side before the run page mounted skipped the
+        // auto-judge, which journey 5 films. That was a product bug, fixed in
+        // the UX phase (auto-judge now keys off "done + judge configured + not
+        // already judged", RunDetailPage.tsx); the slowdown is film pacing
+        // only now, and removing it can no longer break journey 5.
         MOCK_TOKEN_DELAY: RECORDING ? "0.03" : "0.01",
         MOCK_STEP_DELAY: RECORDING ? "0.09" : "0.03",
         // P2-E2E failure injection (mock/config.py fail_marker): the FIRST

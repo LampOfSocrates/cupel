@@ -10,12 +10,14 @@ import {
   judgmentRequests,
   mockRuns,
   mockRunSummaries,
+  mockTasks,
   pushLlmJudgment,
   replayTurnRequests,
   runDetailRequests,
   taskStreamRig,
 } from "../test/msw/handlers";
 import { RunDetailPage } from "./RunDetailPage";
+import type { Run } from "../api/types";
 
 // Contract under test — GET …/runs/{runId} (openapi.yaml:671-693): "Cells
 // fill incrementally as child tasks finish (feature-spec.md:112); live fill
@@ -457,4 +459,186 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
     await sleep(100);
     expect(judgeRequests).toHaveLength(0);
   });
+});
+
+// UX phase — auto-judge. The rule under test: judge a run that IS done and
+// carries a judge config and has not been judged yet, NOT "a run this page
+// watched finish" (the P2-RECORD bug: opening a finished run's link produced
+// no scores at all). Idempotency is read from the append-only store —
+// GET /eval/judgments?run_id=&rubric_id= (openapi.yaml:1575-1614) — plus the
+// in-flight judge parent task (Task.result.run_id, mock/main.py:1836-1838),
+// so reload / remount / a second tab cannot append duplicate judgments.
+const AUTO_JUDGE = { judge_model: "claude-haiku-4-5", rubric_id: "rub-help" };
+
+/** A run whose SECOND column config carries a judge — the shape a "judge on"
+ * replay produces (RunConfig.judge, openapi.yaml:1508-1514). */
+function seedJudgeConfigRun(status: Run["status"], id = "run-auto") {
+  mockRuns.unshift({
+    id,
+    tree_id: "agent1",
+    status,
+    created_at: "2026-08-04T10:00:00Z",
+    task_id: `task-${id}`,
+    label: "Replay · 1 config(s)",
+    columns: [
+      { label: "baseline", config: {} },
+      { label: "v2", config: { instruction_version: 2, judge: AUTO_JUDGE } },
+    ],
+    rows: [
+      {
+        source: { conversation_id: "c1", turn_id: "t2" },
+        cells: [
+          { status: "done", content: "Approved refunds land in 3-5 days." },
+          status === "done"
+            ? { status: "done", content: "Refunds settle in 3 days flat." }
+            : { status: "pending" },
+        ],
+      },
+    ],
+  });
+  return mockRuns[0];
+}
+
+/** The idempotency probe this page makes before auto-judging. */
+const priorJudgmentProbes = () =>
+  judgmentRequests.filter((u) => u.searchParams.get("run_id") === "run-auto");
+
+describe("RunDetailPage — auto-judge (UX phase)", () => {
+  it("opening an ALREADY-done run with a judge config and no judgments fires exactly once", async () => {
+    seedJudgeConfigRun("done");
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+
+    await waitFor(() =>
+      expect(judgeRequests).toEqual([{ run_id: "run-auto", ...AUTO_JUDGE }]),
+    );
+    // the predicate is read from the store, scoped to run × rubric
+    const probe = priorJudgmentProbes().at(-1)!;
+    expect(probe.searchParams.get("rubric_id")).toBe("rub-help");
+    // 202 TaskRef → the same judging state the live path shows
+    await screen.findByTestId("judging-badge");
+
+    // refetches keep arriving while judging; the latch holds
+    await sleep(400);
+    expect(judgeRequests).toHaveLength(1);
+  });
+
+  it("does NOT fire when judgments for that rubric already exist", async () => {
+    seedJudgeConfigRun("done");
+    pushLlmJudgment({
+      case_id: "case-1", run_id: "run-auto", rubric_id: "rub-help",
+      rubric_version: 2, score: 0.87, created_at: "2026-08-04T09:00:00Z",
+    });
+
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(priorJudgmentProbes()).toHaveLength(1));
+    await sleep(100);
+    expect(judgeRequests).toHaveLength(0);
+    expect(screen.queryByTestId("judging-badge")).not.toBeInTheDocument();
+  });
+
+  it("still fires when the only judgments are for a DIFFERENT rubric", async () => {
+    seedJudgeConfigRun("done");
+    pushLlmJudgment({
+      case_id: "case-1", run_id: "run-auto", rubric_id: "rub-acc",
+      rubric_version: 1, score: 0.4, created_at: "2026-08-04T09:00:00Z",
+    });
+
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(judgeRequests).toHaveLength(1));
+    expect(judgeRequests[0].rubric_id).toBe("rub-help");
+    // settle the judging subscription before teardown, so a stream fetch
+    // still in flight can't register itself after the rig is reset
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+  });
+
+  it("a run that finishes WHILE watched still auto-judges once, and the badge clears", async () => {
+    const run = seedJudgeConfigRun("running");
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(taskStreamRig.clients).toBe(1));
+    expect(judgeRequests).toHaveLength(0); // nothing to judge yet
+
+    run.status = "done";
+    run.rows[0].cells[1] = { status: "done", content: "Refunds settle in 3 days flat." };
+    taskStreamRig.emit("task", {
+      id: "task-run-auto", type: "replay", status: "done",
+      progress: { done: 1, total: 1 }, created_at: "2026-08-04T10:00:00Z",
+    });
+
+    await waitFor(() =>
+      expect(judgeRequests).toEqual([{ run_id: "run-auto", ...AUTO_JUDGE }]),
+    );
+    await screen.findByTestId("judging-badge");
+
+    // judging parent terminal → badge clears (task-judge-1 = MSW's 202 id)
+    taskStreamRig.emit("task", {
+      id: "task-judge-1", type: "judge", status: "done",
+      progress: { done: 1, total: 1 }, created_at: "2026-08-04T10:01:00Z",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("judging-badge")).not.toBeInTheDocument(),
+    );
+    expect(judgeRequests).toHaveLength(1);
+  });
+
+  it("a remount mid-judging adopts the in-flight task instead of judging again", async () => {
+    seedJudgeConfigRun("done");
+    const first = renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(judgeRequests).toHaveLength(1));
+    first.unmount();
+
+    // Reload/second tab: no judgment has landed yet, but the judge parent task
+    // is queued — the page adopts it rather than appending a duplicate pass.
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await screen.findByTestId("judging-badge");
+    await sleep(200);
+    expect(judgeRequests).toHaveLength(1);
+  });
+
+  it("a remount after judging finished does not re-judge", async () => {
+    seedJudgeConfigRun("done");
+    const first = renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(judgeRequests).toHaveLength(1));
+    first.unmount();
+
+    // server-side completion: the judgment is appended, the task goes terminal
+    pushLlmJudgment({
+      case_id: "case-1", run_id: "run-auto", rubric_id: "rub-help",
+      rubric_version: 2, score: 0.87, created_at: "2026-08-04T10:02:00Z",
+    });
+    mockTasks.find((t) => t.id === "task-judge-1")!.status = "done";
+
+    renderDetail("run-auto");
+    await screen.findByText("Run run-auto");
+    await waitFor(() => expect(priorJudgmentProbes().length).toBeGreaterThan(1));
+    await sleep(100);
+    expect(judgeRequests).toHaveLength(1);
+    expect(screen.queryByTestId("judging-badge")).not.toBeInTheDocument();
+  });
+
+  it("an already-done run with NO judge config never probes or judges", async () => {
+    renderDetail("run-old-1"); // done fixture, no judge in any config
+    await screen.findByText("Run run-old-1");
+    await sleep(100);
+    expect(judgeRequests).toHaveLength(0);
+    expect(judgmentRequests.filter((u) => u.searchParams.get("run_id"))).toHaveLength(0);
+  });
+
+  it.each(["failed", "cancelled"] as const)(
+    "a %s run with a judge config never auto-judges",
+    async (status) => {
+      seedJudgeConfigRun(status);
+      renderDetail("run-auto");
+      await screen.findByText("Run run-auto");
+      await sleep(100);
+      expect(judgeRequests).toHaveLength(0);
+      expect(priorJudgmentProbes()).toHaveLength(0);
+    },
+  );
 });
