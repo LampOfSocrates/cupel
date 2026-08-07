@@ -1,5 +1,5 @@
 // agentic.config.ts — THE one config artifact (CLAUDE.md invariant; cupel-phases.md:73
-// "Point Loom at your own backend by editing one file (agentic.config.ts)").
+// "Point Cupel at your own backend by editing one file (agentic.config.ts)").
 //
 // This is the file YOU hand-edit to point Cupel at your backends. Everything
 // the app needs to know about where its API lives is declared here; no other

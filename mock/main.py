@@ -411,7 +411,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         so it also lands in the container log. The contract declares no
         endpoint that reads audit records back, and inventing one would break
         the "implement the contract exactly" rule — so the trail is
-        server-side only: `sqlite3 cupel.sqlite 'SELECT * FROM inspect_audit'`
+        server-side only: `sqlite3 mock/cupel-mock.sqlite 'SELECT * FROM inspect_audit'`
         or the server log. A real backend would ship these to its SIEM."""
         user = request_user(request)
         uid = user["id"] if user else "dev"
