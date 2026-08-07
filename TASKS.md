@@ -60,6 +60,27 @@
 
 ## ══ Phase 2 is CLOSED. Next up, in this order (user decision 2026-08-07) ══
 
+## Stage 0 — housekeeping. Small, mostly outside the code; do whenever convenient.
+- [ ] PH-1 Rename the GitHub repo skein -> cupel. One command (`gh repo rename cupel`), but it
+      moves the remote URL: re-point the local remote, and BOTH Render services (cupel-demo,
+      cupel-site) clone from it — verify each still deploys afterwards. docs/index.html's
+      quickstart already says github.com/LampOfSocrates/cupel, so today it is wrong
+- [ ] PH-2 Sort out the Render URLs. The app service was renamed cupel-demo but its hostname is
+      still skein.onrender.com (Render keeps the original); cupel-site.onrender.com is correct.
+      Decide: live with the mismatch, recreate the service to get cupel-demo.onrender.com
+      (loses the current URL), or put a real domain in front. cupel.io and cupel.sh are
+      available; .dev/.app/.com are registered (.com is parked at a reseller)
+- [ ] PH-3 Turn on demo persistence — the code shipped in P2-PERSIST but the hosted demo still
+      runs CUPEL_STORAGE=local, so a restart wipes it. Needs an R2 (or S3) bucket + scoped
+      token, then set CUPEL_STORAGE=s3 + CUPEL_S3_BUCKET / _ENDPOINT / _ACCESS_KEY_ID /
+      _SECRET_ACCESS_KEY (+ optional _PATH, _REGION=auto) in the Render dashboard. NOTE the s3
+      path has never actually executed (no Docker locally, binary blocked) — the first real
+      deploy IS the test; /healthz storage.mode reports whether it degraded to local
+- [ ] PH-4 Delete the SKEIN_* -> CUPEL_* env alias shim in mock/__init__.py. The Render
+      dashboard is already updated, so it is dead weight carrying a delete-me note
+- [ ] PH-5 Decide repo visibility. Both repos are private; going public is the whole point of
+      the stars/community strategy, but the README and site should be launch-ready first
+
 ## Stage A — code quality + make-it-yours. Runs BEFORE the UX phase, no planning session
 ## needed: every item is already specified. Bucket B is docs/review-2026-08-05.md.
 - [ ] PB-1 Split ChatPage.tsx (~1.1k lines, 20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting  [bucket B1]
