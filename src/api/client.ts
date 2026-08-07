@@ -91,7 +91,7 @@ export class ApiError extends Error {
 }
 
 export function buildUrl(path: string, query?: Query): string {
-  // remap first (skein-phases.md:75 — differently-named routes), then prefix
+  // remap first (cupel-phases.md:75 — differently-named routes), then prefix
   // the target's baseUrl. The prod target's baseUrl is "" (same-origin,
   // P1-TDEPLOY) — relative URLs need the page origin as base; absolute
   // baseUrl values ignore the second argument.
@@ -190,7 +190,7 @@ export type TaskStreamEvent =
   | { event: "span"; data: SpanEvent }
   | { event: "judgment"; data: JudgmentEvent };
 
-// One send call covers both modes (skein-phases.md:43: "stream: true (SSE token
+// One send call covers both modes (cupel-phases.md:43: "stream: true (SSE token
 // stream, the UI default) and stream: false (single JSON response ...) — same
 // endpoint, flag in the request body"). The kind is decided by the response
 // Content-Type, so a backend that can't stream degrades gracefully to "json".
@@ -239,7 +239,7 @@ export const api = {
   // the client then clears its stored token regardless of the outcome.
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 
-  // GET /me — always called on boot (skein-phases.md:160; openapi.yaml:62)
+  // GET /me — always called on boot (cupel-phases.md:160; openapi.yaml:62)
   me: () => request<Me>("/me"),
 
   // GET /healthz (openapi.yaml:80-96) — backend-switcher health check

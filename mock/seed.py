@@ -1,5 +1,5 @@
 """Structural bootstrap so a fresh server is usable: trees agent1 + agent2
-(skein-phases.md:43), agents with instruction versions, replay endpoints.
+(cupel-phases.md:43), agents with instruction versions, replay endpoints.
 Conversations/runs/judgments are the generator's job (P1-T18), not the server's.
 """
 

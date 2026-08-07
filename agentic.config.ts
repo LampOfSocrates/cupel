@@ -1,7 +1,7 @@
-// agentic.config.ts — THE one config artifact (CLAUDE.md invariant; skein-phases.md:73
+// agentic.config.ts — THE one config artifact (CLAUDE.md invariant; cupel-phases.md:73
 // "Point Loom at your own backend by editing one file (agentic.config.ts)").
 //
-// This is the file YOU hand-edit to point Skein at your backends. Everything
+// This is the file YOU hand-edit to point Cupel at your backends. Everything
 // the app needs to know about where its API lives is declared here; no other
 // file in src/ contains a host. The runtime store (src/api/target.ts) picks
 // the active target from this list, persists your choice device-locally, and
@@ -43,7 +43,7 @@ export interface BackendTarget {
   banner?: { label: string; color?: string } | false;
   /**
    * Route remapping for backends whose routes are NAMED DIFFERENTLY
-   * (skein-phases.md:75 — e.g. everything lives under "/nabu-service/…").
+   * (cupel-phases.md:75 — e.g. everything lives under "/nabu-service/…").
    * Receives the contract path ("/agenttrees/agent1/chat") and returns the
    * path your backend expects. Applied by the client before prefixing
    * baseUrl. Example:
@@ -52,7 +52,7 @@ export interface BackendTarget {
   remap?: (path: string) => string;
   /**
    * Escape hatch for backends that don't speak the contract at all
-   * (skein-phases.md:75 "any backend at all via a small adapter module —
+   * (cupel-phases.md:75 "any backend at all via a small adapter module —
    * with the mock filling in whatever your backend doesn't do yet").
    * Module specifier of an adapter, resolved by the switcher/readiness
    * tooling (P2-T17 / P2-READY). Declared + typed now; not consumed yet.
@@ -70,9 +70,9 @@ export interface BackendTarget {
  * SQLite file on this machine's filesystem (`dbPath`). Nothing is synced
  * anywhere; delete the file and you are back to the seed.
  *
- * WHEN YOU CONNECT SKEIN TO YOUR OWN BACKEND: set `enabled: false` and point
+ * WHEN YOU CONNECT CUPEL TO YOUR OWN BACKEND: set `enabled: false` and point
  * `defaultTarget.dev` at your target above. `npm start` then runs the UI
- * only, and YOUR backend holds all persistence — Skein itself stores nothing
+ * only, and YOUR backend holds all persistence — Cupel itself stores nothing
  * server-side (the only client-side state is device-local: the chosen target,
  * an auth token, a BYOK LLM key).
  *
@@ -87,7 +87,7 @@ export interface LocalMockConfig {
   port: number;
   /**
    * SQLite file, relative to the repo root — the mock's entire persistence
-   * (passed to the mock as SKEIN_MOCK_DB, mock/config.py:51). Git-ignored.
+   * (passed to the mock as CUPEL_MOCK_DB, mock/config.py:51). Git-ignored.
    */
   dbPath: string;
 }
@@ -108,7 +108,7 @@ export interface AgenticConfig {
 }
 
 export const agenticConfig: AgenticConfig = {
-  product: { name: "skein", label: "Skein" },
+  product: { name: "cupel", label: "Cupel" },
 
   targets: [
     {
@@ -151,6 +151,6 @@ export const agenticConfig: AgenticConfig = {
   localMock: {
     enabled: true,
     port: 4010,
-    dbPath: "mock/skein-mock.sqlite",
+    dbPath: "mock/cupel-mock.sqlite",
   },
 };

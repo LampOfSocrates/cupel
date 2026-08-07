@@ -1,4 +1,4 @@
-# Skein — what you can do
+# Cupel — what you can do
 
 > Half chat app, half agent studio.
 >
@@ -44,10 +44,10 @@
 
 - ✅ Run the whole thing with no backend at all — the bundled demo backend, and a token-gated demo URL you can send a client
 - ✅ Start everything with one command — `npm start` boots the UI and the demo backend, and tells you which backend you're on and where your data lives
-- ✅ Point Skein at your own backend by editing one file (`agentic.config.ts`) — flip `localMock.enabled` off and your backend holds all persistence
+- ✅ Point Cupel at your own backend by editing one file (`agentic.config.ts`) — flip `localMock.enabled` off and your backend holds all persistence
 - ✅ Switch between mock / local / staging / prod live from Settings, with health checks
-- ✅ Check your backend is ready before you try — `skein-ready` reports every missing endpoint or mismatched shape
-- ✅ Generate your config from your own OpenAPI file — `skein-ready --init` detects base URL, route prefix, and auth scheme
+- ✅ Check your backend is ready before you try — `cupel-ready` reports every missing endpoint or mismatched shape
+- ✅ Generate your config from your own OpenAPI file — `cupel-ready --init` detects base URL, route prefix, and auth scheme
 - ✅ Turn login on or off with one env var — real JWTs, login screen, 401 handling; the same UI code either way
 - ✅ Control who can view, tune, or evaluate each agent tree; disable a tree so new work stops but history stays readable
 - 🗓️ Keep the hosted demo's data across restarts — SQLite replicated to object storage
@@ -57,8 +57,8 @@
 - 🗓️ Tune the demo generator's pace from Settings
 - 🗓️ Manage what the app remembers per agent tree — view, edit, clear
 - 🗓️ Deploy to Kubernetes with a Helm-gated test job that blocks a bad release
-- 🗓️ Drive any conformant backend from the terminal — `skein-cli chat`, `replay`, `run --watch`, `tasks --watch`, `--json` for scripts
-- 🗓️ Generate your own project from this repo — `skein create-agentic-app --name myapp --mybackend <your-openapi>`, with the bundled mock filling whatever your backend doesn't implement yet
+- 🗓️ Drive any conformant backend from the terminal — `cupel-cli chat`, `replay`, `run --watch`, `tasks --watch`, `--json` for scripts
+- 🗓️ Generate your own project from this repo — `cupel create-agentic-app --name myapp --mybackend <your-openapi>`, with the bundled mock filling whatever your backend doesn't implement yet
 
 ## Also on the roadmap
 

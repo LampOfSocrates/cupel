@@ -1,5 +1,5 @@
 // P2-E2E — `npm run e2e`: the full Playwright suite, both auth modes
-// (skein-phases.md:101 "a Playwright suite that walks all 13 user journeys in
+// (cupel-phases.md:101 "a Playwright suite that walks all 13 user journeys in
 // both auth modes").
 //
 // TWO Playwright runs, not one: AUTH_MODE is the mock's boot env

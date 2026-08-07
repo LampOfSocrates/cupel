@@ -1,13 +1,13 @@
 {
-  "name": "skein-studio",
+  "name": "cupel-studio",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "skein-ready": "scripts/skein-ready.mjs"
+    "cupel-ready": "scripts/cupel-ready.mjs"
   },
   "scripts": {
-    "ready": "node scripts/skein-ready.mjs",
+    "ready": "node scripts/cupel-ready.mjs",
     "start": "node scripts/dev.mjs",
     "dev": "vite",
     "build": "vite build",

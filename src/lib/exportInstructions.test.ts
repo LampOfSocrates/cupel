@@ -50,10 +50,10 @@ describe("serializeHistoryJson", () => {
 describe("serializeHistoryMarkdown", () => {
   const md = serializeHistoryMarkdown(fixture, "ag_concierge", new Date("2026-08-05T12:00:00Z"));
 
-  it("opens with an H1 + Skein export header carrying the date", () => {
+  it("opens with an H1 + Cupel export header carrying the date", () => {
     expect(md.startsWith("# ag_concierge — instruction history\n")).toBe(true);
     expect(md).toContain(
-      "Skein export — 2026-08-05 — live version v2 — format yaml",
+      "Cupel export — 2026-08-05 — live version v2 — format yaml",
     );
   });
 

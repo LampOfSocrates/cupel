@@ -59,7 +59,7 @@ describe("device-local persistence (feature-spec.md:161)", () => {
 });
 
 // P2-T17 — the "custom Base URL field" (feature-spec.md:158), device-local
-// under skein.backend.customUrl like the target choice itself (:161).
+// under cupel.backend.customUrl like the target choice itself (:161).
 describe("custom target (P2-T17)", () => {
   const URL = "http://backend.internal:9999";
 

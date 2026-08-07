@@ -13,7 +13,7 @@ import { setActiveTarget } from "./target";
 import { setProdToken } from "./backendPrefs";
 
 // P2-T07 token store — one login token PER BACKEND TARGET
-// (skein.auth.token.<targetId>), device-local like the target choice
+// (cupel.auth.token.<targetId>), device-local like the target choice
 // (feature-spec.md:161). localStorage is cleared between tests by setup.ts.
 
 describe("auth token store", () => {

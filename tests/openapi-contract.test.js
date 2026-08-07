@@ -5,7 +5,7 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 
 const doc = YAML.parse(readFileSync("openapi.yaml", "utf8"));
 
-// feature-spec.md:120-135 filtered to Phase 1 (skein-phases.md:9-66); tree-scoped
+// feature-spec.md:120-135 filtered to Phase 1 (cupel-phases.md:9-66); tree-scoped
 // per feature-spec.md:115, global routes unprefixed.
 const PHASE1_PATHS = [
   "/me",
@@ -40,7 +40,7 @@ const PHASE1_PATHS = [
 ];
 
 // v0.3.0 additions — feature-spec.md:117-123, :128-134 filtered to Phase 2
-// (skein-phases.md:69-118). Pro-tier repo/PR endpoints excluded (TASKS.md:56);
+// (cupel-phases.md:69-118). Pro-tier repo/PR endpoints excluded (TASKS.md:56);
 // /assist is Phase 3 (feature-spec.md:119).
 const PHASE2_PATHS = [
   "/auth/token",
@@ -91,7 +91,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("chat serves both modes on one endpoint via a stream flag (skein-phases.md:43)", () => {
+  it("chat serves both modes on one endpoint via a stream flag (cupel-phases.md:43)", () => {
     const stream = doc.components.schemas.ChatRequest.properties.stream;
     expect(stream.type).toBe("boolean");
     expect(stream.default).toBe(true);
@@ -129,7 +129,7 @@ describe("P1-T00 OpenAPI contract", () => {
   });
 
   // NOTE: the Phase-1 test "no auth anywhere — Phase 1 has no security
-  // schemes (skein-phases.md:10)" is REPLACED by design in v0.3.0. Phase 2
+  // schemes (cupel-phases.md:10)" is REPLACED by design in v0.3.0. Phase 2
   // introduces the bearerAuth security model (feature-spec.md:15-21), so the
   // old assertion inverts into the security-model tests in the
   // "P2-T00 contract v0.3.0" block below.
@@ -158,7 +158,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("task lifecycle and result deep-links (skein-phases.md:43, feature-spec.md:107)", () => {
+  it("task lifecycle and result deep-links (cupel-phases.md:43, feature-spec.md:107)", () => {
     const task = doc.components.schemas.Task.properties;
     expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
     // compact + import APPENDED in v0.3.0 — additive, Phase-1 values unchanged
@@ -272,7 +272,7 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(doc.components.responses.Conflict.description).toMatch(/tree_disabled/);
   });
 
-  it("Inspector is cross-user, filtered, paginated, audit-logged (skein-phases.md:78)", () => {
+  it("Inspector is cross-user, filtered, paginated, audit-logged (cupel-phases.md:78)", () => {
     const params = doc.paths["/admin/conversations"].get.parameters.map((p) => p.name);
     for (const name of ["user_id", "tree", "date_from", "date_to", "score_min", "score_max", "page", "page_size"]) {
       expect(params, `filter ${name}`).toContain(name);
@@ -375,7 +375,7 @@ describe("P2-T00 contract v0.3.0", () => {
   it("Health.storage is optional and additive (P2-PERSIST)", () => {
     const health = doc.components.schemas.Health;
     // required is untouched — a backend that omits storage stays conformant,
-    // which is also what skein-ready compares (scripts/conformance.mjs checks
+    // which is also what cupel-ready compares (scripts/conformance.mjs checks
     // the contract's `required` keys only).
     expect(health.required).toEqual(["status", "version"]);
     const storage = health.properties.storage;

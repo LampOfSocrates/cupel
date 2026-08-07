@@ -199,7 +199,7 @@ describe("EditorPage", () => {
 
   // P1-T20b — "Test an instruction change in one click: 'Test in Runs'
   // snapshots your draft and replays your usual conversations against it —
-  // using the editor → Runs flow (sketches 06 → 03)" (skein-phases.md:18).
+  // using the editor → Runs flow (sketches 06 → 03)" (cupel-phases.md:18).
   // Real RunsPage mounted at /runs so the router-state handoff is exercised
   // end to end, not against a probe.
   const renderEditorWithRuns = (agentId = "ag_concierge") =>
@@ -259,7 +259,7 @@ describe("EditorPage", () => {
     const blobs: Blob[] = [];
     const createObjectURL = vi.fn((b: Blob) => {
       blobs.push(b);
-      return "blob:skein-export";
+      return "blob:cupel-export";
     });
     const revokeObjectURL = vi.fn();
     // jsdom ships neither — install, then remove so other tests see stock URL
@@ -283,7 +283,7 @@ describe("EditorPage", () => {
       expect(downloads).toEqual(["ag_concierge-instructions-v3.json"]);
       expect(createObjectURL).toHaveBeenCalledTimes(1);
       expect(blobs[0].type).toBe("application/json");
-      expect(revokeObjectURL).toHaveBeenCalledWith("blob:skein-export");
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:cupel-export");
     } finally {
       clickSpy.mockRestore();
       Reflect.deleteProperty(URL, "createObjectURL");

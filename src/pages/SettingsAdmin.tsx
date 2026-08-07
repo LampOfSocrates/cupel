@@ -18,7 +18,7 @@ import type { AdminUser, AgentTree, TreePermission } from "../api/types";
 import { useApp } from "../AppContext";
 
 // P2-T07b/07c — the two admin Settings sections (unsketched; derived from the
-// existing SettingsPage visual language per skein-phases.md:95 — Paper blocks,
+// existing SettingsPage visual language per cupel-phases.md:95 — Paper blocks,
 // dense xs controls):
 // - Members (feature-spec.md:19): "user list, per-tree permission matrix
 //   (view/tune/evaluate checkboxes)". Data = GET /admin/users + one

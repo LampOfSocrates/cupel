@@ -1,4 +1,4 @@
-"""Skein Phase-1 mock server — implements openapi.yaml v0.2.0 exactly.
+"""Cupel Phase-1 mock server — implements openapi.yaml v0.2.0 exactly.
 
 Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 """
@@ -25,11 +25,11 @@ def err(status: int, code: str, message: str):
     raise HTTPException(status, {"code": code, "message": message})
 
 
-DEMO_COOKIE = "skein_demo_token"
+DEMO_COOKIE = "cupel_demo_token"
 
 DENIED_PAGE = (
-    "<!doctype html><html><head><title>Skein demo</title></head><body>"
-    "<h1>Skein demo</h1><p>This demo needs an access token. Open the exact "
+    "<!doctype html><html><head><title>Cupel demo</title></head><body>"
+    "<h1>Cupel demo</h1><p>This demo needs an access token. Open the exact "
     "link you were given &mdash; it ends in <code>?token=&hellip;</code>. "
     "The token is remembered in a cookie afterwards.</p></body></html>"
 )
@@ -43,7 +43,7 @@ class DemoTokenGate:
 
     DEMO_TOKEN unset (local dev, tests) = fully open, zero behavior change.
     When set, every request must carry the token via ?token= / X-Demo-Token /
-    the skein_demo_token cookie; a valid ?token= request ALSO sets that cookie
+    the cupel_demo_token cookie; a valid ?token= request ALSO sets that cookie
     (httpOnly, SameSite=Lax, Secure behind HTTPS — Render terminates TLS and
     forwards X-Forwarded-Proto) so the SPA and all its same-origin API/asset
     requests pass with no client changes. /healthz stays open for Render's
@@ -98,7 +98,7 @@ class AuthGate:
     AUTH_MODE unset/"off" (the default — local dev, tests, the deployed
     Render demo): completely inert, zero behavior change. AUTH_MODE=on: a
     valid bearer JWT (mock/auth.py) is required on API paths; the verified
-    users-table row is stashed in scope["state"]["skein_user"] for handlers
+    users-table row is stashed in scope["state"]["cupel_user"] for handlers
     (/me) to read.
 
     What is gated (decision, documented): only paths whose FIRST SEGMENT is a
@@ -108,7 +108,7 @@ class AuthGate:
     even within API roots: GET /healthz and POST /auth/token, the contract's
     only two security:[] operations (openapi.yaml:23-25), plus OPTIONS (CORS
     preflight carries no credentials). /openapi.json is not an API root and
-    thus open: it is the contract itself, probed by skein-ready/switcher
+    thus open: it is the contract itself, probed by cupel-ready/switcher
     tooling before login, and carries no data. (The DemoTokenGate DOES gate
     /openapi.json — that gate protects a whole deployment, this one protects
     data; both can be active, see stacking note below.)
@@ -164,7 +164,7 @@ class AuthGate:
                     scope, receive, send, 404, "not_found",
                     f"Agent tree '{parts[2]}' not found.")
 
-        scope.setdefault("state", {})["skein_user"] = user
+        scope.setdefault("state", {})["cupel_user"] = user
         return await self.app(scope, receive, send)
 
 
@@ -180,15 +180,15 @@ async def body_json(request: Request) -> dict:
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
                step_delay: float | None = None, static_dir: str | None = None) -> FastAPI:
-    # P2-READY (skein-phases.md:98): the mock "ships its own OpenAPI file —
-    # which the readiness script validates against Skein's contract as the
+    # P2-READY (cupel-phases.md:98): the mock "ships its own OpenAPI file —
+    # which the readiness script validates against Cupel's contract as the
     # first conformance test". FastAPI auto-generates the spec from the
     # routes; handlers have no response_model, so schemas are loose ({}) and
     # conformance sees path/method/param presence (documented in
     # docs/readiness.md). Docs UI stays off. When DEMO_TOKEN is set the gate
     # covers /openapi.json like every other endpoint (only /healthz is open)
-    # — skein-ready reaches it via --header "X-Demo-Token: ...".
-    app = FastAPI(title="Skein mock", version=config.VERSION,
+    # — cupel-ready reaches it via --header "X-Demo-Token: ...".
+    app = FastAPI(title="Cupel mock", version=config.VERSION,
                   openapi_url="/openapi.json", docs_url=None, redoc_url=None)
     db = Db(db_path or config.DB_PATH)
     # add_middleware PREPENDS, so registration order is inner→outer. Final
@@ -343,7 +343,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     def request_user(request: Request) -> dict | None:
         """The AuthGate-verified users row (AUTH_MODE=on), else None —
         handlers never read AUTH_MODE themselves."""
-        return request.scope.get("state", {}).get("skein_user")
+        return request.scope.get("state", {}).get("cupel_user")
 
     def request_roles(request: Request) -> list:
         """Global roles of the caller. No verified user (an off-mode backend
@@ -411,11 +411,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         so it also lands in the container log. The contract declares no
         endpoint that reads audit records back, and inventing one would break
         the "implement the contract exactly" rule — so the trail is
-        server-side only: `sqlite3 skein.sqlite 'SELECT * FROM inspect_audit'`
+        server-side only: `sqlite3 cupel.sqlite 'SELECT * FROM inspect_audit'`
         or the server log. A real backend would ship these to its SIEM."""
         user = request_user(request)
         uid = user["id"] if user else "dev"
-        email = user["email"] if user else "dev@skein.local"
+        email = user["email"] if user else "dev@cupel.local"
         db.run(
             "INSERT INTO inspect_audit (id, user_id, email, filters, result_count,"
             " created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -488,7 +488,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return auth.me_payload(user)
         trees = db.all("SELECT id FROM trees")
         return {
-            "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
+            "user": {"id": "dev", "name": "Dev User", "email": "dev@cupel.local"},
             "roles": ["admin", "inspect"],
             "permissions": {t["id"]: ["view", "tune", "evaluate"] for t in trees},
         }
@@ -706,7 +706,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
            tree, so the demo shows everything.
         2. Rows are ALL conversations, forks included (unlike the sidebar
            listing, which is roots-only, openapi.yaml:346-349) — "Inspect
-           every conversation in the system" (skein-phases.md:78). Deleted
+           every conversation in the system" (cupel-phases.md:78). Deleted
            conversations stay hidden; a tombstone is not history to browse.
         """
         need_inspect(request)
@@ -1893,7 +1893,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # ----------------------------------------------------- P2-T12a casebooks
     # openapi.yaml:1643-1830. "Collect noteworthy turns into Casebooks with one
     # keystroke, then turn a casebook into an eval set, a replay regression
-    # suite, or few-shot examples for an agent" (skein-phases.md:79).
+    # suite, or few-shot examples for an agent" (cupel-phases.md:79).
     #
     # Items are turn REFERENCES, never copies (openapi.yaml:1739-1741, 3252-
     # 3255): {tree, conversation_id, turn_id} + an optional note. Nothing here

@@ -1,6 +1,6 @@
-"""P2-T07 auth — both AUTH_MODEs (skein-phases.md:76 "Turn auth on or off with
+"""P2-T07 auth — both AUTH_MODEs (cupel-phases.md:76 "Turn auth on or off with
 one env var: off = instant dev as a chosen user; on = real login, tokens, and
-401 handling"; mock deliverable skein-phases.md:98 "auth endpoints in both
+401 handling"; mock deliverable cupel-phases.md:98 "auth endpoints in both
 AUTH_MODEs (seeded admin@demo/restricted@demo, real-shaped JWTs)").
 
 AUTH_MODE env semantics (openapi.yaml:26-32): unset or anything but "on" =
@@ -10,7 +10,7 @@ bearer JWT on API paths and /me answers per token user.
 
 JWT: real-shaped HS256 (header.payload.signature, base64url), claims
 sub/email/roles/iat/exp (~12h). Hand-rolled on hashlib/hmac so the mock adds
-no dependency; secret from env SKEIN_JWT_SECRET (dev default below) — read
+no dependency; secret from env CUPEL_JWT_SECRET (dev default below) — read
 per call so tests/deployments can flip it without reimport.
 
 Seeded users (feature-spec.md:21 "on = seeded credentials (admin@demo /
@@ -36,10 +36,10 @@ import time
 from .db import Db, j, unj
 from .util import now_iso
 
-DEFAULT_JWT_SECRET = "skein-dev-jwt-secret"
+DEFAULT_JWT_SECRET = "cupel-dev-jwt-secret"
 TOKEN_TTL_S = 12 * 3600  # exp ~12h
 
-# password "demo" for both (skein-phases.md:98); stored as sha256 — mock-only
+# password "demo" for both (cupel-phases.md:98); stored as sha256 — mock-only
 # hygiene, not real password storage.
 SEED_USERS = [
     {
@@ -66,7 +66,7 @@ def auth_on() -> bool:
 
 
 def jwt_secret() -> str:
-    return os.environ.get("SKEIN_JWT_SECRET") or DEFAULT_JWT_SECRET
+    return os.environ.get("CUPEL_JWT_SECRET") or DEFAULT_JWT_SECRET
 
 
 def hash_password(password: str) -> str:

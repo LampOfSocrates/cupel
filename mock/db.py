@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS agents (
   parent_id TEXT, tools TEXT NOT NULL DEFAULT '[]',
   enabled INTEGER NOT NULL DEFAULT 1, format TEXT NOT NULL DEFAULT 'text');
 
--- Append-only (skein-phases.md:160); live version = MAX(version).
+-- Append-only (cupel-phases.md:160); live version = MAX(version).
 CREATE TABLE IF NOT EXISTS instruction_versions (
   agent_id TEXT NOT NULL, version INTEGER NOT NULL,
   content TEXT NOT NULL, format TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS rubrics (
 -- SAME append-only shape rubrics already use — composite PRIMARY KEY
 -- (id, version), latest = MAX(version) — rather than a mutated "latest" row
 -- plus a history side-table. One shape for every versioned store keeps the
--- invariant machine-obvious ("versions append-only", skein-phases.md:160) and
+-- invariant machine-obvious ("versions append-only", cupel-phases.md:160) and
 -- GET /eval/cases/{id} "Returns the LATEST version" (openapi.yaml:1442) is one
 -- ORDER BY. Pre-existing databases are migrated in Db._migrate_eval_cases
 -- below: every existing row becomes version 1, so Phase-1 cases (and the
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS inspect_audit (
   filters TEXT NOT NULL, result_count INTEGER NOT NULL,
   created_at TEXT NOT NULL);
 
--- Append-only (skein-phases.md:160); human thumbs share this store.
+-- Append-only (cupel-phases.md:160); human thumbs share this store.
 CREATE TABLE IF NOT EXISTS judgments (
   id TEXT PRIMARY KEY, case_id TEXT, run_id TEXT, turn_id TEXT,
   conversation_id TEXT, type TEXT NOT NULL, judge_model TEXT,
@@ -178,7 +178,7 @@ class Db:
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         with self.lock:
-            # P2-PERSIST: WAL is REQUIRED by SKEIN_STORAGE=s3 — Litestream
+            # P2-PERSIST: WAL is REQUIRED by CUPEL_STORAGE=s3 — Litestream
             # replicates by shipping WAL frames, and refuses a rollback-journal
             # database. Enabled unconditionally so both modes run the same
             # engine settings and the hosted path is never a special case.

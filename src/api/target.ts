@@ -6,13 +6,13 @@
 import { useSyncExternalStore } from "react";
 import { agenticConfig, type BackendTarget } from "../../agentic.config";
 
-export const TARGET_STORAGE_KEY = "skein.backend.target";
+export const TARGET_STORAGE_KEY = "cupel.backend.target";
 
 // P2-T17 — the "custom Base URL field" of feature-spec.md:158: one extra
 // non-preset target whose baseUrl the user types in Settings → Backend.
 // Device-local like the target choice itself (feature-spec.md:161).
 export const CUSTOM_TARGET_ID = "custom";
-export const CUSTOM_URL_KEY = "skein.backend.customUrl";
+export const CUSTOM_URL_KEY = "cupel.backend.customUrl";
 
 /**
  * Default target id per build kind (agentic.config.ts defaultTarget):
@@ -47,7 +47,7 @@ function customTarget(): BackendTarget | undefined {
   return customCache;
 }
 
-/** Persist the custom base URL (skein.backend.customUrl) and notify — the
+/** Persist the custom base URL (cupel.backend.customUrl) and notify — the
  * client rebuilds URLs from getActiveTarget() on every call, so an edit while
  * the custom target is active retargets the app immediately. */
 export function setCustomUrl(url: string): void {

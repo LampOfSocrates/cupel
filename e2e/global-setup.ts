@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 // deterministic generator seed (mock/generator.py: every random choice is
 // drawn from `random.Random(seed)` before any HTTP, so the dataset is a pure
 // function of the seed). Seed 42 = the mock's own default and what the Docker
-// image boots with (mock/entrypoint.py SKEIN_SEED), so the suite walks the
+// image boots with (mock/entrypoint.py CUPEL_SEED), so the suite walks the
 // same dataset a reviewer sees on the demo: 20 conversations (14 agent1,
 // 6 agent2), 4 forks, 3 replay runs, 2 judged, 2 rubrics, 3 thumbs.
 //

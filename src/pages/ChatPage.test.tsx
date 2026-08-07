@@ -117,7 +117,7 @@ describe("ChatPage streaming", () => {
   // P2-T17 — the Settings → Backend SSE toggle (feature-spec.md:160 "SSE
   // streaming on/off") drives ChatRequest.stream; off → the T02 JSON path
   // renders the full reply ("the UI degrades gracefully to non-streaming when
-  // the SSE toggle is off in mock options", skein-phases.md:43).
+  // the SSE toggle is off in mock options", cupel-phases.md:43).
   it("sends stream:false when the device-local SSE flag is off and renders the full JSON reply", async () => {
     setSseEnabled(false);
     const user = userEvent.setup();
@@ -779,7 +779,7 @@ describe("Chat settings", () => {
 });
 
 // P1-T11a — envelope affordance on turns. "every turn records its context
-// (date, timezone, region) at generation" (skein-phases.md:25); envelope on
+// (date, timezone, region) at generation" (cupel-phases.md:25); envelope on
 // turn objects in conversation listings (feature-spec.md:81). Sketch 01 shows
 // no envelope UI, so the surface is a hover tooltip on each turn's timestamp
 // showing the EnvelopeChip.
@@ -933,7 +933,7 @@ describe("Live LLM (BYOK) settings", () => {
     await user.click(screen.getByRole("button", { name: "Save key" }));
 
     // localStorage ONLY (docs/deployment.md:25)
-    expect(localStorage.getItem("skein.byok.key")).toBe(KEY);
+    expect(localStorage.getItem("cupel.byok.key")).toBe(KEY);
     expect(await screen.findByTestId("live-badge")).toHaveTextContent("live");
     // /models refetched WITH the key header → curated list in the select
     await waitFor(() =>
@@ -943,12 +943,12 @@ describe("Live LLM (BYOK) settings", () => {
     );
     await user.click(await screen.findByRole("combobox", { name: "Live model" }));
     await user.click(await screen.findByRole("option", { name: "DeepSeek Chat" }));
-    expect(localStorage.getItem("skein.byok.model")).toBe("deepseek/deepseek-chat");
+    expect(localStorage.getItem("cupel.byok.model")).toBe("deepseek/deepseek-chat");
   });
 
   it("sends chat with X-LLM-Key + X-LLM-Model when a key is stored", async () => {
-    localStorage.setItem("skein.byok.key", KEY);
-    localStorage.setItem("skein.byok.model", "deepseek/deepseek-chat");
+    localStorage.setItem("cupel.byok.key", KEY);
+    localStorage.setItem("cupel.byok.model", "deepseek/deepseek-chat");
     const user = userEvent.setup();
     renderChat("/chat/c1");
     await screen.findByText("How do refunds work?");
@@ -962,8 +962,8 @@ describe("Live LLM (BYOK) settings", () => {
   });
 
   it("clear key wipes localStorage and hides the badge", async () => {
-    localStorage.setItem("skein.byok.key", KEY);
-    localStorage.setItem("skein.byok.model", "deepseek/deepseek-chat");
+    localStorage.setItem("cupel.byok.key", KEY);
+    localStorage.setItem("cupel.byok.model", "deepseek/deepseek-chat");
     const user = userEvent.setup();
     renderChat("/chat/c1");
     await screen.findByText("How do refunds work?");
@@ -971,8 +971,8 @@ describe("Live LLM (BYOK) settings", () => {
 
     await openSettings(user);
     await user.click(screen.getByRole("button", { name: "Clear key" }));
-    expect(localStorage.getItem("skein.byok.key")).toBeNull();
-    expect(localStorage.getItem("skein.byok.model")).toBeNull();
+    expect(localStorage.getItem("cupel.byok.key")).toBeNull();
+    expect(localStorage.getItem("cupel.byok.model")).toBeNull();
     expect(screen.queryByTestId("live-badge")).not.toBeInTheDocument();
   });
 });

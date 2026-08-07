@@ -3,12 +3,12 @@
 This is the Docker CMD (`python -m mock.boot`). It sits one layer OUTSIDE
 mock/entrypoint.py, which is unchanged in what it does — serve + seed:
 
-  SKEIN_STORAGE=local (default)   exec `python -m mock.entrypoint`. Nothing
+  CUPEL_STORAGE=local (default)   exec `python -m mock.entrypoint`. Nothing
                                   else happens; a developer checkout and the
                                   current Render deploy behave exactly as they
                                   did before this task.
 
-  SKEIN_STORAGE=s3                write litestream.yml from the SKEIN_S3_*
+  CUPEL_STORAGE=s3                write litestream.yml from the CUPEL_S3_*
                                   env, restore the SQLite file from the bucket
                                   if a replica exists, then exec
                                   `litestream replicate -exec "python -m
@@ -55,7 +55,7 @@ def build_boot_plan(env, db_path: str, python: str = "python",
 
     Returns
       mode          the EFFECTIVE mode after degradation ("local"|"s3")
-      requested     what SKEIN_STORAGE asked for
+      requested     what CUPEL_STORAGE asked for
       config_path   litestream.yml destination, or None in local mode
       config_text   its contents, or None
       restore       argv for the boot restore, or None
@@ -72,7 +72,7 @@ def build_boot_plan(env, db_path: str, python: str = "python",
         "config_text": None,
         "restore": None,
         "exec": [python, "-m", "mock.entrypoint"],
-        "child_env": {"SKEIN_STORAGE": storage.LOCAL},
+        "child_env": {"CUPEL_STORAGE": storage.LOCAL},
         "warnings": [],
     }
     if requested != storage.S3:
@@ -81,21 +81,21 @@ def build_boot_plan(env, db_path: str, python: str = "python",
     settings, missing = storage.s3_settings(env)
     if missing:
         plan["warnings"].append(
-            "SKEIN_STORAGE=s3 but " + ", ".join(missing) + " not set — running "
+            "CUPEL_STORAGE=s3 but " + ", ".join(missing) + " not set — running "
             "LOCAL and UNREPLICATED; data will be lost on restart "
             "(docs/deployment.md)"
         )
         return plan
     if not have_litestream:
         plan["warnings"].append(
-            "SKEIN_STORAGE=s3 but the `litestream` binary is not on PATH — "
+            "CUPEL_STORAGE=s3 but the `litestream` binary is not on PATH — "
             "running LOCAL and UNREPLICATED; data will be lost on restart. "
             "The Render image installs it (Dockerfile); locally, install "
-            "Litestream or use SKEIN_STORAGE=local"
+            "Litestream or use CUPEL_STORAGE=local"
         )
         return plan
 
-    config_path = (env.get("SKEIN_LITESTREAM_CONFIG") or "").strip() \
+    config_path = (env.get("CUPEL_LITESTREAM_CONFIG") or "").strip() \
         or storage.DEFAULT_CONFIG_PATH
     plan.update(
         mode=storage.S3,
@@ -113,14 +113,14 @@ def build_boot_plan(env, db_path: str, python: str = "python",
         # quoted — /usr/local/bin/python needs none, a Windows dev path does.
         exec=["litestream", "replicate", "-config", config_path,
               "-exec", f"{shlex.quote(python)} -m mock.entrypoint"],
-        child_env={"SKEIN_STORAGE": storage.S3, **storage.litestream_env(settings)},
+        child_env={"CUPEL_STORAGE": storage.S3, **storage.litestream_env(settings)},
     )
     return plan
 
 
 def main(argv=None) -> int:
     env = os.environ
-    db_path = env.get("SKEIN_MOCK_DB") or config.DB_PATH
+    db_path = env.get("CUPEL_MOCK_DB") or config.DB_PATH
     plan = build_boot_plan(
         env,
         db_path=db_path,
@@ -132,7 +132,7 @@ def main(argv=None) -> int:
 
     child_env = {**env, **plan["child_env"]}
     restored = False
-    # The image points SKEIN_MOCK_DB at /app/data, which the Dockerfile
+    # The image points CUPEL_MOCK_DB at /app/data, which the Dockerfile
     # creates — but a bind mount, a scratch path or a restore target can still
     # name a directory that is not there yet, and sqlite3 will not make one.
     if db_path != ":memory:":
@@ -154,7 +154,7 @@ def main(argv=None) -> int:
         restored = not existed and Path(db_path).exists()
         log(f"restore: {'database restored from the replica' if restored else 'no replica restored (fresh database)'}")
 
-    child_env["SKEIN_STORAGE_RESTORED"] = "1" if restored else "0"
+    child_env["CUPEL_STORAGE_RESTORED"] = "1" if restored else "0"
     log(f"storage mode {plan['mode']} · db {db_path} · exec {' '.join(plan['exec'])}")
 
     if os.name == "nt":

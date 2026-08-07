@@ -1,4 +1,4 @@
-// skein-ready comparator engine (P2-READY, skein-phases.md:74).
+// cupel-ready comparator engine (P2-READY, cupel-phases.md:74).
 // Compares a DEREFERENCED contract OpenAPI doc against a DEREFERENCED target
 // doc, contract -> target direction only (extra target paths are ignored).
 //
@@ -217,7 +217,7 @@ export function renderReport(report, { contractLabel, targetLabel }) {
   const lines = [];
   const scope = report.phase1_only ? " [phase1-only]" : "";
   const remap = report.prefix ? ` (prefix ${report.prefix})` : "";
-  lines.push(`skein-ready — ${contractLabel} vs ${targetLabel}${scope}${remap}`);
+  lines.push(`cupel-ready — ${contractLabel} vs ${targetLabel}${scope}${remap}`);
   lines.push("");
   for (const op of report.operations) {
     const mark = op.status === "ok" ? "✓" : "✗";

@@ -12,7 +12,7 @@ import {
   buildInit,
   renderInitBlock,
   main,
-} from "../scripts/skein-ready.mjs";
+} from "../scripts/cupel-ready.mjs";
 
 // P2-READY comparator unit layer — small fixture specs, no server involved.
 // The against-the-real-mock conformance run lives in mock/tests/test_ready.py
@@ -71,7 +71,7 @@ const mutate = (target, fn) => {
   return target;
 };
 
-describe("skein-ready comparator", () => {
+describe("cupel-ready comparator", () => {
   it("full pass: conformant target → ok, exit-worthy report", () => {
     const report = compare(contract(), conformingTarget());
     expect(report.ok).toBe(true);
@@ -188,7 +188,7 @@ describe("skein-ready comparator", () => {
     ]);
   });
 
-  it("--prefix remaps contract paths before lookup (skein-phases.md:75)", () => {
+  it("--prefix remaps contract paths before lookup (cupel-phases.md:75)", () => {
     const target = doc({
       "/nabu-service/things/{thingId}": conformingTarget().paths["/things/{thingId}"],
       "/nabu-service/things": conformingTarget().paths["/things"],
@@ -261,8 +261,8 @@ describe("skein-ready comparator", () => {
 });
 
 // P2-INIT — config-from-swagger: derive an agentic.config.ts target block.
-describe("skein-ready --init", () => {
-  // Nabu-style fixture (skein-phases.md:75): most routes live under
+describe("cupel-ready --init", () => {
+  // Nabu-style fixture (cupel-phases.md:75): most routes live under
   // /nabu-service, /healthz matches without any remap.
   const nabuContract = () =>
     doc({
@@ -380,7 +380,7 @@ describe("skein-ready --init", () => {
   });
 
   it("--json carries the report plus a structured init object (via main)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "skein-init-"));
+    const dir = mkdtempSync(join(tmpdir(), "cupel-init-"));
     const contractPath = join(dir, "contract.json");
     const targetPath = join(dir, "target.json");
     writeFileSync(contractPath, JSON.stringify(nabuContract()));

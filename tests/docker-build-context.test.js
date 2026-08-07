@@ -31,7 +31,7 @@ describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {
     expect(dockerfile).toMatch(/^CMD \["python", "-m", "mock\.boot"\]$/m);
   });
 
-  it("ships a pinned litestream binary so SKEIN_STORAGE=s3 is a pure env flip", () => {
+  it("ships a pinned litestream binary so CUPEL_STORAGE=s3 is a pure env flip", () => {
     expect(dockerfile).toMatch(/^FROM litestream\/litestream:\d+\.\d+\.\d+ AS litestream$/m);
     expect(dockerfile).toMatch(
       /^COPY --from=litestream \/usr\/local\/bin\/litestream \/usr\/local\/bin\/litestream$/m,
@@ -43,7 +43,7 @@ describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {
   });
 
   it("keeps the database out of the code tree and out of the build context", () => {
-    expect(dockerfile).toMatch(/^ENV SKEIN_MOCK_DB=/m);
+    expect(dockerfile).toMatch(/^ENV CUPEL_MOCK_DB=/m);
     // `*.sqlite` alone matches root level only — a nested dev database copied
     // into the image would make `litestream restore -if-db-not-exists` skip
     // the restore and boot the demo on stale data.

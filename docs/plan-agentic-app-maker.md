@@ -4,7 +4,7 @@ User decision 2026-08-06. Goal, in their words: at the end of Phase 3 someone sh
 able to check out this repo and run
 
 ```
-skein create-agentic-app|ui|backend --name myapp --same-repo \
+cupel create-agentic-app|ui|backend --name myapp --same-repo \
       --gap-as-mock server --mybackend XXXX/docs
 ```
 
@@ -34,9 +34,9 @@ Unchanged: no hosted multi-tenant platform.
 One binary, three generation targets:
 
 ```
-skein create-agentic-app   # UI + backend (the default, "give me everything")
-skein create-ui            # UI only — for people who already have a backend
-skein create-backend       # backend only — for people who like our UI but need a server
+cupel create-agentic-app   # UI + backend (the default, "give me everything")
+cupel create-ui            # UI only — for people who already have a backend
+cupel create-backend       # backend only — for people who like our UI but need a server
 ```
 
 Flags:
@@ -52,7 +52,7 @@ Flags:
 
 `--same-repo` semantics matter and must be spelled out in the help text: it **edits this
 checkout in place** (config, product name, README quickstart) rather than copying. That's
-the "I cloned Skein and I'm making it mine" path. Without it, the CLI produces a fresh
+the "I cloned Cupel and I'm making it mine" path. Without it, the CLI produces a fresh
 project the adopter can `git init` themselves — which is the "I want my own repo" path.
 
 ## 3. What gets generated
@@ -61,7 +61,7 @@ project the adopter can `git init` themselves — which is the "I want my own re
 
 - The React app (`src/`, `index.html`, vite/tsconfig/vitest config, `package.json` renamed).
 - **`agentic.config.ts`, prefilled** — this is the whole point. Targets derived from
-  `--mybackend` via the existing `skein-ready --init` logic (base URL, prefix remap,
+  `--mybackend` via the existing `cupel-ready --init` logic (base URL, prefix remap,
   `requiresToken` from the detected security scheme), `product.name`/`label` from `--name`,
   `localMock.enabled` set to `false` when a backend was supplied and `true` when it wasn't.
 - The test suite, so a generated project is green on day one (`npm test` must pass in the
@@ -81,7 +81,7 @@ but restructured for someone to own:
   `docs/review-2026-08-05.md` D2 — it is a good shape reference and a bad physical one).
   Ship a Postgres-oriented skeleton with real indexes, transactions and a tenant column,
   and link the persistence guidance.
-- `skein-ready` wired as the project's own conformance test, so their CI answers
+- `cupel-ready` wired as the project's own conformance test, so their CI answers
   "how much of the contract do I implement?" from the first commit.
 
 ### `create-agentic-app` → both, plus the glue
@@ -92,7 +92,7 @@ but restructured for someone to own:
 
 ### With `--gap-as-mock server`
 
-Run `skein-ready` against `--mybackend`, take the missing set, and generate a **gap mock**:
+Run `cupel-ready` against `--mybackend`, take the missing set, and generate a **gap mock**:
 the bundled mock configured to serve only the missing *feature families* (all eval
 endpoints, or all task endpoints, …) with the adopter's backend serving the rest. Family
 granularity, never per-endpoint — the two stores don't share data, so mixing at endpoint
@@ -111,7 +111,7 @@ myapp is ready.
 1) Test it
    cd myapp/ui && npm install && npm test        # 350+ unit tests
    cd myapp/backend && pip install -r requirements.txt && pytest
-   npx skein-ready https://api.mycorp.com/openapi.json    # contract conformance: 44/69
+   npx cupel-ready https://api.mycorp.com/openapi.json    # contract conformance: 44/69
 
 2) Run it
    docker compose up            # UI :5173 · your backend :8000 · gap mock :4010
@@ -122,7 +122,7 @@ myapp is ready.
    Your backend implements 44 of 69 contract operations.
    Missing families (currently served by the gap mock): eval workbench, memory, casebooks.
    - Implement an endpoint → delete its stub in backend/routers/<family>.py
-   - Re-check anytime:  npx skein-ready <your-openapi>
+   - Re-check anytime:  npx cupel-ready <your-openapi>
    - When a family is complete, drop it from gapAsMock in agentic.config.ts
    Contract reference: openapi.yaml (v0.3.0) · persistence guidance: docs/persistence.md
 ```
@@ -138,30 +138,30 @@ cli/agentic-app-maker/
   targets/ui.mjs       # UI generation
   targets/backend.mjs  # backend scaffold generation
   gap.mjs              # gap report → family mapping → gap-mock config
-  config.mjs           # agentic.config.ts emission (shares logic with skein-ready --init)
+  config.mjs           # agentic.config.ts emission (shares logic with cupel-ready --init)
   templates/           # backend routers/models templates, README/compose templates
   __tests__/           # golden-file tests
 ```
 
-Plain Node ESM, no new runtime dependencies, matching `scripts/skein-ready.mjs`. Exposed
-via `package.json` `bin`: `skein` → `cli/agentic-app-maker/index.mjs`, so
-`npx skein create-agentic-app …` works from a checkout. **Reuse, don't fork:** the
+Plain Node ESM, no new runtime dependencies, matching `scripts/cupel-ready.mjs`. Exposed
+via `package.json` `bin`: `cupel` → `cli/agentic-app-maker/index.mjs`, so
+`npx cupel create-agentic-app …` works from a checkout. **Reuse, don't fork:** the
 comparator (`scripts/conformance.mjs`) and the `--init` derivation logic already exist and
 must be shared, not copy-pasted.
 
 ## 6. Acceptance criteria (what "done" means)
 
-1. `skein create-agentic-app --name myapp` with **no** backend produces a project that
+1. `cupel create-agentic-app --name myapp` with **no** backend produces a project that
    boots on the bundled mock and whose own test suites pass, unmodified.
 2. `--mybackend <a real OpenAPI>` produces a config that points at it, with any prefix
-   remap detected, and `skein-ready` in the generated project reports the same numbers the
+   remap detected, and `cupel-ready` in the generated project reports the same numbers the
    CLI printed.
 3. `--gap-as-mock server` against a deliberately partial backend fixture yields a running
    setup where implemented families hit the real backend and missing families hit the mock
    — proven by an e2e test, not by inspection.
 4. `--same-repo` leaves this checkout runnable and its tests green.
 5. `--dry-run` output matches what a real run writes (golden test).
-6. The generated project contains **no** references to Skein's internal task IDs, phase
+6. The generated project contains **no** references to Cupel's internal task IDs, phase
    plan, or `TASKS.md`.
 
 ## 7. Open decisions (need the user before building)
@@ -196,6 +196,6 @@ must be shared, not copy-pasted.
   config, compose glue, the partial-backend e2e proof.
 - **P3-CLI-E** — `--same-repo` in-place mode + docs, and the acceptance walk (§6) end to end.
 
-Dependencies: all of Phase 2 (the CLI consumes `skein-ready`, the config artifact, and the
+Dependencies: all of Phase 2 (the CLI consumes `cupel-ready`, the config artifact, and the
 mock's storage modes), and it should follow the UX phase so the generated UI is the polished
 one.

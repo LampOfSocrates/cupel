@@ -14,7 +14,7 @@ import { filmed } from "./helpers/hud";
 // any batch child whose payload mentions it — so the retry succeeds and the
 // spec can assert exact counts. Only this spec puts the marker in a prompt.
 
-const FAIL_MARKER = "SKEIN-E2E-INJECTED-FAILURE";
+const FAIL_MARKER = "CUPEL-E2E-INJECTED-FAILURE";
 const FAIL_CONV = `${FAIL_MARKER} retry me`; // <48 chars → title verbatim
 
 test("queue: parent/child progress → cancel cascades → injected failure → retry-failed", async ({

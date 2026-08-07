@@ -11,7 +11,7 @@ export async function signIn(page: Page, email: string, password = "demo"): Prom
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** The JWT the app stored for the active target (skein.auth.token.<targetId>). */
+/** The JWT the app stored for the active target (cupel.auth.token.<targetId>). */
 export function storedToken(page: Page, targetId = "mock"): Promise<string | null> {
-  return page.evaluate((id) => localStorage.getItem(`skein.auth.token.${id}`), targetId);
+  return page.evaluate((id) => localStorage.getItem(`cupel.auth.token.${id}`), targetId);
 }

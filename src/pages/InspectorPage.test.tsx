@@ -14,7 +14,7 @@ import {
 import { Shell } from "../shell/Shell";
 import { InspectorPage } from "./InspectorPage";
 
-// Contract under test — P2-T12a Inspector (skein-phases.md:78 "Inspect every
+// Contract under test — P2-T12a Inspector (cupel-phases.md:78 "Inspect every
 // conversation in the system as a super user — filter by user, tree, date, or
 // score in a dense keyboard-driven table with an inline transcript reader …
 // requires the inspect role, audit-logged"):

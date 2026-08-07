@@ -9,7 +9,7 @@ index.html so client-side routing survives a refresh. API routes always win
 server behaves exactly as before.
 
 Resolution order for the bundle directory: explicit argument (tests) →
-env SKEIN_STATIC_DIR (the Docker image sets /app/dist) → ../dist next to
+env CUPEL_STATIC_DIR (the Docker image sets /app/dist) → ../dist next to
 this package. A directory without index.html counts as absent.
 """
 
@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse
 def resolve_static_dir(static_dir: str | None = None) -> Path | None:
     root = Path(
         static_dir
-        or os.environ.get("SKEIN_STATIC_DIR")
+        or os.environ.get("CUPEL_STATIC_DIR")
         or Path(__file__).resolve().parent.parent / "dist"
     )
     return root.resolve() if (root / "index.html").is_file() else None

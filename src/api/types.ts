@@ -159,7 +159,7 @@ export interface ConversationListParams {
 }
 
 // openapi.yaml:3129 AdminConversationItem — "Inspector row = an ordinary
-// conversation plus the cross-user dimension (skein-phases.md:78 'filter by
+// conversation plus the cross-user dimension (cupel-phases.md:78 'filter by
 // user, tree, date, or score')" (:3134-3137). The mock omits `turns` on these
 // rows: the table is a dense index and the inline reader fetches the
 // transcript for the selected row.
@@ -206,7 +206,7 @@ export interface CasebookItem {
 }
 
 // openapi.yaml:3219 Casebook — "A named collection of turn REFERENCES
-// (skein-phases.md:79) — the raw material for eval sets and replay regression
+// (cupel-phases.md:79) — the raw material for eval sets and replay regression
 // suites" (:3222-3225).
 export interface Casebook {
   id: string;
@@ -268,7 +268,7 @@ export interface ErrorBody {
 
 // openapi.yaml:1391 ChatRequest — ":1398 Omit [conversation_id] to start a new
 // conversation"; ":1431-1436 stream: true = SSE token stream (UI default);
-// false = single JSON response (skein-phases.md:43)".
+// false = single JSON response (cupel-phases.md:43)".
 export interface ChatRequest {
   conversation_id?: string | null;
   message: string;

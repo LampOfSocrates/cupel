@@ -8,15 +8,15 @@ Behavior:
      default 4010) in the MAIN thread, so SIGTERM handling stays uvicorn's.
   2. A background thread polls /healthz on localhost until the server is up.
   3. It then seeds — but only when should_seed() says so (see below). Seeding
-     runs the generator's seed mode against localhost (--seed $SKEIN_SEED,
+     runs the generator's seed mode against localhost (--seed $CUPEL_SEED,
      default 42; --token $DEMO_TOKEN when the gate is on — the generator
      writes through the public API, so it must pass the gate like any other
      client). Progress is logged; the server just keeps serving during and
      after.
 
-SEED ONLY IF EMPTY (P2-PERSIST). SKEIN_SEED_ON_BOOT=1 used to mean "re-seed
+SEED ONLY IF EMPTY (P2-PERSIST). CUPEL_SEED_ON_BOOT=1 used to mean "re-seed
 on every boot" — the mitigation for a disk that lost everything anyway
-(docs/deployment.md). With SKEIN_STORAGE=s3 the database now SURVIVES a
+(docs/deployment.md). With CUPEL_STORAGE=s3 the database now SURVIVES a
 restart, so the flag reads as "make sure this backend has data", and seeding
 is skipped whenever the database already holds conversations. Otherwise every
 restart would layer a fresh seed on top of real demo data: the generator's
@@ -58,8 +58,8 @@ def wait_healthz(base: str, timeout: float = HEALTH_TIMEOUT_S) -> bool:
 def should_seed(env, db_path: str) -> tuple[bool, str]:
     """(seed?, why) — the seed-if-empty rule, pure apart from reading the DB
     file read-only. See the module docstring."""
-    if env.get("SKEIN_SEED_ON_BOOT") != "1":
-        return False, "SKEIN_SEED_ON_BOOT != 1"
+    if env.get("CUPEL_SEED_ON_BOOT") != "1":
+        return False, "CUPEL_SEED_ON_BOOT != 1"
     if not storage.database_is_empty(db_path):
         return False, ("database already holds conversations (restored replica "
                        "or warm restart) — not seeding on top of it")
@@ -72,13 +72,13 @@ def seed_when_ready(port: int) -> None:
         log(f"healthz never came up on {base}; skipping boot seed")
         return
     log(f"server healthy on {base}")
-    db_path = os.environ.get("SKEIN_MOCK_DB") or config.DB_PATH
+    db_path = os.environ.get("CUPEL_MOCK_DB") or config.DB_PATH
     seed_it, why = should_seed(os.environ, db_path)
     if not seed_it:
         log(f"skipping boot seed: {why}")
         return
     log(f"boot seed will run: {why}")
-    seed = os.environ.get("SKEIN_SEED", "42")
+    seed = os.environ.get("CUPEL_SEED", "42")
     token = os.environ.get("DEMO_TOKEN")
     argv = ["seed", "--base", base, "--seed", seed]
     if token:

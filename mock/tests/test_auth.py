@@ -1,4 +1,4 @@
-"""P2-T07 auth tests — both AUTH_MODEs (skein-phases.md:76, :98; openapi.yaml
+"""P2-T07 auth tests — both AUTH_MODEs (cupel-phases.md:76, :98; openapi.yaml
 :21-36 AUTH_MODE semantics). Run: npm run test:mock.
 
 Off-mode (AUTH_MODE unset — the deployed demo's configuration) must behave
@@ -36,7 +36,7 @@ def run(coro):
 def _isolate(monkeypatch):
     monkeypatch.delenv("AUTH_MODE", raising=False)
     monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    monkeypatch.delenv("SKEIN_JWT_SECRET", raising=False)
+    monkeypatch.delenv("CUPEL_JWT_SECRET", raising=False)
 
 
 async def login(c, email="admin@demo", password="demo"):
@@ -55,7 +55,7 @@ def test_off_mode_me_is_dev_user_unchanged():
     the dev user now carries roles ["admin", "inspect"] — roles is the
     additive OPTIONAL v0.3.0 Me field (openapi.yaml:2004-2012), and off mode
     is "instant dev as a chosen user ... default admin = all trees, all
-    rights" (feature-spec.md:17, skein-phases.md:76), so the dev user must
+    rights" (feature-spec.md:17, cupel-phases.md:76), so the dev user must
     advertise admin for the role-driven Settings → Members / Agent trees UI.
     Everything else stays byte-identical to the pre-T07 shape."""
     async def case():
@@ -63,7 +63,7 @@ def test_off_mode_me_is_dev_user_unchanged():
             r = await c.get("/me")
             assert r.status_code == 200
             assert r.json() == {
-                "user": {"id": "dev", "name": "Dev User", "email": "dev@skein.local"},
+                "user": {"id": "dev", "name": "Dev User", "email": "dev@cupel.local"},
                 "roles": ["admin", "inspect"],
                 "permissions": {"agent1": ["view", "tune", "evaluate"],
                                 "agent2": ["view", "tune", "evaluate"]},
@@ -377,7 +377,7 @@ def test_secret_change_invalidates_tokens(monkeypatch):
         async with make_client() as c:
             token = (await login(c))["access_token"]
             assert (await c.get("/me", headers=bearer(token))).status_code == 200
-            monkeypatch.setenv("SKEIN_JWT_SECRET", "rotated")
+            monkeypatch.setenv("CUPEL_JWT_SECRET", "rotated")
             assert (await c.get("/me", headers=bearer(token))).status_code == 401
     run(case())
 

@@ -1,7 +1,7 @@
 node_modules/
 __pycache__/
 .pytest_cache/
-mock/skein-mock.sqlite
+mock/cupel-mock.sqlite
 # WAL sidecars (mock/db.py enables journal_mode=WAL for P2-PERSIST)
 *.sqlite-wal
 *.sqlite-shm

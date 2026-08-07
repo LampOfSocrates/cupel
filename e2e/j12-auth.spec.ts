@@ -13,7 +13,7 @@ import { filmed } from "./helpers/hud";
 // edit lives in j10-permissions.spec.ts; the tree toggles in j11.
 //
 // The frontend never reads AUTH_MODE: this rig flips it purely on the mock's
-// env (skein-phases.md:76 "one env var … the same UI code either way").
+// env (cupel-phases.md:76 "one env var … the same UI code either way").
 
 test.skip(process.env.AUTH_E2E !== "1", "auth-on journey — run via npm run e2e:auth");
 

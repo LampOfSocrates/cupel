@@ -46,7 +46,7 @@ def run(coro):
 def _isolate(monkeypatch):
     monkeypatch.delenv("AUTH_MODE", raising=False)
     monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    monkeypatch.delenv("SKEIN_JWT_SECRET", raising=False)
+    monkeypatch.delenv("CUPEL_JWT_SECRET", raising=False)
 
 
 async def login(c, email="admin@demo", password="demo"):
@@ -209,7 +209,7 @@ def test_pagination():
 
 
 def test_forks_are_listed_too():
-    """"Inspect EVERY conversation in the system" (skein-phases.md:78) — the
+    """"Inspect EVERY conversation in the system" (cupel-phases.md:78) — the
     Inspector is not roots-only like the sidebar listing."""
     app = make_app()
 

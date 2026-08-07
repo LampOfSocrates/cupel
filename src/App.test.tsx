@@ -15,10 +15,10 @@ import {
 } from "./test/msw/handlers";
 
 // P2-T17 live switch — "switch between mock/local/staging/prod live"
-// (skein-phases.md:73). Design under test (App.tsx): the boot fetch is keyed
+// (cupel-phases.md:73). Design under test (App.tsx): the boot fetch is keyed
 // on the active target; a switch resets me/trees → loader → full page-tree
 // remount, so every store refetches against the new base. /me is always
-// called (invariant, skein-phases.md:160) — including once per switch.
+// called (invariant, cupel-phases.md:160) — including once per switch.
 
 describe("live target switch (P2-T17)", () => {
   it("switching target refetches /me, /agenttrees, sidebar + queue + healthz against the new base", async () => {
@@ -90,7 +90,7 @@ describe("live target switch (P2-T17)", () => {
 });
 
 // P2-T07 boot flow: "/me is always called" stays the boot (invariant,
-// skein-phases.md:160); an auth-on backend answers 401 → the LOGIN SCREEN
+// cupel-phases.md:160); an auth-on backend answers 401 → the LOGIN SCREEN
 // renders instead of the error screen, the deep link rides along as
 // return_to, and a successful login re-runs the boot with the token. Against
 // an off-mode backend (the deployed demo) none of this fires — /me succeeds

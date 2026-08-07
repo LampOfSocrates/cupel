@@ -15,7 +15,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
 import type { Conversation, Turn } from "../api/types";
 
-// P2-T12 — "pull them from real turns or forks" (skein-phases.md:80). Two jobs
+// P2-T12 — "pull them from real turns or forks" (cupel-phases.md:80). Two jobs
 // in one picker, chosen by `mode`:
 //
 // - mode "case": the whole turn becomes a case. The caller POSTs

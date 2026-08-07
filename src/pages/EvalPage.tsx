@@ -26,7 +26,7 @@ import type { EvalCase, EvalSet, Judgment, Rubric } from "../api/types";
 // P2-T12 Eval workbench (sketch 10) — "Hand-craft expected answers and have
 // the judge score AI against them — type/paste references, pull them from real
 // turns or forks, or bulk-import a spreadsheet of input/expected pairs"
-// (skein-phases.md:80). The workbench "manage[s] the eval domain directly:
+// (cupel-phases.md:80). The workbench "manage[s] the eval domain directly:
 // case editor (input / output / reference fields; 'reference from turn'
 // picker), set manager (create/name/version sets, drag cases in), rubric
 // editor (prompt text, save = new version…)" (feature-spec.md:63).

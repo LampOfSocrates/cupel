@@ -17,7 +17,7 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const BLOB = path.join(ROOT, "blob-report");
 // Outside blob-report: the blob reporter wipes that directory when a run starts.
-const SHARDS = path.join(os.tmpdir(), "skein-e2e-shards");
+const SHARDS = path.join(os.tmpdir(), "cupel-e2e-shards");
 const REPORT = path.join(ROOT, "playwright-report");
 
 // Only jNN-*.spec.ts: the smoke/DoD/mobile walks are regression nets, not
@@ -31,7 +31,7 @@ function run(pass, label, args, env) {
     stdio: "inherit",
     shell: true,
     cwd: ROOT,
-    env: { ...process.env, SKEIN_E2E_RECORD: "1", ...env },
+    env: { ...process.env, CUPEL_E2E_RECORD: "1", ...env },
   });
   // Both passes are the same project, so both write the same shard filename,
   // and the blob reporter clears its output dir at the start of a run — stash

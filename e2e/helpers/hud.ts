@@ -28,8 +28,8 @@ const DWELL_MS = 700;
 
 /** Runs in the page. Creates the host once per document, then updates text. */
 function paint({ text, css, hostCss }: { text: string; css: string; hostCss: string }) {
-  const w = window as unknown as { __skeinHud?: (t: string) => void };
-  if (!w.__skeinHud) {
+  const w = window as unknown as { __cupelHud?: (t: string) => void };
+  if (!w.__cupelHud) {
     const host = document.createElement("div");
     host.setAttribute("aria-hidden", "true");
     host.style.cssText = hostCss;
@@ -37,9 +37,9 @@ function paint({ text, css, hostCss }: { text: string; css: string; hostCss: str
     const caption = document.createElement("div");
     caption.style.cssText = css;
     host.attachShadow({ mode: "closed" }).appendChild(caption);
-    w.__skeinHud = (t: string) => void (caption.textContent = t);
+    w.__cupelHud = (t: string) => void (caption.textContent = t);
   }
-  w.__skeinHud(text);
+  w.__cupelHud(text);
 }
 
 /** A drop-in for `test.step` that also narrates on screen. `of` is the step

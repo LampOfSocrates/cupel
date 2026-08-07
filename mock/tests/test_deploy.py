@@ -33,7 +33,7 @@ def run(coro):
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    monkeypatch.delenv("SKEIN_STATIC_DIR", raising=False)
+    monkeypatch.delenv("CUPEL_STATIC_DIR", raising=False)
 
 
 # ------------------------------------------------------------- token gate
@@ -132,8 +132,8 @@ def test_browser_paths_get_html_provide_token_page(monkeypatch):
 def dist(tmp_path):
     root = tmp_path / "dist"
     (root / "assets").mkdir(parents=True)
-    (root / "index.html").write_text("<html>SKEIN-INDEX</html>", encoding="utf-8")
-    (root / "assets" / "app.js").write_text("console.log('skein')", encoding="utf-8")
+    (root / "index.html").write_text("<html>CUPEL-INDEX</html>", encoding="utf-8")
+    (root / "assets" / "app.js").write_text("console.log('cupel')", encoding="utf-8")
     return root
 
 
@@ -141,11 +141,11 @@ def test_spa_index_and_fallback_and_assets(dist):
     async def case():
         async with make_client(static_dir=str(dist)) as c:
             r = await c.get("/")
-            assert r.status_code == 200 and "SKEIN-INDEX" in r.text
+            assert r.status_code == 200 and "CUPEL-INDEX" in r.text
             assert r.headers["content-type"].startswith("text/html")
             # client-route refresh -> index.html (SPA fallback)
             r = await c.get("/runs")
-            assert r.status_code == 200 and "SKEIN-INDEX" in r.text
+            assert r.status_code == 200 and "CUPEL-INDEX" in r.text
             # real bundle file served as itself
             r = await c.get("/assets/app.js")
             assert r.status_code == 200 and "console.log" in r.text
@@ -179,7 +179,7 @@ def test_gated_spa_flow_token_url_then_assets_via_cookie(dist, monkeypatch):
         async with make_client(static_dir=str(dist)) as c:
             r = await c.get("/", params={"token": TOKEN},
                             headers={"Accept": "text/html"})
-            assert r.status_code == 200 and "SKEIN-INDEX" in r.text
+            assert r.status_code == 200 and "CUPEL-INDEX" in r.text
             assert f"{DEMO_COOKIE}={TOKEN}" in r.headers.get("set-cookie", "")
             assert (await c.get("/assets/app.js")).status_code == 200
             assert (await c.get("/me")).status_code == 200

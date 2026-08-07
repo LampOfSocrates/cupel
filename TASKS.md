@@ -1,4 +1,4 @@
-# Skein TASKS — worked by the auto-runner, one task per fresh session
+# Cupel TASKS — worked by the auto-runner, one task per fresh session
 # Protocol per task (enforced by hooks + runner): implement → tests green → commit "P{phase}-T{id}: <summary>" → stop.
 # Runner picks the first unchecked box. Do not start a task whose deps are unchecked.
 
@@ -37,12 +37,12 @@
 - [x] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md) (live Render service created from main session)  [deps: T18b, T01, T02]
 - [x] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
 
-## Phase 2 (expanded 2026-08-05, Phase 1 green; order per skein-phases.md build order)
+## Phase 2 (expanded 2026-08-05, Phase 1 green; order per cupel-phases.md build order)
 - [x] P2-CONFIG agentic.config.ts (one config artifact) + API client refactor onto it  [deps: Phase 1]
 - [x] P2-T17 Backend switcher UI — Settings → Backend, sketch 09 (targets, healthz check, mock options)  [deps: CONFIG]
 - [x] P2-T00 Contract v0.3.0 — extend openapi.yaml: auth, admin users/permissions/tree-toggle, eval workbench CRUD+import, generator control, memory (NO repo endpoints — pro tier); update contract tests  [deps: CONFIG]
-- [x] P2-READY skein-ready readiness script (validate a backend OpenAPI against the contract; mock's own OpenAPI = first conformance test)  [deps: T00]
-- [x] P2-INIT skein-ready --init — read a backend's OpenAPI, auto-detect base URL + prefix remap + auth scheme (requiresToken), emit ready-to-paste agentic.config.ts target block (user feature 2026-08-05)  [deps: READY]
+- [x] P2-READY cupel-ready readiness script (validate a backend OpenAPI against the contract; mock's own OpenAPI = first conformance test)  [deps: T00]
+- [x] P2-INIT cupel-ready --init — read a backend's OpenAPI, auto-detect base URL + prefix remap + auth scheme (requiresToken), emit ready-to-paste agentic.config.ts target block (user feature 2026-08-05)  [deps: READY]
 - [x] P2-T07 Auth both AUTH_MODEs — mock JWT endpoints + seeded users, login screen, token handling/401s, /me both modes, no AUTH_MODE branches in components  [deps: T00]
 - [x] P2-T07b/07c Admin — members permission matrix (view/tune/evaluate) + tree enable/disable (read-only history)  [deps: T07]
 - [x] P2-SHARE Copy-link sharing — conversation ⋯ menu + turn action links (/chat/{id}?turn=), scroll+highlight on open, no-access state; works in both AUTH_MODEs via T07's return_to redirect (user feature 2026-08-05)  [deps: T07]
@@ -51,7 +51,7 @@
 - [x] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
 - [x] P2-FIXA Review bucket A — run-scoped latest_score bug, /tasks/stream tenant filtering, span-payload ownership check, markdown memo, chatSettings out of AppContext, grid cell memo, object-URL leak, streaming-draft isolation (see docs/review-2026-08-05.md)  [deps: none]
 - [x] P2-DEVSTART One-command start + explicit local-mock flag — agentic.config.ts `localMock {enabled, port, dbPath}`; `npm start` boots UI + mock per the flag with a startup banner naming the backend AND its storage mode/location; adopters flip enabled:false and their own backend holds persistence (user decision 2026-08-06)  [deps: none]
-- [x] P2-PERSIST Mock storage modes — SKEIN_STORAGE=local|s3; local = plain SQLite file (dev machine); s3 = Litestream continuous replication to an S3-compatible bucket (Cloudflare R2 or AWS) with restore-on-boot, for the hosted demo where the mock IS the whole backend on ephemeral disk. Seed-on-boot becomes seed-only-if-empty; document the single-writer constraint loudly; banner + /healthz report the active mode (user decision 2026-08-06)  [deps: none]
+- [x] P2-PERSIST Mock storage modes — CUPEL_STORAGE=local|s3; local = plain SQLite file (dev machine); s3 = Litestream continuous replication to an S3-compatible bucket (Cloudflare R2 or AWS) with restore-on-boot, for the hosted demo where the mock IS the whole backend on ephemeral disk. Seed-on-boot becomes seed-only-if-empty; document the single-writer constraint loudly; banner + /healthz report the active mode (user decision 2026-08-06)  [deps: none]
 - [x] P2-CHATUX Chat feedback comment + clipboard paste — (a) 👍/👎 opens an optional comment box; the comment stores as Judgment.reasoning on the type:human judgment (additive contract change: FeedbackRequest.comment) and renders beneath that assistant turn, surviving reload; NOT a Turn (turns are what gets replayed/judged/traced — user agreed 2026-08-06). (b) paste images/files from the clipboard into the composer, reusing the existing /upload + chip flow (no onPaste handler exists today)  [deps: none]
 - [x] P2-MSW Full MSW parity for unit tests
 - [x] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
@@ -73,7 +73,7 @@
 ## Also from P2-RECORD's coverage assessment — gaps a reviewer should know about:
 ## no visual-regression/snapshot testing at all; e2e films run against the Vite dev server,
 ## never the built bundle Render serves; chromium only; portrait filmed nowhere; BYOK live
-## mode, SKEIN_STORAGE=s3 restore, a11y/keyboard paths and SSE-drop/5xx surfaces untested.
+## mode, CUPEL_STORAGE=s3 restore, a11y/keyboard paths and SSE-drop/5xx surfaces untested.
 ## Phase 3 begins only after the UX phase closes and the user says so.
 
 ## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
@@ -85,8 +85,8 @@
 - [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
 - [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
 - [ ] P3-K8S k8s manifests + Helm post-upgrade Playwright job that gates the release (artifacts + local validation; no live cluster)  [deps: P2-E2E] (moved from Phase 2 by user decision 2026-08-06)
-- [ ] P3-CLI2 skein-cli — terminal client to ANY conformant backend: `skein-cli --mybackend XXXX <cmd>`; chat with live token streaming, conversations/agents/instructions/replay/run --watch/judge/trace/tasks --watch, `--json` for scripts, delegates `ready` to the existing comparator. In cli/skein-cli/. PLAN: docs/plan-skein-cli.md (4 sub-tasks A-D; 3 open questions). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
-- [ ] P3-CLI agentic-app-maker — `skein create-agentic-app|ui|backend --name X --same-repo --gap-as-mock server --mybackend <openapi>` in cli/agentic-app-maker/; generates a runnable project + prints test/run/change-my-backend next steps; no backend given = mock does everything. PLAN: docs/plan-agentic-app-maker.md (5 sub-tasks A-E; 5 open questions need answers BEFORE building). Un-parks the original scaffolder; may absorb P4-HYBRID (see plan §1, Q1). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
+- [ ] P3-CLI2 cupel-cli — terminal client to ANY conformant backend: `cupel-cli --mybackend XXXX <cmd>`; chat with live token streaming, conversations/agents/instructions/replay/run --watch/judge/trace/tasks --watch, `--json` for scripts, delegates `ready` to the existing comparator. In cli/cupel-cli/. PLAN: docs/plan-cupel-cli.md (4 sub-tasks A-D; 3 open questions). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
+- [ ] P3-CLI agentic-app-maker — `cupel create-agentic-app|ui|backend --name X --same-repo --gap-as-mock server --mybackend <openapi>` in cli/agentic-app-maker/; generates a runnable project + prints test/run/change-my-backend next steps; no backend given = mock does everything. PLAN: docs/plan-agentic-app-maker.md (5 sub-tasks A-E; 5 open questions need answers BEFORE building). Un-parks the original scaffolder; may absorb P4-HYBRID (see plan §1, Q1). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
 
 ## ══ THERE IS NO PAID TIER (user decision 2026-08-07 — supersedes all earlier tiering) ══
 ## Goal is not revenue: brand, GitHub stars, getting hired, a community project, and
@@ -97,11 +97,13 @@
 - [ ] P4-REPO Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes the version live; mock git server. No free tool does this; it is a headline differentiator, not a paywall (former P2-T20)
 - [ ] P4-SHARE Public sharing — anonymous tokenised share links for conversations/turns, with expiry and revocation. A growth mechanism: every shared conversation is a billboard (extends the in-app deep links from P2-SHARE)
 - [ ] P4-AGUI AG-UI bridge — DECISION REQUIRED BEFORE BUILDING. Spike done (docs/spike-agui.md, commit ee9538f): recommends adopt-partially via mock/agui.py on the existing `adapter?:` seam (~400-600 LOC, 1-2 weeks) — a server implementing our contract that proxies generation to any AG-UI endpoint. NOT a client transport, NOT a contract change. Open question the spike could not settle: also ship a thin client-side adapter behind a loud "nothing is persisted" banner, to avoid reading as "does not support AG-UI"? Re-read the spike's "what would change my mind" issue list (persistence #2159/#2186/#1160, resumability #2105/#2106, token usage w/ spend #2188, foundation donation + 1.0) before deciding — the answer may have changed by then  [deps: P3-T00 contract v0.4.0]
-- [ ] P4-HYBRID Hybrid backend fill — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins). Lowers adoption cost for the wedge persona
+- [ ] P4-HYBRID Hybrid backend fill — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the cupel-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins). Lowers adoption cost for the wedge persona
 - ~~P4-REELS~~ — MOVED OUT 2026-08-07 to its own project: C:\Users\soura\Code\2026\journey-replayer (spec committed there). This repo stays a clean agentic chat + studio app. What remains here is P2-RECORD's minimal recording rig, which is enough for our own suite.
 
 ## Parked indefinitely: a hosted multi-tenant platform. Not on any roadmap.
 ## Review buckets: B = the UX phase · C = a future contract v0.4.0 · D = persistence docs.
 ## Strategy (2026-08-07): wedge persona = the framework builder with an agent and no UI;
 ## positioning = "the console for agents you already built"; AG-UI stance pending a spike;
-## product name deferred until positioning settles.
+## product name settled 2026-08-07: Skein → Cupel (second and final rename; the repo,
+## the mock, the contract metadata and the docs all say Cupel. The local directory and
+## the GitHub remote are renamed separately by the user).

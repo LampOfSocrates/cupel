@@ -18,14 +18,14 @@ from mock.entrypoint import should_seed
 from mock.main import create_app
 
 S3_ENV = {
-    "SKEIN_STORAGE": "s3",
-    "SKEIN_S3_BUCKET": "skein-demo",
-    "SKEIN_S3_ENDPOINT": "https://acct.r2.cloudflarestorage.com",
-    "SKEIN_S3_ACCESS_KEY_ID": "AKIAEXAMPLE",
-    "SKEIN_S3_SECRET_ACCESS_KEY": "s3cr3t-value",
+    "CUPEL_STORAGE": "s3",
+    "CUPEL_S3_BUCKET": "cupel-demo",
+    "CUPEL_S3_ENDPOINT": "https://acct.r2.cloudflarestorage.com",
+    "CUPEL_S3_ACCESS_KEY_ID": "AKIAEXAMPLE",
+    "CUPEL_S3_SECRET_ACCESS_KEY": "s3cr3t-value",
 }
 
-DB = "/app/data/skein-mock.sqlite"
+DB = "/app/data/cupel-mock.sqlite"
 
 
 def run(coro):
@@ -35,23 +35,23 @@ def run(coro):
 # --------------------------------------------------------------- mode select
 def test_mode_defaults_to_local():
     assert storage.mode({}) == "local"
-    assert storage.mode({"SKEIN_STORAGE": ""}) == "local"
-    assert storage.mode({"SKEIN_STORAGE": "  S3 "}) == "s3"
-    assert storage.mode({"SKEIN_STORAGE": "local"}) == "local"
+    assert storage.mode({"CUPEL_STORAGE": ""}) == "local"
+    assert storage.mode({"CUPEL_STORAGE": "  S3 "}) == "s3"
+    assert storage.mode({"CUPEL_STORAGE": "local"}) == "local"
 
 
 def test_unknown_mode_falls_back_to_local_rather_than_failing():
     """A typo must not take the hosted demo down."""
-    assert storage.mode({"SKEIN_STORAGE": "gcs"}) == "local"
+    assert storage.mode({"CUPEL_STORAGE": "gcs"}) == "local"
 
 
 def test_health_storage_shape():
     assert storage.health_storage({}) == {"mode": "local"}
     # local mode never claims a restore happened
-    assert "restored" not in storage.health_storage({"SKEIN_STORAGE_RESTORED": "1"})
-    assert storage.health_storage({"SKEIN_STORAGE": "s3"}) == {"mode": "s3", "restored": False}
+    assert "restored" not in storage.health_storage({"CUPEL_STORAGE_RESTORED": "1"})
+    assert storage.health_storage({"CUPEL_STORAGE": "s3"}) == {"mode": "s3", "restored": False}
     assert storage.health_storage(
-        {"SKEIN_STORAGE": "s3", "SKEIN_STORAGE_RESTORED": "1"}
+        {"CUPEL_STORAGE": "s3", "CUPEL_STORAGE_RESTORED": "1"}
     ) == {"mode": "s3", "restored": True}
 
 
@@ -59,17 +59,17 @@ def test_health_storage_shape():
 def test_s3_settings_defaults_and_missing():
     settings, missing = storage.s3_settings(S3_ENV)
     assert missing == []
-    assert settings["bucket"] == "skein-demo"
+    assert settings["bucket"] == "cupel-demo"
     assert settings["path"] == storage.DEFAULT_S3_PATH
     assert settings["region"] == storage.DEFAULT_S3_REGION
 
     settings, missing = storage.s3_settings(
-        {**S3_ENV, "SKEIN_S3_PATH": "demo/db", "SKEIN_S3_REGION": "us-east-1"})
+        {**S3_ENV, "CUPEL_S3_PATH": "demo/db", "CUPEL_S3_REGION": "us-east-1"})
     assert (settings["path"], settings["region"]) == ("demo/db", "us-east-1")
 
-    _, missing = storage.s3_settings({"SKEIN_STORAGE": "s3", "SKEIN_S3_BUCKET": "b"})
-    assert missing == ["SKEIN_S3_ENDPOINT", "SKEIN_S3_ACCESS_KEY_ID",
-                       "SKEIN_S3_SECRET_ACCESS_KEY"]
+    _, missing = storage.s3_settings({"CUPEL_STORAGE": "s3", "CUPEL_S3_BUCKET": "b"})
+    assert missing == ["CUPEL_S3_ENDPOINT", "CUPEL_S3_ACCESS_KEY_ID",
+                       "CUPEL_S3_SECRET_ACCESS_KEY"]
 
 
 def test_litestream_yml_names_one_db_one_replica_and_no_secrets():
@@ -78,8 +78,8 @@ def test_litestream_yml_names_one_db_one_replica_and_no_secrets():
     assert f'- path: "{DB}"' in text
     assert "    replica:" in text and "replicas:" not in text  # 0.5 singular form
     assert "      type: s3" in text
-    assert '      bucket: "skein-demo"' in text
-    assert '      path: "skein-mock"' in text
+    assert '      bucket: "cupel-demo"' in text
+    assert '      path: "cupel-mock"' in text
     assert '      endpoint: "https://acct.r2.cloudflarestorage.com"' in text
     assert '      region: "auto"' in text
     # Credentials travel by env, never onto the container's disk.
@@ -102,7 +102,7 @@ def test_local_plan_is_the_pre_existing_behaviour():
     assert plan["mode"] == "local"
     assert plan["exec"] == ["py", "-m", "mock.entrypoint"]
     assert plan["restore"] is None and plan["config_text"] is None
-    assert plan["child_env"] == {"SKEIN_STORAGE": "local"}
+    assert plan["child_env"] == {"CUPEL_STORAGE": "local"}
     assert plan["warnings"] == []
 
 
@@ -119,7 +119,7 @@ def test_s3_plan_restores_then_replicates_with_exec():
         "litestream", "replicate", "-config", storage.DEFAULT_CONFIG_PATH,
         "-exec", "py -m mock.entrypoint",
     ]
-    assert plan["child_env"]["SKEIN_STORAGE"] == "s3"
+    assert plan["child_env"]["CUPEL_STORAGE"] == "s3"
     assert plan["child_env"]["LITESTREAM_ACCESS_KEY_ID"] == "AKIAEXAMPLE"
     assert storage.litestream_yml(DB, storage.s3_settings(S3_ENV)[0]) == plan["config_text"]
 
@@ -132,19 +132,19 @@ def test_exec_string_quotes_an_interpreter_path_with_spaces():
 
 
 def test_s3_plan_honours_a_custom_config_path():
-    plan = boot.build_boot_plan({**S3_ENV, "SKEIN_LITESTREAM_CONFIG": "/tmp/ls.yml"},
+    plan = boot.build_boot_plan({**S3_ENV, "CUPEL_LITESTREAM_CONFIG": "/tmp/ls.yml"},
                                 db_path=DB)
     assert plan["config_path"] == "/tmp/ls.yml"
     assert "/tmp/ls.yml" in plan["restore"] and "/tmp/ls.yml" in plan["exec"]
 
 
 def test_missing_s3_env_degrades_to_local_and_says_which_vars():
-    plan = boot.build_boot_plan({"SKEIN_STORAGE": "s3", "SKEIN_S3_BUCKET": "b"},
+    plan = boot.build_boot_plan({"CUPEL_STORAGE": "s3", "CUPEL_S3_BUCKET": "b"},
                                 db_path=DB, python="py")
     assert plan["mode"] == "local" and plan["requested"] == "s3"
     assert plan["exec"] == ["py", "-m", "mock.entrypoint"]
-    assert plan["child_env"] == {"SKEIN_STORAGE": "local"}
-    assert "SKEIN_S3_ENDPOINT" in plan["warnings"][0]
+    assert plan["child_env"] == {"CUPEL_STORAGE": "local"}
+    assert "CUPEL_S3_ENDPOINT" in plan["warnings"][0]
     assert "UNREPLICATED" in plan["warnings"][0]
 
 
@@ -158,12 +158,12 @@ def test_missing_litestream_binary_degrades_to_local():
 def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, monkeypatch):
     """A bad bucket/credential must not become a crash loop: log, carry on
     with an empty database, let seed-if-empty refill it."""
-    db = tmp_path / "skein.sqlite"
+    db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
     monkeypatch.setattr(boot.os, "name", "nt")  # take the subprocess.run branch
-    for key, value in {**S3_ENV, "SKEIN_MOCK_DB": str(db),
-                       "SKEIN_LITESTREAM_CONFIG": str(cfg)}.items():
+    for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
+                       "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
 
     calls = []
@@ -183,18 +183,18 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
     assert calls[0][0][1] == "restore"
     assert calls[1][0][:2] == ["litestream", "replicate"]
     # Server still starts, and it is told no restore happened.
-    assert calls[1][1]["SKEIN_STORAGE_RESTORED"] == "0"
-    assert calls[1][1]["SKEIN_STORAGE"] == "s3"
+    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "0"
+    assert calls[1][1]["CUPEL_STORAGE"] == "s3"
     assert not db.exists()
 
 
 def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
-    db = tmp_path / "skein.sqlite"
+    db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
     monkeypatch.setattr(boot.os, "name", "nt")
-    for key, value in {**S3_ENV, "SKEIN_MOCK_DB": str(db),
-                       "SKEIN_LITESTREAM_CONFIG": str(cfg)}.items():
+    for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
+                       "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
 
     calls = []
@@ -210,7 +210,7 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
 
     monkeypatch.setattr(boot.subprocess, "run", fake_run)
     assert boot.main() == 0
-    assert calls[1][1]["SKEIN_STORAGE_RESTORED"] == "1"
+    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "1"
 
 
 # ------------------------------------------------------------------- WAL
@@ -233,7 +233,7 @@ def test_memory_databases_are_unaffected():
 
 # --------------------------------------------------------- database_is_empty
 def test_database_is_empty_covers_absent_fresh_and_populated(tmp_path):
-    path = tmp_path / "skein.sqlite"
+    path = tmp_path / "cupel.sqlite"
     assert storage.database_is_empty(str(path))       # not there at all
     assert storage.database_is_empty(":memory:")
     assert storage.database_is_empty("")
@@ -259,10 +259,10 @@ def test_unreadable_database_counts_as_empty(tmp_path):
 
 # ------------------------------------------------------------ seed-if-empty
 def test_should_seed_rules(tmp_path):
-    path = tmp_path / "skein.sqlite"
-    assert should_seed({}, str(path)) == (False, "SKEIN_SEED_ON_BOOT != 1")
+    path = tmp_path / "cupel.sqlite"
+    assert should_seed({}, str(path)) == (False, "CUPEL_SEED_ON_BOOT != 1")
 
-    on = {"SKEIN_SEED_ON_BOOT": "1"}
+    on = {"CUPEL_SEED_ON_BOOT": "1"}
     seed_it, why = should_seed(on, str(path))
     assert seed_it and "empty" in why
 
@@ -291,22 +291,22 @@ def test_healthz_reports_the_active_storage_mode(monkeypatch):
         assert body["status"] == "ok" and body["seed"]
         assert body["storage"] == expected
 
-    monkeypatch.delenv("SKEIN_STORAGE", raising=False)
-    monkeypatch.delenv("SKEIN_STORAGE_RESTORED", raising=False)
+    monkeypatch.delenv("CUPEL_STORAGE", raising=False)
+    monkeypatch.delenv("CUPEL_STORAGE_RESTORED", raising=False)
     run(case({"mode": "local"}))
 
-    monkeypatch.setenv("SKEIN_STORAGE", "s3")
-    monkeypatch.setenv("SKEIN_STORAGE_RESTORED", "1")
+    monkeypatch.setenv("CUPEL_STORAGE", "s3")
+    monkeypatch.setenv("CUPEL_STORAGE_RESTORED", "1")
     run(case({"mode": "s3", "restored": True}))
 
 
 @pytest.mark.parametrize("restored", ["0", None])
 def test_healthz_s3_without_a_restore(monkeypatch, restored):
-    monkeypatch.setenv("SKEIN_STORAGE", "s3")
+    monkeypatch.setenv("CUPEL_STORAGE", "s3")
     if restored is None:
-        monkeypatch.delenv("SKEIN_STORAGE_RESTORED", raising=False)
+        monkeypatch.delenv("CUPEL_STORAGE_RESTORED", raising=False)
     else:
-        monkeypatch.setenv("SKEIN_STORAGE_RESTORED", restored)
+        monkeypatch.setenv("CUPEL_STORAGE_RESTORED", restored)
 
     async def case():
         app = create_app(db_path=":memory:", token_delay=0, step_delay=0,

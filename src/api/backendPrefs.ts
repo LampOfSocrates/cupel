@@ -7,7 +7,7 @@
 // client attaches it as "Authorization: Bearer" on requiresToken targets —
 // but only when no login JWT exists for the target (precedence documented in
 // src/api/auth.ts authHeaders: the login JWT wins).
-export const PROD_TOKEN_KEY = "skein.backend.prodToken";
+export const PROD_TOKEN_KEY = "cupel.backend.prodToken";
 
 export function getProdToken(): string {
   try {
@@ -29,8 +29,8 @@ export function setProdToken(token: string): void {
 // "SSE streaming on/off" (feature-spec.md:160) — the one mock option that is
 // real today: ChatPage sends stream:<flag> and "the UI degrades gracefully to
 // non-streaming when the SSE toggle is off in mock options"
-// (skein-phases.md:43). Default ON; only the off state is stored.
-export const SSE_STORAGE_KEY = "skein.backend.sse";
+// (cupel-phases.md:43). Default ON; only the off state is stored.
+export const SSE_STORAGE_KEY = "cupel.backend.sse";
 
 export function getSseEnabled(): boolean {
   try {

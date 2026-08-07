@@ -53,7 +53,7 @@ type HealthState =
   | { kind: "fail"; latencyMs: number; message: string };
 
 // Latency/failure-injection env vars and the seed picker are Phase-2 MOCK
-// deliverables that are not built yet (skein-phases.md:98 "failure/latency
+// deliverables that are not built yet (cupel-phases.md:98 "failure/latency
 // injection env vars" ships with the generator work) — these controls render
 // disabled per the sketch, wired to nothing, until P2-GEN.
 const GEN_TOOLTIP = "Arrives with generator controls (P2-GEN)";
@@ -126,7 +126,7 @@ export function SettingsPage() {
 
   const commitCustomUrl = () => {
     const url = customUrl.trim();
-    setCustomUrl(url); // persists skein.backend.customUrl (device-local)
+    setCustomUrl(url); // persists cupel.backend.customUrl (device-local)
     if (url && selectedId === CUSTOM_TARGET_ID && target.id !== CUSTOM_TARGET_ID) {
       setPendingCustom(false);
       setActiveTarget(CUSTOM_TARGET_ID);
@@ -229,7 +229,7 @@ export function SettingsPage() {
 
           {/* Mock options — "visible when target = Mock" (feature-spec.md:160).
               SSE streaming is REAL today (ChatPage sends stream:<flag>,
-              skein-phases.md:43); latency / failure % / seed picker await the
+              cupel-phases.md:43); latency / failure % / seed picker await the
               mock's injection env vars + generator control (P2-GEN). */}
           {target.id === "mock" && (
             <>
@@ -272,8 +272,8 @@ export function SettingsPage() {
       </Paper>
 
       {/* Settings → Members + Settings → Agent trees (feature-spec.md:19-20;
-          skein-phases.md:77) — unsketched, so they reuse this page's visual
-          language (Paper block, dense xs controls) per skein-phases.md:95. */}
+          cupel-phases.md:77) — unsketched, so they reuse this page's visual
+          language (Paper block, dense xs controls) per cupel-phases.md:95. */}
       {isAdmin && (
         <>
           <MembersSection />

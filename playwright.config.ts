@@ -3,28 +3,28 @@ import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
-// P1-TE2E — smoke e2e (skein-phases.md:46,55 "npm run e2e:smoke") against the
+// P1-TE2E — smoke e2e (cupel-phases.md:46,55 "npm run e2e:smoke") against the
 // REAL mock (no MSW): webServer boots BOTH processes, mock first.
 //
-// Scratch DB: SKEIN_MOCK_DB (mock/config.py:51) points the mock at a temp
-// sqlite so e2e runs never touch mock/skein-mock.sqlite dev data. The scratch
+// Scratch DB: CUPEL_MOCK_DB (mock/config.py:51) points the mock at a temp
+// sqlite so e2e runs never touch mock/cupel-mock.sqlite dev data. The scratch
 // dir is wiped at config load, so every run starts from a fresh bootstrap
 // seed (mock/seed.py) and the file never accumulates.
 // The wipe must run ONCE, in the runner process only: workers re-import this
 // config while the mock already holds the sqlite open (EPERM on Windows), so
 // an env flag — inherited by worker child processes — gates the side effect.
-const scratchDir = path.join(os.tmpdir(), "skein-e2e");
-if (!process.env.SKEIN_E2E_SCRATCH_READY) {
+const scratchDir = path.join(os.tmpdir(), "cupel-e2e");
+if (!process.env.CUPEL_E2E_SCRATCH_READY) {
   rmSync(scratchDir, { recursive: true, force: true });
   mkdirSync(scratchDir, { recursive: true });
-  process.env.SKEIN_E2E_SCRATCH_READY = "1";
+  process.env.CUPEL_E2E_SCRATCH_READY = "1";
 }
 
 // P2-RECORD — `npm run e2e:record` (scripts/e2e-record.mjs) sets this. It picks
 // the `record` project AND swaps the reporter: two passes write blob shards
 // that merge into ONE built-in HTML report, which is the review gallery. The
 // normal suites never see it.
-const RECORDING = process.env.SKEIN_E2E_RECORD === "1";
+const RECORDING = process.env.CUPEL_E2E_RECORD === "1";
 
 export default defineConfig({
   testDir: "e2e",
@@ -75,7 +75,7 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 60_000,
       env: {
-        SKEIN_MOCK_DB: path.join(scratchDir, "mock.sqlite"),
+        CUPEL_MOCK_DB: path.join(scratchDir, "mock.sqlite"),
         // Faster than dev defaults (mock/config.py:17-18) but slow enough
         // that the smoke test can observe tokens streaming before `done`.
         //
@@ -91,7 +91,7 @@ export default defineConfig({
         // attempt at any batch child whose payload mentions this string fails,
         // the retry succeeds. Inert unless a spec deliberately puts the marker
         // in a prompt — only e2e/j06-queue.spec.ts does.
-        MOCK_FAIL_MARKER: "SKEIN-E2E-INJECTED-FAILURE",
+        MOCK_FAIL_MARKER: "CUPEL-E2E-INJECTED-FAILURE",
         // P2-T07: `npm run e2e:auth` (scripts/e2e-auth.mjs) sets AUTH_E2E=1,
         // which boots THIS mock with AUTH_MODE=on and runs e2e/auth.spec.ts
         // only; auth.spec skips itself otherwise, so the plain e2e:smoke run

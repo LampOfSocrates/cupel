@@ -31,7 +31,7 @@ import { relativeTime } from "../lib/relativeTime";
 
 // Instruction editor (P1-T10b, sketch 06): "Edit an agent's instructions
 // safely: every save is a new version, with diff view and rollback, never an
-// overwrite" (skein-phases.md:17); "save = new version, never overwrite. Diff
+// overwrite" (cupel-phases.md:17); "save = new version, never overwrite. Diff
 // view + rollback" (feature-spec.md:33).
 //
 // Flow decisions (documented per task brief):
@@ -196,7 +196,7 @@ export function EditorPage() {
   };
 
   // "Test in Runs snapshots your draft and replays your usual conversations
-  // against it" (skein-phases.md:18). Snapshots are immutable, so an unchanged
+  // against it" (cupel-phases.md:18). Snapshots are immutable, so an unchanged
   // draft REUSES the last one instead of POSTing a duplicate (same rule Save
   // uses for promotion); an edited draft gets a fresh snapshot.
   const testInRuns = async () => {
@@ -446,7 +446,7 @@ export function EditorPage() {
                 Snapshot draft
               </Button>
               {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Runs
-                  (skein-phases.md:18 "editor → Runs flow (sketches 06 → 03)"). */}
+                  (cupel-phases.md:18 "editor → Runs flow (sketches 06 → 03)"). */}
               <Button size="xs" variant="light" onClick={() => void testInRuns()} disabled={busy}>
                 Test in Runs ▸
               </Button>

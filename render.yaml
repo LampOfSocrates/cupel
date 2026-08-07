@@ -2,13 +2,13 @@
 # One free-tier Docker web service: FastAPI mock + built Vite bundle,
 # seed-if-empty on boot, shared-token gate.
 #
-# SINGLE WRITER — DO NOT SCALE (P2-PERSIST). With SKEIN_STORAGE=s3 this
+# SINGLE WRITER — DO NOT SCALE (P2-PERSIST). With CUPEL_STORAGE=s3 this
 # service is one SQLite database replicated by Litestream. Two instances
 # writing the same replica CORRUPT it; they do not degrade gracefully. Never
 # raise numInstances, and never run a second service against the same bucket.
 services:
   - type: web
-    name: skein-demo
+    name: cupel-demo
     runtime: docker
     plan: free
     autoDeploy: true
@@ -19,25 +19,25 @@ services:
       - key: DEMO_TOKEN
         generateValue: true
       # Seed the demo dataset deterministically, but ONLY when the database
-      # comes up empty (mock/entrypoint.py should_seed) — with SKEIN_STORAGE=s3
+      # comes up empty (mock/entrypoint.py should_seed) — with CUPEL_STORAGE=s3
       # a restored database must not be seeded on top of.
-      - key: SKEIN_SEED_ON_BOOT
+      - key: CUPEL_SEED_ON_BOOT
         value: "1"
-      - key: SKEIN_SEED
+      - key: CUPEL_SEED
         value: "42"
       # P2-PERSIST storage mode. "local" = plain SQLite on the container's
       # ephemeral disk: every restart/cold start starts from nothing and the
       # boot seed refills it. That is the current, working default.
-      - key: SKEIN_STORAGE
+      - key: CUPEL_STORAGE
         value: local
-      # To make the demo's data SURVIVE restarts, set SKEIN_STORAGE=s3 and add
+      # To make the demo's data SURVIVE restarts, set CUPEL_STORAGE=s3 and add
       # these in the Render dashboard (Environment tab — secrets do not belong
       # in this file, and sync:false here would block blueprint applies).
       # Full walkthrough incl. R2 bucket creation: docs/deployment.md
       # "Storage modes".
-      #   SKEIN_S3_BUCKET             skein-demo
-      #   SKEIN_S3_ENDPOINT           https://<account>.r2.cloudflarestorage.com
-      #   SKEIN_S3_ACCESS_KEY_ID      <R2 API token access key id>
-      #   SKEIN_S3_SECRET_ACCESS_KEY  <R2 API token secret>
-      #   SKEIN_S3_PATH               skein-mock          (optional, default)
-      #   SKEIN_S3_REGION             auto                (optional, default)
+      #   CUPEL_S3_BUCKET             cupel-demo
+      #   CUPEL_S3_ENDPOINT           https://<account>.r2.cloudflarestorage.com
+      #   CUPEL_S3_ACCESS_KEY_ID      <R2 API token access key id>
+      #   CUPEL_S3_SECRET_ACCESS_KEY  <R2 API token secret>
+      #   CUPEL_S3_PATH               cupel-mock          (optional, default)
+      #   CUPEL_S3_REGION             auto                (optional, default)

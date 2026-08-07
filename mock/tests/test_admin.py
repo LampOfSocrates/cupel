@@ -36,7 +36,7 @@ def run(coro):
 def _isolate(monkeypatch):
     monkeypatch.delenv("AUTH_MODE", raising=False)
     monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    monkeypatch.delenv("SKEIN_JWT_SECRET", raising=False)
+    monkeypatch.delenv("CUPEL_JWT_SECRET", raising=False)
 
 
 async def login(c, email="admin@demo", password="demo"):
@@ -222,7 +222,7 @@ def test_disable_blocks_writes_keeps_reads():
     replay, replay/turn, judge-on-run, create agent, PUT instructions, POST
     snapshots, PUT last-selection, conversation rename/delete → 409
     tree_disabled; every GET stays 200 — "new work blocked, history kept
-    read-only" (skein-phases.md:77). Off mode (dev user = admin) — the
+    read-only" (cupel-phases.md:77). Off mode (dev user = admin) — the
     disable gate is mode-independent."""
     async def case():
         async with make_client() as c:

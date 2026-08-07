@@ -17,7 +17,7 @@ import {
 import { RunsPage } from "./RunsPage";
 import { RunDetailPage } from "./RunDetailPage";
 
-// Contract under test — the Runs stepper (skein-phases.md:19: "pick (sketch
+// Contract under test — the Runs stepper (cupel-phases.md:19: "pick (sketch
 // 02), configure (sketch 03), compare (sketch 04)"):
 // - GET /agenttrees/{tree}/runs "Runs, newest first" (openapi.yaml:663)
 // - ReplayRequest {selection, configs, context_policy} (openapi.yaml:

@@ -1,11 +1,11 @@
 // P2-T07 — login-token store + central auth signals. The client always
 // attaches a token when it has one and routes any 401 to the login screen;
-// NO component branches on the auth mode (invariant, skein-phases.md:160 —
+// NO component branches on the auth mode (invariant, cupel-phases.md:160 —
 // machine-checked by tests/no-authmode-branches.test.js;
 // openapi.yaml:30-32 "Clients never branch on the mode: they always attach a
 // token when they have one, and route any 401 to the login screen").
 //
-// Storage: one token PER BACKEND TARGET (skein.auth.token.<targetId>) —
+// Storage: one token PER BACKEND TARGET (cupel.auth.token.<targetId>) —
 // logging into staging must not leak a JWT to prod. Device-local like the
 // target choice itself (feature-spec.md:161); try/catch mirrors llmKey.ts
 // (localStorage can throw in privacy mode — auth then simply has no stored
@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 import { getActiveTarget } from "./target";
 import { getProdToken } from "./backendPrefs";
 
-export const AUTH_TOKEN_PREFIX = "skein.auth.token.";
+export const AUTH_TOKEN_PREFIX = "cupel.auth.token.";
 
 const tokenKey = (targetId: string) => AUTH_TOKEN_PREFIX + targetId;
 
@@ -70,7 +70,7 @@ export function useAuthToken(): string | null {
  * Authorization header for every client call. Precedence (documented):
  * 1. the login JWT for the active target (POST /auth/token, this store);
  * 2. else, for targets declaring requiresToken (agentic.config.ts — prod),
- *    the static token from Settings → Backend (skein.backend.prodToken,
+ *    the static token from Settings → Backend (cupel.backend.prodToken,
  *    P2-T17 "Prod requires an auth token field", feature-spec.md:161).
  * The login JWT wins: an interactive session's identity beats the device's
  * standing credential.

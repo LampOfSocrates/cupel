@@ -25,7 +25,7 @@ STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 
 
 def fail_marker() -> str:
-    """FAILURE INJECTION for the e2e suite (skein-phases.md:98 "failure/latency
+    """FAILURE INJECTION for the e2e suite (cupel-phases.md:98 "failure/latency
     injection env vars"; feature-spec.md:203 "e2e runs with failure-injection ON
     at fixed seed, so retry-failed and error states are exercised
     reproducibly").
@@ -75,4 +75,4 @@ LIVE_MODELS = [
     {"id": "mistralai/mistral-small", "name": "Mistral Small"},
 ]
 
-DB_PATH = os.environ.get("SKEIN_MOCK_DB") or str(Path(__file__).with_name("skein-mock.sqlite"))
+DB_PATH = os.environ.get("CUPEL_MOCK_DB") or str(Path(__file__).with_name("cupel-mock.sqlite"))

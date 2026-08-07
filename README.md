@@ -1,9 +1,9 @@
-# Skein
+# Cupel
 
 Half chat app, half agent studio — a React studio for agentic backends, with a
 bundled FastAPI demo backend so it runs the moment you clone it.
 What it does: [docs/features.md](docs/features.md). How it is built, phase by
-phase: [skein-phases.md](skein-phases.md).
+phase: [cupel-phases.md](cupel-phases.md).
 
 ## Quickstart (you just checked this out)
 
@@ -15,22 +15,22 @@ npm start          # UI on :5173 + the bundled demo backend on :4010
 `npm start` prints what it booted and where your data lives:
 
 ```
-Skein
+Cupel
   UI       http://localhost:5173
   Backend  bundled demo mock · http://localhost:4010
-           storage: local · mock/skein-mock.sqlite (local file, this machine only)
+           storage: local · mock/cupel-mock.sqlite (local file, this machine only)
 ```
 
 That backend is the demo mock in `mock/` (FastAPI). It is a real, stateful
 backend — chat with SSE streaming, runs, versions, judgments, task queue — and
-it keeps **everything in one SQLite file on your machine** (`mock/skein-mock.sqlite`,
+it keeps **everything in one SQLite file on your machine** (`mock/cupel-mock.sqlite`,
 git-ignored). Nothing leaves the machine; delete the file and you are back to
 the seed. Requirements: Node >= 22.18 (`npm start` reads the TypeScript config
 directly) and Python 3.11+ with the mock's deps (`pip install -r mock/requirements.txt`).
 
 That same mock is also what the hosted demo runs, where it has no persistent
 disk and replicates its SQLite file to object storage instead
-(`SKEIN_STORAGE=s3`, Litestream). You never need that locally — see
+(`CUPEL_STORAGE=s3`, Litestream). You never need that locally — see
 [docs/deployment.md](docs/deployment.md) "Storage modes".
 
 Fill the app with data while it runs: `npm run simulate`.
@@ -44,7 +44,7 @@ desktop-first by design.
 Everything about where the API lives is declared in ONE file,
 [`agentic.config.ts`](agentic.config.ts):
 
-1. Add your backend to `targets` (`npx skein-ready <your-openapi> --init`
+1. Add your backend to `targets` (`npx cupel-ready <your-openapi> --init`
    writes the block for you — see [docs/readiness.md](docs/readiness.md)).
 2. Point `defaultTarget.dev` at it.
 3. Set `localMock.enabled: false`.
@@ -54,13 +54,13 @@ npm start          # UI only — no demo backend
 ```
 
 ```
-Skein
+Cupel
   UI       http://localhost:5173
   Backend  your backend · https://api.example.com
-           Skein stores nothing locally — your backend holds all persistence
+           Cupel stores nothing locally — your backend holds all persistence
 ```
 
-With the mock off, **your backend holds all persistence**. Skein keeps no
+With the mock off, **your backend holds all persistence**. Cupel keeps no
 server-side state of its own; the only things it stores are device-local
 browser values (which target is selected, your auth token, a BYOK LLM key).
 You can also switch targets live in Settings → Backend without restarting.

@@ -5,7 +5,7 @@ import { Group, Text, UnstyledButton } from "@mantine/core";
 // tree — "reusing the trace view's node components (same colors/shapes; no
 // timings — this is structure, not execution)" (feature-spec.md:24);
 // "(Agent tree view: reuse 08's node components, structure-only — no separate
-// sketch.)" (skein-phases.md:40). Palette lifted from sketches/clean/08-trace.svg:
+// sketch.)" (cupel-phases.md:40). Palette lifted from sketches/clean/08-trace.svg:
 // agent #EEEDFE/#534AB7, tool #E1F5EE/#0F6E56, llm #FAECE7/#993C1D, connectors
 // #B4B2A9.
 

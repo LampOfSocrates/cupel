@@ -5,7 +5,7 @@ import type { EvalCase, Judgment, Rubric } from "../api/types";
 import { EnvelopeChip } from "./EnvelopeChip";
 import { ScoreChip } from "./ScoreChip";
 
-// P1-T12b — judgment drawer. UNSKETCHED (skein-phases.md:22 "judgment drawer
+// P1-T12b — judgment drawer. UNSKETCHED (cupel-phases.md:22 "judgment drawer
 // (unsketched)") — layout derived from the app's Mantine language, kept dense.
 // Contents per feature-spec.md:64: "Tap a badge → judgment drawer: score,
 // judge reasoning, rubric+version, judge model, input/output/reference side by

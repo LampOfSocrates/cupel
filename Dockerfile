@@ -12,10 +12,10 @@ COPY index.html tsconfig.json vite.config.ts agentic.config.ts ./
 COPY src ./src
 RUN npm run build
 
-# ---- stage 2: litestream (P2-PERSIST, only used by SKEIN_STORAGE=s3) -----
+# ---- stage 2: litestream (P2-PERSIST, only used by CUPEL_STORAGE=s3) -----
 # Pinned official image, copied binary only: one static Go executable, no
 # runtime deps, no download step that can rot. Present in every image so the
-# storage mode stays a pure env flip — SKEIN_STORAGE=local ignores it.
+# storage mode stays a pure env flip — CUPEL_STORAGE=local ignores it.
 FROM litestream/litestream:0.5.16 AS litestream
 
 # ---- stage 3: runtime ----------------------------------------------------
@@ -28,10 +28,10 @@ RUN pip install --no-cache-dir \
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY mock ./mock
 COPY --from=frontend /app/dist ./dist
-ENV SKEIN_STATIC_DIR=/app/dist
+ENV CUPEL_STATIC_DIR=/app/dist
 # The database lives outside the code tree so Litestream's sidecar files
 # (-wal/-shm) and a restore into an empty dir have somewhere of their own.
-ENV SKEIN_MOCK_DB=/app/data/skein-mock.sqlite
+ENV CUPEL_MOCK_DB=/app/data/cupel-mock.sqlite
 RUN mkdir -p /app/data
 # Render injects PORT; 4010 is the local default (mock/entrypoint.py).
 EXPOSE 4010

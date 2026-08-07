@@ -8,14 +8,14 @@ import { agenticConfig } from "../agentic.config.ts";
 // spawning anything.
 
 const base = {
-  product: { name: "skein", label: "Skein" },
+  product: { name: "cupel", label: "Cupel" },
   targets: [
     { id: "mock", label: "Mock", baseUrl: "http://localhost:4010" },
     { id: "local", label: "Local", baseUrl: "http://localhost:8000" },
     { id: "prod", label: "Prod", baseUrl: "" },
   ],
   defaultTarget: { dev: "mock", production: "prod" },
-  localMock: { enabled: true, port: 4010, dbPath: "mock/skein-mock.sqlite" },
+  localMock: { enabled: true, port: 4010, dbPath: "mock/cupel-mock.sqlite" },
 };
 
 const enabled = (env = {}) => buildStartupPlan(base, env);
@@ -29,25 +29,25 @@ const disabled = (dev = "local", env = {}) =>
     env,
   );
 
-// P2-PERSIST — SKEIN_STORAGE picks how durable the demo backend's SQLite file
+// P2-PERSIST — CUPEL_STORAGE picks how durable the demo backend's SQLite file
 // is; s3 replicates it to a bucket with Litestream (the hosted demo).
 const S3_ENV = {
-  SKEIN_STORAGE: "s3",
-  SKEIN_S3_BUCKET: "skein-demo",
-  SKEIN_S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
-  SKEIN_S3_ACCESS_KEY_ID: "AKIAEXAMPLE",
-  SKEIN_S3_SECRET_ACCESS_KEY: "s3cr3t",
+  CUPEL_STORAGE: "s3",
+  CUPEL_S3_BUCKET: "cupel-demo",
+  CUPEL_S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+  CUPEL_S3_ACCESS_KEY_ID: "AKIAEXAMPLE",
+  CUPEL_S3_SECRET_ACCESS_KEY: "s3cr3t",
 };
 
 describe("buildStartupPlan — localMock enabled", () => {
-  it("runs the mock (with SKEIN_MOCK_DB + port) and the UI", () => {
+  it("runs the mock (with CUPEL_MOCK_DB + port) and the UI", () => {
     const { commands } = enabled();
     expect(commands.map((c) => c.name)).toEqual(["mock", "ui"]);
 
     const mock = commands[0];
     expect(mock.command).toBe("python");
     expect(mock.args).toEqual(["-m", "uvicorn", "mock.main:app", "--port", "4010"]);
-    expect(mock.env).toEqual({ SKEIN_MOCK_DB: "mock/skein-mock.sqlite" });
+    expect(mock.env).toEqual({ CUPEL_MOCK_DB: "mock/cupel-mock.sqlite" });
 
     const ui = commands[1];
     expect(ui.command).toBe("npm");
@@ -57,11 +57,11 @@ describe("buildStartupPlan — localMock enabled", () => {
 
   it("names the bundled demo backend and where its data lives", () => {
     const banner = enabled().bannerLines.join("\n");
-    expect(enabled().bannerLines[0]).toBe("Skein");
+    expect(enabled().bannerLines[0]).toBe("Cupel");
     expect(banner).toContain(`UI       http://localhost:${UI_PORT}`);
     expect(banner).toContain("Backend  bundled demo mock · http://localhost:4010");
     expect(banner).toContain(
-      "storage: local · mock/skein-mock.sqlite (local file, this machine only)",
+      "storage: local · mock/cupel-mock.sqlite (local file, this machine only)",
     );
     expect(banner).toContain("localMock.enabled = true");
   });
@@ -69,14 +69,14 @@ describe("buildStartupPlan — localMock enabled", () => {
 
 describe("buildStartupPlan — storage mode (P2-PERSIST)", () => {
   it("defaults to local: plain uvicorn, plain SQLite file, no S3 anything", () => {
-    for (const env of [{}, { SKEIN_STORAGE: "local" }, { SKEIN_STORAGE: "nonsense" }]) {
+    for (const env of [{}, { CUPEL_STORAGE: "local" }, { CUPEL_STORAGE: "nonsense" }]) {
       const { commands, bannerLines } = enabled(env);
       expect(commands[0].args).toEqual([
         "-m", "uvicorn", "mock.main:app", "--port", "4010",
       ]);
-      expect(commands[0].env).toEqual({ SKEIN_MOCK_DB: "mock/skein-mock.sqlite" });
+      expect(commands[0].env).toEqual({ CUPEL_MOCK_DB: "mock/cupel-mock.sqlite" });
       const banner = bannerLines.join("\n");
-      expect(banner).toContain("storage: local · mock/skein-mock.sqlite");
+      expect(banner).toContain("storage: local · mock/cupel-mock.sqlite");
       expect(banner).not.toContain("Litestream");
       expect(banner).not.toContain("s3://");
     }
@@ -87,12 +87,12 @@ describe("buildStartupPlan — storage mode (P2-PERSIST)", () => {
     // mock.boot restores from the bucket, then runs litestream replicate -exec.
     expect(commands[0].args).toEqual(["-m", "mock.boot"]);
     expect(commands[0].env).toEqual({
-      SKEIN_MOCK_DB: "mock/skein-mock.sqlite",
+      CUPEL_MOCK_DB: "mock/cupel-mock.sqlite",
       PORT: "4010",
     });
     const banner = bannerLines.join("\n");
     expect(banner).toContain(
-      "storage: s3 · mock/skein-mock.sqlite → Litestream replica s3://skein-demo/skein-mock",
+      "storage: s3 · mock/cupel-mock.sqlite → Litestream replica s3://cupel-demo/cupel-mock",
     );
     expect(banner).toContain("SINGLE WRITER");
     // secrets are never echoed to the terminal
@@ -100,16 +100,16 @@ describe("buildStartupPlan — storage mode (P2-PERSIST)", () => {
     expect(banner).not.toContain("AKIAEXAMPLE");
   });
 
-  it("s3 honours SKEIN_S3_PATH", () => {
+  it("s3 honours CUPEL_S3_PATH", () => {
     expect(
-      enabled({ ...S3_ENV, SKEIN_S3_PATH: "demo/db" }).bannerLines.join("\n"),
-    ).toContain("s3://skein-demo/demo/db");
+      enabled({ ...S3_ENV, CUPEL_S3_PATH: "demo/db" }).bannerLines.join("\n"),
+    ).toContain("s3://cupel-demo/demo/db");
   });
 
   it("s3 with missing env says exactly which vars are unset", () => {
-    const banner = enabled({ SKEIN_STORAGE: "s3", SKEIN_S3_BUCKET: "b" })
+    const banner = enabled({ CUPEL_STORAGE: "s3", CUPEL_S3_BUCKET: "b" })
       .bannerLines.join("\n");
-    expect(banner).toContain("NOT configured — set SKEIN_S3_ENDPOINT, SKEIN_S3_ACCESS_KEY_ID, SKEIN_S3_SECRET_ACCESS_KEY");
+    expect(banner).toContain("NOT configured — set CUPEL_S3_ENDPOINT, CUPEL_S3_ACCESS_KEY_ID, CUPEL_S3_SECRET_ACCESS_KEY");
     expect(banner).toContain("docs/deployment.md");
   });
 
@@ -130,7 +130,7 @@ describe("buildStartupPlan — localMock disabled (adopter with their own backen
     const banner = disabled().bannerLines.join("\n");
     expect(banner).toContain("Backend  your backend · http://localhost:8000");
     expect(banner).toContain(
-      "Skein stores nothing locally — your backend holds all persistence",
+      "Cupel stores nothing locally — your backend holds all persistence",
     );
     expect(banner).toContain("localMock.enabled = false");
   });
@@ -158,7 +158,7 @@ describe("the real agentic.config.ts", () => {
     expect(agenticConfig.localMock).toEqual({
       enabled: true,
       port: 4010,
-      dbPath: "mock/skein-mock.sqlite",
+      dbPath: "mock/cupel-mock.sqlite",
     });
   });
 

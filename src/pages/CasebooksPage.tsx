@@ -32,7 +32,7 @@ import type {
 // P2-T12a Casebook view (UNSKETCHED — same dense language as the Inspector:
 // Paper blocks, xs controls, a list pane beside a detail pane).
 //
-// skein-phases.md:79: "Collect noteworthy turns into Casebooks with one
+// cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
 // keystroke, then turn a casebook into an eval set, a replay regression suite,
 // or few-shot examples for an agent — using the ⊞ action and Casebook view".
 // feature-spec.md:241: "Casebook view | GET /casebooks/{id},

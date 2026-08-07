@@ -6,9 +6,9 @@ dist/
 coverage/
 .pytest_cache/
 **/__pycache__/
-# `*.sqlite` alone matches root level ONLY, so mock/skein-mock.sqlite was
+# `*.sqlite` alone matches root level ONLY, so mock/cupel-mock.sqlite was
 # being baked into the image — harmless while the disk was ephemeral, fatal
-# for SKEIN_STORAGE=s3 (a database that already exists makes `litestream
+# for CUPEL_STORAGE=s3 (a database that already exists makes `litestream
 # restore -if-db-not-exists` skip the restore, so the demo would silently boot
 # on a developer's stale data instead of the replica). P2-PERSIST.
 **/*.sqlite
@@ -20,8 +20,8 @@ sketches/
 docs/
 autorun/
 .claude/
-skein-starter.zip
-skein-run.sh
+cupel-starter.zip
+cupel-run.sh
 *.md
 openapi.yaml
 vitest.config.ts

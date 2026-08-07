@@ -1,4 +1,4 @@
-# Spike: should Skein speak AG-UI?
+# Spike: should Cupel speak AG-UI?
 
 Research spike, 2026-08-07. Deliverable is this document. No product code was
 changed; the prototype lives outside the repo (paths in §4).
@@ -14,10 +14,10 @@ named. `[I]` = inferred from documentation or reasoning, not executed.
 the client. Do not change `openapi.yaml`'s chat half.**
 
 Concretely: ship a reference **AG-UI bridge** — a small server that implements
-the Skein contract and proxies its generation call to any AG-UI endpoint,
+the Cupel contract and proxies its generation call to any AG-UI endpoint,
 persisting turns, envelopes, tasks and spans in its own store. Do *not* add an
 AG-UI transport to `src/api/client.ts`, and do *not* add a
-`target.protocol: skein | agui` switch that bypasses the contract.
+`target.protocol: cupel | agui` switch that bypasses the contract.
 
 The reason is one structural fact the spike made concrete:
 
@@ -32,14 +32,14 @@ on cancel (`openapi.yaml:875-877`), and emits spans on a separate channel for
 the trace/cost view. AG-UI defines none of that. It defines a stateless
 `RunAgentInput -> event stream` call `[V]`.
 
-Skein is a pure client — "YOUR backend holds all persistence — Skein itself
+Cupel is a pure client — "YOUR backend holds all persistence — Cupel itself
 stores nothing server-side" (`agentic.config.ts:75`). So a *client-side* AG-UI
 adapter produces a chat widget with no history, no replay, no judgments and no
 traces. That is not the product. The place where AG-UI's statelessness can be
 repaired is a server, and we already ship one (`mock/`, 61 of 69 operations),
 and the phase plan already anticipates exactly this shape: "any backend at all
 via a small adapter module — **with the mock filling in whatever your backend
-doesn't do yet**" (`skein-phases.md:75`).
+doesn't do yet**" (`cupel-phases.md:75`).
 
 The second reason is arithmetic. AG-UI covers the wire format of **one** of our
 69 operations (§5a). The framework builder's cold-start tax is not the chat
@@ -342,7 +342,7 @@ SDK, n8n, Langflow, React Native), not protocol capability.
 
 ## 3. Mapping table
 
-### 3.1 AG-UI → Skein
+### 3.1 AG-UI → Cupel
 
 | AG-UI event | Our equivalent | Semantic gap |
 |---|---|---|
@@ -358,7 +358,7 @@ SDK, n8n, Langflow, React Native), not protocol capability.
 | `STATE_SNAPSHOT` / `STATE_DELTA` (JSON Patch) | — | No concept. Nearest neighbour is the tree memory doc (`GET/PUT /agenttrees/{tree}/memory`), but that is persisted-per-tree, not per-run shared state. |
 | `MESSAGES_SNAPSHOT {messages}` | closest: `GET .../conversations/{id}` `.turns` | Different lifecycle: ours is a REST read; theirs is a mid-stream authoritative rewrite of history. |
 | `ACTIVITY_SNAPSHOT` / `ACTIVITY_DELTA` | `TaskProgressEvent {task_id, progress{done,total,stage}}` (`openapi.yaml:2852`) | Loose. Activity is free-form typed content; progress is a counter + stage label. Would need a private `activityType` convention. |
-| `CUSTOM {name, value}` | — | **The extension point.** Everything Skein-specific (envelope, span, judgment, progress) would have to ride here — i.e. we'd be inventing a private protocol inside a public one. |
+| `CUSTOM {name, value}` | — | **The extension point.** Everything Cupel-specific (envelope, span, judgment, progress) would have to ride here — i.e. we'd be inventing a private protocol inside a public one. |
 | `RAW {event, source?}` | — | Passthrough; no use. |
 
 ### 3.2 What AG-UI has NO concept of
@@ -444,7 +444,7 @@ frames chatEvents() would emit: 0
 
 Our framing parser is compatible; our *consumer* is not. `chatEvents()`
 (`src/api/client.ts:201`) switches on the SSE `event:` name; AG-UI never sets
-one. So "point Skein at an AG-UI backend" can never be a `baseUrl` change — it
+one. So "point Cupel at an AG-UI backend" can never be a `baseUrl` change — it
 is always code.
 
 ### 4.3 What worked, and how much code
@@ -539,14 +539,14 @@ hook that already exists.**
 adapter?: string;   // agentic.config.ts:60 — "Declared + typed now; not consumed yet"
 ```
 
-with the comment citing `skein-phases.md:75`: *"any backend at all via a small
+with the comment citing `cupel-phases.md:75`: *"any backend at all via a small
 adapter module — with the mock filling in whatever your backend doesn't do
 yet."* The spike's conclusion is that the correct reading of that line is
 **server-side**.
 
 **Shape I'd actually build:**
 
-1. **`skein-agui-bridge`** — reuse `mock/`. There is exactly one seam:
+1. **`cupel-agui-bridge`** — reuse `mock/`. There is exactly one seam:
    `mock/engine.py:305 chat_events()` calls `llm.stream(...)` at `:326`, an
    `async def stream(...) -> AsyncIterator[str]` (`mock/llm.py:107`). Add
    `mock/agui.py` exposing the same signature, posting `RunAgentInput` to a
@@ -563,7 +563,7 @@ yet."* The spike's conclusion is that the correct reading of that line is
 3. **`agentic.config.ts`**: no new `target.protocol` field. The bridge is just
    another `BackendTarget` with a `baseUrl`. Zero config-surface growth —
    which preserves the one-config-artifact invariant.
-4. **`skein-ready`**: the bridge reports full conformance by construction, so
+4. **`cupel-ready`**: the bridge reports full conformance by construction, so
    `npm run ready` against it passes. That is the adopter's onboarding proof.
 5. **Docs**: "you have an AG-UI agent → run the bridge → you have a console" as
    the framework-builder quickstart.
@@ -573,7 +573,7 @@ path which I measured at 201 LOC for chat alone and which produces a
 non-shippable product (no history).
 
 Explicitly **rejected**:
-- *Client adapter / `target.protocol: skein | agui`* — 201 LOC `[V]` for a chat
+- *Client adapter / `target.protocol: cupel | agui`* — 201 LOC `[V]` for a chat
   widget with no persistence, no trace, no replay, and an envelope that lies.
   It also forks `src/api/client.ts` into two protocol paths, which collides with
   "ALL calls go through `src/api/client.ts`" and with the MSW parity test
@@ -600,8 +600,8 @@ can point at directly. A framework builder with a Mastra agent wants
 is an extra process, an extra deploy, an extra thing to debug, and an extra
 place for our SQLite to be the wrong answer for their infrastructure. Meanwhile
 CopilotKit ships `npx create-ag-ui-app` and they have a UI in 60 seconds `[V,
-README]`. If AG-UI becomes the assumed interface, "Skein requires a bridge"
-reads as "Skein doesn't support AG-UI", and no amount of architectural
+README]`. If AG-UI becomes the assumed interface, "Cupel requires a bridge"
+reads as "Cupel doesn't support AG-UI", and no amount of architectural
 correctness fixes that perception.
 
 There is a real version of this critique that I take seriously: we could ship
@@ -762,10 +762,10 @@ Our code:
 - `src/api/sse.ts:26` (`createSseParser`), `:99` (`parseSseStream`)
 - `src/api/client.ts:174` (`ChatStreamEvent`), `:197` (`ChatSendResult`),
   `:201` (`chatEvents`), `:429` (`chat`), `:534` (`taskStream`)
-- `agentic.config.ts:52` (`remap`), `:60` (`adapter`), `:75` (Skein stores
+- `agentic.config.ts:52` (`remap`), `:60` (`adapter`), `:75` (Cupel stores
   nothing server-side)
 - `mock/engine.py:305` (`chat_events`), `:326` (`llm.stream` seam),
   `mock/llm.py:107` (`stream` signature)
-- `skein-phases.md:75` ("any backend at all via a small adapter module — with
+- `cupel-phases.md:75` ("any backend at all via a small adapter module — with
   the mock filling in whatever your backend doesn't do yet")
-- `docs/readiness.md` (`skein-ready` conformance tool)
+- `docs/readiness.md` (`cupel-ready` conformance tool)

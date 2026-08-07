@@ -27,10 +27,10 @@ import { Markdown } from "../lib/markdown";
 import type { AdminConversationItem, CasebookItemCreate, Conversation } from "../api/types";
 
 // P2-T12a Inspector (UNSKETCHED — derived from the app's existing dense visual
-// language per skein-phases.md:95: the Settings → Members table and the runs
+// language per cupel-phases.md:95: the Settings → Members table and the runs
 // grid are the references. Paper blocks, size-xs controls, one dense Table).
 //
-// skein-phases.md:78: "Inspect every conversation in the system as a super
+// cupel-phases.md:78: "Inspect every conversation in the system as a super
 // user — filter by user, tree, date, or score in a dense keyboard-driven table
 // with an inline transcript reader — using the Inspector (unsketched; requires
 // the `inspect` role, audit-logged)".
@@ -415,7 +415,7 @@ export function InspectorPage() {
       )}
 
       {/* Inline transcript reader — read the conversation without leaving the
-          page (skein-phases.md:78 "an inline transcript reader"). */}
+          page (cupel-phases.md:78 "an inline transcript reader"). */}
       {selected && (
         <Paper withBorder p="xs" data-testid="inspector-reader">
           <Group justify="space-between" wrap="nowrap" mb={4}>

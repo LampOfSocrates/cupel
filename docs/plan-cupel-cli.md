@@ -1,13 +1,13 @@
-# Plan — `skein-cli` (Phase 3, PLAN ONLY — do not build yet)
+# Plan — `cupel-cli` (Phase 3, PLAN ONLY — do not build yet)
 
 User decision 2026-08-06: a second CLI, separate from the scaffolder, that is simply
 **a terminal client to any conformant backend**:
 
 ```
-skein-cli --mybackend XXXX <command> …
+cupel-cli --mybackend XXXX <command> …
 ```
 
-Lives in `cli/skein-cli/`. Sibling to `cli/agentic-app-maker/` (which *generates*
+Lives in `cli/cupel-cli/`. Sibling to `cli/agentic-app-maker/` (which *generates*
 projects); this one *drives* a running backend. Originally sketched in feature-spec.md's
 Phase-3 bullet: "Do everything from the terminal … same API as the UI, `--json` for
 scripts, works against any conformant backend."
@@ -31,7 +31,7 @@ Three distinct users, one tool:
 - `--mybackend <base-url>` — point at anything (the bundled mock, localhost, staging).
 - No flag → resolve from `agentic.config.ts` (`defaultTarget`, honouring `remap`), so a
   checkout Just Works. Same one-config-artifact rule as the UI; no second source of truth.
-- `--token <jwt>` / `SKEIN_TOKEN` env, plus `skein-cli login --email …` writing to a
+- `--token <jwt>` / `CUPEL_TOKEN` env, plus `cupel-cli login --email …` writing to a
   local credentials file. In `AUTH_MODE=off` backends, no token is needed and none is sent.
 - `--llm-key` passthrough for BYOK-capable backends (never persisted, mirroring the UI rule).
 
@@ -52,7 +52,7 @@ Three distinct users, one tool:
 | `judgments --run\|--case\|--turn` | judgment history |
 | `tasks [--watch]` | `GET /tasks`, and `--watch` tails `GET /tasks/stream` |
 | `trace <turn-id>` | span tree, `--span <id>` for the payload |
-| `ready` | delegates to the existing `skein-ready` comparator (one implementation, two front doors) |
+| `ready` | delegates to the existing `cupel-ready` comparator (one implementation, two front doors) |
 
 Global flags: `--json` (machine output on every command, no decoration), `--tree <id>`,
 `--quiet`, `--verbose` (prints the request line and status of every call — the debugging
@@ -60,7 +60,7 @@ feature that makes this worth building).
 
 ## Design rules
 
-- **Node ESM, no runtime dependencies**, matching `scripts/skein-ready.mjs`.
+- **Node ESM, no runtime dependencies**, matching `scripts/cupel-ready.mjs`.
 - **Share, don't fork**: the SSE frame parser exists in `src/api/sse.ts` and the conformance
   comparator in `scripts/conformance.mjs`. Extract the parser to a shared JS module both the
   UI and the CLI import, rather than writing a second one that drifts. (The UI's copy is
@@ -75,7 +75,7 @@ feature that makes this worth building).
 ## Acceptance criteria
 
 1. Every command works against the bundled mock with zero configuration
-   (`npm start` in one terminal, `skein-cli chat "hello"` in another).
+   (`npm start` in one terminal, `cupel-cli chat "hello"` in another).
 2. `--json` output is valid JSON on stdout with nothing else mixed in — verified by piping
    every command through a parser in tests.
 3. `chat` streams tokens and Ctrl+C cancels the task server-side (assert the task's status
@@ -87,10 +87,10 @@ feature that makes this worth building).
 
 ## Open decisions
 
-- **Q1. Config file for defaults** (`~/.skein/config.json` with a default backend and tree)
+- **Q1. Config file for defaults** (`~/.cupel/config.json` with a default backend and tree)
   — convenient, but a second source of truth alongside `agentic.config.ts`. Recommendation:
-  credentials only in `~/.skein/`; everything else from flags or the repo config.
-- **Q2. Does it ship on npm as a standalone package** (`npx skein-cli`) or only from a
+  credentials only in `~/.cupel/`; everything else from flags or the repo config.
+- **Q2. Does it ship on npm as a standalone package** (`npx cupel-cli`) or only from a
   checkout? Recommendation: checkout-only at first; publishing is a release decision, not a
   build one.
 - **Q3. `fav` / aliases** (the original spec's `loom fav refunds`). Recommendation: defer —

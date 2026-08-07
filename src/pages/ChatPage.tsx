@@ -472,7 +472,7 @@ export function ChatPage() {
           // P2-T17: the Settings → Backend "SSE streaming on/off" mock option
           // (feature-spec.md:160) — device-local flag, read at send time.
           // stream:false answers a single JSON ChatResponse handled below
-          // (skein-phases.md:43 "the UI degrades gracefully to non-streaming
+          // (cupel-phases.md:43 "the UI degrades gracefully to non-streaming
           // when the SSE toggle is off in mock options").
           stream: getSseEnabled(),
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
@@ -485,7 +485,7 @@ export function ChatPage() {
         { signal: abort.signal },
       );
       if (result.kind === "json") {
-        // Backend degraded to a single JSON ChatResponse (skein-phases.md:43)
+        // Backend degraded to a single JSON ChatResponse (cupel-phases.md:43)
         attachedConvRef.current = result.response.conversation_id;
         setTurns((prev) => [...(prev ?? []), result.response.turn]);
         setStream(null);
@@ -716,7 +716,7 @@ export function ChatPage() {
                 // design choice matching the sketch.
                 onTrace={() => navigate(`/trace/${turn.id}`)}
                 // P2-T12a ⊞ — "Collect noteworthy turns into Casebooks"
-                // (skein-phases.md:79); "Entry points: ⊞ on any turn, Chat,
+                // (cupel-phases.md:79); "Entry points: ⊞ on any turn, Chat,
                 // the Inspector … and results cells" (openapi.yaml:1742-1743).
                 // Needs a persisted conversation, like ⑂ and 🔗 — an item is a
                 // REFERENCE {tree, conversation_id, turn_id}, so there is
@@ -1170,7 +1170,7 @@ function TurnBubble({
         <Text size="xs" c="dimmed">
           {turn.author}
         </Text>
-        {/* P1-T11a envelope affordance. skein-phases.md:25: "every turn records
+        {/* P1-T11a envelope affordance. cupel-phases.md:25: "every turn records
             its context (date, timezone, region) at generation". Sketch 01
             shows no envelope UI, so the surface is deliberately minimal — a
             hover tooltip on the timestamp (dotted underline = discoverable),
@@ -1278,7 +1278,7 @@ function TurnBubble({
           )}
           {/* P2-T12a ⊞ — the collect action. One glyph in the existing row
               (its density is unchanged: same size, same subtle variant), which
-              is the whole point of "one keystroke" (skein-phases.md:79). */}
+              is the whole point of "one keystroke" (cupel-phases.md:79). */}
           {onCollect && (
             <ActionIcon
               size="sm"

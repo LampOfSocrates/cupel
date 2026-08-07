@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Skein API — Phase 2 contract
+  title: Cupel API — Phase 2 contract
   version: 0.3.0
   description: |
-    Phase 2 API contract for Skein. Extends v0.2.0 (Phase 1) in place: every
+    Phase 2 API contract for Cupel. Extends v0.2.0 (Phase 1) in place: every
     Phase-1 path and schema is unchanged or additively extended (new optional
     fields, widened enums with unchanged defaults), so Phase-1 clients keep
     working. New in v0.3.0: auth + security model, admin (users, permissions,
@@ -11,7 +11,7 @@ info:
     workbench (cases/sets CRUD, import, rubric saves), context-policy
     widening, per-tree memory, and user settings. Source of truth:
     docs/feature-spec.md "API" section (feature-spec.md:114-135) filtered by
-    the Phase 2 plan (skein-phases.md:69-118); pro-tier endpoints are
+    the Phase 2 plan (cupel-phases.md:69-118); pro-tier endpoints are
     excluded (see below).
 
     Scoping rule (feature-spec.md:115): "Tree-scoped: conversation/run/chat
@@ -27,7 +27,7 @@ info:
     (feature-spec.md:16-18): this contract declares the AUTH_MODE=on
     behaviour; with AUTH_MODE=off the backend simply does not ENFORCE the
     scheme — requests without a token succeed as the configured dev user.
-    Clients never branch on the mode (invariant skein-phases.md:160 "no
+    Clients never branch on the mode (invariant cupel-phases.md:160 "no
     component branches on AUTH_MODE"): they always attach a token when they
     have one, and route any 401 to the login screen. GET /me answers in both
     modes (feature-spec.md:120). The 401 response is spelled out on /me,
@@ -37,7 +37,7 @@ info:
 
     Invariants encoded in this contract: instruction versions, judgments and
     snapshots are append-only — no endpoint updates or deletes them
-    (skein-phases.md:160). Phase 2 adds more versioned stores under the same
+    (cupel-phases.md:160). Phase 2 adds more versioned stores under the same
     rule: PUT /eval/cases/{id}, PUT /eval/sets/{id} and
     PUT /eval/rubrics/{id} each append a NEW version, never overwrite
     (feature-spec.md:130-132). Per-tree memory is the deliberate exception:
@@ -55,7 +55,7 @@ info:
     Structural seed writes (POST /agenttrees, POST /agenttrees/{tree}/agents,
     POST /eval/rubrics) exist so the generator can seed trees, agents and
     rubrics through the public API — invariant "generator writes only through
-    the public API" (skein-phases.md:160, feature-spec.md:185, :188).
+    the public API" (cupel-phases.md:160, feature-spec.md:185, :188).
 
     Pro-tier exclusions (user decision 2026-08-05, TASKS.md:56-61): repo/PR
     integration (POST /agenttrees/{tree}/agents/{id}/pr, GET/PUT
@@ -66,12 +66,12 @@ info:
     existing conversation GETs and needs no new endpoints.
 
     Deferred to later phases (deliberately absent): /assist — the AI
-    authoring fast path is Phase 3 (feature-spec.md:119; skein-phases.md:128
+    authoring fast path is Phase 3 (feature-spec.md:119; cupel-phases.md:128
     "New-agent wizard" under Phase 3) — and additional YAML framework
     schemas (Phase 4).
 servers:
   - url: http://localhost:4010
-    description: FastAPI mock (skein-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
+    description: FastAPI mock (cupel-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
 security:
   - bearerAuth: []
 tags:
@@ -106,10 +106,10 @@ paths:
         a client cannot hold a token before logging in. The mock serves
         seeded credentials admin@demo / restricted@demo issuing real-shaped
         JWTs so the auth-on path is testable without a real IdP
-        (feature-spec.md:21; skein-phases.md:98). With AUTH_MODE=off the
+        (feature-spec.md:21; cupel-phases.md:98). With AUTH_MODE=off the
         endpoint still answers (a dev-user token) so the login flow stays
         testable, but the app never needs it — /me answers without a token
-        and no component branches on the mode (skein-phases.md:160).
+        and no component branches on the mode (cupel-phases.md:160).
       requestBody:
         required: true
         content:
@@ -138,7 +138,7 @@ paths:
         presented bearer token server-side; the client then drops it and
         returns to login. With AUTH_MODE=off this is a no-op 204 (nothing to
         invalidate) — clients call it unconditionally, never branching on
-        the mode (skein-phases.md:160).
+        the mode (cupel-phases.md:160).
       responses:
         "204": { description: Token invalidated (or nothing to invalidate). }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -151,7 +151,7 @@ paths:
       summary: Current user and per-tree permissions
       description: |
         feature-spec.md:120: "GET /me (user + per-tree permissions; answers in
-        both auth modes)". Always called on boot — invariant (skein-phases.md:160
+        both auth modes)". Always called on boot — invariant (cupel-phases.md:160
         "/me is always called"). AUTH_MODE=off: answers with the configured
         dev user, no token needed (feature-spec.md:17 — "the backend/mock
         just answers with the dev user, so permission code paths run
@@ -302,7 +302,7 @@ paths:
       summary: Inspector — every conversation, cross-user
       description: |
         feature-spec.md:117: "Inspector/Casebooks: GET /admin/conversations
-        (cross-user)". skein-phases.md:78: "Inspect every conversation in
+        (cross-user)". cupel-phases.md:78: "Inspect every conversation in
         the system as a super user — filter by user, tree, date, or score in
         a dense keyboard-driven table … requires the inspect role,
         audit-logged." Requires the inspect role (403 otherwise); EVERY
@@ -358,7 +358,7 @@ paths:
         seed = one-shot baseline dataset, "Deterministic from --seed N (e2e
         depends on this)"; drip = continuous background loop with
         configurable rates; stop = halt the drip. The generator writes ONLY
-        through this public API (invariant skein-phases.md:160;
+        through this public API (invariant cupel-phases.md:160;
         feature-spec.md:185 "never directly to the DB"), so everything it
         produces flows through the same queues and SSE streams as real
         usage. Surfaced in Settings → Backend for the mock and Settings →
@@ -460,7 +460,7 @@ paths:
         Generator seed mode "builds the baseline dataset — trees, agents +
         versions" (feature-spec.md:188) and "writes through the public API,
         never directly to the DB" (feature-spec.md:185; invariant
-        skein-phases.md:160). Admin tree management UI is Phase 2
+        cupel-phases.md:160). Admin tree management UI is Phase 2
         (feature-spec.md:20); this write exists for API completeness and seeding.
       requestBody:
         required: true
@@ -522,7 +522,7 @@ paths:
       description: |
         Tree-view node context menu: "add sub-agent (opens New-agent wizard
         pre-placed)" (feature-spec.md:26); Phase 1 capability "click any node
-        to edit it or add a sub-agent under it" (skein-phases.md:16). Also the
+        to edit it or add a sub-agent under it" (cupel-phases.md:16). Also the
         generator's seed path for "agents + versions" (feature-spec.md:188).
         The created agent has no instruction versions yet; save v1 via
         PUT …/{agentId}/instructions. The AI-drafted wizard (POST /assist) is
@@ -598,7 +598,7 @@ paths:
         snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
         snapshotted immutably into the run config (snapshot_id), so the tested
         text is exactly what ran even if editing continues… Unsaved snapshots
-        display as 'v15-draft (a3f2)'." Append-only invariant (skein-phases.md:160).
+        display as 'v15-draft (a3f2)'." Append-only invariant (cupel-phases.md:160).
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -761,7 +761,7 @@ paths:
       description: |
         Delete is a tombstone: the conversation disappears from listings and
         chat, but judgments referencing its turns are "persisted forever, never
-        overwritten" (feature-spec.md:59; invariant skein-phases.md:160), eval
+        overwritten" (feature-spec.md:59; invariant cupel-phases.md:160), eval
         cases keep their source refs, and forks keep their lineage (the parent
         link renders as deleted). No cascade to judgments, cases, or forks.
       parameters:
@@ -779,7 +779,7 @@ paths:
       summary: The tree's memory document
       description: |
         feature-spec.md:118: "Memory: GET/PUT/DELETE /agenttrees/{tree}/memory".
-        skein-phases.md:85: "See and control what the app remembers about
+        cupel-phases.md:85: "See and control what the app remembers about
         your conversations per agent tree — view, edit, or clear the memory
         document; compaction runs as a visible queued task — using the
         Memory panel." One document per tree. A tree that has never
@@ -797,10 +797,10 @@ paths:
       operationId: putMemory
       summary: Edit the memory document (overwrites — mutable by design)
       description: |
-        The edit half of skein-phases.md:85 "view, edit, or clear". Memory
+        The edit half of cupel-phases.md:85 "view, edit, or clear". Memory
         is a MUTABLE working document — the deliberate exception to the
         append-only stores (versions/judgments/snapshots,
-        skein-phases.md:160): PUT replaces the content outright.
+        cupel-phases.md:160): PUT replaces the content outright.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
         required: true
@@ -819,7 +819,7 @@ paths:
       operationId: clearMemory
       summary: Clear the memory document
       description: |
-        The clear half of skein-phases.md:85 "view, edit, or clear the
+        The clear half of cupel-phases.md:85 "view, edit, or clear the
         memory document". Resets content to ""; subsequent GET returns the
         empty document, not 404. Conversations are untouched — only the
         distilled memory is cleared.
@@ -838,7 +838,7 @@ paths:
         (queued)". Enqueued like all backend work (feature-spec.md:106
         "every request returns task_id"): 202 + TaskRef; the task has type
         "compact" and streams progress on GET /tasks/stream. On completion
-        the memory document holds the merged summary (skein-phases.md:131:
+        the memory document holds the merged summary (cupel-phases.md:131:
         "LLM summarization merges what matters into the tree's memory
         document"). Compaction rewrites memory, not conversations —
         transcripts, traces and judgments are untouched.
@@ -861,7 +861,7 @@ paths:
         feature-spec.md:123: "POST /agenttrees/{tree}/chat (SSE; queued →
         returns task_id), stop = DELETE /tasks/{task_id}".
 
-        Both modes on this one endpoint (skein-phases.md:43): "stream: true (SSE
+        Both modes on this one endpoint (cupel-phases.md:43): "stream: true (SSE
         token stream, the UI default) and stream: false (single JSON response,
         for curl/scripts/backends that can't stream) — same endpoint, flag in
         the request body".
@@ -1278,7 +1278,7 @@ paths:
       summary: Rubrics (for the Run Config judge section)
       description: |
         feature-spec.md:132 "GET/POST /eval/rubrics". Rubric EDITOR UI is
-        Phase 2 (eval workbench, skein-phases.md:98); the POST exists so the
+        Phase 2 (eval workbench, cupel-phases.md:98); the POST exists so the
         generator can seed "judgments across 2 rubrics" (feature-spec.md:168)
         through the public API (feature-spec.md:185). Consumed by
         Runs · Configure (feature-spec.md:230).
@@ -1297,7 +1297,7 @@ paths:
       description: |
         feature-spec.md:132 "GET/POST /eval/rubrics" — versioned, "save = new
         version". Posting an existing rubric's name appends the next version;
-        no update/delete exists (append-only, skein-phases.md:160).
+        no update/delete exists (append-only, cupel-phases.md:160).
       requestBody:
         required: true
         content:
@@ -1319,7 +1319,7 @@ paths:
         feature-spec.md:132: "PUT /eval/rubrics/{id} (save = new version)";
         workbench rubric editor: "prompt text, save = new version, test
         against one case" (feature-spec.md:63). Appends the next version of
-        this rubric id — never overwrites (invariant skein-phases.md:160);
+        this rubric id — never overwrites (invariant cupel-phases.md:160);
         Judgment.rubric_version keeps old scores comparable
         (feature-spec.md:59). Complements Phase-1 POST /eval/rubrics
         (existing NAME appends) with the id-addressed save the editor needs.
@@ -1648,7 +1648,7 @@ paths:
       summary: Casebooks
       description: |
         feature-spec.md:117: "GET/POST/PATCH/DELETE /casebooks".
-        skein-phases.md:79: "Collect noteworthy turns into Casebooks with
+        cupel-phases.md:79: "Collect noteworthy turns into Casebooks with
         one keystroke, then turn a casebook into an eval set, a replay
         regression suite, or few-shot examples for an agent — using the ⊞
         action and Casebook view." Global (not tree-scoped): a casebook may
@@ -1781,7 +1781,7 @@ paths:
       summary: Materialize the casebook as an eval set
       description: |
         feature-spec.md:117: "POST /casebooks/{id}/to-eval-set";
-        skein-phases.md:79 "turn a casebook into an eval set". For each item
+        cupel-phases.md:79 "turn a casebook into an eval set". For each item
         the server reuses the existing eval case for that turn or creates
         one sourced from it (same semantics as POST /eval/cases with
         source), then creates a new set (set_name) or appends a new
@@ -1808,7 +1808,7 @@ paths:
       summary: Replay the casebook as a regression suite
       description: |
         feature-spec.md:117: "POST /casebooks/{id}/replay";
-        skein-phases.md:79 "a replay regression suite". Replays every
+        cupel-phases.md:79 "a replay regression suite". Replays every
         referenced turn under the given configs — same engine as
         POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
         fields and frozen default. A casebook may reference several trees,
@@ -1887,7 +1887,7 @@ components:
         POST /auth/token opt out (security: []). AUTH_MODE=off backends do
         not ENFORCE this scheme — requests without a token succeed as the
         dev user — but the contract declares the on-mode and clients never
-        branch (invariant skein-phases.md:160).
+        branch (invariant cupel-phases.md:160).
 
   parameters:
     tree:
@@ -1967,7 +1967,7 @@ components:
       description: >
         Authenticated but lacking the required role (code forbidden): admin
         for /admin/* management, inspect for the Inspector
-        (skein-phases.md:78 "requires the inspect role").
+        (cupel-phases.md:78 "requires the inspect role").
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2007,7 +2007,7 @@ components:
             Global roles (additive in v0.3.0, not required — Phase-1
             backends omit it): admin gates the Settings → Members / Agent
             trees UI (feature-spec.md:19 "visible when /me grants admin");
-            inspect gates the Inspector (skein-phases.md:78). Absent or
+            inspect gates the Inspector (cupel-phases.md:78). Absent or
             empty = neither.
           items: { type: string, enum: [admin, inspect] }
         permissions:
@@ -2276,7 +2276,7 @@ components:
           nullable: true
           description: >
             "Every turn captures an envelope at generation" (feature-spec.md:76;
-            skein-phases.md:25 "every turn records its context"). The key is
+            cupel-phases.md:25 "every turn records its context"). The key is
             required; null is permitted ONLY on legacy/imported turns
             (feature-spec.md:78). The server stamps assistant turns at
             generation and inbound (user/machine) turns at receipt; on turn
@@ -2400,7 +2400,7 @@ components:
           default: true
           description: >
             true = SSE token stream (UI default); false = single JSON response
-            (skein-phases.md:43).
+            (cupel-phases.md:43).
 
     ChatResponse:
       type: object
@@ -2972,7 +2972,7 @@ components:
       required: [id, type, score, created_at]
       description: >
         Append-only, never overwritten (feature-spec.md:59; invariant
-        skein-phases.md:160). type llm: case_id, rubric_id and rubric_version
+        cupel-phases.md:160). type llm: case_id, rubric_id and rubric_version
         are non-null (the judge always runs a rubric against a case). type
         human = thumbs via POST /feedback (feature-spec.md:60, :123): keyed by
         turn_id/conversation_id instead — a thumb has no rubric or case.
@@ -3034,7 +3034,7 @@ components:
       description: >
         Real-shaped JWT (feature-spec.md:21) plus the authenticated user so
         the login screen can hydrate immediately — the app still calls
-        GET /me on every boot regardless (invariant skein-phases.md:160
+        GET /me on every boot regardless (invariant cupel-phases.md:160
         "/me is always called").
       properties:
         access_token:
@@ -3133,7 +3133,7 @@ components:
           required: [user_id]
           description: >
             Inspector row = an ordinary conversation plus the cross-user
-            dimension (skein-phases.md:78 "filter by user, tree, date, or
+            dimension (cupel-phases.md:78 "filter by user, tree, date, or
             score").
           properties:
             user_id: { type: string, description: Owning user. }
@@ -3207,7 +3207,7 @@ components:
           type: object
           description: >
             Produced since seed — all written through the public API
-            (invariant skein-phases.md:160), so they flowed through the
+            (invariant cupel-phases.md:160), so they flowed through the
             normal queues and SSE streams.
           required: [conversations, runs, judgments]
           properties:
@@ -3220,7 +3220,7 @@ components:
       type: object
       required: [id, name, created_at, items]
       description: >
-        A named collection of turn REFERENCES (skein-phases.md:79) — the
+        A named collection of turn REFERENCES (cupel-phases.md:79) — the
         raw material for eval sets and replay regression suites. References,
         never copies: deleting a casebook touches nothing else.
       properties:
@@ -3477,7 +3477,7 @@ components:
       type: object
       required: [tree_id, content]
       description: >
-        One MUTABLE memory document per tree (skein-phases.md:85) — the
+        One MUTABLE memory document per tree (cupel-phases.md:85) — the
         deliberate exception to the append-only stores: PUT overwrites,
         DELETE clears. content "" = nothing remembered (never 404 for an
         existing tree).

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // P2-T07 invariant guard, machine-checked — "no component branches on
-// AUTH_MODE" (skein-phases.md:160; CLAUDE.md invariants). The frontend never
+// AUTH_MODE" (cupel-phases.md:160; CLAUDE.md invariants). The frontend never
 // knows which mode the backend runs: it always attaches a token when it has
 // one and routes any 401 to the login screen (openapi.yaml:30-32). The
 // literal "AUTH_MODE" is therefore banned from EVERYTHING under src/ — code,

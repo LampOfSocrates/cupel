@@ -68,17 +68,17 @@ export function Shell() {
                 size="sm"
                 aria-label="Toggle navigation"
                 aria-expanded={navOpened}
-                aria-controls="skein-navbar"
+                aria-controls="cupel-navbar"
               />
               <Text fw={600} size="sm">
-                Skein
+                Cupel
               </Text>
             </Group>
           )}
         </AppShell.Header>
       )}
       <AppShell.Navbar
-        id="skein-navbar"
+        id="cupel-navbar"
         p="xs"
         data-testid="app-navbar"
         // Mirrors the collapsed state that CSS applies, for tests and for

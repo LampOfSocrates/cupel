@@ -41,12 +41,12 @@ export const UI_PORT = 5173;
 // choice: it is a property of the machine you are on, not of the product, and
 // the deploy sets it. Mirrors mock/storage.py — keep the names in step.
 const S3_ENV = [
-  "SKEIN_S3_BUCKET",
-  "SKEIN_S3_ENDPOINT",
-  "SKEIN_S3_ACCESS_KEY_ID",
-  "SKEIN_S3_SECRET_ACCESS_KEY",
+  "CUPEL_S3_BUCKET",
+  "CUPEL_S3_ENDPOINT",
+  "CUPEL_S3_ACCESS_KEY_ID",
+  "CUPEL_S3_SECRET_ACCESS_KEY",
 ];
-const DEFAULT_S3_PATH = "skein-mock"; // mock/storage.py DEFAULT_S3_PATH
+const DEFAULT_S3_PATH = "cupel-mock"; // mock/storage.py DEFAULT_S3_PATH
 
 /**
  * Pure planner — what `npm start` will run and print, derived from the one
@@ -54,14 +54,14 @@ const DEFAULT_S3_PATH = "skein-mock"; // mock/storage.py DEFAULT_S3_PATH
  * testable without booting anything (tests/dev-start.test.js).
  *
  * @param {object} config the agentic.config.ts object
- * @param {Record<string,string|undefined>} env process env (SKEIN_STORAGE, SKEIN_S3_*)
+ * @param {Record<string,string|undefined>} env process env (CUPEL_STORAGE, CUPEL_S3_*)
  * @returns {{commands: {name: string, command: string, args: string[], env: Record<string,string>}[], bannerLines: string[]}}
  */
 export function buildStartupPlan(config, env = {}) {
-  const label = config?.product?.label ?? "Skein";
+  const label = config?.product?.label ?? "Cupel";
   const localMock = config?.localMock;
   const enabled = Boolean(localMock?.enabled);
-  const s3 = String(env.SKEIN_STORAGE ?? "").trim().toLowerCase() === "s3";
+  const s3 = String(env.CUPEL_STORAGE ?? "").trim().toLowerCase() === "s3";
 
   const ui = {
     name: "ui",
@@ -85,15 +85,15 @@ export function buildStartupPlan(config, env = {}) {
         ? ["-m", "mock.boot"]
         : ["-m", "uvicorn", "mock.main:app", "--port", String(localMock.port)],
       env: s3
-        ? { SKEIN_MOCK_DB: localMock.dbPath, PORT: String(localMock.port) }
-        : { SKEIN_MOCK_DB: localMock.dbPath },
+        ? { CUPEL_MOCK_DB: localMock.dbPath, PORT: String(localMock.port) }
+        : { CUPEL_MOCK_DB: localMock.dbPath },
     });
     bannerLines.push(`  Backend  bundled demo mock · http://localhost:${localMock.port}`);
     if (s3) {
       const missing = S3_ENV.filter((key) => !env[key]);
       const replica = missing.length
         ? `NOT configured — set ${missing.join(", ")} (docs/deployment.md)`
-        : `s3://${env.SKEIN_S3_BUCKET}/${env.SKEIN_S3_PATH || DEFAULT_S3_PATH}`;
+        : `s3://${env.CUPEL_S3_BUCKET}/${env.CUPEL_S3_PATH || DEFAULT_S3_PATH}`;
       bannerLines.push(
         `           storage: s3 · ${localMock.dbPath} → Litestream replica ${replica}`,
         "           SINGLE WRITER — never point a second instance at that bucket",
@@ -105,7 +105,7 @@ export function buildStartupPlan(config, env = {}) {
     }
     bannerLines.push(
       "           agentic.config.ts localMock.enabled = true — set it to false",
-      "           when you point Skein at your own backend",
+      "           when you point Cupel at your own backend",
     );
   } else {
     const wanted = config?.defaultTarget?.dev;
@@ -115,7 +115,7 @@ export function buildStartupPlan(config, env = {}) {
       : `no target "${wanted}" in agentic.config.ts — fix defaultTarget.dev`;
     bannerLines.push(
       `  Backend  your backend · ${where}`,
-      "           Skein stores nothing locally — your backend holds all persistence",
+      "           Cupel stores nothing locally — your backend holds all persistence",
       "           agentic.config.ts localMock.enabled = false — the bundled demo",
       "           backend is not running",
     );

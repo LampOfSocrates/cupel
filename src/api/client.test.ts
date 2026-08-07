@@ -57,7 +57,7 @@ describe("api client", () => {
     await expect(api.deleteConversation("agent1", "c3")).resolves.toBeUndefined();
   });
 
-  // Both chat modes on one endpoint, flag in the body (skein-phases.md:43;
+  // Both chat modes on one endpoint, flag in the body (cupel-phases.md:43;
   // openapi.yaml:461-464).
   it("chat() with stream:false returns the single JSON ChatResponse", async () => {
     const result = await api.chat("agent1", { message: "hi", stream: false });
