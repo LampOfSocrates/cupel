@@ -93,6 +93,17 @@
 - [ ] PB-8 Consider enabling the React Compiler — FIRST fix the three render-phase ref writes (App.tsx:35, App.tsx:112, QueueContext.tsx:83) that its lint rules reject  [bucket B9]
 - [ ] PW-1 Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes agentic.config.ts; wire product.label through every UI string so an adopter's name actually renders (user-approved 2026-08-05)
 
+## Stage A+ — A/B compare (user idea 2026-08-07). PLAN: docs/plan-ab-compare.md.
+## Most of the machinery exists (turn re-fire already fans one turn to N endpoints under one
+## run_id); what is missing is doing it LIVE in chat, and doing it ACROSS backends.
+## Sequence deliberately AFTER PB-1: compare mode adds a second layout to ChatPage, which is
+## 1.1k lines and four concerns until that split lands. Dev-only gating is free — require the
+## existing `tune` permission, do NOT invent a role.
+- [ ] PAB-1 Chat compare mode, within one backend — `tune`-gated toggle picking 2-3 variants (endpoint / instruction version / model), server-side fan-out on send, N-column transcript each streaming its own reply, and the result IS a run so the existing grid + judge + summary work unchanged. Warn about N generations = N bills before sending; cap columns at 3 and send people to Runs beyond that  [deps: PB-1]
+- [ ] PAB-2 Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire (an additive contract clarification; FOLD INTO P3-T00, do not smuggle it in separately), then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper  [deps: P3-T00]
+- [ ] PAB-3 `compareSets` presets in agentic.config.ts + picker UI, so a team's usual A/B is one click  [deps: PAB-1]
+- [ ] PAB-4 Cross-backend compare (LATER, separate) — per-request target override in src/api/client.ts, N unrelated conversations in N databases, and a DECIDED answer to who judges them and how that is labelled. No shared run_id means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). Do not start until the judging question is answered  [deps: PAB-1, a decision]
+
 ## Stage B — UX polish phase, desktop-first. PLANNED WITH THE USER before any task runs.
 ## Organising principle (strategy 2026-08-07): the wedge persona's first ten minutes,
 ## ending with THEIR agent answering in a real UI — not our demo with fake data.
