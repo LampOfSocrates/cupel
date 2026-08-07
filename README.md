@@ -1,9 +1,38 @@
-# Cupel
+# Cupel — the console for agents you already built
 
-Half chat app, half agent studio — a React studio for agentic backends, with a
-bundled FastAPI demo backend so it runs the moment you clone it.
-What it does: [docs/features.md](docs/features.md). How it is built, phase by
-phase: [cupel-phases.md](cupel-phases.md).
+A chat client your users can actually use, and the studio you need to make the
+agent better: versioned instructions, replay and compare, an LLM judge, traces
+with cost. Self-hosted. Point it at your backend by editing one file.
+
+**[cupel-site.onrender.com](https://cupel-site.onrender.com)** · what it does:
+[docs/features.md](docs/features.md) · how it was built, phase by phase:
+[cupel-phases.md](cupel-phases.md)
+
+## Why it exists
+
+Chat interfaces talk to *models* and know nothing about your agent. Evaluation
+platforms are dashboards for engineers, and your conversations live on someone
+else's servers. You end up running both, and neither knows about the other.
+
+| | Chat client | Agent studio | Self-hosted | Free |
+|---|---|---|---|---|
+| Open WebUI, LibreChat | ✅ | — | ✅ | ✅ |
+| LangSmith, Braintrust | — | ✅ | enterprise | — |
+| Langfuse | — | ✅ | ✅ | ✅ |
+| Dify, Flowise | ✅ | builds agents | ✅ | ✅ |
+| **Cupel** | ✅ | ✅ | ✅ | ✅ |
+
+Langfuse is the closest neighbour and a good tool — but it is a dashboard you
+send traces to, not a client your users open. Cupel is both, and nothing is held
+back behind a paid tier.
+
+### Deliberately not
+
+- **Building your agent.** There are good frameworks for that (ADK, LangGraph,
+  Mastra, PydanticAI, CrewAI). This drives the one you have.
+- **Hosting your model.** Your keys, your provider, your bill.
+- **Taking your data.** There is no cloud to send it to.
+- **Holding features back.** No paid tier, no enterprise edition, no seat count.
 
 ## Quickstart (you just checked this out)
 
@@ -150,11 +179,19 @@ video only shows what happened while they ran. Everything the run writes
 (`playwright-report/`, `test-results/`, `blob-report/`) is gitignored.
 
 Filming the whole set takes about 3 minutes and produces ~16 clips of 5–16s
-(~5MB of video, ~67MB of report including traces). The full product version of
-this — a journeys.yaml contract, cursor rendering, chapters, a standalone CLI,
-hosted runs — is Phase 4 "Reels", not this.
+(~5MB of video, ~67MB of report including traces). The productised version of
+this idea — a journeys.yaml contract, cursor rendering, chapters, a standalone
+CLI, hosted runs — was deliberately moved out to its own project
+(`journey-replayer`) so this stays a clean agentic chat + studio app.
 
 ## Deployment
 
 The hosted demo runs the same mock as its whole backend, serving the built
 bundle from the same origin — see [docs/deployment.md](docs/deployment.md).
+
+## Why "cupel"
+
+A cupel is the shallow bone-ash dish used to assay silver. Molten metal is held
+in it under heat: the lead and impurities are absorbed into the dish, and what is
+actually valuable stays behind. It seemed like the right name for a tool whose
+job is telling you whether the change you just made was worth keeping.
