@@ -10,7 +10,7 @@ info:
     tree enable/disable, Inspector, generator control), casebooks, the eval
     workbench (cases/sets CRUD, import, rubric saves), context-policy
     widening, per-tree memory, and user settings. Source of truth:
-    docs/feature-spec.md "API" section (feature-spec.md:114-135) filtered by
+    feature-spec.md "API" section (feature-spec.md:114-135) filtered by
     the Phase 2 plan (cupel-phases.md:69-118); pro-tier endpoints are
     excluded (see below).
 

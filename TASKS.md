@@ -58,23 +58,32 @@
 - [x] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
 - ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
 
-## ══ FULL STOP after Phase 2 (user decision 2026-08-05, amended 08-06) ══
-## When the last Phase-2 box is ticked, STOP. Do not start Phase 3.
-## Next: a UX polish phase, desktop-first, planned WITH the user before any task runs.
-## The UX phase absorbs review bucket B (docs/review-2026-08-05.md) and the
-## user-approved "whitelabel-lite" candidate (npm run init + product.label wiring).
-## UX-phase item raised by P2-T12a: there is NO tree switcher in the UI — the app has one
-## active tree from config, so cross-tree results (e.g. a casebook replay spanning trees)
-## can only be linked for the active tree. Needs a real tree selector in the shell.
-## UX-phase item raised by P2-RECORD: RunDetailPage auto-fires the judge ONLY on a live
-## non-terminal -> done transition (RunDetailPage.tsx:156-159). Open a run link after the
-## run already finished and the judge never fires — no scores, no explanation. Real
-## fragility, reproducible by loading a finished run slowly; needs a deliberate rule.
-## Also from P2-RECORD's coverage assessment — gaps a reviewer should know about:
-## no visual-regression/snapshot testing at all; e2e films run against the Vite dev server,
-## never the built bundle Render serves; chromium only; portrait filmed nowhere; BYOK live
-## mode, CUPEL_STORAGE=s3 restore, a11y/keyboard paths and SSE-drop/5xx surfaces untested.
-## Phase 3 begins only after the UX phase closes and the user says so.
+## ══ Phase 2 is CLOSED. Next up, in this order (user decision 2026-08-07) ══
+
+## Stage A — code quality + make-it-yours. Runs BEFORE the UX phase, no planning session
+## needed: every item is already specified. Bucket B is docs/review-2026-08-05.md.
+- [ ] PB-1 Split ChatPage.tsx (~1.1k lines, 20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting  [bucket B1]
+- [ ] PB-2 Extract useAsync(fn, deps) and apply at the ~12 hand-rolled useState(null)+useEffect+cancelled fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines and forces ONE loading/error contract  [bucket B2, B7]
+- [ ] PB-3 Untangle RunsPage navigation state — mode/step/prefilling/preset/testFlow has two sources of truth held together by two eslint-disable exhaustive-deps, plus a remount-by-key trick  [bucket B3]
+- [ ] PB-4 Memoise list rows — memo(ConversationRow), pass activeId down instead of useParams() per row, same for ConversationPicker; useDeferredValue on both search inputs; virtualise past ~200 rows  [bucket B4]
+- [ ] PB-5 Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this correctly with a Map in useMemo — copy it  [bucket B5]
+- [ ] PB-6 Strip task-ID archaeology from comments (files are 13-24% comments, mostly P1-T13 / not-built-here / T08's-job — history, not WHY, and already going stale). Keep every WHY comment  [bucket B6]
+- [ ] PB-7 Split src/test/msw/handlers.ts (~2.5k lines, imported by 45 test files) — needs a shared state module + counters object first  [bucket B8]
+- [ ] PB-8 Consider enabling the React Compiler — FIRST fix the three render-phase ref writes (App.tsx:35, App.tsx:112, QueueContext.tsx:83) that its lint rules reject  [bucket B9]
+- [ ] PW-1 Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes agentic.config.ts; wire product.label through every UI string so an adopter's name actually renders (user-approved 2026-08-05)
+
+## Stage B — UX polish phase, desktop-first. PLANNED WITH THE USER before any task runs.
+## Organising principle (strategy 2026-08-07): the wedge persona's first ten minutes,
+## ending with THEIR agent answering in a real UI — not our demo with fake data.
+## Known inputs:
+##  - README/first-run must lead with "bring your own agent"; cupel-ready --init is the on-ramp
+##  - NO tree switcher exists (raised by P2-T12a): the app has one active tree from config, so
+##    cross-tree results (e.g. a casebook replay spanning trees) cannot be linked
+##  - Coverage gaps (P2-RECORD): no visual-regression/snapshot testing at all; e2e films run
+##    against the Vite dev server, never the built bundle Render serves; chromium only;
+##    portrait filmed nowhere; BYOK live mode, CUPEL_STORAGE=s3 restore, a11y/keyboard paths
+##    and SSE-drop/5xx surfaces untested
+## Phase 3 begins only after Stage B closes and the user says so.
 
 ## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
 ## NOTE: this is NOT the original "Phase 3 = create-agentic-app scaffolder", which stays parked (see below).

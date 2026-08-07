@@ -1,73 +1,87 @@
-# Cupel — what you can do
+# What you can do with Cupel
 
-> Half chat app, half agent studio.
->
-> ✅ = shipped (live on the demo) · 🗓️ = planned
->
-> All free, all open source. No paid tier, nothing held back.
+Everything below is free and open source. There is no paid tier and nothing is held back.
 
-## The chat half — talk to your agentic app
-
-- ✅ Chat with your agent and watch the reply stream in word by word
-- ✅ Stop a reply mid-stream and keep what it wrote so far
-- ✅ Attach files and images to a message, remove them before sending
-- ✅ Thumb up/down any reply — ratings are kept forever, never overwritten
-- ✅ Say why: a thumb opens an optional comment box, and your note stays under that reply for good (it's stored as the rating's reasoning, so it survives reload and travels with a shared link)
-- ✅ Paste screenshots and files straight from the clipboard into the composer
-- ✅ Copy any reply as clean markdown
-- ✅ Set model, temperature, and system prompt for your chat session
-- ✅ Bring your own LLM key (OpenRouter) so replies come from a real model — the key stays in your browser, is never stored or logged server-side
-- ✅ Find any past conversation by search or recency; rename or delete it
-- ✅ See forked conversations nested under their parent
-- ✅ Share a link to a conversation or a single turn — the receiver lands on exactly that turn, or signs in first and still lands there
-- ✅ Chat from your phone in portrait (the studio views below are desktop-first by design)
-
-## The studio half — build and trust your agents
-
-- ✅ See your agent team as a tree — every agent, its live version, its tools
-- ✅ Add a sub-agent under any node
-- ✅ Edit instructions safely — every save is a new version; nothing is ever overwritten
-- ✅ Diff any two versions and roll back
-- ✅ Download an agent's full version history as JSON or Markdown
-- ✅ Test a draft in one click — "Test in Runs" replays your usual conversations against it; repeating a test is two taps
-- ✅ Replay stored conversations — or one turn — under a different instruction version or model, and compare side by side as results fill in live
-- ✅ Re-fire one turn at several deployments at once, each result becoming a real conversation you can open and continue
-- ✅ Score runs with an LLM judge and read its reasoning — every past score kept forever
-- ✅ Watch every background job's live progress; cancel batches; retry just the failures
-- ✅ Debug any turn — the full agent → tool → LLM flow with time, tokens, and cost per step, down to the actual prompts
-- ✅ Trust your comparisons — every turn records its context (date, timezone, region) and replays run under the original context by default
-- ✅ Watch the app fill itself with realistic activity for demos
-- ✅ Hand-craft expected answers (or bulk-import a spreadsheet) and have the judge score against them — the eval workbench
-- ✅ Inspect every conversation as a super user; collect noteworthy turns into casebooks that become eval sets or regression suites
-
-## Run it, point it at your stack, ship it
-
-- ✅ Run the whole thing with no backend at all — the bundled demo backend, and a token-gated demo URL you can send a client
-- ✅ Start everything with one command — `npm start` boots the UI and the demo backend, and tells you which backend you're on and where your data lives
-- ✅ Point Cupel at your own backend by editing one file (`agentic.config.ts`) — flip `localMock.enabled` off and your backend holds all persistence
-- ✅ Switch between mock / local / staging / prod live from Settings, with health checks
-- ✅ Check your backend is ready before you try — `cupel-ready` reports every missing endpoint or mismatched shape
-- ✅ Generate your config from your own OpenAPI file — `cupel-ready --init` detects base URL, route prefix, and auth scheme
-- ✅ Turn login on or off with one env var — real JWTs, login screen, 401 handling; the same UI code either way
-- ✅ Control who can view, tune, or evaluate each agent tree; disable a tree so new work stops but history stays readable
-- 🗓️ Keep the hosted demo's data across restarts — SQLite replicated to object storage
-- ✅ Trust every release — the full end-to-end suite walks every journey in both auth modes (`npm run e2e`)
-- ✅ Watch the tests instead of reading them — `npm run e2e:record` films every journey with an on-screen step caption, into Playwright's own report
-- 🗓️ Choose the context a replay runs under — original / today / custom — and replay recorded tool results so only your change varies
-- 🗓️ Tune the demo generator's pace from Settings
-- 🗓️ Manage what the app remembers per agent tree — view, edit, clear
-- 🗓️ Deploy to Kubernetes with a Helm-gated test job that blocks a bad release
-- 🗓️ Drive any conformant backend from the terminal — `cupel-cli chat`, `replay`, `run --watch`, `tasks --watch`, `--json` for scripts
-- 🗓️ Generate your own project from this repo — `cupel create-agentic-app --name myapp --mybackend <your-openapi>`, with the bundled mock filling whatever your backend doesn't implement yet
-
-## Also on the roadmap
-
-- 🗓️ Manage agents like code — instruction changes become GitHub PRs; merging promotes the version live
-- 🗓️ Share a conversation publicly with a tokenised link — no account needed, with expiry and revocation
-- 🗓️ Adopt it with a half-built backend — implemented endpoints go to yours, the rest are served by the bundled mock
+**✅ works today** (try it on the demo) · **🗓️ planned** ([TASKS.md](../TASKS.md) has the order)
 
 ---
 
-**Everything here is free and open source. There is no paid tier and nothing is held back.**
+## Talk to your agent
 
-**Not planned:** a hosted multi-tenant platform. This is a repo you clone, configure in one file, and run — or generate a project from, once the CLIs land.
+| | |
+|---|---|
+| ✅ | Watch replies stream in word by word — and **stop mid-answer**, keeping whatever was written |
+| ✅ | Attach files and images, or **paste a screenshot straight from the clipboard** |
+| ✅ | Copy any reply as clean markdown |
+| ✅ | Thumb a reply up or down, then **say why** — your note stays under that reply for good |
+| ✅ | Choose the model, temperature and system prompt for your session |
+| ✅ | **Use your own model key** — it stays in your browser and is never stored or logged on the server |
+| ✅ | Find any past conversation by search or recency; rename or delete it |
+| ✅ | See forked conversations nested under the one they came from |
+| ✅ | **Send someone a link to one exact turn** — they land on it, signing in first if your instance requires it |
+| ✅ | Chat from your phone in portrait |
+| 🗓️ | Share a conversation publicly with a tokenised link — no account needed, with expiry and revocation |
+
+## Improve the agent
+
+| | |
+|---|---|
+| ✅ | See your agent team as a tree — live version and tools per node; add sub-agents |
+| ✅ | **Every instruction save is a new version.** Nothing is ever overwritten |
+| ✅ | Diff any two versions, roll back, or download the whole history as JSON or Markdown |
+| ✅ | **Test a draft in one click** — it replays your usual conversations against it; repeating a test is two taps |
+| ✅ | Replay real conversations — or a single turn — under a different version or model |
+| ✅ | **Compare side by side**, cells filling in live as each result lands |
+| ✅ | Re-fire one turn at several deployments at once; each result becomes a real conversation you can continue |
+| ✅ | **Score with an LLM judge and read its reasoning.** Every past score is kept |
+| ✅ | Hand-craft expected answers, or import a spreadsheet of them, and score against those |
+| ✅ | Collect noteworthy turns into casebooks that become eval sets or regression suites |
+| 🗓️ | Choose the context a replay runs under — original, today, or one you specify — and replay recorded tool results so only your change varies |
+| 🗓️ | Manage what the app remembers per agent tree — view it, edit it, clear it |
+
+## Understand what happened
+
+| | |
+|---|---|
+| ✅ | Open any turn's **full trace**: agent → tool → LLM, with time, tokens and cost per step, down to the actual prompts |
+| ✅ | Watch every background job's progress; cancel a batch; retry only the failures |
+| ✅ | **Trust your comparisons** — every turn records the date, timezone and region it ran under, and replays reuse them |
+| ✅ | Inspect every conversation in the system as a super user, filtered by user, tree, date or score |
+
+## Run it your way
+
+| | |
+|---|---|
+| ✅ | **Runs with no backend at all** — a real bundled backend, seeded with realistic data, so the whole app works before you write any server code |
+| ✅ | **One command.** `npm start` boots it and tells you which backend you are on and where your data lives |
+| ✅ | **Point it at your own backend by editing one file.** Turn the bundled one off and your backend holds all persistence — Cupel stores nothing server-side |
+| ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape |
+| ✅ | **Generate your config from your own OpenAPI file** — base URL, route prefix and auth scheme detected for you |
+| ✅ | Switch between mock, local, staging and prod live from Settings, with health checks |
+| ✅ | **Turn login on or off with one environment variable** — real tokens and a login screen, or straight in as a dev user. Same UI either way |
+| ✅ | Control who can view, tune or evaluate each agent tree; disable a tree so new work stops but history stays readable |
+| ✅ | Fill the app with realistic activity for a demo, on demand |
+| ✅ | Send a client a token-gated demo URL |
+| 🗓️ | **Put your own name on it** — one command asks for your product name and backend, and writes the config |
+| 🗓️ | **Switch between agent trees in the UI** (today the active tree comes from config) |
+| 🗓️ | Keep a hosted instance's data across restarts — the code is written, it needs an object-storage bucket |
+| 🗓️ | Work with **any AG-UI agent** through a bridge, so an agent that already speaks that protocol needs no new endpoints for chat |
+| 🗓️ | Adopt it with a **half-built backend** — implemented endpoints go to yours, the rest are served by the bundled one |
+| 🗓️ | **Drive it from the terminal** — chat, replay, watch runs and tasks, `--json` for scripts |
+| 🗓️ | **Generate your own project** from this repo, pointed at your backend |
+| 🗓️ | Manage agents like code — instruction changes become GitHub pull requests; merging promotes the version live |
+| 🗓️ | Deploy to Kubernetes with a test job that blocks a bad release |
+
+## Prove it still works
+
+| | |
+|---|---|
+| ✅ | A full end-to-end suite walks **13 user journeys in both auth modes** — and asserts each journey really called the documented endpoints, not just that the screen looked right |
+| ✅ | **Watch the tests instead of reading them**: `npm run e2e:record` films every journey with an on-screen caption of the step it is performing |
+
+*A film is evidence, not verification — the assertions decide pass or fail, the video shows what happened while they ran.*
+
+---
+
+**Not planned:** a hosted multi-tenant platform. Cupel is a repo you clone, configure in one
+file, and run — or, once the CLIs land, generate your own project from.
