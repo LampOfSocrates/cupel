@@ -2,7 +2,9 @@
 
 > Half chat app, half agent studio.
 >
-> ✅ = shipped (live on the demo) · ⏳ = in build (Phase 2) · 🗓️ = planned (Phase 3) · ⭐ = pro tier (Phase 4)
+> ✅ = shipped (live on the demo) · 🗓️ = planned
+>
+> All free, all open source. No paid tier, nothing held back.
 
 ## The chat half — talk to your agentic app
 
@@ -48,7 +50,7 @@
 - ✅ Generate your config from your own OpenAPI file — `skein-ready --init` detects base URL, route prefix, and auth scheme
 - ✅ Turn login on or off with one env var — real JWTs, login screen, 401 handling; the same UI code either way
 - ✅ Control who can view, tune, or evaluate each agent tree; disable a tree so new work stops but history stays readable
-- ⏳ Keep the hosted demo's data across restarts — SQLite replicated to object storage
+- 🗓️ Keep the hosted demo's data across restarts — SQLite replicated to object storage
 - ✅ Trust every release — the full end-to-end suite walks every journey in both auth modes (`npm run e2e`)
 - ✅ Watch the tests instead of reading them — `npm run e2e:record` films every journey with an on-screen step caption, into Playwright's own report
 - 🗓️ Choose the context a replay runs under — original / today / custom — and replay recorded tool results so only your change varies
@@ -58,13 +60,14 @@
 - 🗓️ Drive any conformant backend from the terminal — `skein-cli chat`, `replay`, `run --watch`, `tasks --watch`, `--json` for scripts
 - 🗓️ Generate your own project from this repo — `skein create-agentic-app --name myapp --mybackend <your-openapi>`, with the bundled mock filling whatever your backend doesn't implement yet
 
-## Pro tier (Phase 4)
+## Also on the roadmap
 
-- ⭐ Manage agents like code — instruction changes become GitHub PRs; merging promotes the version live
-- ⭐ Share a conversation publicly with a tokenised link — no account needed, with expiry and revocation
-- ⭐ Reels — a journey runner that turns any conformant app's tests into reviewable films
-- ⭐ Adopt Skein with a half-built backend — implemented endpoints go to yours, the rest are served by the bundled mock
+- 🗓️ Manage agents like code — instruction changes become GitHub PRs; merging promotes the version live
+- 🗓️ Share a conversation publicly with a tokenised link — no account needed, with expiry and revocation
+- 🗓️ Adopt it with a half-built backend — implemented endpoints go to yours, the rest are served by the bundled mock
 
 ---
 
-**Not planned:** a hosted multi-tenant platform. Skein is a repo you clone, configure in one file, and run — or generate a project from, once the Phase-3 CLIs land.
+**Everything here is free and open source. There is no paid tier and nothing is held back.**
+
+**Not planned:** a hosted multi-tenant platform. This is a repo you clone, configure in one file, and run — or generate a project from, once the CLIs land.
