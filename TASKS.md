@@ -88,14 +88,19 @@
 - [ ] P3-CLI2 skein-cli — terminal client to ANY conformant backend: `skein-cli --mybackend XXXX <cmd>`; chat with live token streaming, conversations/agents/instructions/replay/run --watch/judge/trace/tasks --watch, `--json` for scripts, delegates `ready` to the existing comparator. In cli/skein-cli/. PLAN: docs/plan-skein-cli.md (4 sub-tasks A-D; 3 open questions). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
 - [ ] P3-CLI agentic-app-maker — `skein create-agentic-app|ui|backend --name X --same-repo --gap-as-mock server --mybackend <openapi>` in cli/agentic-app-maker/; generates a runnable project + prints test/run/change-my-backend next steps; no backend given = mock does everything. PLAN: docs/plan-agentic-app-maker.md (5 sub-tasks A-E; 5 open questions need answers BEFORE building). Un-parks the original scaffolder; may absorb P4-HYBRID (see plan §1, Q1). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
 
-## Phase 4 — PRO tier (user decision 2026-08-06: the pro shelf becomes Phase 4).
-## NOT scheduled — do NOT build any of this during Phases 2-3 or the UX phase.
-## Everything here is paid-tier; the free build must stay complete and useful without it.
-- [ ] P4-REPO "Agents as Code" — GitHub connect, instruction changes as PR diffs, merge promotes the version live; mock git server (former P2-T20)
-- [ ] P4-SHARE "Public Sharing" — anonymous tokenized share links for conversations/turns, with expiry and revocation (the free tier keeps in-app deep links only, P2-SHARE)
-- [ ] P4-REELS "Reels" (working name) — watchable-QA journey runner: journeys.yaml testability contract → Playwright films (step HUD, cursor, chapters, pass/fail) + review gallery → standalone CLI → hosted CI product. P2-RECORD ships only the minimal recording rig; this is the product.
-- [ ] P4-HYBRID "Hybrid backend fill" — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins).
+## ══ THERE IS NO PAID TIER (user decision 2026-08-07 — supersedes all earlier tiering) ══
+## Goal is not revenue: brand, GitHub stars, getting hired, a community project, and
+## out-competing funded startups with free open source. Nothing is held back, ever.
+## The old "Phase 4 pro shelf" is dissolved — its items are ordinary free roadmap work below.
 
-## Parked indefinitely: the ORIGINAL Phase 3 (create-agentic-app scaffolder) and the
-## ORIGINAL Phase 4 (hosted multi-tenant platform). Neither is on any roadmap.
+## Phase 4 — the rest of the roadmap (free, like everything else)
+- [ ] P4-REPO Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes the version live; mock git server. No free tool does this; it is a headline differentiator, not a paywall (former P2-T20)
+- [ ] P4-SHARE Public sharing — anonymous tokenised share links for conversations/turns, with expiry and revocation. A growth mechanism: every shared conversation is a billboard (extends the in-app deep links from P2-SHARE)
+- [ ] P4-HYBRID Hybrid backend fill — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the skein-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins). Lowers adoption cost for the wedge persona
+- ~~P4-REELS~~ — MOVED OUT 2026-08-07 to its own project: C:\Users\soura\Code\2026\journey-replayer (spec committed there). This repo stays a clean agentic chat + studio app. What remains here is P2-RECORD's minimal recording rig, which is enough for our own suite.
+
+## Parked indefinitely: a hosted multi-tenant platform. Not on any roadmap.
 ## Review buckets: B = the UX phase · C = a future contract v0.4.0 · D = persistence docs.
+## Strategy (2026-08-07): wedge persona = the framework builder with an agent and no UI;
+## positioning = "the console for agents you already built"; AG-UI stance pending a spike;
+## product name deferred until positioning settles.
