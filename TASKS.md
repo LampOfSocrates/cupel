@@ -1,4 +1,7 @@
 # Cupel TASKS — worked by the auto-runner, one task per fresh session
+# OPEN WORK LIVES IN docs/open-items.md — the deduped index of everything not yet done,
+# incl. items this file does not track (doc debt, the 11 open decisions, bucket C/D contents).
+# Read that instead of re-scanning the review/plan docs. This file stays the runner's queue.
 # Protocol per task (enforced by hooks + runner): implement → tests green → commit "P{phase}-T{id}: <summary>" → stop.
 # Runner picks the first unchecked box. Do not start a task whose deps are unchecked.
 
