@@ -1,59 +1,26 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ClipboardEvent as ReactClipboardEvent,
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import {
-  ActionIcon,
-  Alert,
-  Anchor,
-  Badge,
-  Button,
-  Center,
-  CloseButton,
-  CopyButton,
-  Divider,
-  FileButton,
-  Group,
-  Indicator,
-  Loader,
-  NumberInput,
-  Paper,
-  PasswordInput,
-  Popover,
-  Select,
-  Stack,
-  Text,
-  Textarea,
-  Title,
-  Tooltip,
-} from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Stack, Text, Title } from "@mantine/core";
 import { api, ApiError } from "../api/client";
 import { getSseEnabled } from "../api/backendPrefs";
-import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../api/llmKey";
 import type {
   Attachment,
   CasebookItemCreate,
   Judgment,
   Lineage,
-  Model,
   Turn,
 } from "../api/types";
-import { EnvelopeChip, ForkModal } from "../components";
+import { ForkModal } from "../components";
 import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
-import { formatBytes } from "../lib/formatBytes";
-import { Markdown } from "../lib/markdown";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
+import { ChatSettingsMenu } from "./chat/ChatSettingsMenu";
+import { Composer } from "./chat/Composer";
+import { createDraftStore } from "./chat/draftStore";
+import { Transcript } from "./chat/Transcript";
+import type { ChatSettings, Rating, StreamState, ThumbState } from "./chat/types";
 
-// P1-T02: live chat page.
 // Contract (openapi.yaml:466-476): "stream=true → 200 text/event-stream with
 // events: task (first event; carries the task_id used for stop = DELETE
 // /tasks/{task_id}, plus conversation and turn ids) / token (one per streamed
@@ -65,91 +32,12 @@ import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 // responses (markdown + code blocks)" ... "Auto-scroll on stream;
 // stop-generation button while streaming."
 
-interface StreamState {
-  taskId: string | null; // null until the `task` event arrives
-}
-
-// The in-flight draft is an EXTERNAL STORE, not page state: as ChatPage state,
-// every token re-rendered the whole page — transcript, composer, header — so a
-// stream cost O(turns) per token instead of O(1) (docs/review-2026-08-05.md
-// A8). Only <StreamingBubble> subscribes, so a token re-renders one bubble.
-// ChatPage keeps "a stream is running" + its task id, which change three times
-// per stream (start, task event, done), not once per token.
-function createDraftStore() {
-  let text = "";
-  const listeners = new Set<() => void>();
-  const emit = () => {
-    for (const listener of listeners) listener();
-  };
-  return {
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    get: () => text,
-    append(delta: string) {
-      text += delta;
-      emit();
-    },
-    reset() {
-      text = "";
-      emit();
-    },
-  };
-}
-
-type DraftStore = ReturnType<typeof createDraftStore>;
-
-// P1-T04: one composer chip per picked file. Files upload immediately on pick
-// ("multipart upload to /upload before send", feature-spec.md:277); a 413/415
-// leaves the chip in state "error" with the server's message and its file is
-// never referenced in ChatRequest.attachments ("the UI surfaces the message",
-// openapi.yaml:535-536).
-interface PendingUpload {
-  key: number;
-  filename: string;
-  size: number;
-  status: "uploading" | "done" | "error";
-  attachment?: Attachment; // set when status === "done"
-  error?: string; // server message when status === "error"
-  previewUrl?: string; // object URL for image/* (client-side only — url is null in Phase 1, openapi.yaml:1284)
-}
-
-// P1-T05: "Chat has its own Settings submenu (model, temperature, system
-// prompt — session-scoped)" (feature-spec.md:7); "sent with each /chat call"
-// (feature-spec.md:278). Session-scoped = React state for the app session:
-// survives conversation switches, NOT reloads — Phase 1 has no /settings
-// endpoint (openapi.yaml:38-40 lists it under "Deferred to later phases") and
-// no localStorage persistence is specced.
-// Keys mirror ChatRequest field names (openapi.yaml:1425-1430) so the send
-// spreads them straight into the body; unset settings are ABSENT keys — the
-// contract fields are nullable but untouched settings are omitted entirely,
-// never sent as null.
-export interface ChatSettings {
-  model?: string;
-  temperature?: number;
-  system_prompt?: string;
-}
-
-type Rating = "up" | "down";
-
-// P2-CHATUX: a thumb plus the optional note the rater left with it. The note
-// is NOT a Turn — turns are what gets replayed, forked and judged, and
-// Turn.role is user|assistant — so it lives on the human judgment
-// (FeedbackRequest.comment → Judgment.reasoning) and renders under its turn.
-interface ThumbState {
-  rating: Rating;
-  comment: string | null;
-}
-
-// P1-T03: per-turn thumb state from judgment history. Judgments arrive
-// "newest first" (openapi.yaml:994) and are append-only, so the current thumb
-// is the FIRST type:human judgment per turn_id; "For type human, 1 = 👍 and
-// 0 = 👎" (openapi.yaml:1905). P2-CHATUX carries that judgment's reasoning
-// along under the same newest-wins rule — a later bare thumb supersedes an
-// earlier comment, because it IS the newer judgment.
+// Per-turn thumb state from judgment history. Judgments arrive "newest first"
+// (openapi.yaml:994) and are append-only, so the current thumb is the FIRST
+// type:human judgment per turn_id; "For type human, 1 = 👍 and 0 = 👎"
+// (openapi.yaml:1905). That judgment's reasoning comes along under the same
+// newest-wins rule — a later bare thumb supersedes an earlier comment, because
+// it IS the newer judgment.
 function deriveThumbs(judgments: Judgment[]): Record<string, ThumbState> {
   const thumbs: Record<string, ThumbState> = {};
   for (const j of judgments) {
@@ -166,17 +54,17 @@ export function ChatPage() {
   const { conversationId } = useParams();
   const { tree, refreshConversations } = useApp();
   const navigate = useNavigate();
-  // P2-SHARE — a received turn link: /chat/{id}?turn={turnId}. Read-only here;
-  // the param is never written back, so the URL a receiver shares onward is
+  // A received turn link: /chat/{id}?turn={turnId}. Read-only here; the param
+  // is never written back, so the URL a receiver shares onward is
   // byte-identical to the one they got.
   const [searchParams] = useSearchParams();
   const sharedTurnId = searchParams.get(TURN_PARAM);
 
   const [turns, setTurns] = useState<Turn[] | null>(conversationId ? null : []);
   const [title, setTitle] = useState<string | null>(null);
-  // P1-T13: lineage + agent off the loaded Conversation. Lineage is "Present
-  // iff this conversation is a fork" (openapi.yaml:1369) and drives the header
-  // banner; agent_id seeds the fork modal's optional version select.
+  // Lineage + agent off the loaded Conversation. Lineage is "Present iff this
+  // conversation is a fork" (openapi.yaml:1369) and drives the header banner;
+  // agent_id seeds the fork modal's optional version select.
   const [lineage, setLineage] = useState<Lineage | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   // Parent link state: title when it loads, "deleted" on 404 — "forks keep
@@ -184,18 +72,17 @@ export function ChatPage() {
   const [parent, setParent] = useState<{ title: string } | "deleted" | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
-  // P2-T12a ⊞ — the turn a collect dialog is open for (CasebookItemCreate, the
-  // POST body of openapi.yaml:1732-1757).
+  // ⊞ — the turn a collect dialog is open for (CasebookItemCreate, the POST
+  // body of openapi.yaml:1732-1757).
   const [collectTarget, setCollectTarget] = useState<CasebookItemCreate | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   // Lazy init: one store per ChatPage instance, stable for its lifetime.
   const [draft] = useState(createDraftStore);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [input, setInput] = useState("");
   const [thumbs, setThumbs] = useState<Record<string, ThumbState>>({});
-  // P2-CHATUX: turn id whose comment box is open (null = none). Only ever one
-  // — a thumb elsewhere moves the box rather than stacking prompts.
+  // Turn id whose comment box is open (null = none). Only ever one — a thumb
+  // elsewhere moves the box rather than stacking prompts.
   const [commentFor, setCommentFor] = useState<string | null>(null);
   // Session-scoped chat settings (feature-spec.md:7, :278). They live HERE,
   // not in AppContext: only this page reads them, and in the context every
@@ -205,8 +92,9 @@ export function ChatPage() {
   // same element, so React keeps the instance and its state across the
   // post-send navigate).
   const [chatSettings, setChatSettings] = useState<ChatSettings>({});
-  const [pending, setPending] = useState<PendingUpload[]>([]);
-  const pendingKeyRef = useRef(0);
+  // Bumped when we leave a conversation: the composer drops the chips (and
+  // their image previews) that were picked for the transcript being left.
+  const [composerReset, setComposerReset] = useState(0);
 
   // Conversation id whose turns the local state already holds — set when a
   // send attaches to it (via the SSE `task` event) or when a GET completes.
@@ -215,18 +103,14 @@ export function ChatPage() {
   const abortRef = useRef<AbortController | null>(null);
 
   // Auto-scroll pinned to bottom unless the user scrolled up
-  // (feature-spec.md:13 "Auto-scroll on stream").
+  // (feature-spec.md:13 "Auto-scroll on stream"). The transcript does the
+  // scrolling; the page owns the refs because the share-link effect below
+  // aims them too.
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinnedRef = useRef(true);
-  // Tokens scroll from inside StreamingBubble now that they no longer render
-  // here; this covers new turns and stream start/end.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [turns, stream]);
 
-  // P2-SHARE highlight. Design (documented choice): the targeted turn keeps a
-  // PERSISTENT left accent marker (data-share-target) for the whole visit —
+  // Share-link highlight. Design (documented choice): the targeted turn keeps
+  // a PERSISTENT left accent marker (data-share-target) for the whole visit —
   // a receiver who scrolls away can still find the spot — plus a brief ring
   // that fades after ~2.5s so the eye catches it on arrival. Nothing about
   // the transcript is mutated, so the rest of the page behaves normally.
@@ -244,7 +128,7 @@ export function ChatPage() {
     sharedHandledRef.current = sharedTurnId;
     // The explicit target owns the initial scroll position — beat the
     // bottom-pin for this load (the pin re-arms as soon as the user scrolls
-    // back down, via the container's onScroll below).
+    // back down, via the transcript's onScroll).
     pinnedRef.current = false;
     sharedRef.current?.scrollIntoView({ block: "center" });
     setSharedFlash(true);
@@ -264,11 +148,7 @@ export function ChatPage() {
     abortRef.current?.abort();
     setStream(null);
     setSendError(null);
-    // Pending composer chips belong to the conversation being left.
-    setPending((prev) => {
-      for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      return [];
-    });
+    setComposerReset((n) => n + 1);
     setLineage(null);
     setAgentId(null);
     setForkTurnId(null);
@@ -284,8 +164,8 @@ export function ChatPage() {
     setTurns(null);
     setTitle(null);
     setThumbs({});
-    // P2-SHARE: arriving on a ?turn= deep link, do NOT pin to the bottom for
-    // this load — the highlight effect above places the viewport instead.
+    // Arriving on a ?turn= deep link, do NOT pin to the bottom for this load —
+    // the highlight effect above places the viewport instead.
     pinnedRef.current = sharedTurnIdRef.current === null;
     sharedHandledRef.current = null;
     let cancelled = false;
@@ -317,29 +197,18 @@ export function ChatPage() {
     };
   }, [tree, conversationId]);
 
-  // Unmount cleanup. Besides aborting an in-flight stream, this releases the
-  // image previews still held by composer chips: they are revoked on remove,
-  // on send and on conversation switch, but leaving the page mid-compose
-  // leaked one blob per picked image (docs/review-2026-08-05.md A7). The ref
-  // is synced in an effect rather than during render so the cleanup sees the
-  // last committed chips without a render-phase write.
-  const pendingRef = useRef<PendingUpload[]>([]);
-  useEffect(() => {
-    pendingRef.current = pending;
-  }, [pending]);
+  // Unmount: abort an in-flight stream. (The composer releases its own image
+  // previews, docs/review-2026-08-05.md A7.)
   useEffect(
     () => () => {
       abortRef.current?.abort();
-      for (const p of pendingRef.current) {
-        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      }
     },
     [],
   );
 
-  // P1-T13: resolve the parent's title for the lineage banner. Delete is a
-  // tombstone (openapi.yaml:438-443) — a 404 here means the parent was
-  // deleted; the link renders disabled as "parent deleted", never broken.
+  // Resolve the parent's title for the lineage banner. Delete is a tombstone
+  // (openapi.yaml:438-443) — a 404 here means the parent was deleted; the link
+  // renders disabled as "parent deleted", never broken.
   const parentId = lineage?.parent_conversation_id;
   useEffect(() => {
     setParent(null);
@@ -359,93 +228,11 @@ export function ChatPage() {
   }, [tree, parentId]);
 
   const streaming = stream !== null;
-  const uploading = pending.some((p) => p.status === "uploading");
 
-  // Attach flow: picker or drag-drop → immediate POST /upload per file
-  // ("multipart upload to /upload before send", feature-spec.md:277). Chips
-  // are removable before send (feature-spec.md:12 "attachment chips,
-  // removable before send").
-  const addFiles = (files: File[]) => {
-    for (const file of files) {
-      const key = ++pendingKeyRef.current;
-      // Tiny client-side thumbnail for images; guarded because jsdom lacks
-      // createObjectURL. Contract url stays null in Phase 1 (openapi.yaml:1284).
-      const previewUrl =
-        file.type.startsWith("image/") && typeof URL.createObjectURL === "function"
-          ? URL.createObjectURL(file)
-          : undefined;
-      setPending((prev) => [
-        ...prev,
-        { key, filename: file.name, size: file.size, status: "uploading", previewUrl },
-      ]);
-      api
-        .upload(file)
-        .then((attachment) => {
-          setPending((prev) =>
-            prev.map((p) => (p.key === key ? { ...p, status: "done", attachment } : p)),
-          );
-        })
-        .catch((e: unknown) => {
-          // 413/oversize etc: surface the server's message on the chip; the
-          // file is not added (openapi.yaml:535-536).
-          const message = e instanceof Error ? e.message : String(e);
-          setPending((prev) =>
-            prev.map((p) => (p.key === key ? { ...p, status: "error", error: message } : p)),
-          );
-        });
-    }
-  };
-
-  // P2-CHATUX: clipboard files go through addFiles above — the SAME path the
-  // picker and drag-drop use, so chips, the 413 message and the send gate all
-  // behave identically. A pasted screenshot arrives with a generic or empty
-  // name ("image.png" on Chromium, "" elsewhere), which would render a blank
-  // chip and store a blank filename, so those get a generated one.
-  const pasteCountRef = useRef(0);
-  const namePasted = (file: File): File => {
-    if (file.name && !/^image\.[a-z0-9]+$/i.test(file.name)) return file;
-    const ext = (file.type.split("/")[1] ?? "").replace(/[^a-z0-9]/gi, "") || "png";
-    return new File([file], `pasted-image-${++pasteCountRef.current}.${ext}`, {
-      type: file.type || "application/octet-stream",
-      lastModified: file.lastModified,
-    });
-  };
-  const pasteFiles = (e: ReactClipboardEvent) => {
-    const files = Array.from(e.clipboardData?.files ?? []);
-    // Text pastes are untouched: no preventDefault, so the textarea inserts
-    // the text exactly as it does today.
-    if (files.length === 0) return;
-    e.preventDefault();
-    addFiles(files.map(namePasted));
-  };
-
-  const removePending = (key: number) => {
-    setPending((prev) => {
-      const found = prev.find((p) => p.key === key);
-      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl);
-      return prev.filter((p) => p.key !== key);
-    });
-  };
-
-  const clearPending = () => {
-    setPending((prev) => {
-      for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      return [];
-    });
-  };
-
-  const send = async () => {
-    const text = input.trim();
-    // Design choice: send is DISABLED until in-flight uploads settle (rather
-    // than queued) — the spec sequences "upload to /upload before send"
-    // (feature-spec.md:277) and disabling is the simplest state users can see.
-    if (!text || streaming || uploading) return;
+  const send = async (text: string, uploaded: Attachment[]) => {
     // Only successfully uploaded ids go out (openapi.yaml:1423 "Attachment ids
-    // from POST /upload"); error chips are dropped with the rest on send.
-    const uploaded = pending.filter((p) => p.status === "done" && p.attachment);
-    const attachmentIds = uploaded.map((p) => p.attachment!.id);
-    setInput("");
-    clearPending();
+    // from POST /upload").
+    const attachmentIds = uploaded.map((a) => a.id);
     setSendError(null);
     const optimistic: Turn = {
       id: `local-${Date.now()}`,
@@ -455,7 +242,7 @@ export function ChatPage() {
       created_at: new Date().toISOString(),
       // Render the user turn's chips immediately, same shape the server will
       // store on Turn.attachments (openapi.yaml:1313-1315).
-      attachments: uploaded.map((p) => p.attachment!),
+      attachments: uploaded,
       envelope: null,
     };
     setTurns((prev) => [...(prev ?? []), optimistic]);
@@ -469,14 +256,14 @@ export function ChatPage() {
         {
           message: text,
           conversation_id: conversationId,
-          // P2-T17: the Settings → Backend "SSE streaming on/off" mock option
+          // The Settings → Backend "SSE streaming on/off" mock option
           // (feature-spec.md:160) — device-local flag, read at send time.
           // stream:false answers a single JSON ChatResponse handled below
           // (cupel-phases.md:43 "the UI degrades gracefully to non-streaming
           // when the SSE toggle is off in mock options").
           stream: getSseEnabled(),
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
-          // P1-T05: session-scoped settings "sent with each /chat call"
+          // Session-scoped settings "sent with each /chat call"
           // (feature-spec.md:278). ChatSettings keys mirror ChatRequest
           // (openapi.yaml:1425-1430) and unset keys are absent, so the spread
           // sends only what the user set — never null for untouched fields.
@@ -543,10 +330,10 @@ export function ChatPage() {
   // 👍/👎 → POST /feedback {message_id, rating} (openapi.yaml:1475-1480;
   // feature-spec.md:276). Optimistic; judgments are append-only (no un-vote
   // endpoint), so re-clicking the same thumb simply appends again.
-  // P2-CHATUX: the rating is submitted on the click ITSELF — a user who only
-  // wants to rate still does exactly one click — and the comment box is
-  // merely revealed alongside it. The new judgment carries no comment, so the
-  // rendered note clears until one is submitted (newest judgment wins).
+  // The rating is submitted on the click ITSELF — a user who only wants to
+  // rate still does exactly one click — and the comment box is merely revealed
+  // alongside it. The new judgment carries no comment, so the rendered note
+  // clears until one is submitted (newest judgment wins).
   const rate = (turnId: string, rating: Rating) => {
     const previous = thumbs[turnId];
     setThumbs((m) => ({ ...m, [turnId]: { rating, comment: null } }));
@@ -563,8 +350,8 @@ export function ChatPage() {
     });
   };
 
-  // P2-CHATUX: the comment is a SECOND feedback post carrying the same rating
-  // plus the note — an append, never an update (there is no judgment PATCH,
+  // The comment is a SECOND feedback post carrying the same rating plus the
+  // note — an append, never an update (there is no judgment PATCH,
   // openapi.yaml /eval/judgments is GET-only). Newest-wins in deriveThumbs
   // then makes this judgment the one that renders.
   const submitComment = (turnId: string, text: string) => {
@@ -582,11 +369,11 @@ export function ChatPage() {
   };
 
   if (loadError) {
-    // P2-SHARE no-access state. The contract makes "deleted" and "you may not
-    // see this conversation" INDISTINGUISHABLE — both answer 404
-    // (openapi.yaml:1948 NotFound) — so one friendly state covers both and
-    // deliberately says nothing about which. Any other failure keeps the
-    // existing red error surface carrying the backend's message.
+    // No-access state. The contract makes "deleted" and "you may not see this
+    // conversation" INDISTINGUISHABLE — both answer 404 (openapi.yaml:1948
+    // NotFound) — so one friendly state covers both and deliberately says
+    // nothing about which. Any other failure keeps the existing red error
+    // surface carrying the backend's message.
     if (loadError instanceof ApiError && loadError.status === 404) {
       return (
         <Stack gap="sm" maw={420} mx="auto" mt="xl" data-testid="conversation-unavailable">
@@ -603,12 +390,12 @@ export function ChatPage() {
   }
 
   return (
-    // P2-MOBILE-SHELL — the page owns a viewport-height column so the composer
-    // sits at the bottom and only the transcript scrolls. Two portrait fixes:
-    // dvh (100vh is the LARGE viewport on phones, so the composer hid behind
-    // the browser's own bottom chrome), and subtracting the AppShell header
-    // offset (banner + burger bar), which the old 100vh never accounted for —
-    // the composer sat exactly that far below the fold.
+    // The page owns a viewport-height column so the composer sits at the
+    // bottom and only the transcript scrolls. Two portrait fixes: dvh (100vh
+    // is the LARGE viewport on phones, so the composer hid behind the
+    // browser's own bottom chrome), and subtracting the AppShell header offset
+    // (banner + burger bar), which the old 100vh never accounted for — the
+    // composer sat exactly that far below the fold.
     <Stack
       gap="sm"
       maw={760}
@@ -621,13 +408,13 @@ export function ChatPage() {
       <Group justify="space-between" wrap="nowrap">
         {/* lineClamp + minWidth:0 — a long title truncates instead of shoving
             the ⚙ off a phone screen. */}
-        <Title order={4} lineClamp={1} style={{ minWidth: 0 }}>{title ?? (conversationId ? " " : "New chat")}</Title>
+        <Title order={4} lineClamp={1} style={{ minWidth: 0 }}>{title ?? (conversationId ? " " : "New chat")}</Title>
         <ChatSettingsMenu settings={chatSettings} onChange={setChatSettings} />
       </Group>
-      {/* P2-T07c: a disabled tree keeps history readable while every new turn
-          409s (feature-spec.md:20 "read-only banner"). */}
+      {/* A disabled tree keeps history readable while every new turn 409s
+          (feature-spec.md:20 "read-only banner"). */}
       <ReadOnlyTreeBanner />
-      {/* P1-T13 fork identity banner — "Forks carry lineage metadata: parent
+      {/* Fork identity banner — "Forks carry lineage metadata: parent
           conversation id, fork turn, endpoint + config used. Shown as a
           badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"
           (feature-spec.md:6). */}
@@ -659,11 +446,11 @@ export function ChatPage() {
               Open parent
             </Anchor>
           )}
-          {/* P1-T14 — fork-side entry into the sibling comparison ("compare
-              forks of the same turn across endpoints", feature-spec.md:73).
-              Lineage alone identifies the sibling set (parent + fork turn),
-              so this works even when the parent was deleted; design
-              rationale in ForkComparePage.tsx. */}
+          {/* Fork-side entry into the sibling comparison ("compare forks of
+              the same turn across endpoints", feature-spec.md:73). Lineage
+              alone identifies the sibling set (parent + fork turn), so this
+              works even when the parent was deleted; design rationale in
+              ForkComparePage.tsx. */}
           <Anchor
             size="xs"
             onClick={() =>
@@ -674,195 +461,47 @@ export function ChatPage() {
           </Anchor>
         </Group>
       )}
-      <div
-        ref={scrollRef}
-        style={{ flex: 1, minHeight: 0, overflowY: "auto" }}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-      >
-        {turns === null ? (
-          <Center h="100%">
-            <Loader />
-          </Center>
-        ) : (
-          <Stack gap="sm" data-testid="transcript">
-            {turns.length === 0 && !streaming && (
-              <Text c="dimmed" ta="center" mt="xl">
-                Send a message to start the conversation.
-              </Text>
-            )}
-            {turns.map((turn) => (
-              <TurnBubble
-                key={turn.id}
-                turn={turn}
-                thumb={thumbs[turn.id]?.rating}
-                onRate={(rating) => rate(turn.id, rating)}
-                // P2-CHATUX — the note left with the current thumb, plus the
-                // box that collects it right after a rating.
-                comment={thumbs[turn.id]?.comment ?? null}
-                commentOpen={commentFor === turn.id}
-                onComment={(text) => submitComment(turn.id, text)}
-                onDismissComment={() => setCommentFor(null)}
-                // ⑂ needs a persisted conversation to re-fire against; a brand
-                // new chat gains the id (and the affordance) after the first
-                // send navigates to /chat/{id}.
-                onFork={conversationId ? () => setForkTurnId(turn.id) : undefined}
-                // P1-T16 ⌁ — sketch 01's action row (👍👎⧉⑂⌁). The contract
-                // gives user turns traces too (empty spans), but the action
-                // row exists on assistant turns only (TurnBubble renders it
-                // per feature-spec.md:11), so ⌁ ships there — documented
-                // design choice matching the sketch.
-                onTrace={() => navigate(`/trace/${turn.id}`)}
-                // P2-T12a ⊞ — "Collect noteworthy turns into Casebooks"
-                // (cupel-phases.md:79); "Entry points: ⊞ on any turn, Chat,
-                // the Inspector … and results cells" (openapi.yaml:1742-1743).
-                // Needs a persisted conversation, like ⑂ and 🔗 — an item is a
-                // REFERENCE {tree, conversation_id, turn_id}, so there is
-                // nothing to point at until the first send lands.
-                onCollect={
-                  conversationId
-                    ? () =>
-                        setCollectTarget({
-                          tree,
-                          conversation_id: conversationId,
-                          turn_id: turn.id,
-                        })
-                    : undefined
-                }
-                // P2-SHARE — the 🔗 action copies this turn's deep link.
-                // Needs a persisted conversation, like ⑂.
-                shareUrl={conversationId ? turnShareUrl(conversationId, turn.id) : undefined}
-                shareTarget={sharedTurnPresent && turn.id === sharedTurnId}
-                shareFlash={sharedFlash}
-                shareRef={turn.id === sharedTurnId ? sharedRef : undefined}
-              />
-            ))}
-            {stream && (
-              <StreamingBubble draft={draft} scrollRef={scrollRef} pinnedRef={pinnedRef} />
-            )}
-            {sendError && (
-              <Alert color="red" title="Generation failed">
-                {sendError}
-              </Alert>
-            )}
-          </Stack>
-        )}
-      </div>
-      {/* P1-T04 composer per sketches/clean/01-chat.svg: pending chips row
-          ("📎 spec.pdf ✕") above the input row "+ Message… ↑"; stop replaces
-          send in the same slot while streaming. Enter = send, Shift+Enter =
-          newline (feature-spec.md:12). Drag-drop uses native handlers — no
-          dropzone dependency is installed (package.json has no
-          @mantine/dropzone). */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          addFiles(Array.from(e.dataTransfer.files));
-        }}
-      >
-        {pending.length > 0 && (
-          <Group gap={6} mb={6} data-testid="pending-attachments">
-            {pending.map((p) => (
-              <Paper
-                key={p.key}
-                px={8}
-                py={2}
-                radius="sm"
-                withBorder
-                style={p.status === "error" ? { borderColor: "var(--mantine-color-red-6)" } : undefined}
-              >
-                <Group gap={6} wrap="nowrap">
-                  {p.previewUrl ? (
-                    <img
-                      src={p.previewUrl}
-                      alt=""
-                      height={18}
-                      style={{ borderRadius: 3, maxWidth: 32, objectFit: "cover" }}
-                    />
-                  ) : (
-                    <Text size="xs">&#x1F4CE;</Text>
-                  )}
-                  <Text size="xs" c={p.status === "error" ? "red" : undefined}>
-                    {p.filename} ({formatBytes(p.size)})
-                  </Text>
-                  {p.status === "uploading" && <Loader size={12} data-testid="chip-uploading" />}
-                  {p.status === "error" && (
-                    <Text size="xs" c="red">
-                      {p.error}
-                    </Text>
-                  )}
-                  <CloseButton
-                    size="xs"
-                    aria-label={`Remove ${p.filename}`}
-                    onClick={() => removePending(p.key)}
-                  />
-                </Group>
-              </Paper>
-            ))}
-          </Group>
-        )}
-        <Group align="flex-end" gap="xs">
-          <FileButton multiple onChange={addFiles} inputProps={{ "aria-label": "Attach files input" }}>
-            {({ onClick }) => (
-              <ActionIcon
-                size="lg"
-                variant="default"
-                aria-label="Attach files"
-                onClick={onClick}
-              >
-                +
-              </ActionIcon>
-            )}
-          </FileButton>
-          <Textarea
-            placeholder="Message…"
-            value={input}
-            onChange={(e) => setInput(e.currentTarget.value)}
-            // P2-CHATUX — paste images/files straight into the composer; text
-            // pastes fall through untouched.
-            onPaste={pasteFiles}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            autosize
-            minRows={1}
-            maxRows={6}
-            style={{ flex: 1 }}
-          />
-          {streaming ? (
-            <ActionIcon
-              size="lg"
-              variant="filled"
-              color="red"
-              aria-label="Stop generation"
-              onClick={stop}
-              disabled={!stream?.taskId}
-            >
-              &#x25A0;
-            </ActionIcon>
-          ) : (
-            <ActionIcon
-              size="lg"
-              variant="filled"
-              aria-label="Send"
-              onClick={() => void send()}
-              disabled={!input.trim() || uploading}
-            >
-              &#x2191;
-            </ActionIcon>
-          )}
-        </Group>
-      </div>
-      {/* P1-T13 — "🔀 fork action on any turn in Chat itself"
-          (feature-spec.md:72); sketch 01 tags the ⑂ glyph with
-          "POST …/replay/turn". Modal is mounted once, keyed by the target
-          turn; agentId enables its optional version select. */}
+      <Transcript
+        turns={turns}
+        stream={stream}
+        draft={draft}
+        scrollRef={scrollRef}
+        pinnedRef={pinnedRef}
+        thumbs={thumbs}
+        commentFor={commentFor}
+        sendError={sendError}
+        onRate={rate}
+        onComment={submitComment}
+        onDismissComment={() => setCommentFor(null)}
+        onFork={conversationId ? setForkTurnId : undefined}
+        onTrace={(turnId) => navigate(`/trace/${turnId}`)}
+        // An item is a REFERENCE {tree, conversation_id, turn_id}, so there is
+        // nothing to point at until the first send lands.
+        onCollect={
+          conversationId
+            ? (turnId) =>
+                setCollectTarget({ tree, conversation_id: conversationId, turn_id: turnId })
+            : undefined
+        }
+        shareUrlFor={
+          conversationId ? (turnId) => turnShareUrl(conversationId, turnId) : undefined
+        }
+        sharedTurnId={sharedTurnId}
+        sharedTurnPresent={sharedTurnPresent}
+        sharedFlash={sharedFlash}
+        sharedRef={sharedRef}
+      />
+      <Composer
+        streaming={streaming}
+        canStop={stream?.taskId != null}
+        onStop={stop}
+        onSend={(text, attachments) => void send(text, attachments)}
+        resetToken={composerReset}
+      />
+      {/* "🔀 fork action on any turn in Chat itself" (feature-spec.md:72);
+          sketch 01 tags the ⑂ glyph with "POST …/replay/turn". Modal is
+          mounted once, keyed by the target turn; agentId enables its optional
+          version select. */}
       {conversationId && forkTurnId != null && (
         <ForkModal
           conversationId={conversationId}
@@ -872,519 +511,12 @@ export function ChatPage() {
           onClose={() => setForkTurnId(null)}
         />
       )}
-      {/* P2-T12a ⊞ — same picker the Inspector uses (create-new inline). */}
+      {/* ⊞ — the same picker the Inspector uses (create-new inline). */}
       <CollectModal
         opened={collectTarget !== null}
         target={collectTarget}
         onClose={() => setCollectTarget(null)}
       />
-    </Stack>
-  );
-}
-
-// The in-flight assistant bubble (openapi.yaml:466-476 token events). It owns
-// the draft by subscribing to the store, so a token re-renders THIS and
-// nothing else (docs/review-2026-08-05.md A8) — with the memoized Markdown
-// (A4) a token's cost is one parse, independent of transcript length.
-// Auto-scroll lives here for the same reason: the page-level effect no longer
-// sees per-token change ("Auto-scroll on stream", feature-spec.md:13).
-function StreamingBubble({
-  draft,
-  scrollRef,
-  pinnedRef,
-}: {
-  draft: DraftStore;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  pinnedRef: RefObject<boolean>;
-}) {
-  const text = useSyncExternalStore(draft.subscribe, draft.get);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [text, scrollRef, pinnedRef]);
-  return (
-    <Paper p="sm" radius="md" withBorder mr="10%" data-testid="streaming-turn">
-      {text === "" ? <Loader size="xs" type="dots" /> : <Markdown content={text} />}
-    </Paper>
-  );
-}
-
-// P1-T05 — chat settings submenu. "Chat has its own Settings submenu (model,
-// temperature, system prompt — session-scoped)" (feature-spec.md:7); "sent
-// with each /chat call" (feature-spec.md:278). Model options from GET /models
-// (feature-spec.md:122), fetched once on first open and cached in AppContext.
-// Placement per the sketches' chat header (title left, "⚙" top-right;
-// annotated 01-chat.svg shows a "model · temp" summary beside the gear — we
-// render that summary only when settings deviate from defaults, doubling as
-// the visible "custom settings active" indication alongside the dot badge).
-// The annotated sketch tags this "GET/PUT /settings", but /settings is
-// deferred to Phase 2 (openapi.yaml:38-40) — Phase 1 keeps the values in
-// React state only: they persist across conversation switches within the
-// session, not across reloads. Unset = absent key = omitted from ChatRequest.
-function ChatSettingsMenu({
-  settings: chatSettings,
-  onChange: setChatSettings,
-}: {
-  settings: ChatSettings;
-  onChange: Dispatch<SetStateAction<ChatSettings>>;
-}) {
-  const { models, ensureModels } = useApp();
-  const [opened, setOpened] = useState(false);
-  // NumberInput emits partial strings mid-typing ("0.") — keep the raw value
-  // locally so typing isn't clobbered; only committed numbers reach context.
-  const [tempRaw, setTempRaw] = useState<number | string>(chatSettings.temperature ?? "");
-
-  // P1-T18c "Live LLM (BYOK)". Hard rule (docs/deployment.md:25): the key
-  // lives in "browser localStorage only" — llmKey.ts is the single store;
-  // this state MIRRORS it for rendering (badge, section) and never goes to
-  // any other sink. deployment.md overrides P1-T05's no-persistence note for
-  // this key specifically.
-  const [liveKey, setLiveKeyState] = useState<string | null>(() => getLlmKey());
-  const [keyDraft, setKeyDraft] = useState("");
-  const [byokModel, setByokModelState] = useState<string | null>(() => getLlmModel());
-  // Curated live list — refetched via GET /models WITH the key header (the
-  // client attaches it centrally once the key is stored), "populated from a
-  // curated cheap-model list in live mode" (docs/deployment.md:22-23).
-  const [liveModels, setLiveModels] = useState<Model[] | null>(null);
-
-  const saveKey = () => {
-    const key = keyDraft.trim();
-    if (!key) return;
-    setLlmKey(key); // localStorage only (docs/deployment.md:25)
-    setLiveKeyState(key);
-    setKeyDraft("");
-    api.models().then(setLiveModels).catch(() => setLiveModels(null));
-  };
-  const clearKey = () => {
-    setLlmKey(null);
-    setLlmModel(null);
-    setLiveKeyState(null);
-    setByokModelState(null);
-    setLiveModels(null);
-  };
-  const pickByokModel = (value: string | null) => {
-    setLlmModel(value);
-    setByokModelState(value);
-  };
-
-  const dirty = Object.values(chatSettings).some((v) => v !== undefined);
-  const patch = (p: Partial<ChatSettings>) =>
-    setChatSettings((prev) => {
-      const next = { ...prev, ...p };
-      for (const k of Object.keys(next) as (keyof ChatSettings)[]) {
-        if (next[k] === undefined) delete next[k];
-      }
-      return next;
-    });
-  const reset = () => {
-    setChatSettings({});
-    setTempRaw("");
-  };
-
-  const modelName =
-    models?.find((m) => m.id === chatSettings.model)?.name ?? chatSettings.model;
-  const summary = [
-    modelName,
-    chatSettings.temperature !== undefined ? `temp ${chatSettings.temperature}` : undefined,
-    chatSettings.system_prompt !== undefined ? "sys prompt" : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <Group gap={6} wrap="nowrap">
-      {dirty && (
-        <Text size="xs" c="dimmed" data-testid="chat-settings-summary">
-          {summary}
-        </Text>
-      )}
-      {/* Visible "live" indicator while a BYOK key is active (P1-T18c) —
-          generation is going to a real provider, not the canned mock. */}
-      {liveKey && (
-        <Badge size="xs" color="green" variant="light" data-testid="live-badge">
-          live
-        </Badge>
-      )}
-      <Popover opened={opened} onChange={setOpened} position="bottom-end" shadow="md">
-        <Popover.Target>
-          <Indicator disabled={!dirty} color="blue" size={8} offset={2}>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              aria-label="Chat settings"
-              onClick={() => {
-                ensureModels();
-                if (liveKey && !liveModels) {
-                  api.models().then(setLiveModels).catch(() => {});
-                }
-                setTempRaw(chatSettings.temperature ?? "");
-                setOpened((o) => !o);
-              }}
-            >
-              &#x2699;
-            </ActionIcon>
-          </Indicator>
-        </Popover.Target>
-        <Popover.Dropdown>
-          <Stack gap="xs" w={260}>
-            {/* Model dropdown fed by GET /models (feature-spec.md:122);
-                clearable back to the backend default. Combobox kept inside
-                the popover DOM so option clicks don't count as outside. */}
-            <Select
-              label="Model"
-              placeholder="Default"
-              data={models?.map((m) => ({ value: m.id, label: m.name })) ?? []}
-              value={chatSettings.model ?? null}
-              onChange={(value) => patch({ model: value ?? undefined })}
-              clearable
-              comboboxProps={{ withinPortal: false }}
-            />
-            {/* Number input over slider: the sketch header is dense and a
-                slider cannot represent "unset"; bounds 0-2, empty = unset. */}
-            <NumberInput
-              label="Temperature"
-              placeholder="Default"
-              min={0}
-              max={2}
-              step={0.1}
-              decimalScale={2}
-              value={tempRaw}
-              onChange={(value) => {
-                setTempRaw(value);
-                patch({ temperature: typeof value === "number" ? value : undefined });
-              }}
-            />
-            <Textarea
-              label="System prompt"
-              placeholder="Default"
-              autosize
-              minRows={2}
-              maxRows={6}
-              value={chatSettings.system_prompt ?? ""}
-              onChange={(e) =>
-                patch({ system_prompt: e.currentTarget.value || undefined })
-              }
-            />
-            <Button variant="default" size="xs" onClick={reset} disabled={!dirty}>
-              Reset to defaults
-            </Button>
-            {/* P1-T18c — "Live LLM (BYOK)". Key → localStorage ONLY
-                (docs/deployment.md:25); sent per request as X-LLM-Key
-                (+ X-LLM-Model) by the api client, never in URLs, never
-                logged (docs/deployment.md:26-27). */}
-            <Divider label="Live LLM (BYOK)" labelPosition="left" my={2} />
-            {liveKey ? (
-              <>
-                <Group gap={6} wrap="nowrap">
-                  <Text size="xs" c="dimmed" style={{ flex: 1 }}>
-                    OpenRouter key active (stored in this browser only).
-                  </Text>
-                  <Button size="xs" color="red" variant="light" onClick={clearKey}>
-                    Clear key
-                  </Button>
-                </Group>
-                <Select
-                  label="Live model"
-                  placeholder="Provider default"
-                  data={liveModels?.map((m) => ({ value: m.id, label: m.name })) ?? []}
-                  value={byokModel}
-                  onChange={pickByokModel}
-                  clearable
-                  comboboxProps={{ withinPortal: false }}
-                />
-              </>
-            ) : (
-              <>
-                <PasswordInput
-                  label="OpenRouter key"
-                  placeholder="sk-or-…"
-                  value={keyDraft}
-                  onChange={(e) => setKeyDraft(e.currentTarget.value)}
-                />
-                <Button size="xs" variant="default" onClick={saveKey} disabled={!keyDraft.trim()}>
-                  Save key
-                </Button>
-              </>
-            )}
-          </Stack>
-        </Popover.Dropdown>
-      </Popover>
-    </Group>
-  );
-}
-
-function TurnBubble({
-  turn,
-  thumb,
-  onRate,
-  comment = null,
-  commentOpen = false,
-  onComment,
-  onDismissComment,
-  onFork,
-  onTrace,
-  onCollect,
-  shareUrl,
-  shareTarget = false,
-  shareFlash = false,
-  shareRef,
-}: {
-  turn: Turn;
-  thumb?: Rating;
-  onRate: (rating: Rating) => void;
-  comment?: string | null;
-  commentOpen?: boolean;
-  onComment?: (text: string) => void;
-  onDismissComment?: () => void;
-  onFork?: () => void;
-  onTrace?: () => void;
-  onCollect?: () => void;
-  shareUrl?: string;
-  shareTarget?: boolean;
-  shareFlash?: boolean;
-  shareRef?: RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <Paper
-      ref={shareRef}
-      p="sm"
-      radius="md"
-      withBorder={turn.role === "assistant"}
-      bg={turn.role === "user" ? "blue.0" : undefined}
-      // P2-MOBILE-SHELL — the desktop indents (20% / 10%) cost ~80px of a
-      // 390px phone screen; keep the left/right asymmetry that distinguishes
-      // the roles but shrink it in portrait.
-      ml={turn.role === "user" ? { base: "8%", sm: "20%" } : 0}
-      mr={turn.role === "assistant" ? { base: "4%", sm: "10%" } : 0}
-      // P2-SHARE arrival marker: persistent left accent for the whole visit,
-      // plus a ring that fades ~2.5s after landing.
-      data-share-target={shareTarget ? "true" : undefined}
-      style={{
-        borderLeft: shareTarget ? "3px solid var(--mantine-color-blue-6)" : undefined,
-        boxShadow: shareFlash && shareTarget ? "0 0 0 2px var(--mantine-color-blue-3)" : undefined,
-        transition: "box-shadow 700ms ease",
-        scrollMarginBlock: 16,
-      }}
-    >
-      <Group justify="space-between" mb={4}>
-        <Text size="xs" c="dimmed">
-          {turn.author}
-        </Text>
-        {/* P1-T11a envelope affordance. cupel-phases.md:25: "every turn records
-            its context (date, timezone, region) at generation". Sketch 01
-            shows no envelope UI, so the surface is deliberately minimal — a
-            hover tooltip on the timestamp (dotted underline = discoverable),
-            showing the EnvelopeChip reused later by the T16 trace header. */}
-        <Tooltip label={<EnvelopeChip envelope={turn.envelope} />} p={4}>
-          <Text
-            size="xs"
-            c="dimmed"
-            style={{ cursor: "help", textDecoration: "underline dotted" }}
-          >
-            {new Date(turn.created_at).toLocaleString()}
-          </Text>
-        </Tooltip>
-      </Group>
-      {/* Stored attachments render as filename chips (Turn.attachments,
-          openapi.yaml:1313-1315; url is null in Phase 1 so no link). */}
-      {turn.attachments && turn.attachments.length > 0 && (
-        <Group gap={4} mb={4}>
-          {turn.attachments.map((a) => (
-            <Badge key={a.id} variant="light" color="gray" radius="sm" tt="none">
-              &#x1F4CE; {a.filename}
-            </Badge>
-          ))}
-        </Group>
-      )}
-      {turn.role === "assistant" ? (
-        <Markdown content={turn.content} />
-      ) : (
-        <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-          {turn.content}
-        </Text>
-      )}
-      {/* Persistent action row, bottom-right per sketches/clean/01-chat.svg
-          (👍👎⧉ — fork ⑂ is P1-T13, trace ⌁ is P1-T16; not built here).
-          "Per assistant turn: 👍 / 👎 / copy buttons" (feature-spec.md:11). */}
-      {turn.role === "assistant" && (
-        <Group gap={2} justify="flex-end" mt={4}>
-          <ActionIcon
-            size="sm"
-            variant={thumb === "up" ? "light" : "subtle"}
-            color={thumb === "up" ? "blue" : "gray"}
-            aria-label="Thumbs up"
-            aria-pressed={thumb === "up"}
-            onClick={() => onRate("up")}
-          >
-            &#x1F44D;
-          </ActionIcon>
-          <ActionIcon
-            size="sm"
-            variant={thumb === "down" ? "light" : "subtle"}
-            color={thumb === "down" ? "blue" : "gray"}
-            aria-label="Thumbs down"
-            aria-pressed={thumb === "down"}
-            onClick={() => onRate("down")}
-          >
-            &#x1F44E;
-          </ActionIcon>
-          {/* "copy copies raw markdown" (feature-spec.md:276) — Turn.content,
-              not the rendered HTML. */}
-          <CopyButton value={turn.content} timeout={1500}>
-            {({ copied, copy }) => (
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                color={copied ? "teal" : "gray"}
-                aria-label={copied ? "Copied" : "Copy message"}
-                onClick={copy}
-              >
-                {copied ? "✓" : "⧉"}
-              </ActionIcon>
-            )}
-          </CopyButton>
-          {/* P2-SHARE 🔗 — "share a link to … a turn". Sits next to ⧉ because
-              it is the same gesture (put something on the clipboard), keeping
-              the row's copy affordances together and its density unchanged.
-              Free tier = an in-app deep link; anonymous public links are
-              PRO-2 (TASKS.md:67). */}
-          {shareUrl && (
-            <CopyButton value={shareUrl} timeout={1500}>
-              {({ copied, copy }) => (
-                <ActionIcon
-                  size="sm"
-                  variant="subtle"
-                  color={copied ? "teal" : "gray"}
-                  aria-label={copied ? "Link copied" : "Copy link to turn"}
-                  onClick={copy}
-                >
-                  {copied ? "✓" : "🔗"}
-                </ActionIcon>
-              )}
-            </CopyButton>
-          )}
-          {/* P1-T13 ⑂ — sketch 01 action row "👍👎 ⑂ ⌁" with the fork glyph
-              tagged "POST …/replay/turn"; trace ⌁ remains P1-T16. */}
-          {onFork && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Fork turn"
-              onClick={onFork}
-            >
-              ⑂
-            </ActionIcon>
-          )}
-          {/* P2-T12a ⊞ — the collect action. One glyph in the existing row
-              (its density is unchanged: same size, same subtle variant), which
-              is the whole point of "one keystroke" (cupel-phases.md:79). */}
-          {onCollect && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Collect into casebook"
-              onClick={onCollect}
-            >
-              ⊞
-            </ActionIcon>
-          )}
-          {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results grid
-              cells, and drill-in" (feature-spec.md:145); routes to the trace
-              view (sketch 08). */}
-          {onTrace && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Open trace"
-              onClick={onTrace}
-            >
-              ⌁
-            </ActionIcon>
-          )}
-        </Group>
-      )}
-      {/* P2-CHATUX — the note that came with the current thumb, rendered as a
-          small quoted line under the turn it judges. It survives reload
-          because it IS the judgment (Judgment.reasoning), refetched with the
-          conversation's judgments; a receiver of a shared link sees it for
-          the same reason, with no special-casing. */}
-      {turn.role === "assistant" && comment && !commentOpen && (
-        <Text
-          size="xs"
-          c="dimmed"
-          mt={4}
-          data-testid={`turn-comment-${turn.id}`}
-          style={{
-            borderLeft: "2px solid var(--mantine-color-gray-4)",
-            paddingLeft: 8,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {thumb === "up" ? "\u{1F44D}" : "\u{1F44E}"} {comment}
-        </Text>
-      )}
-      {turn.role === "assistant" && commentOpen && onComment && (
-        <FeedbackCommentBox
-          rating={thumb}
-          onSubmit={onComment}
-          onDismiss={onDismissComment ?? (() => {})}
-        />
-      )}
-    </Paper>
-  );
-}
-
-// P2-CHATUX — the "tell us more" box revealed by a thumb. Optional and
-// dismissible: the rating is already saved by the time this renders, so
-// closing it costs nothing. Its draft is LOCAL state so a keystroke re-renders
-// this box only, not the transcript (same reasoning as the streaming draft
-// store, docs/review-2026-08-05.md A8). Enter submits / Shift+Enter newlines,
-// matching the composer's convention (feature-spec.md:12).
-function FeedbackCommentBox({
-  rating,
-  onSubmit,
-  onDismiss,
-}: {
-  rating?: Rating;
-  onSubmit: (text: string) => void;
-  onDismiss: () => void;
-}) {
-  const [text, setText] = useState("");
-  const submit = () => {
-    if (text.trim()) onSubmit(text);
-  };
-  return (
-    <Stack gap={4} mt={6} data-testid="feedback-comment-box">
-      <Group gap={6} wrap="nowrap" align="flex-end">
-        <Textarea
-          size="xs"
-          style={{ flex: 1 }}
-          autosize
-          minRows={1}
-          maxRows={4}
-          autoFocus
-          aria-label="Feedback comment"
-          placeholder={rating === "up" ? "What made this good?" : "What went wrong?"}
-          value={text}
-          onChange={(e) => setText(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <Button size="compact-xs" onClick={submit} disabled={!text.trim()}>
-          Send
-        </Button>
-        {/* Label deliberately avoids the words "feedback comment" — that is
-            the textarea's accessible name, and a substring-matching locator
-            (Playwright getByLabel) would otherwise resolve to both. */}
-        <CloseButton size="sm" aria-label="Close comment box" onClick={onDismiss} />
-      </Group>
     </Stack>
   );
 }
