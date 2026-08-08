@@ -79,8 +79,13 @@ export function QueueProvider({
   pollAfterFailures = 2,
 }: Props) {
   const [byId, setById] = useState<Record<string, Task>>({});
+  // Latest map for `retryFailed` to consult (was this parent expanded?) without
+  // taking `byId` as a dependency — that would rebuild the context value, and
+  // so re-render every consumer, on each stream frame.
   const byIdRef = useRef(byId);
-  byIdRef.current = byId;
+  useEffect(() => {
+    byIdRef.current = byId;
+  }, [byId]);
 
   // Merge a parent, preserving lazily-loaded children when the incoming Task
   // has none (GET /tasks and `task` frames carry parents without children).

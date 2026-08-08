@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { MantineProvider } from "@mantine/core";
 import { http, HttpResponse } from "msw";
 import { agenticConfig } from "../agentic.config";
 import { App } from "./App";
+import { emitAuthRequired } from "./api/auth";
 import { server } from "./test/msw/server";
 import {
   healthzRequests,
@@ -143,4 +144,38 @@ describe("boot auth (P2-T07)", () => {
     // The deep link survived the round-trip: ChatPage loaded conversation c1.
     await screen.findByTestId("transcript");
   });
+
+  it("mid-session 401 → /login carrying WHERE THE USER NOW IS as return_to", async () => {
+    const user = userEvent.setup();
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/runs"]}>
+          <App />
+          <LocationProbe />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    // Booted, then navigated AWAY from the entry route — return_to must follow
+    // the user, not the location the listener was first subscribed at.
+    await screen.findByRole("button", { name: "+ New chat" });
+    await user.click(screen.getByRole("link", { name: "Queue" }));
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/queue"));
+
+    // The session expires: every call 401s from here. No token was stored to
+    // clear (off-mode boot), so the signal alone must re-run the boot check —
+    // otherwise the stale booted tree would stay up.
+    server.use(
+      http.get(`${BASE}/me`, () => unauthorized()),
+      http.get(`${BASE}/agenttrees`, () => unauthorized()),
+    );
+    act(() => emitAuthRequired());
+
+    await screen.findByText("Sign in to continue");
+    expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fqueue");
+  });
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="loc">{location.pathname + location.search}</div>;
+}

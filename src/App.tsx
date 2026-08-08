@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { api, ApiError } from "./api/client";
@@ -34,16 +34,12 @@ const DEFAULT_TREE = "agent1";
 function AuthRequiredRedirect() {
   const navigate = useNavigate();
   const location = useLocation();
-  const locationRef = useRef(location);
-  locationRef.current = location;
-  useEffect(
-    () =>
-      onAuthRequired(() => {
-        const current = locationRef.current;
-        if (current.pathname !== "/login") navigate(loginPath(current));
-      }),
-    [navigate],
-  );
+  // Effect event: subscribe once, but read the CURRENT location when the
+  // signal fires — re-subscribing per navigation would drop a 401 racing it.
+  const redirectToLogin = useEffectEvent(() => {
+    if (location.pathname !== "/login") navigate(loginPath(location));
+  });
+  useEffect(() => onAuthRequired(redirectToLogin), []);
   return null;
 }
 
@@ -107,15 +103,10 @@ export function App() {
   // booted": during boot the 401 lands in the catch below, and an unguarded
   // bump would loop boot → 401 → bump → boot forever.
   const [bootNonce, setBootNonce] = useState(0);
-  const bootedRef = useRef(false);
-  bootedRef.current = me !== null;
-  useEffect(
-    () =>
-      onAuthRequired(() => {
-        if (bootedRef.current) setBootNonce((n) => n + 1);
-      }),
-    [],
-  );
+  const rebootIfBooted = useEffectEvent(() => {
+    if (me !== null) setBootNonce((n) => n + 1);
+  });
+  useEffect(() => onAuthRequired(rebootIfBooted), []);
   useEffect(() => {
     let cancelled = false;
     setMe(null);
