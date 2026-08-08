@@ -45,10 +45,10 @@ The `[Bn]` tags are the corresponding review-bucket-B item — **same item, not 
 
 | id | item |
 |---|---|
-| PB-1 | Split `ChatPage.tsx` (~1.4k lines, ~20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting. `[B1]` |
+| PB-1 | **Done 2026-08-08** (`dc3bef7`): 1390 → 522 lines + seven files under `src/pages/chat/`; test file byte-identical. **Residual:** ByokSection owns its own state and ChatSettingsMenu knows nothing about it, but it is still *rendered* inside the settings popover. Moving it visually (e.g. into the Settings page's Backend section) is a UX change needing a new affordance to open it, so it belongs to Stage B, not here. `[B1]` |
 | PB-2 | Extract `useAsync(fn, deps)` and apply at the ~12 hand-rolled `useState(null)`+`useEffect`+cancelled-fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines, forces one loading/error contract. `[B2, B7]` |
-| PB-3 | Untangle RunsPage navigation state — `mode`/`step`/`prefilling`/`preset`/`testFlow` has two sources of truth held together by two `eslint-disable` exhaustive-deps plus a remount-by-key trick. `[B3]` |
-| PB-4 | Memoise list rows — `memo(ConversationRow)`, pass `activeId` down instead of `useParams()` per row, same for ConversationPicker; `useDeferredValue` on both search inputs; virtualise past ~200 rows. `[B4]` |
+| PB-3 | **Mostly done 2026-08-08** (`271cad7`): one `useReducer`, both `eslint-disable` exhaustive-deps removed by making deps genuinely complete. **The remount-by-key stays** — `RunConfigPanel` treats `initialFocus` and `judgeInitiallyOpen` as mount-time-only state (`:119`, `:125-129`), so a preset arriving mid-Configure would not re-focus or reset the judge section without it; verified load-bearing by switching to `key={i}`, which fails. Residual fix: make those two props controlled in `RunConfigPanel`, then the key drops to `i`. `[B3]` |
+| PB-4 | **Mostly done 2026-08-08** (`57bfd95`): rows memoised, `activeId` threaded, `useDeferredValue` on both searches. **Virtualisation deliberately skipped** — rows are variable height, the sidebar does not own its scroll container, and `page_size` caps at 100 (`openapi.yaml:681-683`) behind an explicit "Load more", so row count is user-bounded; same call `InspectorPage.tsx:57-60` already documents. If it is ever wanted, the dependency-free route is `content-visibility: auto` + `contain-intrinsic-size` per row, which keeps nodes in the DOM so tests and Ctrl-F still work. `[B4]` |
 | PB-5 | Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this with a Map in `useMemo` — copy it. `[B5]` |
 | PB-6 | Strip task-ID archaeology from comments (files are 13–24% comments, mostly P1-T13 / not-built-here / T08's-job). Keep every WHY comment. **Run this last** — it touches every file. `[B6]` |
 | PB-7 | Split `src/test/msw/handlers.ts` (~2.5k lines, imported by 45 test files) — needs a shared state module + counters object first. `[B8]` |
@@ -65,7 +65,7 @@ backends. Sequenced after PB-1 deliberately.
 
 | id | item |
 |---|---|
-| PAB-1 | Chat compare mode within one backend — `tune`-gated toggle picking 2–3 variants (endpoint / instruction version / model), server-side fan-out on send, N-column transcript each streaming its own reply, and the result IS a run so the existing grid + judge + summary work unchanged. Warn about N generations = N bills before sending; cap columns at 3. **deps: PB-1** |
+| PAB-1 | **Partly done 2026-08-08** (`d884eb5`): `tune`-gated toggle, fan-out on send, N-column transcript, result is a real run, cost warning, 3-column cap. **Only the endpoint axis varies.** `ReplayTurnRequest` carries `endpoints[]` but a *single* shared `config`, so per-column instruction version / model is not expressible under contract v0.3.0. Remaining work is the contract change below, then widening the picker. |
 | PAB-2 | Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire, then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper. The contract half is an additive clarification that **must fold into P3-T00, not be smuggled in separately**. **deps: P3-T00** |
 | PAB-3 | `compareSets` presets in `agentic.config.ts` + picker UI, so a team's usual A/B is one click. **deps: PAB-1** |
 | PAB-4 | Cross-backend compare — per-request target override in `src/api/client.ts`, N unrelated conversations in N databases. No shared `run_id` means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). **Deferred; blocked on decision Q1.** |
@@ -116,6 +116,13 @@ only way to close the two-tab double-judge residual** · C7 SSE event ids + `Las
 C8 per-operation permission semantics + 403s · C9 `Error.details[]` / `request_id` + 422/429/503 ·
 C10 batch turn fetch · C11 `Health.contract_version` + capabilities · C12 visible soft-delete ·
 C13 search semantics · C14 span retention · C15 close the mock's implementation gap.
+
+**Also fold in (found by PAB-1, 2026-08-08):** `ReplayTurnRequest.configs[]` — a `RunConfig`
+per entry in `endpoints[]`, or a combined `variants[]` of `{endpoint_id, config}` — so one
+turn re-fire can vary endpoint, instruction version and model per column under a single
+`run_id`. Today it carries `endpoints[]` with one shared `config`, which caps chat compare
+at the endpoint axis alone. Same family as the `endpoint_ids` widening PAB-2 needs; do both
+in one edit.
 
 Plus two gaps found after the review: (i) the mock correctly returns 409 `tree_disabled` from
 six ops whose contract entries declare only 2xx/404 (POST agents, PUT instructions, POST
