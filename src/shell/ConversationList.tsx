@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ActionIcon,
@@ -27,6 +27,12 @@ import { useApp } from "../AppContext";
 //  badge on each)" · "Conversation actions (long-press/⋯): rename, delete".
 // Contract: GET /agenttrees/{tree}/conversations — roots only by default;
 // ?forks_of= lists a conversation's forks (openapi.yaml:346-364).
+//
+// Not windowed: page_size maxes at 100 with a default of 20 (openapi.yaml:681-683)
+// and growth is an explicit "Load more", so the mounted row count is user-bounded.
+// Rows are also variable height (fork chip + expandable fork sublist) and the
+// scroll container is the AppShell.Section that owns this list, not the list
+// itself — a hand-rolled fixed-height window would be wrong on both counts.
 
 interface Props {
   tree: string;
@@ -34,8 +40,13 @@ interface Props {
 
 export function ConversationList({ tree }: Props) {
   const { conversationsVersion } = useApp();
+  const navigate = useNavigate();
+  const { conversationId } = useParams();
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 250);
+  // The input keeps the urgent value; everything downstream of it re-renders at
+  // low priority so a keystroke is never blocked by the list.
+  const deferredSearch = useDeferredValue(search);
+  const [debouncedSearch] = useDebouncedValue(deferredSearch, 250);
   const [items, setItems] = useState<Conversation[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -82,11 +93,25 @@ export function ConversationList({ tree }: Props) {
     setForks((prev) => ({ ...prev, [conv.id]: data.items }));
   };
 
-  const remove = async (conv: Conversation) => {
-    await api.deleteConversation(tree, conv.id);
-    setItems((prev) => prev.filter((c) => c.id !== conv.id));
-    setTotal((t) => t - 1);
-  };
+  // Stable identities so memo(ConversationRow) actually holds — an inline arrow
+  // per row would invalidate every row on every parent render.
+  const openConversation = useCallback(
+    (conv: Conversation) => navigate(`/chat/${conv.id}`),
+    [navigate],
+  );
+
+  const startRename = useCallback((conv: Conversation) => setRenaming(conv), []);
+
+  const remove = useCallback(
+    async (conv: Conversation) => {
+      await api.deleteConversation(tree, conv.id);
+      setItems((prev) => prev.filter((c) => c.id !== conv.id));
+      setTotal((t) => t - 1);
+    },
+    [tree],
+  );
+
+  const requestDelete = useCallback((conv: Conversation) => void remove(conv), [remove]);
 
   const rename = async (conv: Conversation, title: string) => {
     const updated = await api.renameConversation(tree, conv.id, title);
@@ -107,8 +132,10 @@ export function ConversationList({ tree }: Props) {
         <div key={conv.id}>
           <ConversationRow
             conv={conv}
-            onRename={() => setRenaming(conv)}
-            onDelete={() => void remove(conv)}
+            activeId={conversationId}
+            onOpen={openConversation}
+            onRename={startRename}
+            onDelete={requestDelete}
           />
           {conv.fork_count > 0 && (
             <Button
@@ -157,23 +184,28 @@ export function ConversationList({ tree }: Props) {
   );
 }
 
-function ConversationRow({
+// Hook-free on purpose: useParams/useNavigate both subscribe to the router's
+// location, which would re-render every row on any navigation even when the row
+// itself is unchanged. The active id arrives as a prop instead.
+const ConversationRow = memo(function ConversationRow({
   conv,
+  activeId,
+  onOpen,
   onRename,
   onDelete,
 }: {
   conv: Conversation;
-  onRename: () => void;
-  onDelete: () => void;
+  activeId: string | undefined;
+  onOpen: (conv: Conversation) => void;
+  onRename: (conv: Conversation) => void;
+  onDelete: (conv: Conversation) => void;
 }) {
-  const navigate = useNavigate();
-  const { conversationId } = useParams();
-  const active = conversationId === conv.id;
+  const active = activeId === conv.id;
 
   return (
     <Group gap={4} wrap="nowrap">
       <UnstyledButton
-        onClick={() => navigate(`/chat/${conv.id}`)}
+        onClick={() => onOpen(conv)}
         px={6}
         py={4}
         style={{
@@ -199,7 +231,7 @@ function ConversationRow({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item onClick={onRename}>Rename</Menu.Item>
+          <Menu.Item onClick={() => onRename(conv)}>Rename</Menu.Item>
           {/* P2-SHARE — "Copy link" joins rename/delete in the ⋯ menu
               (feature-spec.md:5-6). Same CopyButton affordance as the turn
               action row, so the confirmation reads identically; the menu is
@@ -212,14 +244,14 @@ function ConversationRow({
               </Menu.Item>
             )}
           </CopyButton>
-          <Menu.Item color="red" onClick={onDelete}>
+          <Menu.Item color="red" onClick={() => onDelete(conv)}>
             Delete
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
     </Group>
   );
-}
+});
 
 // Fork row with ↳ lineage badge (feature-spec.md:5 "lineage badge on each";
 // sketch 07 "↳ prod · v15").
