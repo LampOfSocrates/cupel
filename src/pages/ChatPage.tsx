@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Alert, Anchor, Badge, Button, Group, Stack, Text, Title } from "@mantine/core";
 import { api, ApiError } from "../api/client";
@@ -16,6 +16,7 @@ import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 import { ChatSettingsMenu } from "./chat/ChatSettingsMenu";
+import { CompareToggle, CompareView } from "./chat/CompareView";
 import { Composer } from "./chat/Composer";
 import { createDraftStore } from "./chat/draftStore";
 import { Transcript } from "./chat/Transcript";
@@ -95,6 +96,14 @@ export function ChatPage() {
   // Bumped when we leave a conversation: the composer drops the chips (and
   // their image previews) that were picked for the transcript being left.
   const [composerReset, setComposerReset] = useState(0);
+  // A/B compare mode (docs/plan-ab-compare.md §3) — a second LAYOUT for the
+  // same conversation, not a second page. Off is the whole of normal chat.
+  const [compare, setCompare] = useState(false);
+  // Conversation the compare send landed in. Compare owns its own send, so it
+  // never navigates mid-mode; leaving the mode is what re-enters the single
+  // transcript ("Leaving compare mode returns to a normal single
+  // conversation", plan §3) and the route change refetches it.
+  const compareConvRef = useRef<string | null>(null);
 
   // Conversation id whose turns the local state already holds — set when a
   // send attaches to it (via the SSE `task` event) or when a GET completes.
@@ -115,9 +124,13 @@ export function ChatPage() {
   // that fades after ~2.5s so the eye catches it on arrival. Nothing about
   // the transcript is mutated, so the rest of the page behaves normally.
   const sharedRef = useRef<HTMLDivElement | null>(null);
-  const sharedTurnIdRef = useRef<string | null>(sharedTurnId);
-  sharedTurnIdRef.current = sharedTurnId;
   const [sharedFlash, setSharedFlash] = useState(false);
+  // The load effect below must NOT re-run when only ?turn= changes, yet it
+  // needs that param's current value to decide the initial scroll pin — which
+  // is exactly what an effect event reads without joining a dependency list.
+  const pinUnlessSharedTarget = useEffectEvent(() => {
+    pinnedRef.current = sharedTurnId === null;
+  });
   const sharedHandledRef = useRef<string | null>(null);
   // Unknown turn id → no target at all: the conversation just renders normally
   // (task rule: ignore gracefully, never an error).
@@ -166,7 +179,7 @@ export function ChatPage() {
     setThumbs({});
     // Arriving on a ?turn= deep link, do NOT pin to the bottom for this load —
     // the highlight effect above places the viewport instead.
-    pinnedRef.current = sharedTurnIdRef.current === null;
+    pinUnlessSharedTarget();
     sharedHandledRef.current = null;
     let cancelled = false;
     api
@@ -409,7 +422,19 @@ export function ChatPage() {
         {/* lineClamp + minWidth:0 — a long title truncates instead of shoving
             the ⚙ off a phone screen. */}
         <Title order={4} lineClamp={1} style={{ minWidth: 0 }}>{title ?? (conversationId ? " " : "New chat")}</Title>
-        <ChatSettingsMenu settings={chatSettings} onChange={setChatSettings} />
+        <Group gap="xs" wrap="nowrap">
+          <CompareToggle
+            enabled={compare}
+            onChange={(on) => {
+              setCompare(on);
+              if (on) return;
+              const landed = compareConvRef.current;
+              compareConvRef.current = null;
+              if (landed && landed !== conversationId) navigate(`/chat/${landed}`);
+            }}
+          />
+          <ChatSettingsMenu settings={chatSettings} onChange={setChatSettings} />
+        </Group>
       </Group>
       {/* A disabled tree keeps history readable while every new turn 409s
           (feature-spec.md:20 "read-only banner"). */}
@@ -461,43 +486,59 @@ export function ChatPage() {
           </Anchor>
         </Group>
       )}
-      <Transcript
-        turns={turns}
-        stream={stream}
-        draft={draft}
-        scrollRef={scrollRef}
-        pinnedRef={pinnedRef}
-        thumbs={thumbs}
-        commentFor={commentFor}
-        sendError={sendError}
-        onRate={rate}
-        onComment={submitComment}
-        onDismissComment={() => setCommentFor(null)}
-        onFork={conversationId ? setForkTurnId : undefined}
-        onTrace={(turnId) => navigate(`/trace/${turnId}`)}
-        // An item is a REFERENCE {tree, conversation_id, turn_id}, so there is
-        // nothing to point at until the first send lands.
-        onCollect={
-          conversationId
-            ? (turnId) =>
-                setCollectTarget({ tree, conversation_id: conversationId, turn_id: turnId })
-            : undefined
-        }
-        shareUrlFor={
-          conversationId ? (turnId) => turnShareUrl(conversationId, turnId) : undefined
-        }
-        sharedTurnId={sharedTurnId}
-        sharedTurnPresent={sharedTurnPresent}
-        sharedFlash={sharedFlash}
-        sharedRef={sharedRef}
-      />
-      <Composer
-        streaming={streaming}
-        canStop={stream?.taskId != null}
-        onStop={stop}
-        onSend={(text, attachments) => void send(text, attachments)}
-        resetToken={composerReset}
-      />
+      {compare ? (
+        <CompareView
+          // Remount on conversation switch: each transcript compares its own
+          // shared turn.
+          key={conversationId ?? "new"}
+          conversationId={conversationId ?? null}
+          chatSettings={chatSettings}
+          onConversation={(id) => {
+            compareConvRef.current = id;
+            refreshConversations();
+          }}
+        />
+      ) : (
+        <>
+        <Transcript
+          turns={turns}
+          stream={stream}
+          draft={draft}
+          scrollRef={scrollRef}
+          pinnedRef={pinnedRef}
+          thumbs={thumbs}
+          commentFor={commentFor}
+          sendError={sendError}
+          onRate={rate}
+          onComment={submitComment}
+          onDismissComment={() => setCommentFor(null)}
+          onFork={conversationId ? setForkTurnId : undefined}
+          onTrace={(turnId) => navigate(`/trace/${turnId}`)}
+          // An item is a REFERENCE {tree, conversation_id, turn_id}, so there is
+          // nothing to point at until the first send lands.
+          onCollect={
+            conversationId
+              ? (turnId) =>
+                  setCollectTarget({ tree, conversation_id: conversationId, turn_id: turnId })
+              : undefined
+          }
+          shareUrlFor={
+            conversationId ? (turnId) => turnShareUrl(conversationId, turnId) : undefined
+          }
+          sharedTurnId={sharedTurnId}
+          sharedTurnPresent={sharedTurnPresent}
+          sharedFlash={sharedFlash}
+          sharedRef={sharedRef}
+        />
+        <Composer
+          streaming={streaming}
+          canStop={stream?.taskId != null}
+          onStop={stop}
+          onSend={(text, attachments) => void send(text, attachments)}
+          resetToken={composerReset}
+        />
+        </>
+      )}
       {/* "🔀 fork action on any turn in Chat itself" (feature-spec.md:72);
           sketch 01 tags the ⑂ glyph with "POST …/replay/turn". Modal is
           mounted once, keyed by the target turn; agentId enables its optional

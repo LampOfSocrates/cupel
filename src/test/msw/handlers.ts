@@ -2285,6 +2285,12 @@ export const handlers = [
     // copied up to the re-fired turn, lineage attached (feature-spec.md:68-69).
     // The regenerated turn is NOT present yet — forks generate asynchronously,
     // so Open in Chat first shows just the copied history.
+    //
+    // Documented divergence, same one POST /feedback carries: mock/main.py
+    // 404s a turn_id absent from the conversation, MSW accepts it (forkIndex
+    // -1 → whole history copied, null baseline content). Chat compare re-fires
+    // the turn it JUST streamed, and a streamed turn lives only in the SSE
+    // frames here — never in the conversation fixtures.
     const all = [...mockRoots, ...Object.values(mockForks).flat()];
     const parent = all.find((c) => c.id === body.conversation_id);
     if (parent) {
