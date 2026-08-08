@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   Alert,
@@ -67,8 +67,8 @@ import { useApp } from "../AppContext";
 // P1-T15 — sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
 // Runs with instruction-version field focused, judge off. Sidebar Evaluate →
 // opens Runs with model field + judge section expanded." The preset travels
-// as router state {preset} (same mechanism as the T20b handoff above) but is
-// applied in an effect keyed on the location, because the sidebar links can
+// as router state {preset} (same mechanism as the T20b handoff above) and is
+// folded into the nav reducer on every arrival, because the sidebar links can
 // fire while this page is already mounted. A preset only shapes the Configure
 // step's INITIAL panel UI (focus + judge open/closed) — the flow is
 // unchanged: the user still picks conversations first unless a selection is
@@ -82,40 +82,145 @@ interface TestInRunsState {
 
 type Preset = "tune" | "evaluate";
 
+/** Router state this page can arrive with — editor handoff and sidebar presets. */
+interface Handoff {
+  testInRuns?: TestInRunsState;
+  preset?: Preset;
+}
+
 const emptyConfig = (): RunConfig => ({});
+
+// One reducer owns everything the stepper navigates by. Router state has a
+// single reader — the `arrive` case, which both seeds the initial state and
+// folds in later arrivals — and `navKey` makes it idempotent, since the effect
+// that dispatches arrivals also fires for the one the initial state consumed.
+interface NavState {
+  /** location.key already folded in; null before the first arrival. */
+  navKey: string | null;
+  mode: "list" | "stepper";
+  /** 0 = Select, 1 = Configure; step 2 (Results) lives on the run-detail route. */
+  step: number;
+  /** Waiting on GET last-selection before the stepper knows its landing step. */
+  prefilling: boolean;
+  testFlow: TestInRunsState | null;
+  preset: Preset | null;
+  selection: SelectionItem[];
+  configs: RunConfig[];
+}
+
+type NavAction =
+  | { type: "arrive"; key: string; handoff: Handoff | null }
+  | { type: "prefilled"; items: SelectionItem[] }
+  | { type: "prefillFailed" }
+  | { type: "newRun" }
+  | { type: "cancel" }
+  | { type: "goToStep"; step: number }
+  | { type: "select"; items: SelectionItem[] }
+  | { type: "addConfig" }
+  | { type: "removeConfig"; index: number }
+  | { type: "updateConfig"; index: number; config: RunConfig };
+
+// A fresh stepper entry drops any Test-in-Runs handoff: its config prefill and
+// its Queue-time last-selection PUT belong to that flow only.
+const freshStepper = (state: NavState): NavState => ({
+  ...state,
+  mode: "stepper",
+  step: 0,
+  prefilling: false,
+  testFlow: null,
+  selection: [],
+  configs: [emptyConfig()],
+});
+
+function navReducer(state: NavState, action: NavAction): NavState {
+  switch (action.type) {
+    case "arrive": {
+      if (action.key === state.navKey) return state;
+      const next = { ...state, navKey: action.key };
+      const { testInRuns, preset } = action.handoff ?? {};
+      if (testInRuns) {
+        return {
+          ...next,
+          mode: "stepper",
+          step: 0,
+          prefilling: true,
+          testFlow: testInRuns,
+          preset: preset ?? null,
+          selection: [],
+          configs: [{ agent_id: testInRuns.agent_id, snapshot_id: testInRuns.snapshot_id }],
+        };
+      }
+      if (!preset) return next;
+      // From the list a preset is a fresh stepper entry (same reset as "New
+      // run"); mid-stepper it keeps the flow and jumps to Configure only when
+      // a selection is already in progress.
+      return state.mode === "list"
+        ? { ...freshStepper(next), preset }
+        : { ...next, preset, step: state.selection.length > 0 ? 1 : 0 };
+    }
+    case "prefilled":
+      // "empty items = first-time testing" (openapi.yaml:311) → start at Pick.
+      return {
+        ...state,
+        selection: action.items,
+        step: action.items.length > 0 ? 1 : 0,
+        prefilling: false,
+      };
+    case "prefillFailed":
+      return { ...state, prefilling: false };
+    case "newRun":
+      // A plain "New run" carries no preset UI either.
+      return { ...freshStepper(state), preset: null };
+    case "cancel":
+      return { ...state, mode: "list" };
+    case "goToStep":
+      return { ...state, step: action.step };
+    case "select":
+      return { ...state, selection: action.items };
+    case "addConfig":
+      return {
+        ...state,
+        configs: [...state.configs, { ...state.configs[state.configs.length - 1] }],
+      };
+    case "removeConfig":
+      return { ...state, configs: state.configs.filter((_, i) => i !== action.index) };
+    case "updateConfig":
+      return {
+        ...state,
+        configs: state.configs.map((c, i) => (i === action.index ? action.config : c)),
+      };
+  }
+}
+
+const initialNav = (handoff: Handoff | null, key: string): NavState =>
+  navReducer(
+    {
+      navKey: null,
+      mode: "list",
+      step: 0,
+      prefilling: false,
+      testFlow: null,
+      preset: null,
+      selection: [],
+      configs: [emptyConfig()],
+    },
+    { type: "arrive", key, handoff },
+  );
 
 export function RunsPage() {
   const { tree, models, ensureModels } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Test-in-Runs handoff, read once from router state (cleared by "New run").
-  const [testFlow, setTestFlow] = useState<TestInRunsState | null>(
-    () => (location.state as { testInRuns?: TestInRunsState } | null)?.testInRuns ?? null,
+  // Seeded from the arrival so a handoff opens the stepper without a
+  // list-mode flash; every later arrival goes through the same reducer case.
+  const [nav, dispatch] = useReducer(navReducer, null, () =>
+    initialNav(location.state as Handoff | null, location.key),
   );
-
-  // Preset handoff (P1-T15) — initial value seeds mode so a preset arrival
-  // opens the stepper without a list-mode flash; re-arrivals land in the
-  // location-keyed effect below.
-  const [preset, setPreset] = useState<Preset | null>(
-    () => (location.state as { preset?: Preset } | null)?.preset ?? null,
-  );
+  const { mode, step, prefilling, preset, testFlow, selection, configs } = nav;
 
   const [runs, setRuns] = useState<RunSummaryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"list" | "stepper">(testFlow || preset ? "stepper" : "list");
-  // Waiting on GET last-selection before the stepper knows its landing step.
-  const [prefilling, setPrefilling] = useState(testFlow != null);
-
-  // Stepper state — step 0 = Select, 1 = Configure; step 2 (Results) lives on
-  // the run-detail route, entered by Queue's navigate.
-  const [step, setStep] = useState(0);
-  const [selection, setSelection] = useState<SelectionItem[]>([]);
-  const [configs, setConfigs] = useState<RunConfig[]>(
-    testFlow
-      ? [{ agent_id: testFlow.agent_id, snapshot_id: testFlow.snapshot_id }]
-      : [emptyConfig()],
-  );
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
@@ -173,10 +278,8 @@ export function RunsPage() {
     [tree],
   );
 
-  // Test-in-Runs prefill: fetch the per-agent remembered selection once on
-  // arrival (GET .../last-selection, openapi.yaml:295-313). Non-empty →
-  // preload + jump to Configure; "empty items = first-time testing" (:311)
-  // → start at Pick. Runs once for the mount's handoff, hence no deps.
+  // Test-in-Runs prefill: fetch the per-agent remembered selection on arrival
+  // (GET .../last-selection, openapi.yaml:295-313).
   useEffect(() => {
     if (!testFlow) return;
     let cancelled = false;
@@ -184,54 +287,29 @@ export function RunsPage() {
     api
       .lastSelection(tree, testFlow.agent_id)
       .then((sel) => {
-        if (cancelled) return;
-        setSelection(sel.items);
-        setStep(sel.items.length > 0 ? 1 : 0);
-        setPrefilling(false);
+        if (!cancelled) dispatch({ type: "prefilled", items: sel.items });
       })
       .catch((e: Error) => {
         if (cancelled) return;
         setError(e.message);
-        setPrefilling(false);
+        dispatch({ type: "prefillFailed" });
       });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [testFlow, tree, ensureVersions]);
 
-  // Preset arrival — runs for every location change so clicking Tune/Evaluate
-  // while already on /runs still applies. From the list a preset is a fresh
-  // stepper entry (same reset as "New run"); mid-stepper it keeps the flow and
-  // jumps to Configure only when a selection is already in progress. Reads
-  // mode/selection without depending on them: this reacts to NAVIGATION only.
+  // Arrivals — fires for every location change so clicking Tune/Evaluate while
+  // already on /runs still applies; the reducer drops a key it already folded in.
   useEffect(() => {
-    const p = (location.state as { preset?: Preset } | null)?.preset;
-    if (!p) return;
-    setPreset(p);
-    if (mode === "list") {
-      setTestFlow(null);
-      setSelection([]);
-      setConfigs([emptyConfig()]);
-      setStep(0);
-      setMode("stepper");
-    } else {
-      setStep(selection.length > 0 ? 1 : 0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key]);
+    dispatch({
+      type: "arrive",
+      key: location.key,
+      handoff: location.state as Handoff | null,
+    });
+  }, [location]);
 
-  const startStepper = () => {
-    // Fresh manual run — drop any Test-in-Runs handoff (its config prefill
-    // and Queue-time last-selection PUT belong to that flow only) and any
-    // preset shaping (a plain "New run" carries no preset UI).
-    setTestFlow(null);
-    setPreset(null);
-    setMode("stepper");
-    setStep(0);
-    setSelection([]);
-    setConfigs([emptyConfig()]);
-  };
+  const startStepper = () => dispatch({ type: "newRun" });
 
   const queueRun = async () => {
     setQueueing(true);
@@ -304,17 +382,17 @@ export function RunsPage() {
               last-selection on Test-in-Runs arrival, or Back from Configure). */}
           <ConversationPicker
             tree={tree}
-            onSelectionChange={setSelection}
+            onSelectionChange={(items) => dispatch({ type: "select", items })}
             initialSelection={selection}
           />
           <Group justify="space-between">
-            <Button variant="default" size="xs" onClick={() => setMode("list")}>
+            <Button variant="default" size="xs" onClick={() => dispatch({ type: "cancel" })}>
               Cancel
             </Button>
             <Button
               size="xs"
               disabled={selection.length === 0}
-              onClick={() => setStep(1)}
+              onClick={() => dispatch({ type: "goToStep", step: 1 })}
             >
               Configure ▸
             </Button>
@@ -332,9 +410,9 @@ export function RunsPage() {
             baseline: stored originals · prefilled
           </Text>
           {configs.map((cfg, i) => (
-            // key includes the preset so a preset arrival mid-Configure
-            // remounts the panel (focus + judge-open are mount-time initial
-            // state, not controlled props).
+            // RunConfigPanel treats initialFocus/judgeInitiallyOpen as
+            // mount-time state, so a preset arriving mid-Configure only takes
+            // effect if the panel remounts — hence the preset in the key.
             <Paper key={`${preset ?? "manual"}-${i}`} withBorder p="sm" data-testid={`config-${i}`}>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" fw={600}>
@@ -345,9 +423,7 @@ export function RunsPage() {
                     variant="subtle"
                     color="red"
                     size="compact-xs"
-                    onClick={() =>
-                      setConfigs((prev) => prev.filter((_, j) => j !== i))
-                    }
+                    onClick={() => dispatch({ type: "removeConfig", index: i })}
                   >
                     Remove
                   </Button>
@@ -356,7 +432,7 @@ export function RunsPage() {
               <RunConfigPanel
                 value={cfg}
                 onChange={(next) => {
-                  setConfigs((prev) => prev.map((c, j) => (j === i ? next : c)));
+                  dispatch({ type: "updateConfig", index: i, config: next });
                   if (next.agent_id) ensureVersions(next.agent_id);
                 }}
                 baseline={emptyConfig()}
@@ -386,12 +462,12 @@ export function RunsPage() {
           <Button
             variant="light"
             size="compact-xs"
-            onClick={() => setConfigs((prev) => [...prev, { ...prev[prev.length - 1] }])}
+            onClick={() => dispatch({ type: "addConfig" })}
           >
             + Add config
           </Button>
           <Group justify="flex-end">
-            <Button variant="default" size="xs" onClick={() => setStep(0)}>
+            <Button variant="default" size="xs" onClick={() => dispatch({ type: "goToStep", step: 0 })}>
               Back
             </Button>
             <Button size="xs" loading={queueing} onClick={() => void queueRun()}>
