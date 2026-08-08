@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import {
   Alert,
@@ -144,6 +144,42 @@ export function TracePage() {
     prevRunning.current = hasRunning;
   }, [hasRunning, load]);
 
+  const spans = useMemo(() => trace?.spans ?? [], [trace]);
+
+  // Timeline domain: [min start, max end] across the trace; running spans
+  // (end null) extend to the right edge.
+  const { minStart, range } = useMemo(() => {
+    if (spans.length === 0) return { minStart: 0, range: 1 };
+    let min = Infinity;
+    let max = -Infinity;
+    for (const span of spans) {
+      const start = ms(span.start);
+      const end = span.end == null ? start : ms(span.end);
+      if (start < min) min = start;
+      if (end > max) max = end;
+    }
+    return { minStart: min, range: Math.max(1, max - min) };
+  }, [spans]);
+
+  // Nested call tree from parent links (openapi.yaml:717 "flat span list with
+  // parent links"). Orphans (parent not in the list — possible mid-live)
+  // render as roots rather than vanishing.
+  const { roots, childrenOf } = useMemo(() => {
+    const ids = new Set(spans.map((s) => s.id));
+    const childrenOf = new Map<string, Span[]>();
+    const roots: Span[] = [];
+    for (const span of spans) {
+      if (span.parent_id != null && ids.has(span.parent_id)) {
+        const siblings = childrenOf.get(span.parent_id) ?? [];
+        siblings.push(span);
+        childrenOf.set(span.parent_id, siblings);
+      } else {
+        roots.push(span);
+      }
+    }
+    return { roots, childrenOf };
+  }, [spans]);
+
   if (error) {
     return (
       <Alert color="red" title="Could not load trace" m="md" maw={640}>
@@ -155,27 +191,10 @@ export function TracePage() {
     return <Loader size="sm" mx="auto" my="xl" display="block" />;
   }
 
-  const spans = trace.spans;
   const selected = spans.find((s) => s.id === selectedId) ?? null;
 
-  // Timeline domain: [min start, max end] across the trace; running spans
-  // (end null) extend to the right edge.
-  const minStart = spans.length > 0 ? Math.min(...spans.map((s) => ms(s.start))) : 0;
-  const maxEnd =
-    spans.length > 0
-      ? Math.max(...spans.map((s) => (s.end == null ? ms(s.start) : ms(s.end))))
-      : 0;
-  const range = Math.max(1, maxEnd - minStart);
-
-  // Nested call tree from parent links (openapi.yaml:717 "flat span list with
-  // parent links"). Orphans (parent not in the list — possible mid-live)
-  // render as roots rather than vanishing.
-  const ids = new Set(spans.map((s) => s.id));
-  const roots = spans.filter((s) => s.parent_id == null || !ids.has(s.parent_id));
-  const childrenOf = (id: string) => spans.filter((s) => s.parent_id === id);
-
   const renderNode = (span: Span) => {
-    const children = childrenOf(span.id);
+    const children = childrenOf.get(span.id) ?? [];
     return (
       <div key={span.id}>
         <TreeNode
