@@ -134,15 +134,37 @@ and **Evaluate**. User decision 2026-08-09.
 ## is improvement of a product nobody has cloned yet.
 ## NOTE ids do not move — order is position, not number. #21/#25/#18 sit here deliberately.
 
-- [ ] **#21** `agentic-app-maker` — project scaffolder; generates a runnable project and prints
-      next steps; no backend given = the mock does everything. `docs/plan-agentic-app-maker.md`,
-      5 sub-tasks. **The on-ramp: this is how someone else gets a running app.**
-      [blocked: Q4, Q5, Q6, Q7, Q8 · after #14]
-- [ ] **#25** Hybrid backend fill — implemented endpoints go to the adopter's backend, missing
-      families to the bundled mock, table derived from the `cupel-ready` gap report, visible
-      "served by mock" badges. **Lets someone adopt with a half-built backend instead of
-      bouncing off.**  [blocked: Q4 — #21's `--gap-as-mock` may delete this; answer Q4 FIRST,
-      it decides whether this task exists at all]
+- [ ] **#21** **Adopter onboarding — one command → `<name>-ui/`.** PLAN: `docs/plan-adopter-onboarding.md`
+      (user 2026-08-09; supersedes the generator half of `docs/plan-agentic-app-maker.md` and
+      ABSORBS #25). Clone → one command → a folder that `npm run`s a chat + studio UI; checks the
+      tech stack first; optionally point it at your backend's OpenAPI; **ask per FAMILY, not per
+      operation** (~10 questions, not 60+) with three answers — **mine / mock / hide**; whatever
+      is not yours is served by the bundled mock with a "served by mock" badge. Then a staged
+      hook-up guide: (1) chat only, one endpoint, their agent answering in a real UI inside an
+      hour · (2) conversations + turns · (3) agents/instructions/versions · (4) evaluations +
+      traces. Each stage is a family flipping `mock`→`mine`; `cupel-ready` should name which
+      stage you are on and the next endpoint to write.
+      **`hide` is load-bearing** — it makes the app feel like theirs, and it is how a
+      studio-only adopter switches chat off, which is how #12 gets tested for free.
+      **The wedge persona has NO OpenAPI document** (they have a framework agent on an HTTP
+      endpoint), so the command must accept a bare endpoint + stream shape, not only a swagger.
+      [blocked: Q5, Q6, Q7, Q8 · needs #40 · after #14]
+- [ ] **#25** **Q4 ANSWERED 2026-08-09 — folded into #21.** Hybrid fill is not a runtime
+      feature; it is the `mock` answer to #21's family question, resolved at generation time and
+      written into the config. **All that survives is the "served by mock" badge** — keep it,
+      it is cheap and without it an adopter cannot tell which half of the screen is real.
+      Do not build the per-request routing layer.  [folded into #21]
+- [ ] **#40** **Port the mock to Node — decide before #21 ships.** #21's flow says the generated
+      app carries a Node mock, which is right for the persona (a JS/TS agent developer should not
+      need Python 3.11 + pip to see the product) but forces a choice. **Two mocks is the wrong
+      answer** — two implementations of one contract drift immediately and every contract change
+      becomes two changes plus a conformance diff, which is the exact duplication #14 exists to
+      delete. So: port `mock/` to Node and DELETE the Python one, or keep Python and say so
+      loudly at #21's tech-check step. Never both. Cost is real — SSE chat, the task queue with
+      parent/child cancellation, append-only versions/judgments/snapshots, the deterministic
+      seed-42 generator, both auth modes, s3/Litestream — but **our own suite is the acceptance
+      test**: 13 e2e journeys × both auth modes + 160 pytest cases all boot against it.
+      Multi-week; its own task, not a sub-task of #21.
 - [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.
       **The last contracted-but-unbuilt family; leaving it stubbed makes the contract a lie
       to anyone who runs `cupel-ready`.**  [after #14]
@@ -254,7 +276,7 @@ and **Evaluate**. User decision 2026-08-09.
 | Q1 | #27 | Who judges a cross-backend compare, and how is that labelled? Nominate one backend as scorer, or judge client-side? |
 | Q2 | #16 | `tools_mode: replay_recorded` on a turn whose trace has no tool spans — silent no-op or cell error? |
 | Q3 | #24 | Also ship a thin client-side AG-UI adapter behind a "nothing is persisted" banner? Spike says no in the first pass. Re-read its five watch items before deciding. |
-| Q4 | #21, #25 | Does `--gap-as-mock` make the hybrid fill redundant? Recommendation: yes — delete #25. |
+| ~~Q4~~ | — | **ANSWERED 2026-08-09: yes, redundant.** Hybrid fill collapses into #21's per-family `mock` answer; only the badge survives. See `docs/plan-adopter-onboarding.md`. |
 | Q5 | #21 | What language is `create-backend`? Recommendation: FastAPI/Python first. |
 | Q6 | #21 | Feature trimming (`--features no-evaluate`) — in or out? Recommendation: out. |
 | Q7 | #21 | Does `--same-repo` touch git state? Recommendation: no, print a suggestion. |
