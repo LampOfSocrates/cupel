@@ -12,6 +12,7 @@ import {
   mockCasebooks,
 } from "../test/msw/handlers";
 import { Shell } from "../shell/Shell";
+import { product } from "../lib/product";
 import { InspectorPage } from "./InspectorPage";
 
 // Contract under test — P2-T12a Inspector (cupel-phases.md:78 "Inspect every
@@ -76,8 +77,10 @@ describe("inspector table", () => {
   it("sends the tree filter as ?tree=", async () => {
     renderInspector();
     await waitFor(() => expect(screen.getAllByTestId("inspector-row")).toHaveLength(3));
-    // getByRole, not getByLabelText: the table header is also "Tree".
-    await userEvent.click(screen.getByRole("combobox", { name: "Tree" }));
+    // The filter's label and the term itself come from agentic.config.ts
+    // product.trees (PW-1); getByRole, not getByLabelText, because the table
+    // header carries the same word.
+    await userEvent.click(screen.getByRole("combobox", { name: product.tree.One }));
     await userEvent.click(await screen.findByRole("option", { name: "Agent 2" }));
     await waitFor(() => expect(lastQuery().get("tree")).toBe("agent2"));
     await waitFor(() => expect(screen.getAllByTestId("inspector-row")).toHaveLength(1));

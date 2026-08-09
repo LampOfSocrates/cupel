@@ -6,6 +6,7 @@ import { getActiveTarget } from "./target";
 import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
+import { product } from "../lib/product";
 import type {
   AdminConversationListParams,
   AdminConversationPage,
@@ -133,7 +134,7 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
   // existing error rendering (chat sendError, Runs error alert, …) shows it
   // without per-page mapping. Callers can still branch on ApiError.code.
   if (code === "tree_disabled") {
-    message = "This agent tree is disabled — history is read-only.";
+    message = `This ${product.tree.one} is disabled — history is read-only.`;
   }
   return new ApiError(res.status, code, message);
 }

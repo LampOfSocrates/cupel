@@ -7,6 +7,7 @@
     "cupel-ready": "scripts/cupel-ready.mjs"
   },
   "scripts": {
+    "init": "node scripts/init.mjs",
     "ready": "node scripts/cupel-ready.mjs",
     "start": "node scripts/dev.mjs",
     "dev": "vite",

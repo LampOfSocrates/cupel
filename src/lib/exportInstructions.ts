@@ -4,6 +4,7 @@
 // the editor already fetched it (GET .../instructions, openapi.yaml:221-239) —
 // no contract change, no new endpoints.
 import type { InstructionHistory } from "../api/types";
+import { product } from "./product";
 
 // {agentName-or-id}-instructions-v{live_version}.{ext}
 export function exportFilename(
@@ -20,7 +21,7 @@ export function serializeHistoryJson(history: InstructionHistory): string {
   return JSON.stringify(history, null, 2) + "\n";
 }
 
-// Markdown export: H1 + Cupel export header + date, then one section per
+// Markdown export: H1 + "<product> export" header + date, then one section per
 // version (versions are ascending, append-only — openapi.yaml:1203).
 // yaml-fenced when the version's format is yaml, plain fence otherwise
 // (format semantics: feature-spec.md:34).
@@ -32,7 +33,7 @@ export function serializeHistoryMarkdown(
   const lines: string[] = [
     `# ${agentLabel} — instruction history`,
     "",
-    `Cupel export — ${exportedAt.toISOString().slice(0, 10)} — live version v${history.live_version} — format ${history.format}`,
+    `${product.label} export — ${exportedAt.toISOString().slice(0, 10)} — live version v${history.live_version} — format ${history.format}`,
   ];
   for (const v of history.versions) {
     lines.push("", `## v${v.version} — ${v.created_at}`);

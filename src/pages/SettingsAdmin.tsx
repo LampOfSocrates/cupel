@@ -16,6 +16,7 @@ import {
 import { api } from "../api/client";
 import type { AdminUser, AgentTree, TreePermission } from "../api/types";
 import { useApp } from "../AppContext";
+import { product } from "../lib/product";
 
 // P2-T07b/07c — the two admin Settings sections (unsketched; derived from the
 // existing SettingsPage visual language per cupel-phases.md:95 — Paper blocks,
@@ -231,7 +232,7 @@ export function AgentTreesSection() {
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
-        <Text fw={600}>Agent trees</Text>
+        <Text fw={600}>{product.tree.Many}</Text>
         {error && (
           <Alert color="red" withCloseButton onClose={() => setError(null)}>
             {error}

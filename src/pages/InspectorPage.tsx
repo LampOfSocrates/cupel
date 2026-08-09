@@ -25,6 +25,7 @@ import { EnvelopeChip } from "../components/EnvelopeChip";
 import { ScoreChip } from "../components/ScoreChip";
 import { relativeTime } from "../lib/relativeTime";
 import { Markdown } from "../lib/markdown";
+import { product } from "../lib/product";
 import type { CasebookItemCreate } from "../api/types";
 
 // P2-T12a Inspector (UNSKETCHED — derived from the app's existing dense visual
@@ -182,7 +183,7 @@ export function InspectorPage() {
   }, [collect]);
 
   const treeOptions = [
-    { value: "", label: "All trees" },
+    { value: "", label: `All ${product.tree.many}` },
     ...trees.map((t) => ({ value: t.id, label: t.name })),
   ];
 
@@ -215,7 +216,7 @@ export function InspectorPage() {
           />
           <Select
             size="xs"
-            label="Tree"
+            label={product.tree.One}
             style={{ width: 150 }}
             data={treeOptions}
             value={draft.tree}
@@ -293,7 +294,7 @@ export function InspectorPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>User</Table.Th>
-                  <Table.Th>Tree</Table.Th>
+                  <Table.Th>{product.tree.One}</Table.Th>
                   <Table.Th>Conversation</Table.Th>
                   <Table.Th>Origin</Table.Th>
                   <Table.Th>Activity</Table.Th>

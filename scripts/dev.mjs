@@ -105,7 +105,7 @@ export function buildStartupPlan(config, env = {}) {
     }
     bannerLines.push(
       "           agentic.config.ts localMock.enabled = true — set it to false",
-      "           when you point Cupel at your own backend",
+      `           when you point ${label} at your own backend`,
     );
   } else {
     const wanted = config?.defaultTarget?.dev;
@@ -115,7 +115,7 @@ export function buildStartupPlan(config, env = {}) {
       : `no target "${wanted}" in agentic.config.ts — fix defaultTarget.dev`;
     bannerLines.push(
       `  Backend  your backend · ${where}`,
-      "           Cupel stores nothing locally — your backend holds all persistence",
+      `           ${label} stores nothing locally — your backend holds all persistence`,
       "           agentic.config.ts localMock.enabled = false — the bundled demo",
       "           backend is not running",
     );

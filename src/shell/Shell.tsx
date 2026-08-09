@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router";
 import { AppShell, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useBackendTarget } from "../api/target";
+import { product } from "../lib/product";
 import { EnvBanner, ENV_BANNER_HEIGHT, resolveBanner } from "./EnvBanner";
 import { Sidebar } from "./Sidebar";
 
@@ -71,7 +72,7 @@ export function Shell() {
                 aria-controls="cupel-navbar"
               />
               <Text fw={600} size="sm">
-                Cupel
+                {product.label}
               </Text>
             </Group>
           )}

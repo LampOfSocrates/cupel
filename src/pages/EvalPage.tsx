@@ -21,6 +21,7 @@ import { api } from "../api/client";
 import { useApp } from "../AppContext";
 import { EvalImportModal } from "../components/EvalImportModal";
 import { TurnSourceModal } from "../components/TurnSourceModal";
+import { product } from "../lib/product";
 import type { EvalCase, EvalSet, Judgment, Rubric } from "../api/types";
 
 // P2-T12 Eval workbench (sketch 10) — "Hand-craft expected answers and have
@@ -245,7 +246,7 @@ export function EvalPage() {
       <Group justify="space-between">
         <Title order={4}>Eval workbench</Title>
         <Text size="xs" c="dimmed">
-          Cases, sets and rubrics are global — they are not scoped to an agent tree.
+          Cases, sets and rubrics are global — they are not scoped to a single {product.tree.one}.
         </Text>
       </Group>
       {error && (

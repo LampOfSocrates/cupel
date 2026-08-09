@@ -11,9 +11,9 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { agenticConfig } from "../../agentic.config";
 import { api } from "../api/client";
 import { setAuthToken } from "../api/auth";
+import { product } from "../lib/product";
 import { RETURN_TO_PARAM, sanitizeReturnTo } from "../lib/returnTo";
 
 // P2-T07 login screen — unsketched; feature-spec.md:95 "derive from spec +
@@ -58,7 +58,7 @@ export function LoginPage() {
         <form onSubmit={submit}>
           <Stack gap="sm">
             <Stack gap={2}>
-              <Title order={3}>{agenticConfig.product.label}</Title>
+              <Title order={3}>{product.label}</Title>
               <Text size="sm" c="dimmed">
                 Sign in to continue
               </Text>

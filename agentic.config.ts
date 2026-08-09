@@ -13,6 +13,28 @@
 // carries the message the UI surfaces). There is no client-side limit to
 // edit here.
 
+/**
+ * Product identity — the block an adopter puts their own name into.
+ * `npm run init` (scripts/init.mjs) writes it; every UI string that names the
+ * product or its agent trees reads it back through src/lib/product.ts, so
+ * changing it here changes the app chrome, the login screen, the browser tab
+ * title, the instruction export header and the `npm start` banner.
+ */
+export interface ProductConfig {
+  /** Machine name — lowercase, no spaces. */
+  name: string;
+  /** Human label — the name rendered wherever the product names itself. */
+  label: string;
+  /**
+   * What THIS deployment calls an agent tree ("workspace", "assistant", …).
+   * Write both forms the way they read MID-SENTENCE: the UI only ever
+   * upper-cases the first character for sentence-initial use and never
+   * lower-cases it, so a term that is genuinely a proper noun survives.
+   * Omit the block entirely for the default "agent tree" / "agent trees".
+   */
+  trees?: { one: string; many: string };
+}
+
 /** One backend the app can talk to. Add yours to `targets` below. */
 export interface BackendTarget {
   /** Stable identifier — persisted in localStorage when selected. */
@@ -157,7 +179,7 @@ export interface CompareSet {
 
 export interface AgenticConfig {
   /** Product identity — name for code/config, label for chrome/branding. */
-  product: { name: string; label: string };
+  product: ProductConfig;
   /** Every backend the app can be pointed at. Edit/extend freely. */
   targets: BackendTarget[];
   /**
@@ -173,7 +195,11 @@ export interface AgenticConfig {
 }
 
 export const agenticConfig: AgenticConfig = {
-  product: { name: "cupel", label: "Cupel" },
+  product: {
+    name: "cupel",
+    label: "Cupel",
+    trees: { one: "agent tree", many: "agent trees" },
+  },
 
   targets: [
     {
