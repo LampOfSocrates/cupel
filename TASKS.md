@@ -51,6 +51,14 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    `subject`/`scorer`, `Evaluation.status` derived from its Task. No backward compatibility —
    nothing is published and nobody has adopted it. **After item 6, so the rename is
    type-checked. Before item 14, which closes that window.**
+   **`variants: Variant[]` — settled 2026-08-09 (user).** `RunConfig` already carries the
+   endpoint, so a renamed `Variant` IS one column and needs no `{endpoint_id, config}` wrapper.
+   Both entry points then take the identical `variants: Variant[]`, so turn re-fire stops being
+   a different shape from a conversation replay. Consequence: `endpoint_ids` (plural) becomes
+   `endpoint_id` (singular) — the plural only existed to express a fan-out `variants[]` now
+   expresses properly. There was no naming collision; ignore earlier notes claiming one.
+   Also drifted and belonging here: **310 `feature-spec.md:NNN` citations inside `openapi.yaml`**
+   (contract `description:` text, so out of item 4's comments-only scope).
 
 8. **DECIDE — is the generated `<name>-ui/` folder a copy or a dependency?** A copy is
    editable but never receives updates; a dependency is the reverse. A copy is the only thing
@@ -105,8 +113,8 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
 19. **DECIDE — replaying recorded tools on a turn whose trace has no tool spans: silent no-op
     or cell error?** Blocks item 22.
 
-20. **DECIDE — also ship a thin client-side AG-UI adapter behind a "nothing is persisted"
-    banner?** The spike's own answer is no in a first pass. Blocks item 28.
+20. **PARKED 2026-08-09 (user) — AG-UI is off the table for now.** Was: also ship a thin
+    client-side AG-UI adapter? Revisit only if item 28 is ever unparked.
 
 21. **DECIDE — the three CLI questions.** A `~/.cupel/` config file for defaults (recommend
     credentials only) · publish to npm or checkout-only (recommend checkout-only first) ·
@@ -129,8 +137,10 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
 27. Public sharing — anonymous tokenised links for conversations and turns, with expiry and
     revocation. Every shared conversation is a billboard.
 
-28. AG-UI bridge — a server-side adapter so an agent already speaking AG-UI needs no new
-    endpoints. ~400–600 LOC on an existing seam. Not a client transport, not a contract change.
+28. **PARKED 2026-08-09 (user).** AG-UI bridge — a server-side adapter so an agent already
+    speaking AG-UI needs no new endpoints. Spike is done and stays valid (`docs/spike-agui.md`);
+    nothing else depends on this, so parking costs nothing. Note item 9 partly covers the same
+    need by cheaper means: accepting a bare agent endpoint serves an AG-UI agent too.
 
 29. Vary the deploy target in an evaluation — flip an existing flag on the stepper. UI half
     only; the contract half is in item 7.
