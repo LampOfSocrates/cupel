@@ -58,12 +58,35 @@ const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
 const TASK_IN_FLIGHT = new Set(["queued", "running"]);
 const REFETCH_DEBOUNCE_MS = 300;
 
+// The page is per-EVALUATION state wrapped around a per-SESSION shell. Rubrics
+// (and the models the judge form needs) are neither, so they stay out here and
+// are fetched once per mount; everything below them belongs to one (tree, runId)
+// and is reset by REMOUNTING the body, the same key trick the instruction editor
+// uses. That is what the old `useEffect(() => { setError(null); setStage(null);
+// … }, [tree, runId])` was hand-rolling — and unlike that effect the key also
+// catches the three per-run states it forgot (a half-typed judge config, an open
+// cell re-fire modal, an in-flight cancel), which cannot outlive their run.
 export function EvaluationPage() {
-  const { tree, models, ensureModels } = useApp();
+  const { tree, ensureModels } = useApp();
+  const { runId = "" } = useParams();
+
+  const [rubrics, setRubrics] = useState<Rubric[]>([]);
+  // Rubrics label the summary header + feed the manual judge form; models feed
+  // its judge-model select (feature-spec.md:122 "chat/run/judge model
+  // dropdowns" — session cache). Missing rubric names degrade to raw ids.
+  useEffect(() => {
+    ensureModels();
+    api.rubrics().then(setRubrics).catch(() => {});
+  }, [ensureModels]);
+
+  return <EvaluationBody key={`${tree}/${runId}`} rubrics={rubrics} />;
+}
+
+function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
+  const { tree, models } = useApp();
   const { runId = "" } = useParams();
   const navigate = useNavigate();
 
-  const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Latest progress stage text off the stream ("Conversation 3/10 · turn 2/6",
   // openapi.yaml:791-792; feature-spec.md:109).
@@ -112,23 +135,6 @@ export function EvaluationPage() {
   );
   const run = loaded?.[0] ?? null;
   const summary = loaded?.[1] ?? null;
-
-  useEffect(() => {
-    setError(null);
-    setStage(null);
-    setJudgeTaskId(null);
-    setJudgeFormOpen(false);
-    setDrawerCaseId(null);
-    judgeFired.current = false;
-  }, [tree, runId]);
-
-  // Rubrics label the summary header + feed the manual judge form; models feed
-  // its judge-model select (feature-spec.md:122 "chat/run/judge model
-  // dropdowns" — session cache). Missing rubric names degrade to raw ids.
-  useEffect(() => {
-    ensureModels();
-    api.rubrics().then(setRubrics).catch(() => {});
-  }, [ensureModels]);
 
   const fireJudge = useCallback(
     // `silent`: the AUTO path must never replace the page with an error Alert

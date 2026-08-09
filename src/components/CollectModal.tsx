@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   Button,
@@ -42,7 +42,20 @@ interface Props {
   onCollected?: (casebook: Casebook) => void;
 }
 
+// Fresh form per open WITHOUT a reset effect: Mantine's Modal does not render
+// its children while closed (ModalBaseContent is a Transition mounted on
+// `opened`), so the body below mounts on open and its state starts at the
+// initialisers every time. The shell stays out here so the close transition
+// still has a Modal to run, and so the fetch stops when the modal does.
 export function CollectModal({ opened, target, onClose, onCollected }: Props) {
+  return (
+    <Modal opened={opened} onClose={onClose} title="Collect turn into a casebook" size="md">
+      <CollectBody target={target} onCollected={onCollected} />
+    </Modal>
+  );
+}
+
+function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollected">) {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [newName, setNewName] = useState("");
@@ -53,16 +66,7 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
     data: casebooks,
     error: loadError,
     setData: setCasebooks,
-  } = useAsync(opened ? () => api.casebooks() : null, [opened]);
-
-  // Fresh form per open.
-  useEffect(() => {
-    if (!opened) return;
-    setError(null);
-    setDone(null);
-    setNote("");
-    setNewName("");
-  }, [opened]);
+  } = useAsync(() => api.casebooks(), []);
 
   const add = async (casebook: Casebook) => {
     if (!target) return;
@@ -106,85 +110,83 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Collect turn into a casebook" size="md">
-      <Stack gap="xs">
-        <Text size="xs" c="dimmed">
-          Casebooks store a <strong>reference</strong> to this turn — the transcript stays in
-          its conversation, and removing the item later changes nothing else.
+    <Stack gap="xs">
+      <Text size="xs" c="dimmed">
+        Casebooks store a <strong>reference</strong> to this turn — the transcript stays in
+        its conversation, and removing the item later changes nothing else.
+      </Text>
+      {target && (
+        <Text size="xs" c="dimmed" data-testid="collect-target">
+          {target.tree} · {target.conversation_id} · {target.turn_id}
         </Text>
-        {target && (
-          <Text size="xs" c="dimmed" data-testid="collect-target">
-            {target.tree} · {target.conversation_id} · {target.turn_id}
-          </Text>
-        )}
-        <Textarea
-          size="xs"
-          autosize
-          minRows={1}
-          label="Note (optional)"
-          placeholder="Why is this turn noteworthy?"
-          value={note}
-          onChange={(e) => setNote(e.currentTarget.value)}
-        />
-        {(error ?? loadError) && (
-          <Alert color="red" data-testid="collect-error">
-            {error ?? loadError?.message}
-          </Alert>
-        )}
-        {done && (
-          <Alert color="green" data-testid="collect-done">
-            {done}
-          </Alert>
-        )}
-        <Divider label="Add to" labelPosition="left" />
-        {!casebooks && !error && !loadError && <Loader size="sm" />}
-        {casebooks?.length === 0 && (
-          <Text size="xs" c="dimmed" data-testid="collect-empty">
-            No casebooks yet — name one below and this turn becomes its first entry.
-          </Text>
-        )}
-        <ScrollArea.Autosize mah={220}>
-          <Stack gap={4}>
-            {casebooks?.map((cb) => (
-              <Group key={cb.id} gap={6} wrap="nowrap" justify="space-between">
-                <Text size="sm" truncate title={cb.description ?? undefined}>
-                  {cb.name}{" "}
-                  <Text span size="xs" c="dimmed">
-                    {cb.items.length} item{cb.items.length === 1 ? "" : "s"}
-                  </Text>
+      )}
+      <Textarea
+        size="xs"
+        autosize
+        minRows={1}
+        label="Note (optional)"
+        placeholder="Why is this turn noteworthy?"
+        value={note}
+        onChange={(e) => setNote(e.currentTarget.value)}
+      />
+      {(error ?? loadError) && (
+        <Alert color="red" data-testid="collect-error">
+          {error ?? loadError?.message}
+        </Alert>
+      )}
+      {done && (
+        <Alert color="green" data-testid="collect-done">
+          {done}
+        </Alert>
+      )}
+      <Divider label="Add to" labelPosition="left" />
+      {!casebooks && !error && !loadError && <Loader size="sm" />}
+      {casebooks?.length === 0 && (
+        <Text size="xs" c="dimmed" data-testid="collect-empty">
+          No casebooks yet — name one below and this turn becomes its first entry.
+        </Text>
+      )}
+      <ScrollArea.Autosize mah={220}>
+        <Stack gap={4}>
+          {casebooks?.map((cb) => (
+            <Group key={cb.id} gap={6} wrap="nowrap" justify="space-between">
+              <Text size="sm" truncate title={cb.description ?? undefined}>
+                {cb.name}{" "}
+                <Text span size="xs" c="dimmed">
+                  {cb.items.length} item{cb.items.length === 1 ? "" : "s"}
                 </Text>
-                <Button
-                  size="compact-xs"
-                  variant="light"
-                  loading={busy === cb.id}
-                  onClick={() => add(cb)}
-                >
-                  ⊞ Add
-                </Button>
-              </Group>
-            ))}
-          </Stack>
-        </ScrollArea.Autosize>
-        <Divider label="Or create one" labelPosition="left" />
-        <Group gap={6} wrap="nowrap">
-          <TextInput
-            size="xs"
-            style={{ flex: 1 }}
-            placeholder="New casebook name"
-            aria-label="New casebook name"
-            value={newName}
-            onChange={(e) => setNewName(e.currentTarget.value)}
-          />
-          <Button
-            size="compact-xs"
-            loading={busy === "__new__"}
-            disabled={!newName.trim()}
-            onClick={createAndAdd}
-          >
-            Create + add
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
+              </Text>
+              <Button
+                size="compact-xs"
+                variant="light"
+                loading={busy === cb.id}
+                onClick={() => add(cb)}
+              >
+                ⊞ Add
+              </Button>
+            </Group>
+          ))}
+        </Stack>
+      </ScrollArea.Autosize>
+      <Divider label="Or create one" labelPosition="left" />
+      <Group gap={6} wrap="nowrap">
+        <TextInput
+          size="xs"
+          style={{ flex: 1 }}
+          placeholder="New casebook name"
+          aria-label="New casebook name"
+          value={newName}
+          onChange={(e) => setNewName(e.currentTarget.value)}
+        />
+        <Button
+          size="compact-xs"
+          loading={busy === "__new__"}
+          disabled={!newName.trim()}
+          onClick={createAndAdd}
+        >
+          Create + add
+        </Button>
+      </Group>
+    </Stack>
   );
 }

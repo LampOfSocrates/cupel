@@ -122,7 +122,20 @@ export function ImportReportView({ report }: { report: EvalCaseImportReport }) {
   );
 }
 
+// Fresh form per open WITHOUT a reset effect: Mantine's Modal does not render
+// its children while closed (ModalBaseContent is a Transition mounted on
+// `opened`), so the body mounts on open and its state — file, mapping, report,
+// watched task id — starts at the initialisers every time. That is what the old
+// `if (opened) return; …` teardown effect was for.
 export function EvalImportModal({ opened, sets, onClose, onImported }: Props) {
+  return (
+    <Modal opened={opened} onClose={onClose} title="Import eval cases" size="lg">
+      <ImportBody sets={sets} onClose={onClose} onImported={onImported} />
+    </Modal>
+  );
+}
+
+function ImportBody({ sets, onClose, onImported }: Omit<Props, "opened">) {
   const { tasks } = useQueue();
   const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[] | null>(null);
@@ -134,19 +147,6 @@ export function EvalImportModal({ opened, sets, onClose, onImported }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<EvalCaseImportReport | null>(null);
   const [queuedTaskId, setQueuedTaskId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (opened) return;
-    setFile(null);
-    setColumns(null);
-    setMapping({ input: "", output: "", reference: "" });
-    setTarget("none");
-    setSetName("");
-    setSetId(null);
-    setError(null);
-    setReport(null);
-    setQueuedTaskId(null);
-  }, [opened]);
 
   // 202 path: the report lands on the task, watched through the app-wide
   // queue store (openapi.yaml:2795-2802).
@@ -247,87 +247,85 @@ export function EvalImportModal({ opened, sets, onClose, onImported }: Props) {
     [sets],
   );
 
-  return (
-    <Modal opened={opened} onClose={onClose} title="Import eval cases" size="lg">
-      <Stack gap="sm">
-        <FileInput
-          size="xs"
-          label="Spreadsheet"
-          description="CSV or XLSX — one row per case. Paste a table by saving it as CSV."
-          placeholder="Choose a file"
-          accept=".csv,.xlsx,text/csv"
-          value={file}
-          onChange={pickFile}
-        />
+return (
+  <Stack gap="sm">
+      <FileInput
+        size="xs"
+        label="Spreadsheet"
+        description="CSV or XLSX — one row per case. Paste a table by saving it as CSV."
+        placeholder="Choose a file"
+        accept=".csv,.xlsx,text/csv"
+        value={file}
+        onChange={pickFile}
+      />
+      <Text size="xs" c="dimmed">
+        Map the file's columns onto the case fields. Reference is optional —
+        reference-free rubrics are allowed.
+      </Text>
+      <Group grow align="flex-start">
+        {field("input", "Input (prompt)", true)}
+        {field("output", "Output (candidate)", true)}
+        {field("reference", "Reference (expected)", false)}
+      </Group>
+      {!columns && file && (
         <Text size="xs" c="dimmed">
-          Map the file's columns onto the case fields. Reference is optional —
-          reference-free rubrics are allowed.
+          Column names could not be read from this file — type them exactly as
+          they appear in the header row.
         </Text>
-        <Group grow align="flex-start">
-          {field("input", "Input (prompt)", true)}
-          {field("output", "Output (candidate)", true)}
-          {field("reference", "Reference (expected)", false)}
+      )}
+      <Radio.Group
+        size="xs"
+        label="Add the imported cases to a set"
+        value={target}
+        onChange={(v) => setTarget(v as Target)}
+      >
+        <Group gap="md" mt={4}>
+          <Radio value="none" label="No set" />
+          <Radio value="new" label="New set" />
+          <Radio value="existing" label="Existing set" disabled={sets.length === 0} />
         </Group>
-        {!columns && file && (
-          <Text size="xs" c="dimmed">
-            Column names could not be read from this file — type them exactly as
-            they appear in the header row.
-          </Text>
-        )}
-        <Radio.Group
+      </Radio.Group>
+      {target === "new" && (
+        <TextInput
           size="xs"
-          label="Add the imported cases to a set"
-          value={target}
-          onChange={(v) => setTarget(v as Target)}
-        >
-          <Group gap="md" mt={4}>
-            <Radio value="none" label="No set" />
-            <Radio value="new" label="New set" />
-            <Radio value="existing" label="Existing set" disabled={sets.length === 0} />
-          </Group>
-        </Radio.Group>
-        {target === "new" && (
-          <TextInput
-            size="xs"
-            label="New set name"
-            value={setName}
-            onChange={(e) => setSetName(e.currentTarget.value)}
-          />
-        )}
-        {target === "existing" && (
-          <Select
-            size="xs"
-            label="Set to extend"
-            description="Extending appends a new membership version."
-            data={setOptions}
-            value={setId}
-            onChange={setSetId}
-          />
-        )}
-        {error && (
-          <Alert color="red" title="Import failed">
-            {error}
-          </Alert>
-        )}
-        {queuedTaskId && !queuedReport && (
-          <Group gap="xs">
-            <Loader size="xs" />
-            <Text size="xs">
-              Large file — queued as task {queuedTaskId}. The report appears here when it
-              finishes; the Queue panel tracks it meanwhile.
-            </Text>
-          </Group>
-        )}
-        {(report ?? queuedReport) && <ImportReportView report={(report ?? queuedReport)!} />}
-        <Group justify="flex-end">
-          <Button size="xs" variant="default" onClick={onClose}>
-            Close
-          </Button>
-          <Button size="xs" onClick={submit} disabled={!canSubmit} loading={busy}>
-            Import
-          </Button>
+          label="New set name"
+          value={setName}
+          onChange={(e) => setSetName(e.currentTarget.value)}
+        />
+      )}
+      {target === "existing" && (
+        <Select
+          size="xs"
+          label="Set to extend"
+          description="Extending appends a new membership version."
+          data={setOptions}
+          value={setId}
+          onChange={setSetId}
+        />
+      )}
+      {error && (
+        <Alert color="red" title="Import failed">
+          {error}
+        </Alert>
+      )}
+      {queuedTaskId && !queuedReport && (
+        <Group gap="xs">
+          <Loader size="xs" />
+          <Text size="xs">
+            Large file — queued as task {queuedTaskId}. The report appears here when it
+            finishes; the Queue panel tracks it meanwhile.
+          </Text>
         </Group>
-      </Stack>
-    </Modal>
+      )}
+      {(report ?? queuedReport) && <ImportReportView report={(report ?? queuedReport)!} />}
+      <Group justify="flex-end">
+        <Button size="xs" variant="default" onClick={onClose}>
+          Close
+        </Button>
+        <Button size="xs" onClick={submit} disabled={!canSubmit} loading={busy}>
+          Import
+        </Button>
+      </Group>
+    </Stack>
   );
 }

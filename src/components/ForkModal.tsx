@@ -55,25 +55,56 @@ interface Props {
   onClose: () => void;
 }
 
+// Fresh form per open WITHOUT a reset effect: Mantine's Modal does not render
+// its children while closed (ModalBaseContent is a Transition mounted on
+// `opened`), so the body mounts on open and its state starts at the
+// initialisers every time. The key carries the OTHER half of the old effect's
+// dependency list — a tree or agent change while the modal is open resets the
+// form exactly as it used to.
 export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: Props) {
+  const { tree } = useApp();
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={<Text size="sm" fw={600}>⑂ Re-run this turn with…</Text>}
+      size="sm"
+    >
+      <ForkBody
+        key={`${tree}/${agentId ?? ""}`}
+        conversationId={conversationId}
+        turnId={turnId}
+        agentId={agentId}
+        onClose={onClose}
+      />
+    </Modal>
+  );
+}
+
+function ForkBody({
+  conversationId,
+  turnId,
+  agentId,
+  onClose,
+}: Omit<Props, "opened">) {
   const { tree, models, ensureModels, refreshConversations } = useApp();
   const navigate = useNavigate();
 
   const { data: endpoints, error: endpointsError } = useAsync(
-    opened ? () => api.endpoints(tree) : null,
-    [opened, tree],
+    () => api.endpoints(tree),
+    [tree],
   );
   // Optional axis — endpoints alone still fire, so a failure yields no versions
   // rather than an error.
   const { data: versions } = useAsync(
-    opened && agentId
+    agentId
       ? () =>
           api
             .instructions(tree, agentId)
             .then((h) => h.versions.map((v) => v.version))
             .catch(() => [] as number[])
       : null,
-    [opened, tree, agentId],
+    [tree, agentId],
   );
   const [selected, setSelected] = useState<string[]>([]);
   const [model, setModel] = useState<string | null>(null);
@@ -82,17 +113,11 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
   const [firing, setFiring] = useState(false);
   const [accepted, setAccepted] = useState<ReplayTurnAccepted | null>(null);
 
-  // Fresh form per open (the fetches above key on `opened` for the same
-  // reason); model list comes from the session cache.
+  // Model list comes from the session cache; asking for it is the only thing
+  // left that the old reset effect did beyond resetting.
   useEffect(() => {
-    if (!opened) return;
-    setSelected([]);
-    setModel(null);
-    setVersion(null);
-    setError(null);
-    setAccepted(null);
     ensureModels();
-  }, [opened, tree, agentId, ensureModels]);
+  }, [ensureModels]);
 
   const endpointName = (id: string) => endpoints?.find((e) => e.id === id)?.name ?? id;
 
@@ -132,101 +157,92 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
     navigate(path);
   };
 
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={<Text size="sm" fw={600}>⑂ Re-run this turn with…</Text>}
-      size="sm"
-    >
-      {accepted ? (
-        <Stack gap="xs" data-testid="fork-results">
-          <Text size="xs" c="dimmed">
-            Forks are generating in the background — Open in Chat shows the
-            copied history now; the re-generated turn appears once its task
-            completes.
-          </Text>
-          {/* "one task_id + new conversation_id per endpoint"
-              (feature-spec.md:71); "Open in Chat: any fork can be opened in
-              the main Chat page and continued there" (feature-spec.md:70). */}
-          {accepted.results.map((r) => (
-            <Group key={r.endpoint_id} justify="space-between" wrap="nowrap">
-              <Group gap={6} wrap="nowrap">
-                <Text size="sm">{endpointName(r.endpoint_id)}</Text>
-                <Badge size="xs" variant="light" color="yellow">
-                  queued
-                </Badge>
-              </Group>
-              <Anchor size="xs" onClick={() => go(`/chat/${r.conversation_id}`)}>
-                Open in Chat ↗
-              </Anchor>
-            </Group>
-          ))}
-          <Group justify="space-between" mt={4}>
-            {/* run_id backs the fork-comparison pivot (openapi.yaml:1581-1585)
-                — link to the existing run detail route. */}
-            <Anchor size="xs" onClick={() => go(`/evaluations/${accepted.run_id}`)}>
-              View evaluation
-            </Anchor>
-            <Button size="xs" variant="default" onClick={onClose}>
-              Close
-            </Button>
+  return accepted ? (
+    <Stack gap="xs" data-testid="fork-results">
+      <Text size="xs" c="dimmed">
+        Forks are generating in the background — Open in Chat shows the
+        copied history now; the re-generated turn appears once its task
+        completes.
+      </Text>
+      {/* "one task_id + new conversation_id per endpoint"
+          (feature-spec.md:71); "Open in Chat: any fork can be opened in
+          the main Chat page and continued there" (feature-spec.md:70). */}
+      {accepted.results.map((r) => (
+        <Group key={r.endpoint_id} justify="space-between" wrap="nowrap">
+          <Group gap={6} wrap="nowrap">
+            <Text size="sm">{endpointName(r.endpoint_id)}</Text>
+            <Badge size="xs" variant="light" color="yellow">
+              queued
+            </Badge>
           </Group>
-        </Stack>
-      ) : (
-        <Stack gap="sm">
-          {endpoints == null && !endpointsError && <Loader size="xs" mx="auto" />}
-          {endpoints != null && (
-            <MultiSelect
-              size="xs"
-              label="Endpoints"
-              description="one fork per endpoint"
-              placeholder={selected.length ? undefined : "Pick at least one"}
-              data={endpoints.map((e) => ({ value: e.id, label: e.name }))}
-              value={selected}
-              onChange={setSelected}
-              comboboxProps={{ withinPortal: false }}
-            />
-          )}
-          <Select
-            size="xs"
-            label="Model (optional)"
-            placeholder="unchanged"
-            data={models?.map((m) => ({ value: m.id, label: m.name })) ?? []}
-            value={model}
-            onChange={setModel}
-            clearable
-            comboboxProps={{ withinPortal: false }}
-          />
-          {agentId != null && versions != null && versions.length > 0 && (
-            <Select
-              size="xs"
-              label="Instruction version (optional)"
-              placeholder="live"
-              data={versions.map((v) => ({ value: String(v), label: `v${v}` }))}
-              value={version}
-              onChange={setVersion}
-              clearable
-              comboboxProps={{ withinPortal: false }}
-            />
-          )}
-          {(error ?? endpointsError) && (
-            <Alert color="red" title="Fork failed">
-              {error ?? endpointsError?.message}
-            </Alert>
-          )}
-          <Group justify="flex-end">
-            <Button
-              size="xs"
-              disabled={selected.length === 0}
-              loading={firing}
-              onClick={() => void fire()}
-            >
-              Fork ⑂
-            </Button>
-          </Group>
-        </Stack>
+          <Anchor size="xs" onClick={() => go(`/chat/${r.conversation_id}`)}>
+            Open in Chat ↗
+          </Anchor>
+        </Group>
+      ))}
+      <Group justify="space-between" mt={4}>
+        {/* run_id backs the fork-comparison pivot (openapi.yaml:1581-1585)
+            — link to the existing run detail route. */}
+        <Anchor size="xs" onClick={() => go(`/evaluations/${accepted.run_id}`)}>
+          View evaluation
+        </Anchor>
+        <Button size="xs" variant="default" onClick={onClose}>
+          Close
+        </Button>
+      </Group>
+    </Stack>
+  ) : (
+    <Stack gap="sm">
+      {endpoints == null && !endpointsError && <Loader size="xs" mx="auto" />}
+      {endpoints != null && (
+        <MultiSelect
+          size="xs"
+          label="Endpoints"
+          description="one fork per endpoint"
+          placeholder={selected.length ? undefined : "Pick at least one"}
+          data={endpoints.map((e) => ({ value: e.id, label: e.name }))}
+          value={selected}
+          onChange={setSelected}
+          comboboxProps={{ withinPortal: false }}
+        />
       )}
-    </Modal>
+      <Select
+        size="xs"
+        label="Model (optional)"
+        placeholder="unchanged"
+        data={models?.map((m) => ({ value: m.id, label: m.name })) ?? []}
+        value={model}
+        onChange={setModel}
+        clearable
+        comboboxProps={{ withinPortal: false }}
+      />
+      {agentId != null && versions != null && versions.length > 0 && (
+        <Select
+          size="xs"
+          label="Instruction version (optional)"
+          placeholder="live"
+          data={versions.map((v) => ({ value: String(v), label: `v${v}` }))}
+          value={version}
+          onChange={setVersion}
+          clearable
+          comboboxProps={{ withinPortal: false }}
+        />
+      )}
+      {(error ?? endpointsError) && (
+        <Alert color="red" title="Fork failed">
+          {error ?? endpointsError?.message}
+        </Alert>
+      )}
+      <Group justify="flex-end">
+        <Button
+          size="xs"
+          disabled={selected.length === 0}
+          loading={firing}
+          onClick={() => void fire()}
+        >
+          Fork ⑂
+        </Button>
+      </Group>
+        </Stack>
   );
 }
