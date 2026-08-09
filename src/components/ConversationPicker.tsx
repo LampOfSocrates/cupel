@@ -109,6 +109,10 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
   );
 
   useEffect(() => {
+    // KEPT: `load` flips `loading` true synchronously as it issues the request,
+    // which is the point — the list is paged and APPENDS (Load more), so it
+    // cannot be a useAsync read and the flag cannot be derived from the items.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(1, false);
   }, [load]);
 

@@ -79,6 +79,12 @@ export function useAsync<T>(fn: (() => Promise<T>) | null, deps: unknown[]): Asy
   }, []);
 
   useEffect(() => {
+    // KEPT, with the reset it names: this hook IS the fetch seam every call
+    // site delegates to, and `loading` has to be true from the moment the
+    // request goes out — a request in flight while the state still reads `ok`
+    // with the PREVIOUS deps' data is the stale render the seq guard exists to
+    // prevent. There is nothing to derive from: the data lives on the server.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     run(true);
     return () => {
       // The rule's advice (copy the ref into a local first) is exactly wrong

@@ -107,6 +107,11 @@ export function SettingsPage() {
   // "on select" (feature-spec.md:159): every target change re-checks — the
   // mount run covers both first visit and the post-switch remount.
   useEffect(() => {
+    // KEPT: an imperative probe of an external system, not a read of one. The
+    // `checking` state has to be entered at the moment the request is issued
+    // because the result it leads to is timed from there (`latencyMs` on BOTH
+    // the ok and the fail branch — which is also why this is not a useAsync).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void runCheck();
   }, [runCheck, target]);
 

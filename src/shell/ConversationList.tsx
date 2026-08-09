@@ -75,6 +75,11 @@ export function ConversationList({ tree }: Props) {
   // conversationsVersion: chat sends bump it so new/updated conversations
   // appear without a manual reload.
   useEffect(() => {
+    // KEPT: same shape as ConversationPicker — a paged list that APPENDS on
+    // Load more, so `load` owns both the fetch and the `loading` flag it flips
+    // as the request goes out. The expanded fork cache is cleared alongside it
+    // because it is keyed by the conversation ids this fetch is replacing.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForks({});
     void load(1, false);
   }, [load, conversationsVersion]);

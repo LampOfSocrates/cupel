@@ -131,6 +131,12 @@ export function Composer({
   };
 
   useEffect(() => {
+    // KEPT: this releases object URLs — an external resource — at the moment
+    // the page says it left the transcript the chips were picked for, and the
+    // empty list is the visible half of that release. Keying the whole Composer
+    // on `resetToken` instead would also discard `input`, which the page
+    // deliberately carries across a conversation switch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPending((prev) => {
       if (prev.length === 0) return prev;
       for (const p of prev) if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);

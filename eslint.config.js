@@ -31,18 +31,12 @@ export default [
   {
     ...reactHooks.configs.flat["recommended-latest"],
     files: ["src/**/*.{ts,tsx}"],
-    rules: {
-      ...reactHooks.configs.flat["recommended-latest"].rules,
-      // OFF, deliberately and temporarily: 20 pre-existing sites across 18
-      // files (App, ChatPage ×2, EvalPage ×2, InspectorPage ×2, CasebooksPage,
-      // EditorPage, EvaluationPage, SettingsPage, TracePage, CompareView,
-      // Composer, ConversationList, ConversationPicker, CollectModal,
-      // EvalImportModal, ForkModal, useAsync). Every one is a
-      // "you-might-not-need-an-effect" reshape, not a defect the rule caught,
-      // and reshaping 18 files is its own task — not #10, which exists to make
-      // lint run at all. Turn this back on when that task is filed and done.
-      "react-hooks/set-state-in-effect": "off",
-    },
+    // No rule overrides: `recommended-latest` is taken whole, including
+    // set-state-in-effect. It was globally off when lint first landed (21 sites
+    // across 18 files, deferred as their own task). Twelve of those were
+    // reshaped away — derived during render, or reset by remounting a keyed
+    // child — and the nine that remain are external-system seams carrying an
+    // individual eslint-disable-next-line with the reason at the site.
   },
   {
     files: ["src/**/*.{ts,tsx}"],

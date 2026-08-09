@@ -131,6 +131,11 @@ export function EvalPage() {
     const missing = bucketCaseIds.filter((id) => !cases[id]);
     if (missing.length === 0) return;
     let cancelled = false;
+    // KEPT: an incremental cache FILL, same shape as CasebooksPage — one GET
+    // per case id the cache is missing, merged in. A failed case is caught to
+    // null and never lands, so "is anything still missing" is not an equivalent
+    // derivation of the flag; it would never clear.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingCases(true);
     Promise.all(missing.map((id) => api.evalCase(id).catch(() => null)))
       .then((loaded) => {

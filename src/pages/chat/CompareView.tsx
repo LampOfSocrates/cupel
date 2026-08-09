@@ -153,6 +153,12 @@ export function CompareView({
   }, [tree, runId]);
 
   useEffect(() => {
+    // KEPT, and a FALSE POSITIVE at that: `loadRun` awaits the GET before it
+    // touches state, so nothing is set synchronously in this effect body — the
+    // rule is following the call into the async function. Not a useAsync read
+    // either: `send` clears the run to null before a new one exists, which the
+    // hook's setData deliberately cannot do.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRun();
   }, [loadRun]);
 

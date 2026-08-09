@@ -150,6 +150,15 @@ export function ChatPage() {
   // History via GET conversation on route entry (openapi.yaml:387); streaming
   // appends to it.
   useEffect(() => {
+    // KEPT, and the one site here that must not be reshaped. This is not a
+    // reset that happens to fetch: it ABORTS a live SSE stream, decides via
+    // attachedConvRef whether the transcript already on screen was handed to us
+    // by our own send (in which case the running stream and its locally
+    // appended turns are kept and nothing is refetched), and only then reloads.
+    // `turns` is stream-mutated afterwards, so it is not a useAsync read; and
+    // remounting the page on conversationId would kill the stream the send path
+    // exists to keep alive across the post-send navigate.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadError(null);
     // Our own send navigated here (task event attached first) — keep the
     // in-flight stream and local turns; no refetch.

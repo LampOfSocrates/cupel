@@ -235,6 +235,12 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
     const missing = wanted.filter((key) => !conversations[key]);
     if (missing.length === 0) return;
     let cancelled = false;
+    // KEPT: an incremental cache FILL, not a data/loading/error read — the
+    // effect fetches only the ids the cache is missing and merges them in. The
+    // flag cannot be derived as "something is still missing" either: a
+    // conversation whose GET fails is caught to null and never lands, so a
+    // derived flag would stay true forever.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingRefs(true);
     Promise.all(
       missing.map((key) => {
