@@ -78,6 +78,27 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    `openapi.yaml` are maintained (item 4, stage A). Re-pointing the other direction is its own
    task. **(vi)** `docs/plan-adopter-onboarding.md:26` still lists `casebooks` as a family;
    stage E owns the family list.
+   Stage C DONE 2026-08-09 — **`Judgment` is a polymorphic subject + scorer.** The four
+   mutually-exclusive nullable keys and the `type` enum are GONE, not aliased:
+   `{id, subject{kind,id}, scorer{kind,ref,version,model}, evaluation_id?, score, reasoning?,
+   created_at}`. `subject.kind` is `case|turn` and `scorer.kind` is `llm|human` — declared
+   tight, only what is produced today; `check` and a pairwise `evaluation` subject are
+   additive enum values, which is the whole point of the reshape. `evaluation_id` stays a
+   top-level SCOPE (not a subject) because one case scored inside two evaluations must not
+   collide — `?evaluation_id=`, the summary and `Result.latest_score` all key on the pair.
+   A thumb's scorer is a bare `{kind: human}` with ref/version/model null; no rubric is
+   invented for a person. `EvaluationScoreSummary.rubrics` became `.scorers`, grouping by
+   scorer identity through the same `Scorer` schema, so a deterministic check aggregates
+   with no further bump. `GET /eval/judgments` swaps `case_id`/`turn_id`/`rubric_id` for
+   `subject_kind`/`subject_id`/`scorer_ref`; `conversation_id` survives as a query filter
+   and a SQLite index only, never a wire field. SQLite rebuilt by a fifth presence-guarded
+   migration (`_migrate_judgment_subject_scorer`, ordered after the run→evaluation rename
+   it depends on), covered by its own pytest. Found during stage C, **not fixed**:
+   **(vii)** stage B's wrinkle is UNCHANGED — a judgment against a set version can still
+   name a case that is not a member of that version, because judging resolves reference
+   items without rewriting membership. Nothing about the reshape makes it better or worse;
+   the fix is a `set_id`/`set_version` scope pair beside `evaluation_id`, and it needs
+   eval-set design, not judgment design.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

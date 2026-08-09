@@ -143,6 +143,23 @@ Tranche 2 (the wire rename, the Casebook/EvalSet merge, `Judgment.subject`/`scor
 `Evaluation.status`) is **folded into P3-T00** — see `TASKS.md`. It is not a separate task and
 must not be a separate contract bump.
 
+`Judgment.subject`/`scorer` **landed 2026-08-09** (item 7 stage C). Three decisions recorded
+so they are not re-litigated: (a) **`evaluation_id` stays a top-level scope field**, not a
+subject — an LLM judgment of a grid cell judges the CASE, and folding the evaluation into
+`subject` would make one case scored inside two evaluations collide, breaking
+`?evaluation_id=`, the score summary and `Result.latest_score` at once; (b) the enums are
+declared **tight** — `subject.kind` is `case|turn` and `scorer.kind` is `llm|human`, because
+nothing produces `result`, `evaluation` or `check` today and an undeclared value is dead
+contract surface `cupel-ready` would report as a gap; adding one later is an enum value, not
+a reshape; (c) `conversation_id` survives as a **query filter and a physical index only** —
+it is no longer a `Judgment` field, because the chat view needs one request per conversation
+but never reads the value back. **Still open** (inherited from stage B, unchanged by the
+reshape): a judgment made against an eval-set version names a case that may not be a member
+of that version, because judging resolves reference items into cases without rewriting
+membership. The reshape neither fixes nor worsens it — but it does give the fix an obvious
+home, a `set_id`/`set_version` scope pair beside `evaluation_id`. Needs eval-set design, not
+judgment design.
+
 **Blast radius, measured 2026-08-09:** `run_id` — 151 in `openapi.yaml` + `mock/`, 142 in
 `src/`, 28 in `e2e/`; 48 files total. But only ~5 user-visible strings and 2 routes. That
 asymmetry is why the concept is nearly free to kill today and the identifier is not.

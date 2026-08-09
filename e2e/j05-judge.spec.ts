@@ -58,6 +58,46 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
     });
     await expect(page.getByTestId("evaluation-summary")).toBeVisible();
     await api.expectCalled("GET /eval/evaluations/{evaluation}/summary");
+
+    // The wire shape an LLM judge writes, read back off the REAL mock. Every
+    // judge path converges on a CASE subject; the evaluation rides alongside
+    // as the batch scope, and the summary aggregates by scorer identity —
+    // the same Scorer schema the judgments carry (openapi.yaml Scorer).
+    const evaluationId = new URL(page.url()).pathname.split("/").pop();
+    const listed = await request.get(
+      `${API_ORIGIN}/eval/judgments?evaluation_id=${evaluationId}&page_size=200`,
+    );
+    expect(listed.ok(), await listed.text()).toBeTruthy();
+    const history = (await listed.json()) as {
+      subject: { kind: string; id: string };
+      scorer: { kind: string; ref: string; version: number; model: string };
+      evaluation_id: string;
+    }[];
+    expect(history.length).toBeGreaterThan(0);
+    for (const j of history) {
+      expect(j.subject.kind).toBe("case");
+      expect(j.subject.id).toBeTruthy();
+      expect(j.scorer.kind).toBe("llm");
+      expect(j.scorer.ref).toBe(rubric.id);
+      expect(j.scorer.version).toBe(rubric.version);
+      expect(j.scorer.model).toBe("claude-sonnet-5");
+      expect(j.evaluation_id).toBe(evaluationId);
+    }
+    const summaryRes = await request.get(
+      `${API_ORIGIN}/eval/evaluations/${evaluationId}/summary`,
+    );
+    expect(summaryRes.ok(), await summaryRes.text()).toBeTruthy();
+    const summary = (await summaryRes.json()) as {
+      scorers: { scorer: { kind: string; ref: string; version: number }; count: number }[];
+    };
+    expect(summary.scorers).toHaveLength(1);
+    expect(summary.scorers[0].scorer).toEqual({
+      kind: "llm",
+      ref: rubric.id,
+      version: rubric.version,
+      model: null, // the judge model is not part of the group key
+    });
+    expect(summary.scorers[0].count).toBe(history.length);
   });
 
   await step("judgment drawer: reasoning and append-only history", async () => {

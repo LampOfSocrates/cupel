@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/api";
+import { API_ORIGIN, expect, test } from "./helpers/api";
 import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 2 (feature-spec.md:203):
@@ -18,6 +18,7 @@ test.use({ permissions: ["clipboard-write", "clipboard-read"] });
 
 test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy → link → stop generation", async ({
   page,
+  request,
   api,
 }) => {
   const step = filmed(page, "Journey 2", 8);
@@ -87,6 +88,31 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
       "true",
     );
     await page.getByTestId("feedback-comment-box").getByLabel("Close comment box").click();
+
+    // The wire shape a thumb writes, read back off the REAL mock — the one
+    // layer that sees the server's own JSON rather than a fixture. A thumb
+    // subjects the TURN and its scorer is a bare {kind: human}: no rubric is
+    // invented to stand in for a person (openapi.yaml Scorer).
+    const conversationId = new URL(page.url()).pathname.split("/").pop();
+    const res = await request.get(
+      `${API_ORIGIN}/eval/judgments?conversation_id=${conversationId}`,
+    );
+    expect(res.ok(), await res.text()).toBeTruthy();
+    const history = (await res.json()) as {
+      subject: { kind: string; id: string };
+      scorer: { kind: string; ref: string | null; version: number | null; model: string | null };
+      evaluation_id: string | null;
+      score: number;
+    }[];
+    // Append-only: 👍, then the comment re-rate, then 👎 — newest first.
+    expect(history.length).toBe(3);
+    expect(history.map((j) => j.score)).toEqual([0, 1, 1]);
+    for (const j of history) {
+      expect(j.subject.kind).toBe("turn");
+      expect(j.scorer).toEqual({ kind: "human", ref: null, version: null, model: null });
+      expect(j.evaluation_id).toBeNull();
+    }
+    expect(new Set(history.map((j) => j.subject.id)).size).toBe(1);
   });
 
   await step("copy the reply as markdown", async () => {
