@@ -78,7 +78,6 @@ export function TracePage() {
   const { tree } = useApp();
   const { turnId = "" } = useParams();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
     data: trace,
     error,
@@ -86,10 +85,14 @@ export function TracePage() {
     setData: mergeTrace,
   } = useAsync(() => api.trace(tree, turnId), [tree, turnId]);
 
-  // A selection belongs to the trace it was made in.
-  useEffect(() => {
-    setSelectedId(null);
-  }, [tree, turnId]);
+  // A selection belongs to the trace it was made in — so it is stored TAGGED
+  // with that trace's key and read back only under the same one. Another
+  // tree/turn reads as no selection during render, with no reset effect.
+  const traceKey = `${tree}/${turnId}`;
+  const [pick, setPick] = useState<{ key: string; id: string } | null>(null);
+  const selectedId = pick?.key === traceKey ? pick.id : null;
+  const setSelectedId = (id: string | null) =>
+    setPick(id === null ? null : { key: traceKey, id });
 
   const hasRunning = trace?.spans.some((s) => s.status === "running") ?? false;
 

@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { Alert, Loader, Stack, Title } from "@mantine/core";
 import { api } from "../api/client";
-import type { InstructionHistory } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { InstructionEditor } from "./editor/InstructionEditor";
 
@@ -61,28 +60,13 @@ import { InstructionEditor } from "./editor/InstructionEditor";
 export function EditorPage() {
   const { tree } = useApp();
   const { agentId } = useParams();
-  const [history, setHistory] = useState<InstructionHistory | null>(null);
   // Load errors only. A failed WRITE is the body's own inline alert — it must
-  // never replace the page, because the page is where the draft is (#7).
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!agentId) return;
-    let cancelled = false;
-    setHistory(null);
-    setError(null);
-    api
-      .instructions(tree, agentId)
-      .then((h) => {
-        if (!cancelled) setHistory(h);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tree, agentId]);
+  // never replace the page, because the page is where the draft is (#7); the
+  // body owns its own error slot and never touches this one.
+  const { data: history, error } = useAsync(
+    agentId ? () => api.instructions(tree, agentId) : null,
+    [tree, agentId],
+  );
 
   if (!agentId) return null;
 
@@ -91,7 +75,7 @@ export function EditorPage() {
       <Stack gap="sm">
         <Title order={3}>Instruction editor — {agentId}</Title>
         <Alert color="red" title="Instruction editor error">
-          {error}
+          {error.message}
         </Alert>
       </Stack>
     );

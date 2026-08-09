@@ -95,8 +95,13 @@ export function InspectorPage() {
     return next;
   }, [params]);
   const page = Math.max(1, Number(params.get("page") ?? "1") || 1);
-  const [draft, setDraft] = useState<Filters>(applied);
-  useEffect(() => setDraft(applied), [applied]);
+  // The buffer is TAGGED with the `applied` object it was typed against, so a
+  // new URL drops straight back to that URL's own values during render — same
+  // reset the old `useEffect(() => setDraft(applied), [applied])` did, one
+  // render earlier and without the intermediate stale paint.
+  const [edited, setEdited] = useState<{ base: Filters; value: Filters } | null>(null);
+  const draft = edited?.base === applied ? edited.value : applied;
+  const setDraft = (value: Filters) => setEdited({ base: applied, value });
 
   const [pickedId, setPickedId] = useState<string | null>(null);
   const { data: pageData, error } = useAsync(
@@ -131,18 +136,24 @@ export function InspectorPage() {
   const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1;
 
   // ------------------------------------------------------- inline reader
-  const [focusedTurnId, setFocusedTurnId] = useState<string | null>(null);
   const { data: transcript, error: readerError } = useAsync(
     selected ? () => api.conversation(selected.tree_id, selected.id) : null,
     [selected],
   );
 
-  // Open on the newest answer; the reader's keyboard nav moves it from there.
-  useEffect(() => {
+  // Open on the newest answer; clicking a turn moves it from there. The pick is
+  // TAGGED with the transcript it was made in, so any other transcript falls
+  // back to the default during render — the same reset the old
+  // `useEffect(…, [transcript])` did, without the setState.
+  const [focusPick, setFocusPick] = useState<{ of: unknown; turnId: string } | null>(null);
+  const defaultFocusedTurnId = useMemo(() => {
     const turns = transcript?.turns ?? [];
     const lastAssistant = [...turns].reverse().find((t) => t.role === "assistant");
-    setFocusedTurnId(lastAssistant?.id ?? turns[turns.length - 1]?.id ?? null);
+    return lastAssistant?.id ?? turns[turns.length - 1]?.id ?? null;
   }, [transcript]);
+  const focusedTurnId =
+    focusPick !== null && focusPick.of === transcript ? focusPick.turnId : defaultFocusedTurnId;
+  const setFocusedTurnId = (turnId: string) => setFocusPick({ of: transcript, turnId });
 
   // ------------------------------------------------------- ⊞ collect + keys
   const [collectTarget, setCollectTarget] = useState<CasebookItemCreate | null>(null);

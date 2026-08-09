@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { api, ApiError } from "./api/client";
@@ -80,15 +80,16 @@ export function App() {
   // GET /models fetched lazily on first settings-menu open, once per
   // session (feature-spec.md:122). Ref guards a duplicate in-flight fetch;
   // cleared on failure so a later open can retry.
-  const [models, setModels] = useState<Model[] | null>(null);
-  const modelsRequested = useRef(false);
-  const ensureModels = useCallback(() => {
-    if (modelsRequested.current) return;
-    modelsRequested.current = true;
-    api.models().then(setModels).catch(() => {
-      modelsRequested.current = false;
-    });
-  }, []);
+  //
+  // Models are per-backend (GET {base}/models), so the cache is TAGGED with the
+  // backend identity it was fetched under and read back only while that tag
+  // still matches — a switch invalidates it during render instead of through a
+  // reset effect. `backendKey` is declared below, next to the boot fetch that
+  // defines what "the current backend" means.
+  const [modelsCache, setModelsCache] = useState<{ key: unknown; models: Model[] } | null>(
+    null,
+  );
+  const modelsRequested = useRef<unknown>(null);
 
   // Live switch: the boot fetch is KEYED ON THE ACTIVE TARGET. On
   // switch (Settings → Backend), me/trees reset to null → the loader renders
@@ -120,12 +121,27 @@ export function App() {
     if (me !== null) setBootNonce((n) => n + 1);
   });
   useEffect(() => onAuthRequired(rebootIfBooted), []);
-  useEffect(() => {
-    // Models are per-backend (GET {base}/models) — drop the session cache so
-    // the next settings-menu open refetches against the new target.
-    setModels(null);
-    modelsRequested.current = false;
-  }, [target, authToken, bootNonce]);
+
+  // One identity for "the backend everything downstream is talking to" — a new
+  // array whenever any of the three change (target compares by reference, so a
+  // custom-URL edit counts even though the id did not move). The models cache
+  // above is read back only while its tag is still this array, which makes the
+  // switch invalidate it during render.
+  const backendKey = useMemo(
+    () => [target, authToken, bootNonce] as const,
+    [target, authToken, bootNonce],
+  );
+  const models = modelsCache?.key === backendKey ? modelsCache.models : null;
+  const ensureModels = useCallback(() => {
+    if (modelsRequested.current === backendKey) return;
+    modelsRequested.current = backendKey;
+    api
+      .models()
+      .then((list) => setModelsCache({ key: backendKey, models: list }))
+      .catch(() => {
+        if (modelsRequested.current === backendKey) modelsRequested.current = null;
+      });
+  }, [backendKey]);
 
   if (error instanceof ApiError && error.status === 401) {
     // Boot 401 (auth-on backend, no/expired token) → the login

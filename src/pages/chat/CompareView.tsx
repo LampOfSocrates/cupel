@@ -111,7 +111,16 @@ export function CompareView({
     [tree],
   );
   const endpoints = useMemo(() => endpointData ?? [], [endpointData]);
-  const [selected, setSelected] = useState<string[]>([]);
+  // Arrive configured: the usual A/B is "everything the tree deploys to",
+  // trimmed to the column cap. Derived, not seeded by an effect — an untouched
+  // picker simply READS as that default, and any ad-hoc selection (including
+  // clearing it) is stored and wins from then on.
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const selected = useMemo(
+    () => picked ?? endpoints.slice(0, MAX_COMPARE_COLUMNS - 1).map((e) => e.id),
+    [picked, endpoints],
+  );
+  const setSelected = setPicked;
   const [presetId, setPresetId] = useState<string | null>(null);
   // The shared user turn, rendered above the columns (plan §3).
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -132,17 +141,6 @@ export function CompareView({
     },
     [],
   );
-
-  // Arrive configured: the usual A/B is "everything the tree deploys to",
-  // trimmed to the column cap. Ad-hoc selection still overrides it.
-  useEffect(() => {
-    if (!endpointData) return;
-    setSelected((prev) =>
-      prev.length > 0
-        ? prev
-        : endpointData.slice(0, MAX_COMPARE_COLUMNS - 1).map((e) => e.id),
-    );
-  }, [endpointData]);
 
   const loadRun = useCallback(async () => {
     if (!runId) return;

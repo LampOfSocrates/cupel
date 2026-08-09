@@ -13,6 +13,7 @@ import type {
 import { ForkModal } from "../components";
 import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 import { ChatSettingsMenu } from "./chat/ChatSettingsMenu";
@@ -68,9 +69,6 @@ export function ChatPage() {
   // agent_id seeds the fork modal's optional version select.
   const [lineage, setLineage] = useState<Lineage | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
-  // Parent link state: title when it loads, "deleted" on 404 — "forks keep
-  // their lineage (the parent link renders as deleted)" (openapi.yaml:441-443).
-  const [parent, setParent] = useState<{ title: string } | "deleted" | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
   // ⊞ — the turn a collect dialog is open for (CasebookItemCreate, the POST
@@ -221,24 +219,22 @@ export function ChatPage() {
 
   // Resolve the parent's title for the lineage banner. Delete is a tombstone
   // (openapi.yaml:438-443) — a 404 here means the parent was deleted; the link
-  // renders disabled as "parent deleted", never broken.
+  // renders disabled as "parent deleted", never broken. Any OTHER failure is
+  // swallowed to `null`, which renders exactly as "still loading": a banner
+  // that cannot name its parent is not worth an error state.
   const parentId = lineage?.parent_conversation_id;
-  useEffect(() => {
-    setParent(null);
-    if (!parentId) return;
-    let cancelled = false;
-    api
-      .conversation(tree, parentId)
-      .then((data) => {
-        if (!cancelled) setParent({ title: data.title });
-      })
-      .catch((e: unknown) => {
-        if (!cancelled && e instanceof ApiError && e.status === 404) setParent("deleted");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tree, parentId]);
+  const { data: parent } = useAsync<{ title: string } | "deleted" | null>(
+    parentId
+      ? () =>
+          api
+            .conversation(tree, parentId)
+            .then((data) => ({ title: data.title }) as { title: string } | "deleted" | null)
+            .catch((e: unknown) =>
+              e instanceof ApiError && e.status === 404 ? "deleted" : null,
+            )
+      : null,
+    [tree, parentId],
+  );
 
   const streaming = stream !== null;
 

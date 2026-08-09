@@ -566,18 +566,17 @@ function SetsTab({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [membership, setMembership] = useState<string[]>([]);
   const [savingMembership, setSavingMembership] = useState(false);
-  const [rubricId, setRubricId] = useState<string | null>(null);
+  const [pickedRubricId, setRubricId] = useState<string | null>(null);
   const [judgeModel, setJudgeModel] = useState<string | null>(null);
   const [judgeNotice, setJudgeNotice] = useState<string | null>(null);
 
   const selected = sets?.find((s) => s.id === selectedId) ?? null;
 
   // Default to the first rubric once they load, same as the case editor —
-  // "Judge set" is one click from a picked set, not three.
-  const firstRubricId = rubricOptions[0]?.value;
-  useEffect(() => {
-    setRubricId((id) => id ?? firstRubricId ?? null);
-  }, [firstRubricId]);
+  // "Judge set" is one click from a picked set, not three. Derived, not stored:
+  // an unpicked rubric simply reads as the first option, so the default appears
+  // the moment the options do rather than one effect-render later.
+  const rubricId = pickedRubricId ?? rubricOptions[0]?.value ?? null;
 
   function select(s: EvalSet) {
     setSelectedId(s.id);
