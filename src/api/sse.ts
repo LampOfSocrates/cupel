@@ -1,7 +1,7 @@
 // Minimal SSE frame parser for POST-based streams — EventSource can't POST,
 // so POST /agenttrees/{tree}/chat is read off a fetch() ReadableStream
 // (openapi.yaml:466-476: "stream=true → 200 text/event-stream with events:
-// task/token/done/error"). Reused by the task queue stream in P1-T08.
+// task/token/done/error"). Reused by the task queue stream.
 //
 // Implements the SSE wire format subset the contract uses:
 // - frames are `event:` + `data:` lines terminated by a blank line

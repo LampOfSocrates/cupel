@@ -24,7 +24,7 @@ import { TurnSourceModal } from "../components/TurnSourceModal";
 import { product } from "../lib/product";
 import type { EvalCase, EvalSet, Judgment, Rubric } from "../api/types";
 
-// P2-T12 Eval workbench (sketch 10) — "Hand-craft expected answers and have
+// Eval workbench (sketch 10) — "Hand-craft expected answers and have
 // the judge score AI against them — type/paste references, pull them from real
 // turns or forks, or bulk-import a spreadsheet of input/expected pairs"
 // (cupel-phases.md:80). The workbench "manage[s] the eval domain directly:

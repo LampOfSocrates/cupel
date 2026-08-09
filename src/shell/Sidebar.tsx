@@ -9,12 +9,12 @@ import { ConversationList } from "./ConversationList";
 
 // Nav entries: Chat carries the recent list (feature-spec.md:5 "Expanded
 // sidebar shows recent conversations under Chat"); Queue carries the pending
-// badge + running spinner (feature-spec.md:111, P1-T08).
-// P2-T12 adds Eval — the workbench is described as "a tab inside Runs"
+// badge + running spinner (feature-spec.md:111).
+// Eval — the workbench is described as "a tab inside Runs"
 // (feature-spec.md:63), so it sits directly under Runs and its presets, and
 // carries no tree in its route (eval cases are global, feature-spec.md:115).
-// P2-T12a adds Casebooks (next to Eval — a casebook's whole point is becoming
-// an eval set or a replay suite) and Inspector, which is ROLE-gated: it renders
+// Casebooks sits next to Eval — a casebook's whole point is becoming
+// an eval set or a replay suite. Inspector is ROLE-gated: it renders
 // only when /me.roles includes `inspect` (openapi.yaml:308 "Requires the
 // inspect role"), never on the auth mode — an off-mode backend simply answers
 // /me with the dev user's roles (feature-spec.md:17 "default admin = all trees,
@@ -29,16 +29,16 @@ const NAV = [
   { to: "/agents", label: "Agents" },
 ];
 
-// P1-T15 — presets nest under Runs (feature-spec.md:4 "Menus: Chat, Runs
+// Presets nest under Runs (feature-spec.md:4 "Menus: Chat, Runs
 // (Tune / Evaluate presets), Settings"; :102-103). They are LINKS into the
 // same Runs page, not routes of their own — the preset travels as router
-// state, the same handoff mechanism as Test-in-Runs (T20b).
+// state, the same handoff mechanism as Test-in-Runs.
 const PRESETS = [
   { preset: "tune", label: "Tune" },
   { preset: "evaluate", label: "Evaluate" },
 ] as const;
 
-// P1-T08 badge on the Queue entry: "Sidebar badge: pending count; subtle
+// Badge on the Queue entry: "Sidebar badge: pending count; subtle
 // spinner while anything is running" (feature-spec.md:111) — pending =
 // queued + running parents, fed by QueueProvider's app-wide stream.
 function QueueIndicator() {
@@ -60,7 +60,7 @@ export function Sidebar() {
   const { tree, me } = useApp();
   const navigate = useNavigate();
 
-  // P2-T07 session row: user name from /me; "Sign out" shows EXACTLY when a
+  // Session row: user name from /me; "Sign out" shows EXACTLY when a
   // login token exists for the active target (the no-branch rule from the
   // task: an off-mode backend issues no token on boot, so the dev user shows
   // without a sign-out — the token's presence is the signal, never the
@@ -82,8 +82,8 @@ export function Sidebar() {
     <>
       <AppShell.Section>
         <Stack gap={4}>
-          {/* New chat button at top (feature-spec.md:5); posting the first
-              message is P1-T02 — for now it opens the empty chat page. */}
+          {/* New chat button at top (feature-spec.md:5) — opens the empty
+              chat page. */}
           <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
             + New chat
           </Button>
@@ -117,7 +117,7 @@ export function Sidebar() {
       <AppShell.Section grow style={{ overflowY: "auto" }} mt={4}>
         <ConversationList tree={tree} />
       </AppShell.Section>
-      {/* P2-T17 — Settings pinned at the bottom, below the recent list
+      {/* Settings pinned at the bottom, below the recent list
           (feature-spec.md:4 "Menus: Chat, Runs (Tune / Evaluate presets),
           Settings"). First section: Settings → Backend (sketch 09). */}
       <AppShell.Section>

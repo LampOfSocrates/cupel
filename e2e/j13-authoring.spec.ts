@@ -8,8 +8,8 @@ import { filmed } from "./helpers/hud";
 // P4-REPO). NOT APPLICABLE as written.
 //
 // Its free-tier equivalent — the authoring loop this build actually ships — is
-// the eval workbench (P2-T12) plus Inspector → casebook → eval set → replay
-// (P2-T12a): notice something in real traffic, turn it into cases, and make it
+// the eval workbench plus Inspector → casebook → eval set → replay:
+// notice something in real traffic, turn it into cases, and make it
 // a regression suite. Endpoint tags (feature-spec.md:235, 241-242, sketch 10):
 //   POST/PUT /eval/rubrics · POST/PUT /eval/cases · POST/PUT /eval/sets
 //   POST /eval/cases/import · POST /eval/judge

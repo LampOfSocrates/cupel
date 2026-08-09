@@ -93,7 +93,7 @@ export const mockSnapshots: Snapshot[] = []; // append-only — nothing deletes
 // GET/PUT .../last-selection (openapi.yaml:295-332) — "Last-used conversation
 // selection for this agent"; GET answers "empty items = first-time testing"
 // (:311). Per-agent state (feature-spec.md:87 "remembered per agent") + PUT
-// capture for exact-body asserts (P1-T20b).
+// capture for exact-body asserts.
 export const mockLastSelections: Record<string, SelectionItem[]> = {};
 export const lastSelectionPuts: Array<{ agentId: string; items: SelectionItem[] }> = [];
 

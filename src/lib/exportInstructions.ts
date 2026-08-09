@@ -1,5 +1,5 @@
-// P1-TEXPORT — free-tier "download version history to file" (user decision
-// 2026-08-05: file export instead of repo integration; P2-T20 repo/PR is
+// Free-tier "download version history to file" (user decision
+// 2026-08-05: file export instead of repo integration; repo/PR is
 // pro-tier). Pure client-side serializers over InstructionHistory exactly as
 // the editor already fetched it (GET .../instructions, openapi.yaml:221-239) —
 // no contract change, no new endpoints.

@@ -13,7 +13,7 @@ import {
 import { EditorPage } from "./EditorPage";
 import { RunsPage } from "./RunsPage";
 
-// P1-T10b contract under test:
+// Contract under test:
 // - GET .../instructions → live pointer + full ascending history
 //   (openapi.yaml:221-239, InstructionHistory :1194-1204).
 // - PUT .../instructions → 201 new version, now live — "Save instructions as
@@ -54,7 +54,7 @@ describe("EditorPage", () => {
     expect(screen.getByText("v4 · draft")).toBeInTheDocument();
     expect(screen.queryByText("unsaved changes")).not.toBeInTheDocument();
     // save disabled until dirty; Test in Runs always available — "drafts are
-    // testable without saving" (feature-spec.md:86, P1-T20b)
+    // testable without saving" (feature-spec.md:86)
     expect(screen.getByRole("button", { name: "Save as v4" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test in Runs ▸" })).toBeEnabled();
   });
@@ -197,7 +197,7 @@ describe("EditorPage", () => {
     expect(screen.getByText("v2 · draft")).toBeInTheDocument();
   });
 
-  // P1-T20b — "Test an instruction change in one click: 'Test in Runs'
+  // "Test an instruction change in one click: 'Test in Runs'
   // snapshots your draft and replays your usual conversations against it —
   // using the editor → Runs flow (sketches 06 → 03)" (cupel-phases.md:18).
   // Real RunsPage mounted at /runs so the router-state handoff is exercised
@@ -252,7 +252,7 @@ describe("EditorPage", () => {
     });
   });
 
-  // P1-TEXPORT — free-tier export: pure client-side Blob download of the
+  // Free-tier export: pure client-side Blob download of the
   // already-fetched history; no request leaves the page (MSW would error on
   // any unhandled one — contract untouched).
   it("Download → JSON triggers a client-side download with the right filename", async () => {

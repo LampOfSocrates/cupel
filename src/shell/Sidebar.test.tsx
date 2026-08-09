@@ -13,7 +13,7 @@ import { Shell } from "./Shell";
 // (openapi.yaml:747-775 "polling fallback + sidebar badge").
 
 // Probe exposing where a nav click landed — pathname + router state, the
-// preset handoff channel (P1-T15).
+// preset handoff channel.
 function LocationProbe() {
   const loc = useLocation();
   return (
@@ -68,10 +68,10 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// P1-T15 — presets nested under Runs (feature-spec.md:4 "Runs (Tune /
+// Presets nested under Runs (feature-spec.md:4 "Runs (Tune /
 // Evaluate presets)"; :102-103). They route to /runs carrying {preset} as
-// router state — the same handoff channel as Test-in-Runs (T20b).
-// P2-T17 — Settings entry pinned below the recent list (feature-spec.md:4
+// router state — the same handoff channel as Test-in-Runs.
+// Settings entry pinned below the recent list (feature-spec.md:4
 // "Menus: Chat, Runs (Tune / Evaluate presets), Settings").
 describe("Sidebar Settings entry", () => {
   it("routes to /settings", async () => {
@@ -82,7 +82,7 @@ describe("Sidebar Settings entry", () => {
   });
 });
 
-// P2-T07 session row — user name from /me; "Sign out" shows EXACTLY when a
+// Session row — user name from /me; "Sign out" shows EXACTLY when a
 // login token exists for the active target (no auth-mode branch: an off-mode
 // backend issues no token, so the dev user shows without sign-out).
 describe("Sidebar session row (P2-T07)", () => {

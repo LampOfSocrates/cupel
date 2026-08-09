@@ -1,7 +1,7 @@
 import { Alert } from "@mantine/core";
 import { useApp } from "../AppContext";
 
-// P2-T07c read-only banner — "existing conversations stay READABLE (read-only
+// Read-only banner — "existing conversations stay READABLE (read-only
 // banner) so history and traces aren't lost" (feature-spec.md:20;
 // openapi.yaml:288-291). Rendered by the pages that CREATE work (Chat, Runs):
 // every write there answers 409 tree_disabled, so the banner explains the

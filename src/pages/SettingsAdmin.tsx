@@ -18,7 +18,7 @@ import type { AdminUser, AgentTree, TreePermission } from "../api/types";
 import { useApp } from "../AppContext";
 import { product } from "../lib/product";
 
-// P2-T07b/07c — the two admin Settings sections (unsketched; derived from the
+// The two admin Settings sections (unsketched; derived from the
 // existing SettingsPage visual language per cupel-phases.md:95 — Paper blocks,
 // dense xs controls):
 // - Members (feature-spec.md:19): "user list, per-tree permission matrix

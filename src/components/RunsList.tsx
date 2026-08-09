@@ -5,7 +5,7 @@ import { STATUS_COLOR } from "./status";
 
 // Runs listing — RunSummaryItem rows (openapi.yaml:1596-1605: id, tree_id,
 // status, created_at, task_id, label). Pure render: row click and task link
-// are callbacks; navigation/fetching belongs to the pages (T11).
+// are callbacks; navigation/fetching belongs to the pages.
 
 interface Props {
   runs: RunSummaryItem[];

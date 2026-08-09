@@ -11,7 +11,7 @@ import {
 } from "../test/msw/handlers";
 import { TracePage } from "./TracePage";
 
-// Contract under test — P1-T16 trace view:
+// Contract under test — trace view:
 // - GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721): "The
 //   trace (totals + flat span list with parent links)"; header totals
 //   ("wall time, tokens in/out, cost", feature-spec.md:147) + envelope

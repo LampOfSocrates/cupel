@@ -1,7 +1,7 @@
-// P1-T18c Live-LLM BYOK key store. Hard rules (docs/deployment.md:24-27):
+// Live-LLM BYOK key store. Hard rules (docs/deployment.md:24-27):
 // "Client pastes key in UI → browser localStorage only. Sent per request:
 // X-LLM-Key + X-LLM-Model headers." localStorage is the SPECCED home for this
-// key (deployment.md overrides the P1-T05 no-persistence note, which applied
+// key (deployment.md overrides the earlier no-persistence note, which applied
 // to chat settings); it is never put in URLs and never logged.
 const KEY_STORAGE = "cupel.byok.key";
 const MODEL_STORAGE = "cupel.byok.model";

@@ -1,7 +1,6 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
 // anywhere else (feature-spec.md:158). URLs are built from the ACTIVE backend
-// target (agentic.config.ts via src/api/target.ts) — P2-CONFIG replaced the
-// old hand-edited BASE constant (src/api/base.ts, folded in here).
+// target (agentic.config.ts via src/api/target.ts).
 import { getActiveTarget } from "./target";
 import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
@@ -93,9 +92,9 @@ export class ApiError extends Error {
 
 export function buildUrl(path: string, query?: Query): string {
   // remap first (cupel-phases.md:75 — differently-named routes), then prefix
-  // the target's baseUrl. The prod target's baseUrl is "" (same-origin,
-  // P1-TDEPLOY) — relative URLs need the page origin as base; absolute
-  // baseUrl values ignore the second argument.
+  // the target's baseUrl. The prod target's baseUrl is "" (same-origin) —
+  // relative URLs need the page origin as base; absolute baseUrl values
+  // ignore the second argument.
   const { baseUrl, remap } = getActiveTarget();
   const url = new URL(baseUrl + (remap ? remap(path) : path), globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -106,7 +105,7 @@ export function buildUrl(path: string, query?: Query): string {
   return url.toString();
 }
 
-// P2-T07 central 401 handling (feature-spec.md:18 "401 anywhere → back to
+// Central 401 handling (feature-spec.md:18 "401 anywhere → back to
 // login"): every 401 clears the active target's login token and emits
 // auth-required — the router-level listener (App.tsx) navigates to
 // /login?return_to=<current path>. The one exception is POST /auth/token
@@ -128,7 +127,7 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
     clearAuthToken();
     emitAuthRequired();
   }
-  // P2-T07c central 409 surface (extends the central-401 pattern minimally):
+  // Central 409 surface (extends the central-401 pattern minimally):
   // tree_disabled means "new work blocked, history kept read-only"
   // (openapi.yaml:1974-1979) — one friendly message here, so every caller's
   // existing error rendering (chat sendError, Runs error alert, …) shows it
@@ -139,7 +138,7 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
   return new ApiError(res.status, code, message);
 }
 
-// P1-T18c: BYOK headers attach CENTRALLY here, and only on the calls whose
+// BYOK headers attach CENTRALLY here, and only on the calls whose
 // generation can go live — chat/replay/judge/models (docs/deployment.md:
 // 18-20, :26 "Sent per request: X-LLM-Key + X-LLM-Model headers"). The key
 // never appears in URLs and is never logged.
@@ -156,8 +155,8 @@ async function request<T>(
   const res = await fetch(buildUrl(path, opts.query), {
     method: opts.method ?? "GET",
     // authHeaders(): login JWT for the active target, else the static prod
-    // token for requiresToken targets — precedence documented in auth.ts
-    // (P2-T07). Attached centrally; no caller passes tokens.
+    // token for requiresToken targets — precedence documented in auth.ts.
+    // Attached centrally; no caller passes tokens.
     headers: {
       ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...authHeaders(),
@@ -180,9 +179,9 @@ export type ChatStreamEvent =
 
 // SSE events of GET /tasks/stream (openapi.yaml:789-796: "task — data: Task
 // (status change) · progress — data: TaskProgressEvent (per-unit ticks) ·
-// span — data: SpanEvent · judgment — data: JudgmentEvent"). judgment frames
-// added in T12b ("scores stream into the grid live as judging tasks finish
-// (SSE)", feature-spec.md:64); span frames added in T16 — "spans appear live
+// span — data: SpanEvent · judgment — data: JudgmentEvent"). judgment frames:
+// "scores stream into the grid live as judging tasks finish
+// (SSE)" (feature-spec.md:64); span frames: "spans appear live
 // while the turn is generating (same SSE channel as tasks)"
 // (feature-spec.md:150), consumed by the trace view's scoped subscription.
 export type TaskStreamEvent =
@@ -251,7 +250,7 @@ export const api = {
   // GET /agenttrees (openapi.yaml:115)
   agentTrees: () => request<AgentTree[]>("/agenttrees"),
 
-  // P2-T07b admin — Settings → Members / Agent trees, role-gated server-side
+  // Admin — Settings → Members / Agent trees, role-gated server-side
   // (403 Forbidden without the admin role, openapi.yaml:1966-1970).
   // GET /admin/users (openapi.yaml:169-189) — "Every user, cross-user".
   adminUsers: () => request<AdminUser[]>("/admin/users"),
@@ -284,7 +283,7 @@ export const api = {
       body: { enabled },
     }),
 
-  // P2-T12a Inspector — GET /admin/conversations (openapi.yaml:298-348):
+  // Inspector — GET /admin/conversations (openapi.yaml:298-348):
   // "Inspector — every conversation, cross-user … Requires the inspect role
   // (403 otherwise); EVERY access is audit-logged server-side". Filters are
   // the contract's own query params (:314-340); the page renders them as its
@@ -292,7 +291,7 @@ export const api = {
   adminConversations: (params: AdminConversationListParams = {}) =>
     request<AdminConversationPage>("/admin/conversations", { query: params as Query }),
 
-  // P2-T12a casebooks (openapi.yaml:1643-1830). Global, not tree-scoped
+  // Casebooks (openapi.yaml:1643-1830). Global, not tree-scoped
   // (:1654-1656) — no tree in any of these paths.
   // GET /casebooks — "All casebooks visible to the user, items included".
   casebooks: () => request<Casebook[]>("/casebooks"),
@@ -334,7 +333,7 @@ export const api = {
   // POST /casebooks/{casebookId}/replay (:1804-1830) — 202
   // CasebookReplayAccepted, "one run per tree touched, all children of a
   // single parent task". context_policy is hard-set to the contract default
-  // exactly as api.replay does (widening is P3-CTX).
+  // exactly as api.replay does (widening is future work).
   replayCasebook: (casebookId: string, body: CasebookReplayRequest) =>
     request<CasebookReplayAccepted>(`/casebooks/${casebookId}/replay`, {
       method: "POST",
@@ -435,7 +434,7 @@ export const api = {
     const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
       method: "POST",
       // llmHeaders(): BYOK X-LLM-Key/X-LLM-Model when a key is stored
-      // (P1-T18c, docs/deployment.md:26). authHeaders(): P2-T07 bearer.
+      // (docs/deployment.md:26). authHeaders(): bearer.
       headers: { "Content-Type": "application/json", ...authHeaders(), ...llmHeaders() },
       body: JSON.stringify(req),
       signal: opts.signal,
@@ -530,8 +529,8 @@ export const api = {
   // the shared parser (sse.ts works for GET too); abort the signal to
   // unsubscribe. Yields task/progress frames (see TaskStreamEvent). `onOpen`
   // fires once the response headers confirm the stream is up — QueueProvider
-  // (P1-T08) uses it to detect reconnection (an idle stream sends no frames,
-  // so frame arrival alone can't signal recovery).
+  // uses it to detect reconnection (an idle stream sends no frames, so frame
+  // arrival alone can't signal recovery).
   taskStream: async function* (
     opts: { signal?: AbortSignal; onOpen?: () => void } = {},
   ): AsyncGenerator<TaskStreamEvent, void> {

@@ -14,7 +14,7 @@ import {
   main,
 } from "../scripts/cupel-ready.mjs";
 
-// P2-READY comparator unit layer — small fixture specs, no server involved.
+// Comparator unit layer — small fixture specs, no server involved.
 // The against-the-real-mock conformance run lives in mock/tests/test_ready.py
 // (pytest fetches /openapi.json in-process, then drives the CLI).
 
@@ -260,7 +260,7 @@ describe("cupel-ready comparator", () => {
   });
 });
 
-// P2-INIT — config-from-swagger: derive an agentic.config.ts target block.
+// Config-from-swagger: derive an agentic.config.ts target block.
 describe("cupel-ready --init", () => {
   // Nabu-style fixture (cupel-phases.md:75): most routes live under
   // /nabu-service, /healthz matches without any remap.

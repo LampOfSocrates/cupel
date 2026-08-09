@@ -145,7 +145,7 @@ describe("prod auth token (feature-spec.md:161)", () => {
     expect(token).toHaveAttribute("type", "password"); // masked
     await user.type(token, "sekrit-token");
     expect(localStorage.getItem(PROD_TOKEN_KEY)).toBe("sekrit-token");
-    // P2-T07: the field now documents that it IS sent as a Bearer token,
+    // The field now documents that it IS sent as a Bearer token,
     // with the signed-in session's JWT taking precedence (auth.ts).
     expect(
       screen.getByText(/sent as a Bearer token on this target/),

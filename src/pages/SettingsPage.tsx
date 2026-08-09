@@ -32,7 +32,7 @@ import {
 import { useApp } from "../AppContext";
 import { AgentTreesSection, MembersSection } from "./SettingsAdmin";
 
-// P2-T17 — Settings → Backend (sketch 09, feature-spec.md:157-161):
+// Settings → Backend (sketch 09, feature-spec.md:157-161):
 // "Target switcher: Mock / Local / Staging / Prod presets + custom Base URL
 // field" (:158); "Health check: GET {base}/healthz on select — shows status,
 // latency, server version, and (for mock) the loaded seed" (:159, latency
@@ -55,12 +55,12 @@ type HealthState =
 // Latency/failure-injection env vars and the seed picker are Phase-2 MOCK
 // deliverables that are not built yet (cupel-phases.md:98 "failure/latency
 // injection env vars" ships with the generator work) — these controls render
-// disabled per the sketch, wired to nothing, until P2-GEN.
+// disabled per the sketch, wired to nothing.
 const GEN_TOOLTIP = "Arrives with generator controls (P2-GEN)";
 
 export function SettingsPage() {
   const target = useBackendTarget();
-  // P2-T07b/07c: the admin sections are ROLE-driven — "Admin UI (visible when
+  // The admin sections are ROLE-driven — "Admin UI (visible when
   // /me grants admin)" (feature-spec.md:19). /me is fetched once at boot and
   // lives in AppContext; nothing here knows or asks how the backend
   // authenticates (invariant: the frontend never branches on the auth mode —
@@ -209,8 +209,8 @@ export function SettingsPage() {
           </Group>
 
           {/* "Prod requires an auth token field" (feature-spec.md:161).
-              Attached as a Bearer header on requiresToken targets since
-              P2-T07 — unless a login JWT exists (auth.ts precedence). */}
+              Attached as a Bearer header on requiresToken targets —
+              unless a login JWT exists (auth.ts precedence). */}
           {selectedPreset?.requiresToken && (
             <PasswordInput
               label="Auth token"
@@ -230,7 +230,7 @@ export function SettingsPage() {
           {/* Mock options — "visible when target = Mock" (feature-spec.md:160).
               SSE streaming is REAL today (ChatPage sends stream:<flag>,
               cupel-phases.md:43); latency / failure % / seed picker await the
-              mock's injection env vars + generator control (P2-GEN). */}
+              mock's injection env vars + generator control. */}
           {target.id === "mock" && (
             <>
               <Divider my={4} />

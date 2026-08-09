@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS selections (
   agent_id TEXT PRIMARY KEY, items TEXT NOT NULL);
 
 -- ~ ADK sessions. lineage is a JSON Lineage object, present iff fork.
--- P2-T12a added user_id — the OWNING user, the cross-user dimension the
+-- user_id is the OWNING user, the cross-user dimension the
 -- Inspector filters on (AdminConversationItem.user_id, openapi.yaml:3139).
 -- Pre-existing databases gain it in Db._migrate_conversation_owner below.
 CREATE TABLE IF NOT EXISTS conversations (
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS spans (
   status TEXT NOT NULL, error TEXT,
   prompt TEXT, response TEXT, args TEXT, result TEXT);
 
--- P2-T07 seeded users (auth-on credentials, feature-spec.md:21). Part of the
+-- Seeded users (auth-on credentials, feature-spec.md:21). Part of the
 -- IF NOT EXISTS schema, which runs on EVERY Db open — pre-existing DBs gain
 -- the table additively; rows are seeded via auth.ensure_users (INSERT OR
 -- IGNORE, migration-safe).
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS rubrics (
   prompt TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (id, version));
 
--- P2-T12 versioning choice (documented): eval_cases moved from "PK id" to the
+-- Versioning choice (documented): eval_cases moved from "PK id" to the
 -- SAME append-only shape rubrics already use — composite PRIMARY KEY
 -- (id, version), latest = MAX(version) — rather than a mutated "latest" row
 -- plus a history side-table. One shape for every versioned store keeps the
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS eval_sets (
   case_ids TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (id, version));
 
--- P2-T12a casebooks (openapi.yaml:3219-3262). A casebook is GLOBAL, not
+-- Casebooks (openapi.yaml:3219-3262). A casebook is GLOBAL, not
 -- tree-scoped (openapi.yaml:1654-1656), and its items are turn REFERENCES,
 -- never copies (openapi.yaml:3252-3255) — hence a row of ids and nothing
 -- else. Deleting a casebook or an item touches no turn, conversation, eval
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS casebook_items (
 CREATE UNIQUE INDEX IF NOT EXISTS casebook_items_ref
   ON casebook_items (casebook_id, tree, conversation_id, turn_id);
 
--- P2-T12a audit trail. "EVERY access is audit-logged server-side"
+-- Audit trail. "EVERY access is audit-logged server-side"
 -- (openapi.yaml:308-309) for GET /admin/conversations. The contract declares
 -- NO endpoint that reads this back, so it is deliberately a server-side store
 -- only (rows here + one stdout line per query, mock/main.py audit_inspect).
@@ -178,7 +178,7 @@ class Db:
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         with self.lock:
-            # P2-PERSIST: WAL is REQUIRED by CUPEL_STORAGE=s3 — Litestream
+            # WAL is REQUIRED by CUPEL_STORAGE=s3 — Litestream
             # replicates by shipping WAL frames, and refuses a rollback-journal
             # database. Enabled unconditionally so both modes run the same
             # engine settings and the hosted path is never a special case.
@@ -198,7 +198,7 @@ class Db:
             self.conn.commit()
 
     def _migrate_eval_cases(self):
-        """P2-T12: pre-P2-T12 databases carry eval_cases with PRIMARY KEY (id)
+        """Older databases carry eval_cases with PRIMARY KEY (id)
         and no version column; CREATE TABLE IF NOT EXISTS above is a no-op for
         them. SQLite cannot change a primary key in place, so rebuild once and
         stamp every existing row as version 1 — Phase-1 cases stay readable and
@@ -221,7 +221,7 @@ class Db:
             " DROP TABLE eval_cases_pre_t12;")
 
     def _migrate_conversation_owner(self):
-        """P2-T12a: pre-P2-T12a databases carry conversations without user_id,
+        """Older databases carry conversations without user_id,
         and CREATE TABLE IF NOT EXISTS above is a no-op for them. Adding a
         column IS possible in place, so this is one ALTER plus a backfill.
 

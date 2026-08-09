@@ -60,7 +60,7 @@ function ChatProbe() {
   return <div>chat-probe {conversationId}</div>;
 }
 
-// Navigation probe for cell ⌁ trace targets (P1-T16).
+// Navigation probe for cell ⌁ trace targets.
 function TraceProbe() {
   const { turnId } = useParams();
   return <div>trace-probe {turnId}</div>;
@@ -156,7 +156,7 @@ describe("RunDetailPage", () => {
     await waitFor(() => expect(cancelRequests).toEqual(["task-live"]));
   });
 
-  // P1-T13 — "'re-run this turn with…' on any results cell"
+  // "'re-run this turn with…' on any results cell"
   // (feature-spec.md:72; sketch 04 "+ Re-run this turn with…
   // POST …/replay/turn"): done cells expose ⑂ seeded with the CELL's source
   // conversation/turn, reusing the same ForkModal as Chat.
@@ -183,7 +183,7 @@ describe("RunDetailPage", () => {
     });
   });
 
-  // P1-T14 — fork comparison pivot. "a turn re-fire is a run whose grid
+  // Fork comparison pivot. "a turn re-fire is a run whose grid
   // pivots to 'compare forks of the same turn across endpoints (column per
   // endpoint)'" (openapi.yaml:636-639) — the SERVER delivers the pivoted
   // grid (endpoint-name columns, one row), so the page just renders it plus
@@ -235,7 +235,7 @@ describe("RunDetailPage", () => {
     expect(screen.queryByText("Open in Chat ↗")).not.toBeInTheDocument();
   });
 
-  // P1-T16 — "⌁ trace icon on every turn — in Chat, results grid cells, and
+  // "⌁ trace icon on every turn — in Chat, results grid cells, and
   // drill-in. Works on originals, forks, and replays alike"
   // (feature-spec.md:145): done cells that carry the produced turn's id
   // (RunCell.turn_id) route to that turn's trace — endpoint cells to the fork
@@ -274,7 +274,7 @@ describe("RunDetailPage", () => {
   });
 });
 
-// P1-T12b — eval layer. Contract under test:
+// Eval layer. Contract under test:
 // - GET /eval/runs/{runId}/summary "Aggregates per rubric" feeding the
 //   "summary header (mean, distribution sparkline)" (openapi.yaml:1001-1022;
 //   feature-spec.md:49), "updates live" (feature-spec.md:64)
@@ -461,9 +461,9 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
   });
 });
 
-// UX phase — auto-judge. The rule under test: judge a run that IS done and
+// Auto-judge. The rule under test: judge a run that IS done and
 // carries a judge config and has not been judged yet, NOT "a run this page
-// watched finish" (the P2-RECORD bug: opening a finished run's link produced
+// watched finish" (the bug: opening a finished run's link produced
 // no scores at all). Idempotency is read from the append-only store —
 // GET /eval/judgments?run_id=&rubric_id= (openapi.yaml:1575-1614) — plus the
 // in-flight judge parent task (Task.result.run_id, mock/main.py:1836-1838),

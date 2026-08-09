@@ -1,4 +1,4 @@
-"""P1-TDEPLOY same-origin production serving (docs/deployment.md:4).
+"""Same-origin production serving (docs/deployment.md:4).
 
 "One Docker container: FastAPI mock serves the API AND the built Vite
 bundle." — when a built dist/ exists, a catch-all GET route registered AFTER

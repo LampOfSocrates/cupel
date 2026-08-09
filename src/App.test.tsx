@@ -15,7 +15,7 @@ import {
   mockTrees,
 } from "./test/msw/handlers";
 
-// P2-T17 live switch — "switch between mock/local/staging/prod live"
+// Live switch — "switch between mock/local/staging/prod live"
 // (cupel-phases.md:73). Design under test (App.tsx): the boot fetch is keyed
 // on the active target; a switch resets me/trees → loader → full page-tree
 // remount, so every store refetches against the new base. /me is always
@@ -79,7 +79,7 @@ describe("live target switch (P2-T17)", () => {
     await screen.findByRole("radio", { name: "Staging" });
 
     await user.click(screen.getByRole("radio", { name: "Staging" }));
-    // Boot error names the target (P2-CONFIG hint, kept by T17).
+    // Boot error names the target.
     await screen.findByText("Backend unreachable");
     expect(screen.getByText(/is the Staging backend/)).toBeInTheDocument();
 
@@ -90,7 +90,7 @@ describe("live target switch (P2-T17)", () => {
   });
 });
 
-// P2-T07 boot flow: "/me is always called" stays the boot (invariant,
+// Boot flow: "/me is always called" stays the boot (invariant,
 // cupel-phases.md:160); an auth-on backend answers 401 → the LOGIN SCREEN
 // renders instead of the error screen, the deep link rides along as
 // return_to, and a successful login re-runs the boot with the token. Against

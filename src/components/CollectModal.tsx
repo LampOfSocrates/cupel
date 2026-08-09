@@ -16,7 +16,7 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
 import type { Casebook, CasebookItemCreate } from "../api/types";
 
-// P2-T12a ⊞ collect — "Collect noteworthy turns into Casebooks with one
+// ⊞ collect — "Collect noteworthy turns into Casebooks with one
 // keystroke" (cupel-phases.md:79). One modal behind every ⊞ entry point
 // (feature-spec.md:240 "Inspector | GET /admin/conversations,
 // POST /casebooks/{id}/items"): pick an existing casebook or type a new name,

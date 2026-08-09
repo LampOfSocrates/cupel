@@ -12,7 +12,7 @@ import { AgentsPage } from "./AgentsPage";
 import { EditorPage } from "./EditorPage";
 import { AgentConversationsPage } from "./AgentConversationsPage";
 
-// P1-T10 contract under test:
+// Contract under test:
 // - GET /agenttrees/{tree}/agents — "Flat list of agents with parent links
 //   (root has parent_id null)" (openapi.yaml:188) → nested diagram.
 // - Node shows "agent name, live instruction version, tools attached (icons),

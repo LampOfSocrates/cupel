@@ -13,11 +13,11 @@ import { getActiveTarget } from "../../api/target";
 import type { AgentTree, Conversation, Me } from "../../api/types";
 
 // The test rig registers handlers at the MOCK target's baseUrl, resolved
-// through the same store the client uses (P2-CONFIG) — vitest is a dev build,
+// through the same store the client uses — vitest is a dev build,
 // so the default active target IS mock (agentic.config.ts defaultTarget.dev).
 export const BASE = getActiveTarget().baseUrl;
 
-// P2-T17 second base: the config's LOCAL preset — target-switch tests prove
+// Second base: the config's LOCAL preset — target-switch tests prove
 // that after setActiveTarget("local") every fetch lands on the NEW base.
 // Resolved from the one config artifact like BASE (no hardcoded hosts).
 export const LOCAL_BASE = agenticConfig.targets.find((t) => t.id === "local")!.baseUrl;
@@ -46,7 +46,7 @@ export const mockMe: Me = {
   permissions: { agent1: ["view", "tune", "evaluate"], agent2: ["view"] },
 };
 
-// P2-T07 auth fixtures — POST /auth/token (openapi.yaml:96-128) + POST
+// Auth fixtures — POST /auth/token (openapi.yaml:96-128) + POST
 // /auth/logout (:130-144). Credentials mirror the real mock's seeded users
 // (mock/auth.py SEED_USERS: admin@demo / restricted@demo, password "demo");
 // the token is real-SHAPED (three dot-separated segments) — signature not
@@ -70,7 +70,7 @@ function seedTrees(): AgentTree[] {
 export const mockTrees: AgentTree[] = seedTrees();
 
 // ------------------------------------------------------- tree access gates
-// P2-MSW: the two tree rules the real backend centralises in middleware
+// The two tree rules the real backend centralises in middleware
 // (mock/main.py AuthGate + need_tree/need_enabled_tree). MSW enforced neither
 // before, so a page could "work" against a tree the server would refuse.
 //
@@ -89,7 +89,7 @@ export function treeGate(tree: string): Response | null {
   );
 }
 
-// enabledTreeGate: treeGate, then the P2-T07c disable gate for NEW WORK — a
+// enabledTreeGate: treeGate, then the disable gate for NEW WORK — a
 // disabled tree answers 409 tree_disabled while every read keeps working
 // ("existing conversations stay READABLE", feature-spec.md:20). The blocked
 // set mirrors mock/main.py:426-441 exactly: chat, replay, replay/turn,
@@ -98,7 +98,7 @@ export function treeGate(tree: string): Response | null {
 // the set — a thumb annotates existing history, it creates no new work.
 // 404 (absent tree) wins over 409, as in the real mock.
 //
-// KNOWN CONTRACT GAP (P2-MSW, deliberate divergence): openapi.yaml v0.3.0
+// KNOWN CONTRACT GAP (deliberate divergence): openapi.yaml v0.3.0
 // declares 409 on only five of these — chat, replay, replay/turn, /eval/judge
 // and casebook replay. The other six (POST agents, PUT instructions, POST
 // snapshots, PUT last-selection, PATCH/DELETE conversation) emit an
@@ -141,7 +141,7 @@ export function conv(
   };
 }
 
-// P1-T18c BYOK: X-LLM-Key/X-LLM-Model captures on the generation-adjacent
+// BYOK: X-LLM-Key/X-LLM-Model captures on the generation-adjacent
 // endpoints (chat/replay/judge/models). The headers are transport-level BY
 // DESIGN — outside openapi.yaml (docs/deployment.md:26).
 export const llmHeaderCaptures: Array<{
@@ -166,7 +166,7 @@ export const cancelledTasks = new Set<string>();
 // ---------------------------------------------------------- task stream rig
 // GET /tasks/stream (openapi.yaml:777-813) — controllable SSE: tests call
 // taskStreamRig.emit("progress"|"task", data) to push frames to every open
-// subscriber (same streaming pattern as the T02 chat handler, but held open
+// subscriber (same streaming pattern as the chat handler, but held open
 // until the client aborts). clients counts open subscriptions so tests can
 // await the subscribe before emitting. The client set is shared because both
 // bases serve a stream (BASE's real one and LOCAL_BASE's idle one).

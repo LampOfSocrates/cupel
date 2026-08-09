@@ -19,7 +19,7 @@ import { api } from "../api/client";
 import { useQueue } from "../QueueContext";
 import type { EvalCaseImportReport, EvalSet } from "../api/types";
 
-// P2-T12 bulk import — "upload CSV/XLSX (or paste a table) with columns mapped
+// Bulk import — "upload CSV/XLSX (or paste a table) with columns mapped
 // to input/output/reference → creates/extends a set in one shot
 // (POST /eval/cases/import, queued for large files; row errors reported per
 // line, not all-or-nothing)" (feature-spec.md:63).

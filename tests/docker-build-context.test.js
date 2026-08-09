@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // stage 1), so a new root-level file that src/ imports must be added there or
 // `vite build` dies with UNRESOLVED_IMPORT inside the image — invisible
 // locally, fatal on deploy (that is exactly what happened to
-// agentic.config.ts between P2-CONFIG and P2-DEVSTART).
+// agentic.config.ts).
 
 const ROOT_IMPORT = /from\s+"\.\.\/\.\.?\/([\w.-]+)"/g;
 
@@ -21,7 +21,7 @@ describe("Dockerfile build context covers the root files src/ imports", () => {
   });
 });
 
-// P2-PERSIST — the runtime stage grew a second moving part (the litestream
+// The runtime stage grew a second moving part (the litestream
 // binary) and a new CMD. Same failure shape as the agentic.config.ts incident:
 // invisible locally, only fatal in the image.
 describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {

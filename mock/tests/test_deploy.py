@@ -1,4 +1,4 @@
-"""P1-TDEPLOY tests: shared-token gate, same-origin static serving, generator
+"""Deployment tests: shared-token gate, same-origin static serving, generator
 gate passage (docs/deployment.md:3-12). Run: npm run test:mock.
 
 The gate defaults OFF (DEMO_TOKEN unset) so every other test file is

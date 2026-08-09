@@ -1,4 +1,4 @@
-"""P1-T18b behavioural tests: chat both modes, SSE, task lifecycle, SQLite
+"""Behavioural tests: chat both modes, SSE, task lifecycle, SQLite
 state, forks/lineage, append-only invariants. Run: npm run test:mock."""
 
 import asyncio
@@ -342,7 +342,7 @@ def test_feedback_appends_human_judgment():
     run(case())
 
 
-# P2-CHATUX — the optional FeedbackRequest.comment rides on Judgment.reasoning
+# The optional FeedbackRequest.comment rides on Judgment.reasoning
 # (the same field the LLM judge explains itself in). Bare thumbs are unchanged;
 # re-rating APPENDS a second judgment, newest first (openapi.yaml:994).
 def test_feedback_comment_stores_as_reasoning_and_appends():
@@ -501,7 +501,7 @@ def test_replay_turn_forks_with_lineage():
     run(case())
 
 
-# ------------------------------------------------- context envelope (P1-T11a)
+# -------------------------------------------------------- context envelope
 # Invariants under test: "The server stamps assistant turns at generation and
 # inbound (user/machine) turns at receipt" (openapi.yaml:1323-1325); "Phase 1
 # pin — replays always run under each turn's original envelope
@@ -791,7 +791,7 @@ def test_task_listing_defaults_to_parents():
 
 
 def test_fail_marker_injects_one_failure_then_retry_succeeds(monkeypatch):
-    """P2-E2E failure injection (config.fail_marker): a child whose payload
+    """Failure injection (config.fail_marker): a child whose payload
     mentions MOCK_FAIL_MARKER fails its FIRST attempt only, so retry-failed is
     exercisable end-to-end and deterministically."""
     monkeypatch.setenv("MOCK_FAIL_MARKER", "BOOM-MARKER")

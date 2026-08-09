@@ -15,7 +15,7 @@ export const testAppState = {
   tree: "agent1",
 };
 
-// P2-T07b: boot-state overrides. The admin sections are gated on /me.roles and
+// Boot-state overrides. The admin sections are gated on /me.roles and
 // the read-only banner on the active tree's `enabled` — both arrive from the
 // boot fetch (App.tsx), so tests inject them here rather than re-booting App.
 export interface AppStateOverrides {
@@ -69,9 +69,9 @@ function TestAppProvider({
 // and floating-ui hideDetached — without it, popover dropdowns get inline
 // display:none in jsdom (zero layout rects read as "reference hidden") and
 // role queries can't see their contents.
-// `state` = router location state for the initial entry (P1-T20b: the
-// editor → Runs Test-in-Runs handoff travels as navigate state, not a URL).
-// `queue` = wrap in QueueProvider (P1-T08) with fast timings — OPT-IN so
+// `state` = router location state for the initial entry (the editor → Runs
+// Test-in-Runs handoff travels as navigate state, not a URL).
+// `queue` = wrap in QueueProvider with fast timings — OPT-IN so
 // existing tests that count taskStreamRig.clients (RunDetailPage) keep their
 // single-subscription arithmetic.
 export function renderApp(

@@ -1,4 +1,4 @@
-"""P1-T18 generator tests: writes only via the public API (httpx against the
+"""Generator tests: writes only via the public API (httpx against the
 in-process ASGI app), deterministic per --seed, idempotent re-seed, drip
 appends activity. Run: npm run test:mock."""
 

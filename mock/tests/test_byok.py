@@ -1,4 +1,4 @@
-"""P1-T18c Live-LLM BYOK tests (docs/deployment.md:17-31).
+"""Live-LLM BYOK tests (docs/deployment.md:17-31).
 
 Hard rules proven here: the key is used in-memory for the request only —
 NEVER persisted (sqlite scan), NEVER logged (log/stdout capture); provider

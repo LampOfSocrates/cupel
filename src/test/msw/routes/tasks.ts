@@ -5,8 +5,8 @@ import type { Task } from "../../../api/types";
 import { BASE, cancelledTasks, sseEncoder, taskStreamClients } from "../state";
 
 // ---------------------------------------------------------------- task state
-// GET /tasks + /tasks/{id} + retry-failed fixtures (openapi.yaml:747-865),
-// P1-T08. Parents stored with children INLINE; the list handler strips them
+// GET /tasks + /tasks/{id} + retry-failed fixtures (openapi.yaml:747-865).
+// Parents stored with children INLINE; the list handler strips them
 // ("Parents only ... expand via GET /tasks/{id}", openapi.yaml:770-771).
 // Mutable — tests flip statuses then poke taskStreamRig; reset reseeds.
 function seedTasks(): Task[] {
@@ -115,7 +115,7 @@ export const taskHandlers = [
   }),
 
   // GET /tasks/:taskId (openapi.yaml:815-830) — "Task with children
-  // populated" (:826); the queue panel's expand fetch (P1-T08). After the
+  // populated" (:826); the queue panel's expand fetch. After the
   // /tasks/stream handler so the static segment matches first.
   http.get(`${BASE}/tasks/:taskId`, ({ params }) => {
     const id = params.taskId as string;
@@ -151,7 +151,7 @@ export const taskHandlers = [
 
   // DELETE /tasks/{taskId} — cancel; doubles as chat stop-generation
   // (openapi.yaml:832-847). Known queue fixtures cancel with cascade
-  // ("cancels queued/running children"); other ids keep the T02 synthetic
+  // ("cancels queued/running children"); other ids keep the synthetic
   // chat-task response (stop-generation tests).
   http.delete(`${BASE}/tasks/:taskId`, ({ params }) => {
     const id = params.taskId as string;

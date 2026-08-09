@@ -1,6 +1,6 @@
 import { expect, test as base, type Page, type Request } from "@playwright/test";
 
-// P2-E2E — request interception that asserts the ENDPOINT TAGS from the
+// Request interception that asserts the ENDPOINT TAGS from the
 // sketches. feature-spec.md:205: "one spec file per numbered dev prompt; each
 // asserts against the endpoint tags in the sketches" — i.e. a journey must be
 // shown to CALL the documented endpoints, not merely to look right.

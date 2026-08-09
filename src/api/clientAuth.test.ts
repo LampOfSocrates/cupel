@@ -7,7 +7,7 @@ import { setActiveTarget } from "./target";
 import { server } from "../test/msw/server";
 import { BASE, mockMe } from "../test/msw/handlers";
 
-// P2-T07 — the SINGLE client attaches auth centrally ("token attached by the
+// The SINGLE client attaches auth centrally ("token attached by the
 // single API client", feature-spec.md:18) and handles every 401 centrally
 // ("401 anywhere → back to login"). No caller passes tokens; no component
 // branches on the auth mode.

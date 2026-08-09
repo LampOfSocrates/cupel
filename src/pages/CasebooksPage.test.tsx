@@ -13,7 +13,7 @@ import {
 } from "../test/msw/handlers";
 import { CasebooksPage } from "./CasebooksPage";
 
-// Contract under test — P2-T12a Casebook view (cupel-phases.md:79 "Collect
+// Contract under test — Casebook view (cupel-phases.md:79 "Collect
 // noteworthy turns into Casebooks with one keystroke, then turn a casebook
 // into an eval set, a replay regression suite, or few-shot examples";
 // feature-spec.md:241 "Casebook view | GET /casebooks/{id},

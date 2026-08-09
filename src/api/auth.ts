@@ -1,4 +1,4 @@
-// P2-T07 — login-token store + central auth signals. The client always
+// Login-token store + central auth signals. The client always
 // attaches a token when it has one and routes any 401 to the login screen;
 // NO component branches on the auth mode (invariant, cupel-phases.md:160 —
 // machine-checked by tests/no-authmode-branches.test.js;
@@ -71,7 +71,7 @@ export function useAuthToken(): string | null {
  * 1. the login JWT for the active target (POST /auth/token, this store);
  * 2. else, for targets declaring requiresToken (agentic.config.ts — prod),
  *    the static token from Settings → Backend (cupel.backend.prodToken,
- *    P2-T17 "Prod requires an auth token field", feature-spec.md:161).
+ *    "Prod requires an auth token field", feature-spec.md:161).
  * The login JWT wins: an interactive session's identity beats the device's
  * standing credential.
  */

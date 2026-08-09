@@ -1,4 +1,4 @@
-// P2-E2E — `npm run e2e`: the full Playwright suite, both auth modes
+// `npm run e2e`: the full Playwright suite, both auth modes
 // (cupel-phases.md:101 "a Playwright suite that walks all 13 user journeys in
 // both auth modes").
 //
@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 function run(label, args, env) {
   console.log(`\n=== e2e: ${label} ===`);
   const started = Date.now();
-  // --project=chromium: P2-RECORD added a second `record` project, and
+  // --project=chromium: there is a second `record` project, and
   // Playwright runs every project unless one is named.
   const result = spawnSync("npx", ["playwright", "test", "--project=chromium", ...args], {
     stdio: "inherit",

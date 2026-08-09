@@ -46,7 +46,7 @@ export const chatHandlers = [
   // frames task/token/done/error; stream=false → single JSON ChatResponse.
   // Omitting conversation_id starts a new conversation (openapi.yaml:488).
   http.post(`${BASE}/agenttrees/:tree/chat`, async ({ params, request }) => {
-    captureLlmHeaders(request); // P1-T18c
+    captureLlmHeaders(request);
     const body = (await request.json()) as ChatRequest;
     chatRequests.push(body);
     const denied = enabledTreeGate(params.tree as string);

@@ -1,10 +1,10 @@
-// P2-T17 — device-local Settings → Backend preferences (localStorage, the
+// Device-local Settings → Backend preferences (localStorage, the
 // specced home for device-local state: feature-spec.md:161 "Target is
 // device-local (not synced via /settings)"). try/catch mirrors llmKey.ts:
 // localStorage can throw (privacy mode) — prefs then fall back to defaults.
 
-// "Prod requires an auth token field" (feature-spec.md:161). Since P2-T07 the
-// client attaches it as "Authorization: Bearer" on requiresToken targets —
+// "Prod requires an auth token field" (feature-spec.md:161). The client
+// attaches it as "Authorization: Bearer" on requiresToken targets —
 // but only when no login JWT exists for the target (precedence documented in
 // src/api/auth.ts authHeaders: the login JWT wins).
 export const PROD_TOKEN_KEY = "cupel.backend.prodToken";

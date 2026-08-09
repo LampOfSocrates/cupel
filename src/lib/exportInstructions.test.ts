@@ -6,7 +6,7 @@ import {
   serializeHistoryMarkdown,
 } from "./exportInstructions";
 
-// P1-TEXPORT — serializers over InstructionHistory exactly as fetched
+// Serializers over InstructionHistory exactly as fetched
 // (openapi.yaml:1194-1204): JSON must round-trip verbatim; markdown is the
 // human-readable rendering of the same append-only history.
 

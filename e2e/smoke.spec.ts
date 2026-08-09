@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// P1-TE2E — THE smoke e2e (cupel-phases.md:46): "boot on mock → send chat turn
+// THE smoke e2e (cupel-phases.md:46): "boot on mock → send chat turn
 // (SSE renders) → queue a 2-conversation replay → grid fills → judge one →
 // score appears". Runs against the real mock on :4010 (no MSW) with a fresh
 // scratch DB per run (playwright.config.ts), so all history is created here.

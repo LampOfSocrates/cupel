@@ -18,9 +18,9 @@ import { STATUS_COLOR } from "./status";
 // failure with retry-failed button." Task model: openapi.yaml:1726-1773.
 //
 // Data flow: pure render of the Task[] prop — SSE/polling and the actual
-// DELETE /tasks/{id} + POST /tasks/{id}/retry-failed wiring is T08's job;
+// DELETE /tasks/{id} + POST /tasks/{id}/retry-failed wiring live in the page;
 // this component only emits the callbacks. `onExpand` fires when a row is
-// expanded so T08 can lazy-fetch children ("Populated on GET /tasks/{id}",
+// expanded so the page can lazy-fetch children ("Populated on GET /tasks/{id}",
 // openapi.yaml:1760); embedded `children` render when present.
 
 const TYPE_LABEL: Record<Task["type"], string> = {
@@ -29,8 +29,8 @@ const TYPE_LABEL: Record<Task["type"], string> = {
   replay_turn: "Turn fork",
   judge: "Judging",
   // Additive in contract v0.3.0 (openapi.yaml:2770-2782): compact = memory
-  // compaction (P3-MEM), import = a large POST /eval/cases/import running in
-  // the background (P2-T12).
+  // compaction, import = a large POST /eval/cases/import running in
+  // the background.
   compact: "Compaction",
   import: "Import",
 };

@@ -12,7 +12,7 @@ import {
 import { setActiveTarget } from "./target";
 import { setProdToken } from "./backendPrefs";
 
-// P2-T07 token store — one login token PER BACKEND TARGET
+// Token store — one login token PER BACKEND TARGET
 // (cupel.auth.token.<targetId>), device-local like the target choice
 // (feature-spec.md:161). localStorage is cleared between tests by setup.ts.
 

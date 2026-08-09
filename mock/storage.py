@@ -1,4 +1,4 @@
-"""P2-PERSIST — the mock's two storage modes.
+"""The mock's two storage modes.
 
 The bundled mock plays two roles (docs/deployment.md "The same mock, two
 roles"), and only the DURABILITY of its SQLite file differs between them.

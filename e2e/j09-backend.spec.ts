@@ -49,7 +49,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     // click, not check: the boot against the dead target replaces the whole
     // app (including this radio) before check() could verify it.
     await page.getByRole("radio", { name: "Local" }).click();
-    // P2-T17's recovery path: boot fails against the new target, the error
+    // The recovery path: boot fails against the new target, the error
     // names it, and the build's default target is one click away.
     const alert = page.getByText("Backend unreachable");
     await expect(alert).toBeVisible({ timeout: 30_000 });

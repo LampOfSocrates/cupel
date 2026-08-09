@@ -7,7 +7,7 @@ import { product } from "../lib/product";
 import { EnvBanner, ENV_BANNER_HEIGHT, resolveBanner } from "./EnvBanner";
 import { Sidebar } from "./Sidebar";
 
-// P2-MOBILE-SHELL — the navbar breakpoint is load-bearing, not cosmetic:
+// The navbar breakpoint is load-bearing, not cosmetic:
 // BELOW it Mantine renders the navbar as a full-width overlay
 // (assign-navbar-variables.mjs sets --app-shell-navbar-width:100% and
 // navbar-offset:0), so without a `collapsed.mobile` state it simply buries the
@@ -23,7 +23,7 @@ const MOBILE_BAR_HEIGHT = 44;
 
 // Shell frame per sketches/clean/01-chat.svg: left sidebar + main content.
 // Banner-declaring targets add a slim header (per-target config via
-// resolveBanner, P2-T17; feature-spec.md:161); on phones the header also
+// resolveBanner; feature-spec.md:161); on phones the header also
 // carries the burger, so the header slot exists when EITHER applies and prod
 // on desktop still loses no vertical space.
 export function Shell() {

@@ -36,7 +36,7 @@ DENIED_PAGE = (
 
 
 class DemoTokenGate:
-    """P1-TDEPLOY shared-token gate (docs/deployment.md:11-12): "gate with an
+    """Shared-token gate (docs/deployment.md:11-12): "gate with an
     unguessable URL + shared token checked by middleware (env var DEMO_TOKEN;
     ?token= or X-Demo-Token header)". Transport-level like the BYOK headers —
     deliberately OUTSIDE the openapi.yaml contract.
@@ -92,7 +92,7 @@ class DemoTokenGate:
 
 
 class AuthGate:
-    """P2-T07 AUTH_MODE=on enforcement (openapi.yaml:21-36). Pure ASGI like
+    """AUTH_MODE=on enforcement (openapi.yaml:21-36). Pure ASGI like
     DemoTokenGate so SSE streaming/cancellation semantics are untouched.
 
     AUTH_MODE unset/"off" (the default — local dev, tests, the deployed
@@ -180,7 +180,7 @@ async def body_json(request: Request) -> dict:
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
                step_delay: float | None = None, static_dir: str | None = None) -> FastAPI:
-    # P2-READY (cupel-phases.md:98): the mock "ships its own OpenAPI file —
+    # cupel-phases.md:98: the mock "ships its own OpenAPI file —
     # which the readiness script validates against Cupel's contract as the
     # first conformance test". FastAPI auto-generates the spec from the
     # routes; handlers have no response_model, so schemas are loose ({}) and
@@ -194,7 +194,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # add_middleware PREPENDS, so registration order is inner→outer. Final
     # stack: CORS (outermost — preflight answered first; every 401 still
     # carries CORS headers) → DemoTokenGate (deployment shared token) →
-    # AuthGate (P2-T07 per-user JWT when AUTH_MODE=on) → app. Both gates can
+    # AuthGate (per-user JWT when AUTH_MODE=on) → app. Both gates can
     # be active at once; the demo gate runs first (see AuthGate docstring).
     app.add_middleware(AuthGate, db=db)
     app.add_middleware(DemoTokenGate)
@@ -216,7 +216,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     # ------------------------------------------------------------- helpers
     def live_headers(request: Request) -> tuple[str | None, str | None]:
-        """P1-T18c: (key, model) from X-LLM-Key / X-LLM-Model. The headers are
+        """(key, model) from X-LLM-Key / X-LLM-Model. The headers are
         transport-level BY DESIGN (docs/deployment.md:26) — deliberately
         outside the openapi.yaml contract. The key is returned into the
         caller's stack frame only: never stored on app.state or the DB, never
@@ -376,7 +376,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             err(403, "forbidden", "The admin role is required.")
 
     def need_inspect(request: Request) -> None:
-        """P2-T12a: 403 unless the caller holds the INSPECT role — "Requires
+        """403 unless the caller holds the INSPECT role — "Requires
         the inspect role (403 otherwise)" (openapi.yaml:308). Deliberately a
         separate role from admin (openapi.yaml roles enum): a super-user
         reader is not necessarily a tenant administrator. Mirrors need_admin;
@@ -425,7 +425,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
               flush=True)
 
     def need_enabled_tree(tree: str) -> dict:
-        """need_tree + the P2-T07c disable gate for WRITE work: a disabled
+        """need_tree + the disable gate for WRITE work: a disabled
         tree answers 409 tree_disabled (openapi.yaml:1974-1979) on new work,
         while every GET keeps working — "new chat/replay/judge against it
         return 409 tree_disabled; existing conversations stay READABLE"
@@ -477,7 +477,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def me(request: Request):
         """GET /me (openapi.yaml:147-166): "answers in both auth modes".
         AUTH_MODE=on → the token's user with their roles+permissions;
-        off → the dev user. P2-T07b: the dev user now advertises roles
+        off → the dev user, which advertises roles
         [admin, inspect] — "off = instant dev as a chosen user ... default
         admin = all trees, all rights" (feature-spec.md:17), and roles is
         the additive-optional v0.3.0 Me field (openapi.yaml:2004-2012) that
@@ -495,7 +495,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.get("/healthz")
     async def healthz():
-        """P2-PERSIST: `storage` reports the EFFECTIVE storage mode and, in s3
+        """`storage` reports the EFFECTIVE storage mode and, in s3
         mode, whether this boot restored the database from the replica
         (openapi.yaml Health.storage — optional, additive; backends that omit
         it stay conformant). Read from the env per call, like
@@ -517,7 +517,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """GET /agenttrees (openapi.yaml:437-454): "Permitted agent trees".
         AUTH_MODE=on filters to trees the token's user can view — "GET
         /agent-trees returns only permitted trees; unpermitted trees never
-        render" (feature-spec.md:32). P2-T07c: "permitted + enabled; admins
+        render" (feature-spec.md:32). Also "permitted + enabled; admins
         also see disabled" (feature-spec.md:121) — non-admins additionally
         lose disabled trees; admins get them with enabled:false
         (openapi.yaml:443-446). Off mode: the dev user is admin, so all
@@ -551,7 +551,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 for e in db.all("SELECT * FROM endpoints WHERE tree_id = ? ORDER BY rowid", (tree,))]
 
     # --------------------------------------------------------------- admin
-    # P2-T07b/07c — users, permission matrices, tree enable/disable
+    # Users, permission matrices, tree enable/disable
     # (openapi.yaml:168-296). Every operation is admin-gated (403 forbidden
     # otherwise); in off mode the dev user IS admin (request_roles above).
     # Permission updates take effect on the target user's NEXT request — the
@@ -672,7 +672,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 engine.cancel(t["id"])
         return {"id": row["id"], "name": row["name"], "enabled": enabled}
 
-    # --------------------------------------------- P2-T12a Inspector (admin)
+    # --------------------------------------------------- Inspector (admin)
     # GET /admin/conversations (openapi.yaml:298-348) — "Inspector — every
     # conversation, cross-user … filter by user, tree, date, or score …
     # requires the inspect role, audit-logged".
@@ -781,7 +781,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/agents", status_code=201)
     async def create_agent(tree: str, request: Request):
-        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # write — blocked on a disabled tree
         body = await body_json(request)
         if not body.get("name"):
             err(422, "invalid", "name is required.")
@@ -812,7 +812,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.put("/agenttrees/{tree}/agents/{agentId}/instructions", status_code=201)
     async def save_instructions(tree: str, agentId: str, request: Request):
-        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # write — blocked on a disabled tree
         agent = need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
@@ -844,7 +844,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/agenttrees/{tree}/agents/{agentId}/snapshots", status_code=201)
     async def create_snapshot(tree: str, agentId: str, request: Request):
-        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # write — blocked on a disabled tree
         need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
@@ -868,7 +868,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.put("/agenttrees/{tree}/agents/{agentId}/last-selection")
     async def put_last_selection(tree: str, agentId: str, request: Request):
-        need_enabled_tree(tree)  # write — blocked on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # write — blocked on a disabled tree
         need_agent(tree, agentId)
         body = await body_json(request)
         items = body.get("items")
@@ -919,7 +919,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.patch("/agenttrees/{tree}/conversations/{conversationId}")
     async def rename_conversation(tree: str, conversationId: str, request: Request):
-        need_enabled_tree(tree)  # history is read-only on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # history is read-only on a disabled tree
         conv = need_conversation(tree, conversationId)
         body = await body_json(request)
         if body.get("title"):
@@ -929,13 +929,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.delete("/agenttrees/{tree}/conversations/{conversationId}", status_code=204)
     async def delete_conversation(tree: str, conversationId: str):
-        need_enabled_tree(tree)  # history is read-only on a disabled tree (P2-T07c)
+        need_enabled_tree(tree)  # history is read-only on a disabled tree
         conv = need_conversation(tree, conversationId)
         # Tombstone: judgments, eval cases and fork lineage survive (openapi.yaml:438-443).
         db.run("UPDATE conversations SET deleted = 1 WHERE id = ?", (conv["id"],))
         return Response(status_code=204)
 
-    # Generated-spec truth for the two SSE endpoints (P2-READY): both really
+    # Generated-spec truth for the two SSE endpoints: both really
     # serve text/event-stream, which FastAPI cannot infer from StreamingResponse.
     # Without this the mock's own OpenAPI failed conformance on /tasks/stream
     # (contract openapi.yaml:1207 declares text/event-stream only).
@@ -1027,7 +1027,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
              j(stamp_envelope()), task["id"]))
         db.run("UPDATE conversations SET last_activity_at = ? WHERE id = ?", (now, conv["id"]))
 
-        # P1-T18c: BYOK key rides in ctx for THIS request's generation only —
+        # BYOK key rides in ctx for THIS request's generation only —
         # never persisted, never logged (docs/deployment.md:26-27).
         llm_key, llm_model = live_headers(request)
         ctx = {
@@ -1088,7 +1088,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if not turn:
             err(404, "not_found", f"Turn '{body['message_id']}' not found.")
         jid, now = new_id("judg"), now_iso()
-        # P2-CHATUX: the optional comment rides on `reasoning` — the same field
+        # The optional comment rides on `reasoning` — the same field
         # the LLM judge explains itself in (FeedbackRequest.comment, openapi.yaml).
         # Empty/whitespace-only stays NULL so a bare thumb is byte-identical to
         # before. Append-only: a re-rating inserts a NEW row, never an UPDATE.
@@ -1796,7 +1796,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             if not r:
                 err(404, "not_found", f"Run '{run_id}' not found.")
             run_tree = r["tree_id"]
-            # P2-T07c disable rule for judge (cheapest honest rule, documented):
+            # Disable rule for judge (cheapest honest rule, documented):
             # judging is blocked when the RUN'S TREE is disabled — "new
             # chat/replay/judge against it return 409 tree_disabled"
             # (feature-spec.md:20; Conflict wired on /eval/judge,
@@ -1890,7 +1890,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                             "distribution": distribution})
         return {"run_id": runId, "rubrics": rubrics}
 
-    # ----------------------------------------------------- P2-T12a casebooks
+    # ----------------------------------------------------------- casebooks
     # openapi.yaml:1643-1830. "Collect noteworthy turns into Casebooks with one
     # keystroke, then turn a casebook into an eval set, a replay regression
     # suite, or few-shot examples for an agent" (cupel-phases.md:79).
@@ -2126,7 +2126,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if not configs or not isinstance(configs, list):
             err(422, "invalid", "configs must be a non-empty array.")
         if body.get("context_policy", "frozen") != "frozen":
-            # Widening the policy is P3-CTX; the tree-scoped replay pins the
+            # Widening the policy is Phase 3; the tree-scoped replay pins the
             # same way (see /agenttrees/{tree}/replay above).
             err(422, "invalid", "Replays currently run frozen (openapi.yaml:3300-3304).")
 
@@ -2206,7 +2206,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return JSONResponse({"task_id": parent["id"], "runs": runs}, status_code=202)
 
     # ------------------------------------------------- static SPA (last!)
-    # P1-TDEPLOY: the built Vite bundle, when present, mounts AFTER every API
+    # The built Vite bundle, when present, mounts AFTER every API
     # route so API paths always win; absent dist/ = dev mode, no change.
     static_root = resolve_static_dir(static_dir)
     if static_root:

@@ -21,7 +21,7 @@ import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { TreeBranch, TreeNode } from "../components";
 
-// Agent tree view (P1-T10) — "home view is a static node-and-edge diagram of
+// Agent tree view — "home view is a static node-and-edge diagram of
 // the agent hierarchy (root → sub-agents)" (feature-spec.md:24); node shows
 // "agent name, live instruction version, tools attached (icons), enabled
 // state" (feature-spec.md:25); "Node click → instruction editor ... add
@@ -30,8 +30,7 @@ import { TreeBranch, TreeNode } from "../components";
 // with "live_version 0 until v1 is saved" (openapi.yaml:215).
 // The AI New-agent wizard is Phase 3 (openapi.yaml:204-206) — plain form here.
 // "View recent conversations" routes to /agents/{id}/conversations, a minimal
-// GET /conversations?agent_id= listing (openapi.yaml:365-371); the editor
-// route is a placeholder until P1-T10b.
+// GET /conversations?agent_id= listing (openapi.yaml:365-371).
 
 export function AgentsPage() {
   const { tree } = useApp();

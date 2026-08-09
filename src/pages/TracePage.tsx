@@ -19,7 +19,7 @@ import { useAsync } from "../hooks/useAsync";
 import { EnvelopeChip, TreeBranch, TreeNode, type TreeNodeKind } from "../components";
 import { useApp } from "../AppContext";
 
-// P1-T16 — Trace view (sketch 08). Spec:
+// Trace view (sketch 08). Spec:
 // - feature-spec.md:146-148: "Trace view, two synced layers: Call tree: nodes
 //   colored by type (agent / tool / LLM), each badged `time · tokens in→out`.
 //   Header shows turn totals (wall time, total tokens in/out, cost).
@@ -245,7 +245,7 @@ export function TracePage() {
           </div>
 
           {/* Layer 2 — waterfall: one row per span in trace order, CSS bars on
-              the shared timeline (no chart lib, like the T12b sparkline). */}
+              the shared timeline (no chart lib, like the summary sparkline). */}
           <Text size="xs" c="dimmed">
             Waterfall
           </Text>

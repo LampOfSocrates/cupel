@@ -99,7 +99,7 @@ describe("api client", () => {
   });
 });
 
-// P1-T11a — frozen-pinned replay layer. "Phase 1 pin — replays always run
+// Frozen-pinned replay layer. "Phase 1 pin — replays always run
 // under each turn's original envelope (feature-spec.md:77, :82)"
 // (openapi.yaml:1544-1546); the client hard-sets context_policy so callers
 // cannot override it (it is stripped from the function signatures).
@@ -137,7 +137,7 @@ describe("replay client", () => {
   });
 });
 
-// P1-T18c — BYOK header attachment, central in the client. Hard rules
+// BYOK header attachment, central in the client. Hard rules
 // (docs/deployment.md:24-27): key from "browser localStorage only", "Sent per
 // request: X-LLM-Key + X-LLM-Model headers", never in URLs. The headers are
 // transport-level by design — openapi.yaml is untouched.

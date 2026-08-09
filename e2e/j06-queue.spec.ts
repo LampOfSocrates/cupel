@@ -44,7 +44,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
     const row = page.getByTestId(`task-${big.task_id}`);
     await expect(row).toBeVisible();
     await expect(row.getByRole("progressbar")).toBeVisible();
-    // "3/48 · 2m14s" — the stage counter moves without a reload (P1-T08's one
+    // "3/48 · 2m14s" — the stage counter moves without a reload (the one
     // app-wide /tasks/stream).
     await expect(row).toContainText(/\d+\/\d+/);
     await api.expectCalled("GET /tasks/stream");

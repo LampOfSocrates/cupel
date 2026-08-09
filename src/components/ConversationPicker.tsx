@@ -42,7 +42,7 @@ interface Props {
   tree: string;
   onSelectionChange: (items: SelectionItem[]) => void;
   /**
-   * Mount-time seed for the selection (P1-T20b: the per-agent remembered
+   * Mount-time seed for the selection (the per-agent remembered
    * selection, feature-spec.md:87 — and Back-from-Configure restores what was
    * picked). Read once on mount; later prop changes are ignored — the picker
    * owns its selection state after that.
@@ -114,7 +114,7 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
 
   // Compute from current state, not inside the setSelected updater: calling
   // the parent's onSelectionChange from an updater is setState-during-render
-  // (React warning surfaced by the P1-TE2E DoD walk). Checkbox events are
+  // (React warning surfaced by the DoD walk). Checkbox events are
   // discrete, so reading `selected` directly is equivalent.
   // The three handlers below are useCallback'd so memo(PickerRow) holds across
   // the renders that do not touch the selection — typing, paging, expanding.

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-// P2-CONFIG guard — "All API calls go through one configurable client
+// Guard — "All API calls go through one configurable client
 // ({base} prefix) — no hardcoded hosts anywhere" (feature-spec.md:158).
 // The mock's host may appear ONLY in agentic.config.ts (the one config
 // artifact, repo root); everything under src/ — code, tests, MSW fixtures —

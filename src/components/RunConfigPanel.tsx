@@ -25,7 +25,7 @@ import type {
 // "instruction_version XOR snapshot_id — a snapshot is an untested draft;
 // neither = the live version") is enforced in UI state: choosing a version
 // clears the snapshot and vice versa is impossible (snapshots arrive only via
-// props/value from Test-in-Runs, T20b).
+// props/value from Test-in-Runs).
 //
 // Diff-from-baseline (feature-spec.md:45 "prefilled from the baseline so
 // changing one axis = one field"; e2e checklist :208 "version change
@@ -52,20 +52,17 @@ interface Props {
   rubrics?: Rubric[];
   /** Pivot flag: endpoints multi-select is only for turn re-fire. */
   showEndpoints?: boolean;
-  /**
-   * Scope flag: false keeps the judge section dormant entirely (P1-T11 uses
-   * this — judge WIRING is P1-T12b; the section itself was built in T09).
-   */
+  /** Scope flag: false keeps the judge section dormant entirely. */
   showJudge?: boolean;
   /** Display label for value.snapshot_id, e.g. "v15-draft (a3f2)" (feature-spec.md:86). */
   snapshotLabel?: string;
   /**
-   * P1-T15 presets (feature-spec.md:102-103): field focused on mount —
+   * Presets (feature-spec.md:102-103): field focused on mount —
    * Tune → "version", Evaluate → "model". Mount-time only, not controlled.
    */
   initialFocus?: "version" | "model";
   /**
-   * P1-T15: judge section's initial open state (Evaluate arrives expanded,
+   * Judge section's initial open state (Evaluate arrives expanded,
    * awaiting judge_model/rubric). Defaults to open iff value.judge is set.
    */
   judgeInitiallyOpen?: boolean;

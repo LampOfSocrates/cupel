@@ -16,14 +16,14 @@ import { setAuthToken } from "../api/auth";
 import { product } from "../lib/product";
 import { RETURN_TO_PARAM, sanitizeReturnTo } from "../lib/returnTo";
 
-// P2-T07 login screen — unsketched; feature-spec.md:95 "derive from spec +
+// Login screen — unsketched; feature-spec.md:95 "derive from spec +
 // existing visual language". Minimal proposal (approved shape from the task):
 // centered Mantine card, email + password, inline error state. Spec:
 // feature-spec.md:18 "On: login screen (email + password or SSO redirect) →
 // POST /auth/token; token attached by the single API client". On success the
 // token is stored for the ACTIVE target and navigation returns to the
 // validated ?return_to= path (same-origin relative only — lib/returnTo.ts),
-// so P2-SHARE deep links round-trip through a 401. The app still calls
+// so share deep links round-trip through a 401. The app still calls
 // GET /me on boot regardless (invariant; App.tsx re-boots on the token
 // change). This page never knows which auth mode the backend runs — it is
 // simply where 401s land.

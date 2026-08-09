@@ -18,7 +18,7 @@ import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
 
-// P1-T11 — Runs 3-step flow (cupel-phases.md:19): "Replay stored conversations
+// Runs 3-step flow (cupel-phases.md:19): "Replay stored conversations
 // — or a single turn — under a different instruction version, model, or
 // endpoint — using the Runs stepper: pick (sketch 02), configure (sketch 03),
 // compare (sketch 04)". Engine (feature-spec.md:41): "take stored
@@ -37,7 +37,7 @@ import { useApp } from "../AppContext";
 // affordance that duplicates the previous config (documented deviation:
 // minimum 1 config, matching the sketch's single-drawer density).
 //
-// P1-T12b: judge section live (feature-spec.md:48 "Judge (optional, collapsed
+// Judge section live (feature-spec.md:48 "Judge (optional, collapsed
 // by default): toggle on → judge model + rubric fields appear") — rubric
 // dropdown fed by GET /eval/rubrics (feature-spec.md:230 "Runs · 2 Configure |
 // … GET /eval/rubrics"), judge model from the session models cache. The judge
@@ -45,12 +45,11 @@ import { useApp } from "../AppContext";
 // note) — queueing here only records the intent in the config.
 //
 // Scope guards (never build ahead, cupel-phases.md:158):
-// - endpoints hidden (showEndpoints defaults false) — turn re-fire is P1-T13.
+// - endpoints hidden (showEndpoints defaults false).
 // - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
-// - no queue UI here — the queue PANEL is P1-T08.
 //
-// P1-T20b — Test-in-Runs arrival (cupel-phases.md:18 "editor → Runs flow
+// Test-in-Runs arrival (cupel-phases.md:18 "editor → Runs flow
 // (sketches 06 → 03)"): the editor navigates here with router state
 // {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set
@@ -65,10 +64,10 @@ import { useApp } from "../AppContext";
 //   or user-changed) before POSTing the replay, so the next test remembers it.
 // A fresh "New run" clears the flow — the PUT belongs to Test-in-Runs only.
 
-// P1-T15 — sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
+// Sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
 // Runs with instruction-version field focused, judge off. Sidebar Evaluate →
 // opens Runs with model field + judge section expanded." The preset travels
-// as router state {preset} (same mechanism as the T20b handoff above) and is
+// as router state {preset} (same mechanism as the Test-in-Runs handoff above) and is
 // folded into the nav reducer on every arrival, because the sidebar links can
 // fire while this page is already mounted. A preset only shapes the Configure
 // step's INITIAL panel UI (focus + judge open/closed) — the flow is
@@ -326,7 +325,7 @@ export function RunsPage() {
             New run
           </Button>
         </Group>
-        {/* P2-T07c: a disabled tree keeps its runs readable while queueing new
+        {/* A disabled tree keeps its runs readable while queueing new
             work 409s (feature-spec.md:20 "read-only banner"). */}
         <ReadOnlyTreeBanner />
         {(runsError ?? error) && (

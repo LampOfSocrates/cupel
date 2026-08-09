@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// P1-TE2E — the Phase-1 Definition of done, walked end-to-end
+// The Phase-1 Definition of done, walked end-to-end
 // (cupel-phases.md:64-65): "app boots on mock with seeded data → simulate
 // (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2
 // endpoints → compare → judge → read reasoning → edit agent → Test in Runs →

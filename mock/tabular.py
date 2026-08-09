@@ -1,4 +1,4 @@
-"""P2-T12 bulk-import parsing — "upload CSV/XLSX (or paste a table)"
+"""Bulk-import parsing — "upload CSV/XLSX (or paste a table)"
 (feature-spec.md:63; openapi.yaml:1376-1379).
 
 DEPENDENCY DECISION (documented per task): mock/requirements.txt gains NOTHING.

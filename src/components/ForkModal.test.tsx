@@ -164,8 +164,7 @@ describe("ForkModal", () => {
     await user.click(screen.getByRole("button", { name: "Fork ⑂" }));
     await screen.findByTestId("fork-results");
 
-    // run_id → GET …/runs/{runId} route (openapi.yaml:1581-1585); pivot
-    // RENDERING is P1-T14 — only the link belongs to T13.
+    // run_id → GET …/runs/{runId} route (openapi.yaml:1581-1585).
     await user.click(screen.getByText("View run"));
     await screen.findByText("run-probe run-1");
   });

@@ -368,7 +368,7 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(settings.properties.chat_defaults).toBeDefined();
   });
 
-  // P2-PERSIST — Health.storage is the ONLY contract change in that task, and
+  // Health.storage is the ONLY contract change in that task, and
   // it is additive by construction: a new optional property on an existing
   // response schema. These assertions are what makes "additive" checkable,
   // not just claimed.
@@ -385,7 +385,7 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(storage.properties.restored.type).toBe("boolean");
   });
 
-  // P2-CHATUX — FeedbackRequest.comment is the ONLY contract change in that
+  // FeedbackRequest.comment is the ONLY contract change in that
   // task, additive by construction: a new optional property on an existing
   // request schema, so v0.3.0 clients that only send {message_id, rating}
   // remain conformant and the version does not move.

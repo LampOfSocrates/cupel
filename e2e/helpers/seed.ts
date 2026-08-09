@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { API_ORIGIN } from "./api";
 
-// P2-E2E — the few API writes the journeys need as SETUP. Everything a spec
+// The few API writes the journeys need as SETUP. Everything a spec
 // actually asserts still goes through the UI; this is only "given a
 // conversation exists". Same trick smoke.spec.ts and dod.spec.ts already use:
 // the mock's generation is a pure function of its inputs (mock/util.py

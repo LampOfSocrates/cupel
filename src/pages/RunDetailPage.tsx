@@ -37,7 +37,7 @@ import { useApp } from "../AppContext";
 // the run status is terminal (refetch-on-event is the documented baseline;
 // cell patching is only an optimization). Unsubscribes on unmount/terminal.
 //
-// P1-T12b eval layer (feature-spec.md:49 "If judge on: score column + summary
+// Eval layer (feature-spec.md:49 "If judge on: score column + summary
 // header (mean, distribution sparkline), drill-in per turn for judge
 // reasoning"; :64 "scores stream into the grid live as judging tasks finish
 // (SSE) … summary header (mean + distribution) updates live"):
@@ -51,7 +51,7 @@ import { useApp } from "../AppContext";
 //
 // Cancel = DELETE /tasks/{task_id} on the run's parent task (openapi.yaml:
 // 832-839 "Cancel a task … cancels queued/running children") — a small
-// affordance only; the queue PANEL is P1-T08.
+// affordance only.
 
 const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
 // A judging task still owns the run's scores while it is queued or running.
@@ -69,15 +69,15 @@ export function RunDetailPage() {
   // openapi.yaml:791-792; feature-spec.md:109).
   const [stage, setStage] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  // P1-T13 cell re-fire target — the ⑂ modal is seeded with the CELL's source
+  // Cell re-fire target — the ⑂ modal is seeded with the CELL's source
   // turn (feature-spec.md:72 "'re-run this turn with…' on any results cell").
   const [forkSource, setForkSource] = useState<{
     conversation_id: string;
     turn_id: string;
   } | null>(null);
-  // T12b: in-flight judging parent task (POST /eval/judge 202 TaskRef,
+  // In-flight judging parent task (POST /eval/judge 202 TaskRef,
   // openapi.yaml:949-953) — non-null shows the subtle "judging…" state on the
-  // header until the task's terminal frame arrives (no queue UI — T08).
+  // header until the task's terminal frame arrives.
   const [judgeTaskId, setJudgeTaskId] = useState<string | null>(null);
   const [judgeFormOpen, setJudgeFormOpen] = useState(false);
   const [judgeDraft, setJudgeDraft] = useState<Partial<JudgeConfig>>({});
@@ -99,7 +99,7 @@ export function RunDetailPage() {
   // Loads overlap (mount double-fetch, debounced refetches, judge handler) and
   // a SLOW stale response resolving after a newer one would overwrite terminal
   // state with "still running" — with no further frames due, the grid froze
-  // there (found by the P1-TE2E DoD walk). useAsync's seq guard is what keeps
+  // there. useAsync's seq guard is what keeps
   // only the latest load applying. Summary rides the same (debounced) tick —
   // "summary header … updates live" (feature-spec.md:64).
   const {
@@ -150,11 +150,11 @@ export function RunDetailPage() {
     [runId],
   );
 
-  // T12b judge trigger. The contract's judging path is POST /eval/judge —
+  // Judge trigger. The contract's judging path is POST /eval/judge —
   // replay configs carry `judge` (JudgeConfig, openapi.yaml:1508-1514) as the
   // UI's recorded intent, and the CLIENT fires it.
   //
-  // THE RULE (rewritten in the UX phase; P2-RECORD found the old one): judge a
+  // THE RULE: judge a
   // run that IS done and carries a judge config and has not been judged yet —
   // NOT "judge a run I happened to watch finish". The old trigger keyed off a
   // live non-terminal → done transition, so opening a run link after the run
@@ -190,7 +190,7 @@ export function RunDetailPage() {
   // RESIDUAL RACE (cannot be closed client-side): two tabs that both reach
   // step 3 before either's POST creates its task will both judge, appending
   // duplicates. Only a server-side Idempotency-Key on the 202 fixes that —
-  // it is bucket C / P3-T00, and openapi.yaml is frozen here.
+  // it is bucket C, and openapi.yaml is frozen here.
   const autoJudge =
     run?.id === runId && run.status === "done"
       ? (run.columns.map((c) => c.config.judge).find((j): j is JudgeConfig => j != null) ?? null)
@@ -247,7 +247,7 @@ export function RunDetailPage() {
       reload();
     };
     void (async () => {
-      // Reconnect loop (found by the P1-TE2E DoD walk): the page-scoped
+      // Reconnect loop: the page-scoped
       // stream can drop mid-run (connection reuse/proxy/server close) and a
       // single-shot subscription then freezes the fill forever. On a
       // non-abort exit: reconcile immediately (frames emitted while
@@ -303,7 +303,7 @@ export function RunDetailPage() {
             } else if (ev.event === "progress") {
               belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
             } else {
-              belongs = false; // span frames: trace-view scope (P1-T16)
+              belongs = false; // span frames: trace-view scope
             }
             if (!belongs) continue;
             if (ev.event === "progress" && ev.data.progress.stage) {
@@ -374,7 +374,7 @@ export function RunDetailPage() {
           <span />
         )}
         <Group gap={2} wrap="nowrap">
-          {/* P1-T16 ⌁ — "⌁ trace icon on every turn — in Chat, results
+          {/* ⌁ — "⌁ trace icon on every turn — in Chat, results
               grid cells, and drill-in. Works on originals, forks, and
               replays alike" (feature-spec.md:145): done cells that carry
               the produced turn's id (RunCell.turn_id, openapi.yaml:1652)
@@ -541,12 +541,12 @@ export function RunDetailPage() {
       )}
 
       {/* Cell ⑂ via the cell-action slot (separate from renderAnnotation,
-          which T12b now fills with score chips). Done cells only — the slot
+          which now fills with score chips). Done cells only — the slot
           is invoked for status done; every row carries its source turn
           (Run.rows[].source, openapi.yaml:1607-1643). Sketch 04: "+ Re-run
           this turn with… POST …/replay/turn".
 
-          P1-T14 fork pivot: for turn re-fire runs the server already delivers
+          Fork pivot: for turn re-fire runs the server already delivers
           the pivoted grid — one row, "column per endpoint" with endpoint-name
           labels (openapi.yaml:636-639; mock/main.py:634-635) — so no client
           reshaping is needed; ComparisonView renders whatever columns arrive.
@@ -559,7 +559,7 @@ export function RunDetailPage() {
           one rule links baseline → original and forks → their conversations.
           Cells without a conversation_id (plain replay configs) get no link.
 
-          T12b score chips: "score column reads latest judgment per (case,
+          Score chips: "score column reads latest judgment per (case,
           rubric)" (feature-spec.md:62) — the server denormalizes that into
           RunCell.latest_score, joined to its case by RunCell.case_id
           (openapi.yaml:1654-1664); chip tap opens the judgment drawer. */}

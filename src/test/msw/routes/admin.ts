@@ -10,7 +10,7 @@ import type {
 import { BASE, conv, counters, mockTrees } from "../state";
 import { mockRoots } from "./conversations";
 
-// P2-T07b/07c admin fixtures — GET/PUT /admin/users (openapi.yaml:169-218),
+// Admin fixtures — GET/PUT /admin/users (openapi.yaml:169-218),
 // GET/PUT /admin/users/{userId}/permissions (:220-265), PATCH
 // /admin/agenttrees/{treeId} (:267-296). Users mirror the real mock's seeded
 // pair (mock/auth.py SEED_USERS); AdminUser carries roles only —
@@ -58,7 +58,7 @@ export const permissionPuts: Array<{
 export const adminUserUpserts: AdminUserUpsert[] = [];
 export const treeTogglePatches: Array<{ treeId: string; enabled: boolean }> = [];
 
-// ------------------------------------ P2-T12a Inspector + casebooks (v0.3.0)
+// -------------------------------------------- Inspector + casebooks (v0.3.0)
 // GET /admin/conversations (openapi.yaml:298-348) — "Inspector — every
 // conversation, cross-user"; the handler applies the contract's six filters and
 // page/page_size so a test can prove a control reaches the right query param.

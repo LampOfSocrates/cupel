@@ -1,6 +1,6 @@
 import { Badge } from "@mantine/core";
 
-// P1-T12b — color-banded score badge ("scores stream into the grid live …
+// Color-banded score badge ("scores stream into the grid live …
 // color-banded badges", feature-spec.md:64). Style per annotated sketch 04:
 // small pill chips on the cell, green for high scores (8.7 on #EAF3DE/#3B6D11)
 // and amber for middling ones (6.1 on #FAEEDA/#854F0B) — the contract's judge

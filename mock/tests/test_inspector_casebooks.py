@@ -1,4 +1,4 @@
-"""P2-T12a Inspector + Casebooks tests. Run: npm run test:mock.
+"""Inspector + Casebooks tests. Run: npm run test:mock.
 
 Contract under test (openapi.yaml v0.3.0):
 - :298-348 GET /admin/conversations ("Inspector — every conversation,
@@ -714,7 +714,7 @@ def test_replay_validation_and_disabled_trees():
                 "turn_id": conv["turn"]["id"]})
             assert (await c.post(f"/casebooks/{book['id']}/replay",
                                  json={"configs": []})).status_code == 422
-            # Context widening is P3-CTX; frozen is pinned like tree replay.
+            # Context widening is Phase 3; frozen is pinned like tree replay.
             assert (await c.post(f"/casebooks/{book['id']}/replay",
                                  json={"configs": [{}],
                                        "context_policy": "current"})).status_code == 422

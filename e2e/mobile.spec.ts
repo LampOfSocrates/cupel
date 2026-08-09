@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// P2-MOBILE-SHELL — the user-reported bug, walked at phone size: "in portrait
+// The user-reported bug, walked at phone size: "in portrait
 // mode new chat doesn't open the chat" / "I only see the sidebar, it doesn't
 // collapse when I do a new chat". Below the navbar breakpoint Mantine renders
 // the sidebar as a full-width overlay, so the route change was invisible.
@@ -19,7 +19,7 @@ test("portrait: burger opens the sidebar, New chat closes it and shows the chat"
   // Boot lands on the CHAT, not on the sidebar (the reported symptom).
   await expect(composer).toBeVisible();
   await expect(navbar).toHaveAttribute("data-collapsed", "true");
-  // The non-prod banner survives the mobile header (P2-T17).
+  // The non-prod banner survives the mobile header.
   await expect(page.getByTestId("env-banner")).toBeVisible();
 
   // Burger opens the overlay; the sidebar is now what covers the screen.

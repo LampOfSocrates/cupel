@@ -1,11 +1,11 @@
-// P2-SHARE — copy-link sharing (free tier). Deliberately CONTRACT-NEUTRAL:
+// Copy-link sharing (free tier). Deliberately CONTRACT-NEUTRAL:
 // a share link is just one of the app's own routes rendered absolute, so it
 // rides the existing GET endpoints and adds nothing to openapi.yaml. The
 // receiver authenticates normally and the backend's own rule decides what
 // they see — "404 for a conversation that is missing OR unpermitted"
 // (openapi.yaml:1948), which ChatPage renders as one no-access state.
 //
-// Anonymous tokenized public links (expiry, revocation) are PRO-2
+// Anonymous tokenized public links (expiry, revocation) are pro-tier
 // (TASKS.md:67) and are NOT built here.
 
 /** Query param carrying the targeted turn on a conversation deep link. */

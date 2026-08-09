@@ -4,7 +4,7 @@ import type { Task } from "../api/types";
 import { TaskQueue } from "../components";
 import { useQueue } from "../QueueContext";
 
-// P1-T08 — the full queue panel per sketch 05 ("Tasks" header, "3 running ·
+// The full queue panel per sketch 05 ("Tasks" header, "3 running ·
 // SSE live", parent cards with children). "Queue panel (all pages): each task
 // shows live progress bar + stage text + elapsed time; expandable to child
 // tasks; cancel (parent cancels children). Failed children don't kill the

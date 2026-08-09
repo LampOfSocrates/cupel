@@ -1,4 +1,4 @@
-// cupel-ready comparator engine (P2-READY, cupel-phases.md:74).
+// cupel-ready comparator engine (cupel-phases.md:74).
 // Compares a DEREFERENCED contract OpenAPI doc against a DEREFERENCED target
 // doc, contract -> target direction only (extra target paths are ignored).
 //
@@ -60,7 +60,7 @@ export const PHASE1_PATHS = [
 ];
 
 // v0.3.0 added Phase-2 METHODS onto Phase-1 paths in one place: the versioned
-// PUT on /eval/cases/{caseId} (contract "P2-T00" — append-only case saves).
+// PUT on /eval/cases/{caseId} (append-only case saves).
 // --phase1-only must therefore filter per operation, not just per path: only
 // the methods listed here count as Phase 1 for that path (unlisted paths
 // include all their contract methods).

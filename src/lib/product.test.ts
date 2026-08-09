@@ -4,7 +4,7 @@ import { DEFAULT_TREE_TERMS, product, resolveProductLabels } from "./product";
 import { serializeHistoryMarkdown } from "./exportInstructions";
 import type { InstructionHistory } from "../api/types";
 
-// PW-1 whitelabel-lite — agentic.config.ts `product` is the one place the app
+// Whitelabel-lite — agentic.config.ts `product` is the one place the app
 // is named. These cover the shipped defaults (so an untouched checkout still
 // says "Cupel" / "agent tree"), the grammar forms an adopter's term has to
 // survive, and that the strings really are threaded rather than duplicated.

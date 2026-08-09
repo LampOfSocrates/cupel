@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildStartupPlan, UI_PORT } from "../scripts/dev.mjs";
 import { agenticConfig } from "../agentic.config.ts";
 
-// P2-DEVSTART — `npm start` (scripts/dev.mjs) boots the UI plus, per the one
+// `npm start` (scripts/dev.mjs) boots the UI plus, per the one
 // config artifact's localMock flag, the bundled demo backend. The plan builder
 // is pure so the commands and the startup banner can be asserted here without
 // spawning anything.
@@ -29,7 +29,7 @@ const disabled = (dev = "local", env = {}) =>
     env,
   );
 
-// P2-PERSIST — CUPEL_STORAGE picks how durable the demo backend's SQLite file
+// CUPEL_STORAGE picks how durable the demo backend's SQLite file
 // is; s3 replicates it to a bucket with Litestream (the hosted demo).
 const S3_ENV = {
   CUPEL_STORAGE: "s3",

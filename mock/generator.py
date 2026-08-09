@@ -1,4 +1,4 @@
-"""Cupel data generator (P1-T18): deterministic seed + basic drip.
+"""Cupel data generator: deterministic seed + basic drip.
 
 Invariant (cupel-phases.md:160, feature-spec.md:185): the generator "writes
 through the public API (POST …/chat, /replay, /eval/judge etc.), never
@@ -407,7 +407,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def auth_headers(token: str | None) -> dict:
-    """Headers for the P1-TDEPLOY token gate; {} when no token (open server)."""
+    """Headers for the demo token gate; {} when no token (open server)."""
     return {"X-Demo-Token": token} if token else {}
 
 

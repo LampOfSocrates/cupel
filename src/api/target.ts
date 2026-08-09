@@ -1,4 +1,4 @@
-// P2-CONFIG — runtime backend-target store over agentic.config.ts (the one
+// Runtime backend-target store over agentic.config.ts (the one
 // config artifact). The active target is DEVICE-LOCAL (feature-spec.md:161
 // "Target is device-local (not synced via /settings)") — persisted in
 // localStorage, resolved from the config on every read so the config file
@@ -8,7 +8,7 @@ import { agenticConfig, type BackendTarget } from "../../agentic.config";
 
 export const TARGET_STORAGE_KEY = "cupel.backend.target";
 
-// P2-T17 — the "custom Base URL field" of feature-spec.md:158: one extra
+// The "custom Base URL field" of feature-spec.md:158: one extra
 // non-preset target whose baseUrl the user types in Settings → Backend.
 // Device-local like the target choice itself (feature-spec.md:161).
 export const CUSTOM_TARGET_ID = "custom";
@@ -16,8 +16,7 @@ export const CUSTOM_URL_KEY = "cupel.backend.customUrl";
 
 /**
  * Default target id per build kind (agentic.config.ts defaultTarget):
- * dev server / vitest → mock; `vite build` bundles → prod (same-origin,
- * preserving the P1-TDEPLOY semantic that base.ts carried).
+ * dev server / vitest → mock; `vite build` bundles → prod (same-origin).
  * `isProd` is injectable ONLY so tests can exercise both sides —
  * import.meta.env.PROD is statically replaced at build time, so the
  * production branch is unreachable in vitest without the parameter.
@@ -92,7 +91,7 @@ export function getActiveTarget(): BackendTarget {
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
-/** Persist a new active target and notify subscribers (future T17 switcher). */
+/** Persist a new active target and notify subscribers. */
 export function setActiveTarget(id: string): void {
   if (!findTarget(id)) throw new Error(`Unknown backend target: ${id}`);
   try {

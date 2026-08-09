@@ -1,7 +1,7 @@
 import { Children, type ReactNode } from "react";
 import { Group, Text, UnstyledButton } from "@mantine/core";
 
-// Node card shared by the agent tree view and (later, P1-T16) the trace call
+// Node card shared by the agent tree view and the trace call
 // tree — "reusing the trace view's node components (same colors/shapes; no
 // timings — this is structure, not execution)" (feature-spec.md:24);
 // "(Agent tree view: reuse 08's node components, structure-only — no separate
@@ -26,7 +26,7 @@ interface TreeNodeProps {
   kind?: TreeNodeKind;
   /** Disabled/unpermitted styling (feature-spec.md:25). */
   dimmed?: boolean;
-  /** Trace call-tree selection highlight (P1-T16 — synced with the waterfall). */
+  /** Trace call-tree selection highlight (synced with the waterfall). */
   selected?: boolean;
   /** "Errors mark the span red in both views" (feature-spec.md:149). */
   error?: boolean;

@@ -43,7 +43,7 @@ export const endpointsRequests: string[] = []; // tree ids seen by GET endpoints
 
 // GET /models (openapi.yaml:98-112, Model :1102-1107) — mirrors the real
 // mock's list (mock/config.py:6-11). Tests count fetches via modelsRequests
-// to prove the context fetches once and caches (P1-T05).
+// to prove the context fetches once and caches.
 export const mockModels: Model[] = [
   { id: "claude-sonnet-5", name: "Claude Sonnet 5" },
   { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
@@ -102,7 +102,7 @@ export const systemHandlers = [
     return HttpResponse.json(healthConfig.body);
   }),
 
-  // ------------------------- LOCAL_BASE handlers (P2-T17 target switching):
+  // -------------------------------- LOCAL_BASE handlers (target switching):
   // everything a full-App boot + Settings page touch on the new base.
   http.get(`${LOCAL_BASE}/me`, () => {
     localBaseRequests.push("/me");
@@ -152,7 +152,7 @@ export const systemHandlers = [
   }),
 
   // GET /models (openapi.yaml:98-112) — model dropdown source
-  // (feature-spec.md:122). With X-LLM-Key (P1-T18c) the curated live list
+  // (feature-spec.md:122). With X-LLM-Key the curated live list
   // answers instead, mirroring the real mock.
   http.get(`${BASE}/models`, ({ request }) => {
     captureLlmHeaders(request);

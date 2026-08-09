@@ -95,11 +95,10 @@ describe("RunsPage — stepper", () => {
     await user.click(within(config2).getByRole("combobox", { name: "Model" }));
     await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
 
-    // judge section live since T12b, one collapsed toggle per config
+    // judge section, one collapsed toggle per config
     // (feature-spec.md:48 "Judge (optional, collapsed by default)") — left
     // untouched here, so the queued configs carry no judge key.
     expect(screen.getAllByRole("switch", { name: "⚖ Judge" })).toHaveLength(2);
-    // endpoints hidden — turn re-fire is P1-T13
     expect(screen.queryByRole("combobox", { name: "Endpoints" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Queue" }));
@@ -125,7 +124,7 @@ describe("RunsPage — stepper", () => {
     expect(screen.getByText("claude-haiku-4-5")).toBeInTheDocument();
   });
 
-  // P1-T12b judge trigger — the contract's judging path is POST /eval/judge
+  // Judge trigger — the contract's judging path is POST /eval/judge
   // (openapi.yaml:931-954); the queued replay config carries `judge` as the
   // UI's intent (JudgeConfig, openapi.yaml:1508-1514) and the CLIENT fires
   // the judge once the run detail page observes the run reach 'done'
@@ -175,12 +174,12 @@ describe("RunsPage — stepper", () => {
       judge_model: "claude-haiku-4-5",
       rubric_id: "rub-help",
     });
-    // 202 task_id → subtle judging state on the run header (no queue UI — T08)
+    // 202 task_id → subtle judging state on the run header
     await screen.findByTestId("judging-badge");
   });
 });
 
-// P1-T20b — Test-in-Runs arrival + per-agent last-selection:
+// Test-in-Runs arrival + per-agent last-selection:
 // - GET .../last-selection "Remembered selection (empty items = first-time
 //   testing)" (openapi.yaml:309-311); PUT "Remember the conversation
 //   selection for this agent" (:315-317).
@@ -289,7 +288,7 @@ describe("RunsPage — Test in Runs arrival", () => {
   });
 });
 
-// P1-T15 — sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
+// Sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
 // Runs with instruction-version field focused, judge off. Sidebar Evaluate →
 // opens Runs with model field + judge section expanded." The preset arrives
 // as router state {preset} and shapes ONLY the Configure step's initial panel
@@ -379,7 +378,7 @@ describe("RunsPage — Tune/Evaluate preset arrival", () => {
   });
 });
 
-// P2-T07c: "existing conversations stay READABLE (read-only banner)"
+// "Existing conversations stay READABLE (read-only banner)"
 // (feature-spec.md:20) — the runs list of a disabled tree still loads; only
 // NEW work is blocked (409 tree_disabled, surfaced by the central mapping).
 describe("Disabled tree (P2-T07c)", () => {

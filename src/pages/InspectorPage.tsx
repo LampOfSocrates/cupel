@@ -28,7 +28,7 @@ import { Markdown } from "../lib/markdown";
 import { product } from "../lib/product";
 import type { CasebookItemCreate } from "../api/types";
 
-// P2-T12a Inspector (UNSKETCHED — derived from the app's existing dense visual
+// Inspector (UNSKETCHED — derived from the app's existing dense visual
 // language per cupel-phases.md:95: the Settings → Members table and the runs
 // grid are the references. Paper blocks, size-xs controls, one dense Table).
 //
@@ -54,7 +54,7 @@ import type { CasebookItemCreate } from "../api/types";
 // Keys are ignored while typing in a filter field or while a modal is open.
 //
 // Filters live in the URL (feature-spec.md:289 "filters as URL params"), so an
-// inspection is a shareable link — the same reasoning as P2-SHARE's deep links.
+// inspection is a shareable link — the same reasoning as the share deep links.
 //
 // NOT virtualized (the dev prompt's "virtualized" wish): the contract caps
 // page_size at 100 (openapi.yaml:340), so a page is at most 100 rows and

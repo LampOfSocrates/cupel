@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// P2-CONFIG — remap hook: "Connect backends whose routes are named
+// Remap hook: "Connect backends whose routes are named
 // differently (e.g. /nabu-service/…) via remap" (cupel-phases.md:75). The
 // shipped config defines no remapped target, so the store is mocked to
 // resolve one; buildUrl must apply remap BEFORE prefixing baseUrl.

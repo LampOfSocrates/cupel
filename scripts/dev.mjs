@@ -1,4 +1,4 @@
-// P2-DEVSTART — `npm start`: ONE command that boots the studio UI and, when
+// `npm start`: ONE command that boots the studio UI and, when
 // agentic.config.ts's `localMock.enabled` is true, the bundled demo backend
 // (the FastAPI mock) next to it. Plain Node ESM, no new dependencies — child
 // processes are spawned the way scripts/e2e-auth.mjs does it.
@@ -34,7 +34,7 @@ import path from "node:path";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const UI_PORT = 5173;
 
-// P2-PERSIST — the demo backend's storage mode. `local` (the default, and the
+// The demo backend's storage mode. `local` (the default, and the
 // only thing a developer checkout ever wants) is a plain SQLite file; `s3`
 // replicates that same file to an S3-compatible bucket with Litestream, which
 // is what the hosted demo runs. The mode is an ENV choice, not a config-file

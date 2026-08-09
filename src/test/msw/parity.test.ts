@@ -1,4 +1,4 @@
-// P2-MSW — the drift guard for the fake backend.
+// The drift guard for the fake backend.
 //
 // Why this file exists: handlers.ts grew task by task, each task adding only
 // what it needed. Nothing forced the fake to agree with openapi.yaml, so a UI
@@ -993,7 +993,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     await expect(api.conversations("agent-nope")).rejects.toMatchObject({ status: 404 });
   });
 
-  // Found while building this guard, reported with P2-MSW: the reference
+  // Found while building this guard: the reference
   // implementation emits 409 tree_disabled from SIX operations whose contract
   // entries declare only 2xx/404. mock/main.py is right (feature-spec.md:20
   // "history is read-only"); openapi.yaml under-declares. Nothing is changed

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loginPath, sanitizeReturnTo } from "./returnTo";
 
-// P2-T07 return_to round-trip — built for P2-SHARE deep links
+// Return_to round-trip — built for share deep links
 // (/chat/{id}?turn=...): 401 → /login?return_to=<full path incl. query>;
 // after login navigate back, SAME-ORIGIN RELATIVE PATHS ONLY.
 
@@ -12,7 +12,7 @@ describe("loginPath", () => {
     );
   });
 
-  // P2-SHARE: a multi-param deep link must survive as ONE return_to value —
+  // A multi-param deep link must survive as ONE return_to value —
   // an unencoded "&" would split the second param off into the login URL.
   it("encodes the query so a second param cannot leak out of return_to", () => {
     const encoded = loginPath({ pathname: "/chat/c1", search: "?turn=t2&highlight=1" });

@@ -72,7 +72,7 @@ export interface Health {
   status: "ok";
   version: string;
   seed?: string | null; // "Loaded seed dataset — mock only" (openapi.yaml:1100)
-  // P2-PERSIST Health.storage — optional and additive; a conformant backend
+  // Health.storage — optional and additive; a conformant backend
   // may omit it entirely, so every read must tolerate undefined.
   storage?: {
     mode: "local" | "s3";
@@ -244,7 +244,7 @@ export type CasebookToEvalSetRequest = { set_name: string } | { set_id: string }
 // openapi.yaml:3286 CasebookReplayRequest — "Same engine as ReplayRequest
 // applied to the casebook's referenced turns; context fields carry
 // ReplayRequest's enums and defaults". context_policy is pinned to frozen by
-// the client exactly as on ReplayRequest (widening is P3-CTX).
+// the client exactly as on ReplayRequest (widening is future work).
 export interface CasebookReplayRequest {
   configs: RunConfig[];
   context_policy?: "frozen";
@@ -318,7 +318,7 @@ export interface ChatDoneEvent {
 export interface FeedbackRequest {
   message_id: string;
   rating: "up" | "down";
-  // P2-CHATUX: optional free-text note stored as the appended judgment's
+  // Optional free-text note stored as the appended judgment's
   // `reasoning`. Additive and optional in the contract, so a bare thumb sends
   // exactly the two fields it always did — omit the key, never send null.
   comment?: string;

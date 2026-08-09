@@ -18,7 +18,7 @@ import type { ReplayTurnAccepted, RunConfig } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 
-// P1-T13 — turn re-fire as forks (cupel-phases.md:20): "Re-fire one turn
+// Turn re-fire as forks (cupel-phases.md:20): "Re-fire one turn
 // against several endpoints at once, each becoming a real new conversation you
 // can open and continue in Chat — from any results cell or any chat turn".
 // Semantics (feature-spec.md:68): "Each (turn × endpoint × config) forks a new
@@ -27,7 +27,7 @@ import { useApp } from "../AppContext";
 // conversation." Fired via POST /agenttrees/{tree}/replay/turn
 // (openapi.yaml:623-652) → 202 ReplayTurnAccepted: "one task_id + new
 // conversation_id per endpoint" (feature-spec.md:71) + run_id backing the
-// fork pivot (T14).
+// fork pivot.
 //
 // Design choice — slim inline selects instead of RunConfigPanel: the sketches'
 // fork affordance is a single glyph in a dense action row (clean/01-chat.svg
@@ -43,8 +43,7 @@ import { useApp } from "../AppContext";
 // Async note: forks generate in the background. Open in Chat navigates
 // immediately and shows whatever is persisted at click time (the copied
 // history); the regenerated turn appears once its task completes — ChatPage
-// has no live task-completion feed for non-streaming turns (global task
-// visibility is P1-T08 scope, not wired here).
+// has no live task-completion feed for non-streaming turns.
 
 interface Props {
   /** Source of the re-fire — the turn whose (copied-history) forks are created. */
@@ -165,8 +164,7 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
           ))}
           <Group justify="space-between" mt={4}>
             {/* run_id backs the fork-comparison pivot (openapi.yaml:1581-1585)
-                — link to the existing run detail route; pivot RENDERING is
-                P1-T14, not built here. */}
+                — link to the existing run detail route. */}
             <Anchor size="xs" onClick={() => go(`/runs/${accepted.run_id}`)}>
               View run
             </Anchor>

@@ -17,7 +17,7 @@ import {
 } from "../test/msw/handlers";
 import { EvalPage } from "./EvalPage";
 
-// Contract under test — P2-T12 eval workbench (sketch 10; feature-spec.md:63
+// Contract under test — eval workbench (sketch 10; feature-spec.md:63
 // "case editor (input / output / reference fields; 'reference from turn'
 // picker), set manager (create/name/version sets, drag cases in), rubric
 // editor (prompt text, save = new version…)"):

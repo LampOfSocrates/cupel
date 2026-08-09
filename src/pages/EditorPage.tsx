@@ -29,12 +29,12 @@ import {
 } from "../lib/exportInstructions";
 import { relativeTime } from "../lib/relativeTime";
 
-// Instruction editor (P1-T10b, sketch 06): "Edit an agent's instructions
+// Instruction editor (sketch 06): "Edit an agent's instructions
 // safely: every save is a new version, with diff view and rollback, never an
 // overwrite" (cupel-phases.md:17); "save = new version, never overwrite. Diff
 // view + rollback" (feature-spec.md:33).
 //
-// Flow decisions (documented per task brief):
+// Flow decisions:
 // - Rollback: "Restore this version" copies that version's content into the
 //   draft (dirty), review via diff, then Save — which is exactly "Rollback =
 //   PUT the old version's content (creates a new version)" (openapi.yaml:
@@ -51,7 +51,7 @@ import { relativeTime } from "../lib/relativeTime";
 // - format select is metadata only: "Phase 1 treats both as plain text; YAML
 //   schema validation is Phase 2" (openapi.yaml:1163-1164).
 //
-// P1-T20b — "Test in Runs" (sketch 06 "Test ▸"; annotated 06 tags it
+// "Test in Runs" (sketch 06 "Test ▸"; annotated 06 tags it
 // "POST …/refunds/snapshots"): "the draft text is snapshotted immutably into
 // the run config (snapshot_id), so the tested text is exactly what ran even
 // if editing continues" (feature-spec.md:86). The button ensures a snapshot
@@ -70,7 +70,7 @@ import { relativeTime } from "../lib/relativeTime";
 // unmounts on the navigate, so surfacing the queued run back here would need
 // new persistence (session storage / server state the contract doesn't have).
 // The spec'd link-back lives on the Results side ("Back to editor" breadcrumb,
-// feature-spec.md:88) — not this task's scope to invent storage for.
+// feature-spec.md:88).
 
 const DEL_STYLE = { background: "#FCEBEB", color: "#A32D2D" };
 const ADD_STYLE = { background: "#EAF3DE", color: "#3B6D11" };
@@ -115,7 +115,7 @@ export function EditorPage() {
         setDraft(live?.content ?? "");
         setSavedContent(live?.content ?? "");
         setFormat(h.format);
-        // Default diff: draft vs live (task brief).
+        // Default diff: draft vs live.
         setDiffFrom(live ? String(live.version) : "draft");
         setDiffTo("draft");
       })
@@ -228,7 +228,7 @@ export function EditorPage() {
     setMode("edit");
   };
 
-  // P1-TEXPORT — free-tier file export: serialize the already-fetched history
+  // Free-tier file export: serialize the already-fetched history
   // (no server round-trip, no contract change) and hand it to the browser.
   const download = (kind: "json" | "md") => {
     if (!history) return;
@@ -293,7 +293,7 @@ export function EditorPage() {
               <Text size="xs" c="dimmed">
                 Versions
               </Text>
-              {/* P1-TEXPORT: download the version history as a file. Disabled
+              {/* Download the version history as a file. Disabled
                   on v0 agents — nothing to export yet (openapi.yaml:215). */}
               <Tooltip
                 label="No versions yet — nothing to export"

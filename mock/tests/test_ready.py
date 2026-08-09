@@ -1,4 +1,4 @@
-"""P2-READY: the mock ships its own OpenAPI (/openapi.json) and the readiness
+"""The mock ships its own OpenAPI (/openapi.json) and the readiness
 script validates it against contract v0.3.0 as the FIRST conformance test
 (cupel-phases.md:98). Run: npm run test:mock.
 
@@ -94,7 +94,7 @@ def test_openapi_gated_like_other_endpoints(monkeypatch):
 def test_phase1_conformance_passes(spec_path):
     """--phase1-only must report FULL conformance: the mock implements the
     whole v0.2.0 surface, so any gap here is a real mock bug (one was found
-    and fixed during P2-READY: /tasks/stream didn't declare its
+    and fixed: /tasks/stream didn't declare its
     text/event-stream content type — see SSE_RESPONSES in mock/main.py)."""
     proc = cupel_ready(str(spec_path), "--phase1-only", "--json")
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -107,8 +107,8 @@ def test_phase1_conformance_passes(spec_path):
 
 def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     """Default (full v0.3.0) run: the missing set is the not-yet-implemented
-    Phase-2 surface. Tolerant by design: later Phase-2 tasks (P2-T07 auth,
-    P2-T12 workbench, ...) implement these endpoints one by one, and this
+    Phase-2 surface. Tolerant by design: later Phase-2 tasks (auth,
+    workbench, ...) implement these endpoints one by one, and this
     test must keep passing as the missing set SHRINKS — so we assert subset
     of the known Phase-2 surface plus a few sentinels that exist TODAY,
     not an exact list."""
@@ -123,15 +123,12 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     missing_paths = {m["path"] for m in report["missing"]}
     assert missing_paths, "expected Phase-2 endpoints to be missing today"
     # Subset (not equality): implemented-later endpoints simply drop out.
-    # P2-T12 implemented the PUT on the Phase-1 path /eval/cases/{caseId}, so
+    # The PUT on the Phase-1 path /eval/cases/{caseId} is implemented, so
     # that path is fully conformant now and the old exemption is gone.
     assert missing_paths <= phase2_paths
-    # Sentinels that are certainly unimplemented today (P2-T07 implemented
-    # /auth/token + /auth/logout; P2-T07b/07c implemented /admin/users,
-    # /admin/users/{userId}/permissions and /admin/agenttrees/{treeId};
-    # P2-T12 implemented the eval workbench surface; P2-T12a implemented
-    # /admin/conversations and the whole /casebooks family — each left this
-    # list, so the missing set shrinks task by task, as documented above).
+    # Sentinels that are certainly unimplemented today (endpoints leave this
+    # list as they get implemented, so the missing set shrinks task by task,
+    # as documented above).
     for sentinel in ("/settings",
                      "/agenttrees/{tree}/memory", "/admin/generator"):
         assert sentinel in missing_paths, f"{sentinel} should be missing today"
@@ -148,7 +145,7 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
                         "/casebooks/{casebookId}/to-eval-set",
                         "/casebooks/{casebookId}/replay"):
         assert implemented not in missing_paths
-    # P2-T12a shrink, recorded so a regression is loud: 51 -> 61 conformant
+    # Shrink recorded so a regression is loud: 51 -> 61 conformant
     # operations of the same 69 checked (10 new: GET /admin/conversations,
     # GET + POST /casebooks, GET + PATCH + DELETE /casebooks/{casebookId},
     # POST /casebooks/{casebookId}/items,
@@ -174,7 +171,7 @@ def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
     assert "--header expects" in bad.stderr
 
 
-# ---------------------------------------------------- P2-INIT: --init mode
+# ------------------------------------------------------------- --init mode
 def test_init_emits_target_block_from_real_mock(spec_path):
     """--init against the real mock's OpenAPI, fetched over HTTP so the
     fetched-origin baseUrl fallback is exercised end-to-end. Expectations

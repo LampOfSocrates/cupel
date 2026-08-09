@@ -30,7 +30,7 @@ import type {
   Turn,
 } from "../api/types";
 
-// P2-T12a Casebook view (UNSKETCHED — same dense language as the Inspector:
+// Casebook view (UNSKETCHED — same dense language as the Inspector:
 // Paper blocks, xs controls, a list pane beside a detail pane).
 //
 // cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one

@@ -1,4 +1,4 @@
-"""P2-T07 auth — both AUTH_MODEs (cupel-phases.md:76 "Turn auth on or off with
+"""Auth — both AUTH_MODEs (cupel-phases.md:76 "Turn auth on or off with
 one env var: off = instant dev as a chosen user; on = real login, tokens, and
 401 handling"; mock deliverable cupel-phases.md:98 "auth endpoints in both
 AUTH_MODEs (seeded admin@demo/restricted@demo, real-shaped JWTs)").
@@ -139,7 +139,7 @@ def me_payload(user: dict) -> dict:
 def ensure_users(db: Db) -> None:
     """Idempotent seed (INSERT OR IGNORE keyed on both id and unique email) —
     safe on every boot and on pre-existing DBs; never overwrites edits made
-    via the future admin endpoints (P2-T07b)."""
+    via the admin endpoints."""
     now = now_iso()
     for u in SEED_USERS:
         db.run(

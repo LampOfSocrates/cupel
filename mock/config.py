@@ -14,7 +14,7 @@ MODELS = [
 # artifact and the server enforces them (openapi.yaml:533-536).
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
-# P2-T12 bulk import: "Small files: 200 with the per-row report inline. Above
+# Bulk import: "Small files: 200 with the per-row report inline. Above
 # the server's size threshold: 202 TaskRef" (openapi.yaml:1385-1389). The
 # threshold is DATA ROWS, not bytes — it is row work that makes an import slow,
 # and it makes the boundary testable without building multi-MB fixtures.
@@ -38,13 +38,13 @@ def fail_marker() -> str:
     counts. Unset (the default, and every deployment) = completely inert.
 
     The Settings → "Random task failures (5%)" control stays greyed out: that is
-    the generator control API, Phase 3 (P3-GEN).
+    the generator control API, Phase 3.
 
     Read per call, not at import, so tests can flip it (mirrors live_disabled).
     """
     return os.environ.get("MOCK_FAIL_MARKER", "")
 
-# --- Live-LLM BYOK mode (P1-T18c, docs/deployment.md:17-31) ---------------
+# --- Live-LLM BYOK mode (docs/deployment.md:17-31) ---------------
 # "Mock stays the backend of record ...; only the generation call inside
 # chat/replay/judge goes to a real provider when a key is present."
 # Headers X-LLM-Key / X-LLM-Model are transport-level by design — deliberately

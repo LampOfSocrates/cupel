@@ -3,10 +3,10 @@ import { useBackendTarget } from "../api/target";
 
 export const ENV_BANNER_HEIGHT = 22;
 
-// P2-T17 — banner config lives on the target (agentic.config.ts
+// Banner config lives on the target (agentic.config.ts
 // BackendTarget.banner): prod declares `false`, mock/staging declare their
 // label + color. Targets with NO banner field (e.g. local, custom) fall back
-// to the P2-CONFIG id-based rule — "Non-prod targets show a colored banner in
+// to the id-based rule — "Non-prod targets show a colored banner in
 // the app chrome so nobody mistakes mock data for real" (feature-spec.md:161).
 export function resolveBanner(
   target: BackendTarget,

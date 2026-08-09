@@ -1,4 +1,4 @@
-"""P2-T12 eval workbench — the mock half of contract v0.3.0's eval surface:
+"""Eval workbench — the mock half of contract v0.3.0's eval surface:
 POST /eval/cases, GET+PUT /eval/cases/{caseId}, POST /eval/cases/import,
 GET+POST /eval/sets, PUT /eval/sets/{setId}, PUT /eval/rubrics/{rubricId},
 and JudgeRequest.set_id (+ set_version).
@@ -162,7 +162,7 @@ def test_case_put_validation_and_missing_case():
 
 def test_versioned_case_keeps_phase1_rows_valid(tmp_path):
     """The (id, version) migration (db.py Db._migrate_eval_cases): a database
-    written before P2-T12 opens fine and its rows read back as version 1."""
+    written before versioning opens fine and its rows read back as version 1."""
     path = str(tmp_path / "old.sqlite")
     conn = sqlite3.connect(path)
     conn.executescript(

@@ -80,8 +80,7 @@ export const mockRoots: Conversation[] = seedRoots();
 // Fork transcripts: copied history strictly BEFORE the fork turn (fresh ids,
 // mirroring mock/main.py:664-673) + the regenerated assistant turn appended by
 // the fork task (engine.py:354-363). Endpoint ids use the ep_agent1_* form of
-// the endpoint fixtures (T13 flag resolved — the old "prod"/"staging" ids
-// never existed in mockEndpoints).
+// the endpoint fixtures.
 function seedForks(): Record<string, Conversation[]> {
   return {
   c2: [
@@ -185,7 +184,7 @@ export const conversationHandlers = [
     const agentId = url.searchParams.get("agent_id");
     if (agentId) items = items.filter((c) => c.agent_id === agentId);
     if (search) items = items.filter((c) => c.title.toLowerCase().includes(search));
-    // P2-MSW: server-side sort (openapi.yaml:381; mock/main.py:754, :910
+    // Server-side sort (openapi.yaml:381; mock/main.py:754, :910
     // ORDER BY last_activity_at DESC) — not a property of the fixture order.
     items = items.slice().sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
     const total = items.length;

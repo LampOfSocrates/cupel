@@ -73,7 +73,7 @@ export function ConversationList({ tree }: Props) {
   );
 
   // conversationsVersion: chat sends bump it so new/updated conversations
-  // appear without a manual reload (P1-T02).
+  // appear without a manual reload.
   useEffect(() => {
     setForks({});
     void load(1, false);
@@ -144,7 +144,7 @@ export function ConversationList({ tree }: Props) {
               size="compact-xs"
               ml="md"
               // Addressable per conversation: the label ("⑂ 2 forks") repeats
-              // across rows, so e2e needs the id to target one (P2-E2E).
+              // across rows, so e2e needs the id to target one.
               data-testid={`forks-${conv.id}`}
               onClick={() => void toggleForks(conv)}
             >
@@ -232,7 +232,7 @@ const ConversationRow = memo(function ConversationRow({
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item onClick={() => onRename(conv)}>Rename</Menu.Item>
-          {/* P2-SHARE — "Copy link" joins rename/delete in the ⋯ menu
+          {/* "Copy link" joins rename/delete in the ⋯ menu
               (feature-spec.md:5-6). Same CopyButton affordance as the turn
               action row, so the confirmation reads identically; the menu is
               held open (closeMenuOnClick=false) precisely so that

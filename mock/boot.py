@@ -1,4 +1,4 @@
-"""P2-PERSIST container entrypoint: pick the storage mode, then serve.
+"""Container entrypoint: pick the storage mode, then serve.
 
 This is the Docker CMD (`python -m mock.boot`). It sits one layer OUTSIDE
 mock/entrypoint.py, which is unchanged in what it does — serve + seed:
@@ -6,7 +6,7 @@ mock/entrypoint.py, which is unchanged in what it does — serve + seed:
   CUPEL_STORAGE=local (default)   exec `python -m mock.entrypoint`. Nothing
                                   else happens; a developer checkout and the
                                   current Render deploy behave exactly as they
-                                  did before this task.
+                                  did before.
 
   CUPEL_STORAGE=s3                write litestream.yml from the CUPEL_S3_*
                                   env, restore the SQLite file from the bucket

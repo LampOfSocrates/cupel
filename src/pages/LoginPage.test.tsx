@@ -9,10 +9,10 @@ import { authTokenRequests, BASE, MOCK_JWT } from "../test/msw/handlers";
 import { getAuthToken } from "../api/auth";
 import { LoginPage } from "./LoginPage";
 
-// P2-T07 login screen (unsketched — minimal centered card per the task):
+// Login screen (unsketched — minimal centered card):
 // email + password → POST /auth/token (feature-spec.md:18), token stored for
 // the active target, redirect to the VALIDATED return_to (lib/returnTo.ts) —
-// the mechanism P2-SHARE deep links round-trip through.
+// the mechanism share deep links round-trip through.
 
 function LocationProbe() {
   const loc = useLocation();
@@ -54,7 +54,7 @@ describe("LoginPage (P2-T07)", () => {
     expect(getAuthToken("mock")).toBe(MOCK_JWT);
   });
 
-  // P2-SHARE verification: the whole query string must survive the round trip
+  // Share-link verification: the whole query string must survive the round trip
   // intact, INCLUDING an encoded "&" — if return_to were left unencoded the
   // second param would split off into the login URL and the receiver would
   // land on the conversation with the target lost.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cupel-ready — backend readiness/conformance report (P2-READY).
+// cupel-ready — backend readiness/conformance report.
 // cupel-phases.md:74: "run npx cupel-ready <your-openapi> and get a report of
 // every missing endpoint or mismatched shape"; :107 "npx cupel-ready
 // http://localhost:4010/openapi.json → conformance: PASS".
@@ -17,7 +17,7 @@
 //   --init                emit a ready-to-paste agentic.config.ts target block
 //                         (auto-detected baseUrl / prefix remap / auth) after
 //                         the conformance report. TEXT ONLY — never writes
-//                         agentic.config.ts (P2-INIT; docs/readiness.md).
+//                         agentic.config.ts (docs/readiness.md).
 //                         With --prefix, that prefix is used instead of
 //                         auto-detection. With --json the block + derivations
 //                         land under an `init` key.
@@ -85,7 +85,7 @@ export async function loadTarget(source, headers) {
 }
 
 // ---------------------------------------------------------------- --init mode
-// P2-INIT: derive a ready-to-paste agentic.config.ts target block from the
+// Derive a ready-to-paste agentic.config.ts target block from the
 // target's own OpenAPI. TEXT ONLY — this script never writes agentic.config.ts;
 // the one config artifact stays human-owned and the human pastes the block.
 
@@ -146,7 +146,7 @@ export function detectPrefix(contract, target, { phase1Only = false } = {}) {
   return { prefix: null, base, withRemap: null, note: null };
 }
 
-/** Token-ish securitySchemes → requiresToken (the switcher's token UI, P2-T17). */
+/** Token-ish securitySchemes → requiresToken (the switcher's token UI). */
 const TOKENISH_TYPES = new Set(["http", "apiKey", "oauth2", "openIdConnect"]);
 
 export function detectAuth(target) {

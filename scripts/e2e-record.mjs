@@ -1,4 +1,4 @@
-// P2-RECORD — `npm run e2e:record`: film the 13 journey specs.
+// `npm run e2e:record`: film the 13 journey specs.
 //
 // Same two-pass matrix as scripts/e2e-full.mjs (AUTH_MODE is the mock's boot
 // env, so one Playwright run cannot host both modes) — but only the journeys,
@@ -8,7 +8,7 @@
 // two passes writing it directly would leave the second overwriting the first.
 // Each pass writes a blob shard instead; `merge-reports` folds them into ONE
 // report with all 13 films embedded. Both commands are stock Playwright — the
-// gallery is not something we built (that is P4-REELS).
+// gallery is not something we built.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import os from "node:os";

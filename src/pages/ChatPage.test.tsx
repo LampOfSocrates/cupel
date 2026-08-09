@@ -114,8 +114,8 @@ describe("ChatPage streaming", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
-  // P2-T17 — the Settings → Backend SSE toggle (feature-spec.md:160 "SSE
-  // streaming on/off") drives ChatRequest.stream; off → the T02 JSON path
+  // The Settings → Backend SSE toggle (feature-spec.md:160 "SSE
+  // streaming on/off") drives ChatRequest.stream; off → the JSON path
   // renders the full reply ("the UI degrades gracefully to non-streaming when
   // the SSE toggle is off in mock options", cupel-phases.md:43).
   it("sends stream:false when the device-local SSE flag is off and renders the full JSON reply", async () => {
@@ -179,7 +179,7 @@ describe("ChatPage streaming", () => {
   });
 });
 
-// P1-T04 — composer attachments. Contract: POST /upload multipart {file} →
+// Composer attachments. Contract: POST /upload multipart {file} →
 // 201 Attachment, "reference its id in ChatRequest.attachments"
 // (openapi.yaml:550, :1421-1424); oversize → 413 and "the UI surfaces the
 // message" (openapi.yaml:535-536); UI spec: "attach images and files
@@ -318,7 +318,7 @@ describe("Composer attachments", () => {
     }
   });
 
-  // P2-CHATUX (b) — clipboard paste reuses the SAME upload path as the picker
+  // Clipboard paste reuses the SAME upload path as the picker
   // and drag-drop; only files are intercepted, so text paste is untouched.
   it("paste with files uploads through the existing path and chips a generated filename", async () => {
     renderChat("/chat/c1");
@@ -393,7 +393,7 @@ describe("Composer attachments", () => {
   });
 });
 
-// P1-T03 — turn actions. Contract: POST /feedback {message_id, rating}
+// Turn actions. Contract: POST /feedback {message_id, rating}
 // (openapi.yaml:1475-1480), returns the appended type:human Judgment
 // (openapi.yaml:578-582); reload state via GET /eval/judgments filtered by
 // conversation_id, "newest first" (openapi.yaml:966-968, :994); "copy copies
@@ -467,7 +467,7 @@ describe("Turn actions", () => {
     expect(calls).toHaveLength(1);
   });
 
-  // P2-CHATUX (a) — the comment box. Design (agreed with the user 2026-08-06):
+  // The comment box. Design (agreed with the user 2026-08-06):
   // the comment is NOT a Turn — it rides on the type:human judgment's
   // `reasoning` (FeedbackRequest.comment) and renders under its assistant
   // turn. The rating itself is still ONE click; the box is optional extra.
@@ -648,7 +648,7 @@ describe("Turn actions", () => {
   });
 });
 
-// P1-T05 — chat settings submenu. Spec: "Chat has its own Settings submenu
+// Chat settings submenu. Spec: "Chat has its own Settings submenu
 // (model, temperature, system prompt — session-scoped)" (feature-spec.md:7);
 // "session-scoped, sent with each /chat call" (feature-spec.md:278); model
 // dropdown fed by GET /models (feature-spec.md:122). Contract: ChatRequest
@@ -720,7 +720,7 @@ describe("Chat settings", () => {
     // switch conversation via the sidebar — settings are session-scoped,
     // not per-conversation (feature-spec.md:7)
     await user.click(screen.getByText("Billing dispute"));
-    // c2's transcript loaded (fixture turns added in P1-T14)
+    // c2's transcript loaded
     await screen.findByText("Why was I charged twice for order 4413?");
     expect(screen.getByTestId("chat-settings-summary")).toHaveTextContent("Claude Haiku 4.5");
 
@@ -778,7 +778,7 @@ describe("Chat settings", () => {
   });
 });
 
-// P1-T11a — envelope affordance on turns. "every turn records its context
+// Envelope affordance on turns. "every turn records its context
 // (date, timezone, region) at generation" (cupel-phases.md:25); envelope on
 // turn objects in conversation listings (feature-spec.md:81). Sketch 01 shows
 // no envelope UI, so the surface is a hover tooltip on each turn's timestamp
@@ -804,7 +804,7 @@ describe("Turn envelope affordance", () => {
   });
 });
 
-// P1-T13 — turn forks. "🔀 fork action on any turn in Chat itself"
+// Turn forks. "🔀 fork action on any turn in Chat itself"
 // (feature-spec.md:72) fires POST /agenttrees/{tree}/replay/turn
 // (openapi.yaml:623-652); "Forks carry lineage metadata … Shown as a
 // badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"
@@ -857,7 +857,7 @@ describe("Turn forks (P1-T13)", () => {
     expect(screen.queryByText("Open parent")).not.toBeInTheDocument();
   });
 
-  // P1-T14 — fork-side entry into the sibling comparison: lineage alone
+  // Fork-side entry into the sibling comparison: lineage alone
   // (parent + fork_turn_id) identifies the sibling set ("compare forks of the
   // same turn across endpoints", feature-spec.md:73) — no run id needed.
   it("Compare siblings on the lineage banner routes to /forks/{parent}/{turn}", async () => {
@@ -881,7 +881,7 @@ function ForksProbe() {
   return <div>forks-probe {parentId} {turnId}</div>;
 }
 
-// P1-T16 — "⌁ trace icon on every turn — in Chat, results grid cells, and
+// "⌁ trace icon on every turn — in Chat, results grid cells, and
 // drill-in" (feature-spec.md:145). Chat surface: sketch 01's action row
 // (👍👎⧉⑂⌁) exists on assistant turns only, so ⌁ ships there (user turns'
 // traces are empty-span per the contract — no affordance).
@@ -910,9 +910,9 @@ function TraceProbe() {
   return <div>trace-probe {turnId}</div>;
 }
 
-// P1-T18c — "Live LLM (BYOK)" section of the chat settings popover. Hard
+// "Live LLM (BYOK)" section of the chat settings popover. Hard
 // rules (docs/deployment.md:24-27): "Client pastes key in UI → browser
-// localStorage only" (the specced override of the P1-T05 no-persistence
+// localStorage only" (the specced override of the no-persistence
 // note); "Sent per request: X-LLM-Key + X-LLM-Model headers"; visible live
 // indicator near the settings gear while a key is active.
 describe("Live LLM (BYOK) settings", () => {
@@ -977,12 +977,12 @@ describe("Live LLM (BYOK) settings", () => {
   });
 });
 
-// P2-SHARE — copy-link sharing. Deliberately contract-neutral: the links are
+// Copy-link sharing. Deliberately contract-neutral: the links are
 // the app's own routes and ride the existing GET conversation endpoint. A
 // received ?turn= scrolls + marks that turn; an unknown one is ignored; a
 // conversation the receiver can't see is 404 for BOTH "deleted" and
 // "unpermitted" (openapi.yaml:1948) and renders one friendly state.
-// Anonymous tokenized public links are PRO-2 — not built.
+// Anonymous tokenized public links are not built.
 describe("Share links (P2-SHARE)", () => {
   it("🔗 on an assistant turn copies the conversation URL plus ?turn={id}", async () => {
     const user = userEvent.setup();
@@ -1073,7 +1073,7 @@ describe("Share links (P2-SHARE)", () => {
   });
 });
 
-// P2-T07c disabled tree (feature-spec.md:20): "existing conversations stay
+// Disabled tree (feature-spec.md:20): "existing conversations stay
 // READABLE (read-only banner) so history and traces aren't lost"; "new
 // chat/replay/judge against it return 409 tree_disabled".
 describe("Disabled tree (P2-T07c)", () => {
@@ -1128,7 +1128,7 @@ describe("Disabled tree (P2-T07c)", () => {
   });
 });
 
-// P2-T12a ⊞ — "Entry points: ⊞ on any turn, Chat, the Inspector … and results
+// ⊞ — "Entry points: ⊞ on any turn, Chat, the Inspector … and results
 // cells" (openapi.yaml:1742-1743). The chat action row gains one glyph; the
 // picker behind it is the same CollectModal the Inspector opens, and what it
 // posts is a REFERENCE {tree, conversation_id, turn_id} (openapi.yaml:1739).

@@ -1,4 +1,4 @@
-"""P2-PERSIST tests: storage modes, the Litestream wiring, seed-if-empty.
+"""Storage tests: storage modes, the Litestream wiring, seed-if-empty.
 
 No bucket, no litestream binary, no container is touched — mock/boot.py splits
 the pure plan (env -> config text + argv + child env) from the four lines that

@@ -15,7 +15,7 @@ import { Shell } from "../shell/Shell";
 import { product } from "../lib/product";
 import { InspectorPage } from "./InspectorPage";
 
-// Contract under test — P2-T12a Inspector (cupel-phases.md:78 "Inspect every
+// Contract under test — Inspector (cupel-phases.md:78 "Inspect every
 // conversation in the system as a super user — filter by user, tree, date, or
 // score in a dense keyboard-driven table with an inline transcript reader …
 // requires the inspect role, audit-logged"):
@@ -78,7 +78,7 @@ describe("inspector table", () => {
     renderInspector();
     await waitFor(() => expect(screen.getAllByTestId("inspector-row")).toHaveLength(3));
     // The filter's label and the term itself come from agentic.config.ts
-    // product.trees (PW-1); getByRole, not getByLabelText, because the table
+    // product.trees; getByRole, not getByLabelText, because the table
     // header carries the same word.
     await userEvent.click(screen.getByRole("combobox", { name: product.tree.One }));
     await userEvent.click(await screen.findByRole("option", { name: "Agent 2" }));

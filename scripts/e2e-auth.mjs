@@ -1,4 +1,4 @@
-// P2-T07 / P2-E2E — `npm run e2e:auth`: the AUTH_MODE=on half of the suite.
+// `npm run e2e:auth`: the AUTH_MODE=on half of the suite.
 // A tiny Node wrapper because npm scripts can't set env vars portably on
 // Windows (cmd) + POSIX without a cross-env dependency.
 //
@@ -8,7 +8,7 @@
 // un-skip themselves.
 import { spawnSync } from "node:child_process";
 
-// --project=chromium: P2-RECORD added a second `record` project, and Playwright
+// --project=chromium: there is a second `record` project, and Playwright
 // runs every project unless one is named.
 const result = spawnSync("npx", ["playwright", "test", "--project=chromium", "--grep", "@auth-on"], {
   stdio: "inherit",

@@ -44,14 +44,13 @@ describe("ConversationList", () => {
       expect(forkReq).toBeDefined();
     });
     // Lineage badges per fork (feature-spec.md:5; sketch 07 "↳ prod · v15").
-    // Fixture endpoint ids use the ep_agent1_* form of the endpoint fixtures
-    // (normalized in P1-T14); the badge shows the id verbatim (T13 choice —
-    // no per-fork GET /endpoints).
+    // Fixture endpoint ids use the ep_agent1_* form of the endpoint fixtures;
+    // the badge shows the id verbatim — no per-fork GET /endpoints.
     expect(await screen.findByText("ep_agent1_prod · v15")).toBeInTheDocument();
     expect(screen.getByText("ep_agent1_staging · v15")).toBeInTheDocument();
   });
 
-  // P2-SHARE — "Copy link" joins rename/delete in the ⋯ menu
+  // "Copy link" joins rename/delete in the ⋯ menu
   // (feature-spec.md:5-6). No endpoint is involved: the link is the app's own
   // /chat/{id} route made absolute against the current origin.
   it("⋯ Copy link writes the conversation's absolute URL to the clipboard and confirms", async () => {

@@ -6,7 +6,7 @@ import { renderApp } from "../test/render";
 import { ChatPage } from "../pages/ChatPage";
 import { Shell } from "./Shell";
 
-// P2-MOBILE-SHELL — the reported bug: on a phone in portrait the sidebar is a
+// The reported bug: on a phone in portrait the sidebar is a
 // FULL-WIDTH overlay (Mantine sets --app-shell-navbar-width:100% below the
 // breakpoint), so "New chat" navigated correctly but the user only ever saw
 // the sidebar. Shell now collapses that overlay on every navigation.
@@ -109,7 +109,7 @@ describe("Shell — desktop", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "New chat" })).toBeInTheDocument(),
     );
-    // Same fixed column as before this task: still there, still not collapsed.
+    // Desktop keeps the fixed column: still there, still not collapsed.
     expect(navbar()).toHaveAttribute("data-collapsed", "false");
     expect(screen.getByRole("link", { name: "Chat" })).toBeVisible();
   });

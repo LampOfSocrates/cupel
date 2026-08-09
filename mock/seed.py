@@ -1,6 +1,6 @@
 """Structural bootstrap so a fresh server is usable: trees agent1 + agent2
 (cupel-phases.md:43), agents with instruction versions, replay endpoints.
-Conversations/runs/judgments are the generator's job (P1-T18), not the server's.
+Conversations/runs/judgments are the generator's job, not the server's.
 """
 
 from .auth import ensure_users
@@ -49,7 +49,7 @@ def instruction_text(agent_name: str, version: int) -> str:
 
 
 def bootstrap(db: Db) -> str:
-    # P2-T07: seeded auth users, on fresh AND pre-existing DBs — ensure_users
+    # Seeded auth users, on fresh AND pre-existing DBs — ensure_users
     # is INSERT OR IGNORE so it runs before the seed-label short-circuit
     # (a pre-existing DB has the label but not the users). Also called on
     # POST /auth/token as a defensive first-auth-request path (mock/auth.py).

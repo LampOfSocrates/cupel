@@ -5,7 +5,7 @@ import { BASE, envelope, treeGate } from "../state";
 
 // --------------------------------------------------------------- trace state
 // GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721) + GET
-// /spans/{spanId}/payload (:723-744), P1-T16. Span shape openapi.yaml:
+// /spans/{spanId}/payload (:723-744). Span shape openapi.yaml:
 // 1668-1690; payload_ref = span id, mirroring the real mock (engine.py:59).
 // t2: COMPLETED agent→tool→llm trace incl. an ERROR span ("Errors mark the
 // span red", feature-spec.md:149). t-live: still-generating trace (running
@@ -109,7 +109,7 @@ export const spanPayloadRequests: string[] = []; // span ids seen by GET payload
 
 export const traceHandlers = [
   // GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721) —
-  // "Span tree for a turn" (P1-T16).
+  // "Span tree for a turn".
   http.get(`${BASE}/agenttrees/:tree/turns/:turnId/trace`, ({ params }) => {
     const id = params.turnId as string;
     traceRequests.push(id);

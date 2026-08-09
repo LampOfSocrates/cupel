@@ -68,7 +68,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
       "aria-pressed",
       "true",
     );
-    // P2-CHATUX: the thumb opens a comment box; the note is stored as the
+    // The thumb opens a comment box; the note is stored as the
     // judgment's reasoning and renders under that turn.
     const box = page.getByTestId("feedback-comment-box");
     await expect(box).toBeVisible();

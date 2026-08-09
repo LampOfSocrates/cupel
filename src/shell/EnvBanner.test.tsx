@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { setActiveTarget } from "../api/target";
 import { EnvBanner } from "./EnvBanner";
 
-// P2-T17 — banner config lives on the target (agentic.config.ts
+// Banner config lives on the target (agentic.config.ts
 // BackendTarget.banner); "Non-prod targets show a colored banner in the app
 // chrome so nobody mistakes mock data for real" (feature-spec.md:161).
 describe("EnvBanner", () => {

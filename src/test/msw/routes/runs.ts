@@ -15,8 +15,8 @@ import { allConversations, mockForks } from "./conversations";
 import { mockEndpoints } from "./system";
 
 // --------------------------------------------------------------- replay state
-// POST /agenttrees/{tree}/replay(/turn) (openapi.yaml:586-652) — P1-T11a rig,
-// reused by P1-T11's Runs flow tests. Both mirror the real mock's Phase-1 pin:
+// POST /agenttrees/{tree}/replay(/turn) (openapi.yaml:586-652) — both mirror
+// the real mock's Phase-1 pin:
 // context_policy other than "frozen" → 422 (mock/main.py:528-529, :605-606;
 // openapi.yaml:1540-1546 enum [frozen]).
 export const replayRequests: Array<{ tree: string; body: ReplayRequest }> = [];
@@ -152,7 +152,7 @@ export const runHandlers = [
   // (feature-spec.md:71); registered before /replay for readability (MSW
   // matches full paths, order is not load-bearing).
   http.post(`${BASE}/agenttrees/:tree/replay/turn`, async ({ params, request }) => {
-    captureLlmHeaders(request); // P1-T18c
+    captureLlmHeaders(request);
     const body = (await request.json()) as ReplayTurnRequest;
     replayTurnRequests.push({ tree: params.tree as string, body });
     const denied = enabledTreeGate(params.tree as string);
@@ -208,7 +208,7 @@ export const runHandlers = [
       // columns labeled with endpoint NAMES, one row whose baseline cell is
       // done with the ORIGINAL conversation/turn and one pending cell per
       // endpoint (conversation_id arrives when the fork task finishes,
-      // engine.py:361-363 — not modeled here; T14 tests use the seeded done
+      // engine.py:361-363 — not modeled here; tests use the seeded done
       // fixture for that state).
       const treeEndpoints = mockEndpoints[params.tree as string] ?? [];
       mockRuns.unshift({
@@ -247,7 +247,7 @@ export const runHandlers = [
   // POST /agenttrees/{tree}/replay (openapi.yaml:586-621) → 202 ReplayAccepted
   // "Work enqueued; run row appears immediately" (openapi.yaml:617).
   http.post(`${BASE}/agenttrees/:tree/replay`, async ({ params, request }) => {
-    captureLlmHeaders(request); // P1-T18c
+    captureLlmHeaders(request);
     const body = (await request.json()) as ReplayRequest;
     replayRequests.push({ tree: params.tree as string, body });
     const denied = enabledTreeGate(params.tree as string);
@@ -285,7 +285,7 @@ export const runHandlers = [
     runListRequests.push(params.tree as string);
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
-    // P2-MSW: "Runs, newest first" is a SERVER rule (openapi.yaml:663;
+    // "Runs, newest first" is a SERVER rule (openapi.yaml:663;
     // mock/main.py:1291 ORDER BY rowid DESC), so sort here rather than trust
     // the fixture array's order. Stable — equal timestamps keep insert order.
     const items: RunSummaryItem[] = mockRuns

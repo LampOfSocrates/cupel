@@ -1,8 +1,8 @@
-"""P2-T07 auth tests — both AUTH_MODEs (cupel-phases.md:76, :98; openapi.yaml
+"""Auth tests — both AUTH_MODEs (cupel-phases.md:76, :98; openapi.yaml
 :21-36 AUTH_MODE semantics). Run: npm run test:mock.
 
 Off-mode (AUTH_MODE unset — the deployed demo's configuration) must behave
-exactly as before P2-T07: /me answers the dev user, nothing enforced. On-mode:
+exactly as it did before auth: /me answers the dev user, nothing enforced. On-mode:
 seeded admin@demo / restricted@demo (password "demo"), real-shaped HS256 JWTs,
 401s, permission filtering, DemoTokenGate stacking.
 """
@@ -51,13 +51,13 @@ def bearer(token):
 
 # ----------------------------------------------------------- off mode (demo)
 def test_off_mode_me_is_dev_user_unchanged():
-    """DELIBERATE P2-T07b change to the off-mode /me byte-parity assertion:
+    """DELIBERATE change to the off-mode /me byte-parity assertion:
     the dev user now carries roles ["admin", "inspect"] — roles is the
     additive OPTIONAL v0.3.0 Me field (openapi.yaml:2004-2012), and off mode
     is "instant dev as a chosen user ... default admin = all trees, all
     rights" (feature-spec.md:17, cupel-phases.md:76), so the dev user must
     advertise admin for the role-driven Settings → Members / Agent trees UI.
-    Everything else stays byte-identical to the pre-T07 shape."""
+    Everything else stays byte-identical to the pre-auth shape."""
     async def case():
         async with make_client() as c:
             r = await c.get("/me")

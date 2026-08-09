@@ -1,4 +1,4 @@
-"""P2-T07b/07c admin tests — members permission matrix + tree enable/disable.
+"""Admin tests — members permission matrix + tree enable/disable.
 Run: npm run test:mock.
 
 Contract under test (openapi.yaml v0.3.0):

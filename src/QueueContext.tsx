@@ -11,7 +11,7 @@ import {
 import { api } from "./api/client";
 import type { Task, TaskProgress } from "./api/types";
 
-// P1-T08 — app-wide task visibility (feature-spec.md:105-112). One provider
+// App-wide task visibility (feature-spec.md:105-112). One provider
 // owns the single GET /tasks/stream subscription for the whole app plus the
 // task map behind the queue panel and the sidebar badge:
 // - "Live updates via SSE (GET /tasks/stream): status changes and progress
@@ -34,8 +34,8 @@ import type { Task, TaskProgress } from "./api/types";
 // the parent's `children` on expand via GET /tasks/{id} ("Task with children
 // populated", :826) — chosen over GET /tasks?parent_id= because one call
 // refreshes the parent AND its children together. Chat/Runs pages keep their
-// own scoped stream subscriptions from earlier tasks; folding them onto this
-// provider is a possible future simplification, out of P1-T08 scope.
+// own scoped stream subscriptions; folding them onto this provider is a
+// possible future simplification.
 
 const ACTIVE = new Set<Task["status"]>(["queued", "running"]);
 
@@ -188,7 +188,7 @@ export function QueueProvider({
             } else if (ev.event === "progress") {
               applyProgress(ev.data.task_id, ev.data.progress);
             }
-            // judgment frames: consumed by run-scoped subscribers (T12b).
+            // judgment frames: consumed by run-scoped subscribers.
           }
           // server closed the stream — reconnect like a drop
         } catch {

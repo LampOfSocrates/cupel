@@ -1,4 +1,4 @@
-// P2-T07 — return_to round-trip for the login redirect. Built for P2-SHARE's
+// Return_to round-trip for the login redirect. Built for share
 // deep links (/chat/{id}?turn=...): a 401 on a shared link must land on
 // /login?return_to=<full path incl. query> and, after login, navigate back to
 // exactly that path (TASKS.md:48 — sharing "works in both auth modes via

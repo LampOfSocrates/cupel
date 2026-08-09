@@ -1,6 +1,6 @@
 import { test, type Page } from "@playwright/test";
 
-// P2-RECORD — the step HUD. Wraps `test.step` so a named step ALSO paints a
+// The step HUD. Wraps `test.step` so a named step ALSO paints a
 // small caption into the page: "Journey 3 · Step 2/4 — Configure: …". The
 // films then narrate themselves when they are watched outside the HTML report
 // (dropped into Slack, sent to a client).

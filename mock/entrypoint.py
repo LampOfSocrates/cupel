@@ -1,4 +1,4 @@
-"""P1-TDEPLOY container entrypoint: serve + seed a fresh database on boot.
+"""Container entrypoint: serve + seed a fresh database on boot.
 
 Run: python -m mock.entrypoint  (invoked by mock/boot.py, which picks the
 storage mode first; also works standalone and locally)
@@ -14,7 +14,7 @@ Behavior:
      client). Progress is logged; the server just keeps serving during and
      after.
 
-SEED ONLY IF EMPTY (P2-PERSIST). CUPEL_SEED_ON_BOOT=1 used to mean "re-seed
+SEED ONLY IF EMPTY. CUPEL_SEED_ON_BOOT=1 used to mean "re-seed
 on every boot" — the mitigation for a disk that lost everything anyway
 (docs/deployment.md). With CUPEL_STORAGE=s3 the database now SURVIVES a
 restart, so the flag reads as "make sure this backend has data", and seeding

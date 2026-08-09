@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { EnvelopeChip, envelopeSummary } from "./EnvelopeChip";
 
-// P1-T11a — envelope display contract: "{system_date, timezone, region,
+// Envelope display contract: "{system_date, timezone, region,
 // locale, user_profile_ref?}" (feature-spec.md:76); null is permitted only on
 // legacy/imported turns (openapi.yaml:1321-1323) and must render an explicit
 // state, never a fabricated envelope (feature-spec.md:78).

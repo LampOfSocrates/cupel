@@ -1,4 +1,4 @@
-// PW-1 whitelabel-lite — the single place the UI reads its own name from.
+// Whitelabel-lite — the single place the UI reads its own name from.
 // agentic.config.ts `product` is the source (THE one config artifact); no
 // component spells "Cupel" or "agent tree" out.
 import { agenticConfig, type ProductConfig } from "../../agentic.config";

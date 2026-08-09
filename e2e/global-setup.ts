@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-// P2-E2E — pre-existing data for the journeys that need it, from THE
+// Pre-existing data for the journeys that need it, from THE
 // deterministic generator seed (mock/generator.py: every random choice is
 // drawn from `random.Random(seed)` before any HTTP, so the dataset is a pure
 // function of the seed). Seed 42 = the mock's own default and what the Docker

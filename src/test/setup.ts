@@ -54,7 +54,7 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   resetHandlerState();
-  // P1-T18c: the BYOK key lives in localStorage — never let it leak between
+  // The BYOK key lives in localStorage — never let it leak between
   // tests (a stored key flips /models to the curated list and adds headers).
   localStorage.clear();
 });

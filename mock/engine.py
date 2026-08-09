@@ -99,7 +99,7 @@ class Engine:
         self.token_delay = config.TOKEN_DELAY if token_delay is None else token_delay
         self.step_delay = config.STEP_DELAY if step_delay is None else step_delay
         self._bg: set[asyncio.Task] = set()
-        # P1-T18c: BYOK key for batch children (replay/judge run server-side,
+        # BYOK key for batch children (replay/judge run server-side,
         # detached from the request that carried X-LLM-Key). Held IN-MEMORY
         # ONLY, keyed by parent task id — NEVER written to the tasks.payload
         # DB column or anywhere else (docs/deployment.md:27 "NEVER persisted").
@@ -276,7 +276,7 @@ class Engine:
                     note=None):
         """Persist the agent→(tool)→llm span tree for one generated turn.
 
-        `note` (P1-T18c): live-provider fallback annotation on the llm span —
+        `note`: live-provider fallback annotation on the llm span —
         stored in the span's error field while status STAYS "ok" (the turn
         succeeded with canned content; docs/deployment.md provider-error
         policy). Notes are built by mock/llm.py and never contain the key."""
@@ -314,7 +314,7 @@ class Engine:
         prompt_full = (ctx.get("system_prompt") or "") + ("\n\n" if ctx.get("system_prompt") else "") + ctx["prompt"]
         acc, cancelled, live_note = "", False, None
 
-        # P1-T18c live path (docs/deployment.md:18-20: "only the generation
+        # Live path (docs/deployment.md:18-20: "only the generation
         # call ... goes to a real provider when a key is present"). The key
         # exists only in ctx for this request — never persisted or logged.
         key = ctx.get("llm_key")
@@ -386,7 +386,7 @@ class Engine:
         """One replayed/forked assistant turn. Frozen context: the new turn
         reuses the source turn's envelope (openapi.yaml:1540-1546).
 
-        P1-T18c: `content` (live-generated text) overrides the canned reply;
+        `content` (live-generated text) overrides the canned reply;
         `trace_note` annotates the llm span on live fallback."""
         tid = new_id("turn")
         now = now_iso()
@@ -546,7 +546,7 @@ class Engine:
             f"v{payload['rubric_version']}: the response addresses the prompt and "
             f"{'cites supporting detail' if h % 2 == 0 else 'stays on topic, with minor gaps'}."
         )
-        # P1-T18c: with a BYOK key on the parent judge task, the judge's
+        # With a BYOK key on the parent judge task, the judge's
         # GENERATION (its reasoning text) comes from the live provider
         # (docs/deployment.md:18-20). The SCORE stays canned-deterministic —
         # parsing scores out of arbitrary cheap models is unreliable and the
@@ -554,7 +554,7 @@ class Engine:
         # canned reasoning, never a failed task.
         live = self.live_keys.get(child["parent_id"])
         if live:
-            # P2-T12: eval_cases is versioned (id, version) — judge the LATEST
+            # eval_cases is versioned (id, version) — judge the LATEST
             # content, matching GET /eval/cases/{id} (openapi.yaml:1441-1442).
             case = self.db.one(
                 "SELECT * FROM eval_cases WHERE id = ? ORDER BY version DESC LIMIT 1",

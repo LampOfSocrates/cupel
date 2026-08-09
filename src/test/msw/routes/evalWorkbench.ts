@@ -56,7 +56,7 @@ function seedEvalCases(): Record<string, EvalCase> {
       output: "Refunds arrive within 3 business days.",
       reference: null,
       source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
-      // P2-MSW: cases are versioned append-only server-side and every stored
+      // Cases are versioned append-only server-side and every stored
       // case carries one (mock/main.py:1477 ORDER BY version DESC) — the
       // fixture omitted it, so a PUT's "version + 1" had nothing to build on.
       version: 1,
@@ -71,7 +71,7 @@ export const evalCaseRequests: string[] = [];
 // driven by tests (fixture mutation + taskStreamRig), like run live fill.
 export const judgeRequests: JudgeRequest[] = [];
 
-// ------------------------------------------- P2-T12 eval workbench (v0.3.0)
+// -------------------------------------------------- eval workbench (v0.3.0)
 // POST /eval/cases (openapi.yaml:1340-1369), PUT /eval/cases/{caseId}
 // (:1455-1483), GET/POST /eval/sets (:1484-1523), PUT /eval/sets/{setId}
 // (:1524-1547), PUT /eval/rubrics/{rubricId} (:1313-1338),
@@ -309,7 +309,7 @@ export const evalHandlers = [
   // (mock/main.py:841-842); judging results are test-driven via fixture
   // mutation + taskStreamRig, mirroring the live-fill pattern.
   http.post(`${BASE}/eval/judge`, async ({ request }) => {
-    captureLlmHeaders(request); // P1-T18c
+    captureLlmHeaders(request);
     const body = (await request.json()) as JudgeRequest;
     judgeRequests.push(body);
     if (!body.judge_model || !body.rubric_id) {
@@ -330,7 +330,7 @@ export const evalHandlers = [
         { status: 422 },
       );
     }
-    // P2-T07c disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
+    // Disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
     // judging is blocked when the RUN'S tree is disabled; case_ids/set_id
     // judging is NOT tree-gated (eval cases are global, feature-spec.md:115).
     if (body.run_id) {

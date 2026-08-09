@@ -17,14 +17,14 @@ import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { Markdown } from "../lib/markdown";
 
-// P1-T14 — sibling fork comparison, the chat-side entry into the fork pivot.
+// Sibling fork comparison, the chat-side entry into the fork pivot.
 // Spec (feature-spec.md:73): "Forked conversations appear in GET
 // /conversations (filterable: forks_of={id}), and the comparison grid can
 // pivot to compare forks of the same turn across endpoints (column per
 // endpoint)."
 //
-// Design choice (documented per task brief): when the pivot is reached from a
-// RUN (ForkModal "View run", T13), RunDetailPage renders the server-pivoted
+// Design choice: when the pivot is reached from a
+// RUN (ForkModal "View run"), RunDetailPage renders the server-pivoted
 // grid. From a FORK's lineage banner no run id is discoverable — GET
 // /agenttrees/{tree}/runs takes no turn filter (openapi.yaml:654-669) — but
 // the SIBLINGS are: GET /conversations?forks_of={parent} (openapi.yaml:335)

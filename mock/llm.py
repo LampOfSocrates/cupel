@@ -1,4 +1,4 @@
-"""OpenRouter client for Live-LLM BYOK mode (P1-T18c, docs/deployment.md:17-31).
+"""OpenRouter client for Live-LLM BYOK mode (docs/deployment.md:17-31).
 
 Key handling hard rules (docs/deployment.md:24-27): the key arrives per request
 in the X-LLM-Key header and lives ONLY in function arguments on the caller's

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { conversationShareUrl, TURN_PARAM, turnShareUrl } from "./shareLink";
 
-// P2-SHARE — share links are the app's own routes made absolute against the
+// Share links are the app's own routes made absolute against the
 // CURRENT origin (no configured share host, nothing to keep in sync) and add
 // nothing to the contract. jsdom serves these tests from http://localhost:3000.
 

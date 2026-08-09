@@ -35,13 +35,13 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await api.expectCalled("GET /me"); // cupel-phases.md:160 invariant
     await api.expectCalled("GET /agenttrees");
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
-    await api.expectCalled("GET /tasks/stream"); // one app-wide SSE (P1-T08)
+    await api.expectCalled("GET /tasks/stream"); // one app-wide SSE
   });
 
   await step("sidebar collapse: desktop keeps the fixed column", async () => {
     // The collapse control is the phone burger — Mantine renders the navbar as
-    // a full-width overlay below the breakpoint. mobile.spec.ts owns that walk
-    // (P2-MOBILE-SHELL); here we assert the desktop side of the same state.
+    // a full-width overlay below the breakpoint. mobile.spec.ts owns that
+    // walk; here we assert the desktop side of the same state.
     await expect(page.getByTestId("app-navbar")).toHaveAttribute("data-collapsed", "false");
     await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
   });
@@ -49,7 +49,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
   await step("presets route to Runs (Tune → version axis, Evaluate → judge open)", async () => {
     await page.getByRole("link", { name: "Tune", exact: true }).click();
     await expect(page).toHaveURL(/\/runs$/);
-    // A preset lands straight in the stepper, not the run list (P1-T15).
+    // A preset lands straight in the stepper, not the run list.
     await expect(page.getByRole("button", { name: "Configure ▸" })).toBeVisible();
 
     await page.getByRole("link", { name: "Evaluate", exact: true }).click();
@@ -97,7 +97,7 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     await page.getByRole("button", { name: `Actions for ${UNIQUE}` }).click();
     await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    // P2-SHARE: copy-link joins rename/delete; the menu is held open so the
+    // Copy-link joins rename/delete; the menu is held open so the
     // confirmation is visible.
     await page.getByRole("menuitem", { name: "Copy link" }).click();
     await expect(page.getByRole("menuitem", { name: "Link copied" })).toBeVisible();

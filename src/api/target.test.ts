@@ -11,7 +11,7 @@ import {
   subscribeTarget,
 } from "./target";
 
-// P2-CONFIG — the runtime store over agentic.config.ts. localStorage is
+// The runtime store over agentic.config.ts. localStorage is
 // cleared between tests by src/test/setup.ts, so each test starts unpersisted.
 
 describe("default target resolution", () => {
@@ -58,7 +58,7 @@ describe("device-local persistence (feature-spec.md:161)", () => {
   });
 });
 
-// P2-T17 — the "custom Base URL field" (feature-spec.md:158), device-local
+// The "custom Base URL field" (feature-spec.md:158), device-local
 // under cupel.backend.customUrl like the target choice itself (:161).
 describe("custom target (P2-T17)", () => {
   const URL = "http://backend.internal:9999";

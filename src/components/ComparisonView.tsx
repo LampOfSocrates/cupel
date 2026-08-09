@@ -7,13 +7,10 @@ import type { Run, RunCell, RunRow } from "../api/types";
 // column per run config, row per turn". Run.columns index 0 = baseline
 // (openapi.yaml:1621); cells "fill incrementally" (openapi.yaml:1642,
 // feature-spec.md:112) — this is a PURE render of whatever Run it's given, so
-// live fill is just re-rendering with the updated Run (SSE wiring is
-// T08/T11's job, not built here).
+// live fill is just re-rendering with the updated Run.
 //
 // Annotation slot (feature-spec.md:138 "pluggable annotation: thumbs and/or
-// scores"): a render prop invoked for DONE cells only — thumbs (T03-style)
-// and score badges (T12b) plug in later; this task builds the slot, not the
-// annotations.
+// scores"): a render prop invoked for DONE cells only.
 
 export interface CellContext {
   rowIndex: number;
@@ -24,8 +21,8 @@ export interface CellContext {
 interface Props {
   run: Run;
   renderAnnotation?: (cell: RunCell, ctx: CellContext) => ReactNode;
-  // P1-T13 cell-action slot, separate from renderAnnotation on purpose: the
-  // annotation slot is reserved for thumbs/score badges (T03-style/T12b), the
+  // Cell-action slot, separate from renderAnnotation on purpose: the
+  // annotation slot is for thumbs/score badges, the
   // action slot for per-cell affordances — first user is the ⑂ re-fire on
   // done cells (sketch 04 "+ Re-run this turn with… POST …/replay/turn";
   // feature-spec.md:72 "'re-run this turn with…' on any results cell").

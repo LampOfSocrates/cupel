@@ -28,10 +28,10 @@ import { LoginPage } from "./pages/LoginPage";
 
 const DEFAULT_TREE = "agent1";
 
-// P2-T07: mid-session 401s (expired token during use). The client clears the
+// Mid-session 401s (expired token during use). The client clears the
 // token and emits auth-required (client.ts); this listener navigates to
 // /login?return_to=<current full path incl. query> so login returns the user
-// exactly where they were — the mechanism P2-SHARE deep links rely on.
+// exactly where they were — the mechanism share deep links rely on.
 function AuthRequiredRedirect() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,7 +68,7 @@ export function App() {
     setConversationsVersion((v) => v + 1);
   }, []);
 
-  // P1-T05: GET /models fetched lazily on first settings-menu open, once per
+  // GET /models fetched lazily on first settings-menu open, once per
   // session (feature-spec.md:122). Ref guards a duplicate in-flight fetch;
   // cleared on failure so a later open can retry.
   const [models, setModels] = useState<Model[] | null>(null);
@@ -81,7 +81,7 @@ export function App() {
     });
   }, []);
 
-  // P2-T17 live switch: the boot fetch is KEYED ON THE ACTIVE TARGET. On
+  // Live switch: the boot fetch is KEYED ON THE ACTIVE TARGET. On
   // switch (Settings → Backend), me/trees reset to null → the loader renders
   // and the whole page tree (Shell, QueueProvider's /tasks/stream, every
   // page's mount fetch) unmounts; when /me + /agenttrees resolve against the
@@ -90,7 +90,7 @@ export function App() {
   // failing new target lands in the boot error state below, which names it.
   // `target` is referentially stable per id (target.ts snapshot contract),
   // so the effect fires only on real changes (or a custom-URL edit).
-  // P2-T07: ALSO keyed on the login token — login (token set) and logout
+  // ALSO keyed on the login token — login (token set) and logout
   // (token cleared) re-run the boot fetch, so /me is called again with the
   // new credentials (invariant "/me is always called", cupel-phases.md:160).
   const target = useBackendTarget();
@@ -119,7 +119,7 @@ export function App() {
   }, [target, authToken, bootNonce]);
 
   if (error instanceof ApiError && error.status === 401) {
-    // P2-T07: boot 401 (auth-on backend, no/expired token) → the login
+    // Boot 401 (auth-on backend, no/expired token) → the login
     // screen instead of the error screen (task rule: "401 at boot → login").
     // The current deep link is preserved as return_to; after login the token
     // change re-runs the boot effect above. Off-mode backends never 401 here,
@@ -132,8 +132,8 @@ export function App() {
     );
   }
   if (error) {
-    // Target-aware hint (P2-CONFIG): the boot error names the ACTIVE backend
-    // target instead of hardcoding the mock host. P2-T17 adds the recovery
+    // Target-aware hint: the boot error names the ACTIVE backend
+    // target instead of hardcoding the mock host. Plus the recovery
     // path: a live switch to a dead target would otherwise strand the user
     // here (Settings is unreachable while boot fails) — offer the build's
     // default target as the way back; selecting it reruns the boot effect.
@@ -179,11 +179,11 @@ export function App() {
         ensureModels,
       }}
     >
-      {/* P1-T08: ONE app-wide /tasks/stream subscription, opened on boot —
+      {/* ONE app-wide /tasks/stream subscription, opened on boot —
           feeds the queue panel and the sidebar badge (feature-spec.md:108,
           :111). Design notes in QueueContext.tsx. */}
       <QueueProvider>
-      {/* P2-T07: mid-session 401 → /login?return_to=… (see component). */}
+      {/* Mid-session 401 → /login?return_to=… (see component). */}
       <AuthRequiredRedirect />
       <Routes>
         {/* Booted app at /login (already authenticated, or the post-login
@@ -194,27 +194,27 @@ export function App() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/runs" element={<RunsPage />} />
-          {/* Step 3 Results — also the detail route for stored runs (P1-T11). */}
+          {/* Step 3 Results — also the detail route for stored runs. */}
           <Route path="/runs/:runId" element={<RunDetailPage />} />
-          {/* P1-T14 sibling fork comparison — "compare forks of the same turn
+          {/* Sibling fork comparison — "compare forks of the same turn
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}
           <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
-          {/* P1-T16 trace — one route for every ⌁ entry ("Works on originals,
+          {/* Trace — one route for every ⌁ entry ("Works on originals,
               forks, and replays alike", feature-spec.md:145); tree from
               context like all pages. */}
           <Route path="/trace/:turnId" element={<TracePage />} />
-          {/* P2-T12 Eval workbench (sketch 10) — "manage the eval domain
+          {/* Eval workbench (sketch 10) — "manage the eval domain
               directly: case editor …, set manager …, rubric editor"
               (feature-spec.md:63). Global, not tree-scoped
               (feature-spec.md:115), so the route carries no tree. */}
           <Route path="/eval" element={<EvalPage />} />
-          {/* P2-T12a Casebooks — global like Eval (a casebook may reference
+          {/* Casebooks — global like Eval (a casebook may reference
               turns across trees, openapi.yaml:1654-1656), so no tree in the
               route. Open to any signed-in user: the contract role-gates the
               Inspector, not /casebooks. */}
           <Route path="/casebooks" element={<CasebooksPage />} />
-          {/* P2-T12a Inspector — ROLE-gated, never mode-gated: the route
+          {/* Inspector — ROLE-gated, never mode-gated: the route
               exists only when /me.roles includes `inspect` (openapi.yaml:308
               "Requires the inspect role"). Without it the path falls through
               to the index redirect, so a hand-typed /inspector cannot render
@@ -225,11 +225,11 @@ export function App() {
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Editor route target for node click / "Edit instructions"
-              (feature-spec.md:26) — placeholder page until P1-T10b. */}
+              (feature-spec.md:26). */}
           <Route path="/agents/:agentId/editor" element={<EditorPage />} />
           <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
-          {/* P2-T17 Settings — Backend section first (sketch 09); later
-              tasks (T07 members, GEN generator, MEM memory) add sections. */}
+          {/* Settings — Backend section first (sketch 09); generator and
+              memory sections come later. */}
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>

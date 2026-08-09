@@ -6,8 +6,8 @@
 // keep importing from "…/msw/handlers". State more than one domain touches —
 // the tree gates, the id counters, the SSE rig — lives in ./state.
 //
-// P2-MSW made the agreement with openapi.yaml v0.3.0 MACHINE-CHECKED rather
-// than by-hand: parity.test.ts (same folder) exercises every method on
+// The agreement with openapi.yaml v0.3.0 is MACHINE-CHECKED rather than
+// by-hand: parity.test.ts (same folder) exercises every method on
 // src/api/client.ts through these handlers and validates each response
 // against the contract schema the operation declares. Read that file before
 // adding a handler — a new api.* method with no exercise, an invented route,

@@ -82,7 +82,7 @@ test(
   },
 );
 
-// P2-SHARE — a turn deep link received by a logged-out user. The frontend has
+// A turn deep link received by a logged-out user. The frontend has
 // no idea which auth mode the backend runs: the boot /me simply 401s here, the
 // central handler routes to /login?return_to=<path incl. query>, and login
 // navigates back to exactly that URL. In off-mode (j02-chat.spec.ts, and the

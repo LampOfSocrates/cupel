@@ -8,7 +8,7 @@ import { allConversations } from "./conversations";
 // ---------------------------------------------------------- judgments state
 // Append-only store, held newest-first (openapi.yaml:994 "Matching judgments,
 // newest first") — POST /feedback unshifts; fixtures seed via pushHumanJudgment
-// (oldest first, so the newest ends up in front). P1-T12b adds llm judgments.
+// (oldest first, so the newest ends up in front).
 export const mockJudgments: Judgment[] = [];
 export const feedbackRequests: FeedbackRequest[] = [];
 export const judgmentRequests: URL[] = [];
@@ -18,7 +18,7 @@ export function pushHumanJudgment(
   conversation_id: string,
   rating: "up" | "down",
   created_at: string,
-  // P2-CHATUX: the thumb's optional comment, stored on reasoning.
+  // The thumb's optional comment, stored on reasoning.
   reasoning: string | null = null,
 ): Judgment {
   // Judgment type human: rubric/case fields null; score 1 = 👍, 0 = 👎
@@ -41,7 +41,7 @@ export function pushHumanJudgment(
   return judgment;
 }
 
-// P1-T12b seed helper — type llm judgment: "case_id, rubric_id and
+// Seed helper — type llm judgment: "case_id, rubric_id and
 // rubric_version are non-null (the judge always runs a rubric against a
 // case)" (openapi.yaml:1886-1887). Push OLDEST first: unshift keeps the store
 // newest-first (openapi.yaml:994).
@@ -77,7 +77,7 @@ export const judgmentHandlers = [
       case_id: null,
       run_id: null,
       turn_id: body.message_id,
-      // DELIBERATE DIVERGENCE (kept, P2-MSW): the real mock 404s an unknown
+      // DELIBERATE DIVERGENCE (kept): the real mock 404s an unknown
       // message_id (mock/main.py:1089). MSW accepts it with a null
       // conversation_id because a JUST-STREAMED assistant turn only exists in
       // the SSE frames — it was never added to the conversation fixtures — and
@@ -92,7 +92,7 @@ export const judgmentHandlers = [
       rubric_id: null,
       rubric_version: null,
       score: body.rating === "up" ? 1 : 0,
-      // P2-CHATUX: FeedbackRequest.comment lands on reasoning, mirroring the
+      // FeedbackRequest.comment lands on reasoning, mirroring the
       // real mock (mock/main.py feedback handler); blank = no comment.
       reasoning: body.comment?.trim() || null,
       created_at: new Date().toISOString(),
