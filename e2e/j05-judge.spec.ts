@@ -11,7 +11,7 @@ import { filmed } from "./helpers/hud";
 
 const CONV = "Judge journey: is my warranty valid?";
 
-test("judge: run with the judge on → scores stream in → drawer reasoning + append-only history", async ({
+test("judge: evaluation with the judge on → scores stream in → drawer reasoning + append-only history", async ({
   page,
   request,
   api,
@@ -23,9 +23,9 @@ test("judge: run with the judge on → scores stream in → drawer reasoning + a
     conversationId: chat.conversationId,
   });
 
-  await step("configure a run with the judge enabled up front", async () => {
-    await page.goto("/runs");
-    await page.getByRole("button", { name: "New run" }).click();
+  await step("configure an evaluation with the judge enabled up front", async () => {
+    await page.goto("/evaluations");
+    await page.getByRole("button", { name: "New evaluation" }).click();
     await page.getByRole("checkbox", { name: `Select ${CONV}` }).check();
     await page.getByRole("button", { name: "Configure ▸" }).click();
 
@@ -46,7 +46,7 @@ test("judge: run with the judge on → scores stream in → drawer reasoning + a
     api.clear();
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/runs\/run_/);
+    await page.waitForURL(/\/evaluations\/run_/);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     // 2 rows × (baseline + 1 config).
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(4, {
@@ -71,9 +71,9 @@ test("judge: run with the judge on → scores stream in → drawer reasoning + a
     await page.keyboard.press("Escape");
   });
 
-  await step('retroactive "Judge this run" appends, never overwrites', async () => {
+  await step('retroactive "Judge this evaluation" appends, never overwrites', async () => {
     api.clear();
-    await page.getByRole("button", { name: "⚖ Judge this run" }).click();
+    await page.getByRole("button", { name: "⚖ Judge this evaluation" }).click();
     const judgeForm = page.getByTestId("judge-form");
     await judgeForm.getByRole("combobox", { name: "Judge model" }).click();
     await page.getByRole("option", { name: "DeepSeek V3" }).click();
@@ -93,12 +93,12 @@ test("judge: run with the judge on → scores stream in → drawer reasoning + a
 });
 
 // UX phase — the reload path. The old auto-judge fired only when an OPEN page
-// watched a live non-terminal → done transition, so a run that finished before
-// anyone opened its link was never judged (no scores, no explanation). The rule
-// is now "done + judge configured + not already judged", which makes the same
-// page load idempotent: this journey proves both halves — it judges a run it
-// never watched finish, and a reload does NOT append a second judging pass.
-test("judge: a run that finished before its page was opened is judged, once", async ({
+// watched a live non-terminal → done transition, so an evaluation that finished
+// before anyone opened its link was never judged (no scores, no explanation). The
+// rule is now "done + judge configured + not already judged", which makes the same
+// page load idempotent: this journey proves both halves — it judges an evaluation
+// it never watched finish, and a reload does NOT append a second judging pass.
+test("judge: an evaluation that finished before its page was opened is judged, once", async ({
   page,
   request,
   api,
@@ -108,8 +108,8 @@ test("judge: a run that finished before its page was opened is judged, once", as
   const chat = await seedChat(request, "Reload journey: is my parcel late?");
 
   // Queued OUTSIDE the browser and awaited to completion — nobody is watching
-  // the run page while it finishes, which is exactly the case that used to
-  // produce a permanently unjudged run.
+  // the evaluation page while it finishes, which is exactly the case that used
+  // to produce a permanently unjudged evaluation.
   const replay = await seedReplay(
     request,
     [{ conversation_id: chat.conversationId }],
@@ -122,11 +122,11 @@ test("judge: a run that finished before its page was opened is judged, once", as
     expect(res.ok(), await res.text()).toBeTruthy();
     return ((await res.json()) as unknown[]).length;
   };
-  expect(await judgmentCount(), "the run is unjudged until the page opens").toBe(0);
+  expect(await judgmentCount(), "the evaluation is unjudged until the page opens").toBe(0);
 
   let judged = 0;
-  await step("open the finished run's link — the judge fires anyway", async () => {
-    await page.goto(`/runs/${replay.run_id}`);
+  await step("open the finished evaluation's link — the judge fires anyway", async () => {
+    await page.goto(`/evaluations/${replay.run_id}`);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     // The idempotency probe, then the judging pass it did not veto.
     await api.expectCalled("GET /eval/judgments");
@@ -156,9 +156,9 @@ test("judge: a run that finished before its page was opened is judged, once", as
 
   await step("navigating away and back is idempotent too", async () => {
     api.clear();
-    await page.getByRole("link", { name: "Runs" }).first().click();
-    await page.waitForURL(/\/runs$/);
-    await page.goto(`/runs/${replay.run_id}`);
+    await page.getByRole("link", { name: "Evaluations" }).first().click();
+    await page.waitForURL(/\/evaluations$/);
+    await page.goto(`/evaluations/${replay.run_id}`);
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });

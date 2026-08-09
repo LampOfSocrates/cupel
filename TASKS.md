@@ -39,7 +39,7 @@ and **Evaluate**. User decision 2026-08-09.
       "New evaluation" (`:325`), "Test in Runs ▸"→"Test as evaluation", the compareSets
       rejection string (`compareSets.test.ts:75`), `agentic.config.ts:131,:164`.
       **`docs/features.md:55` "Runs with no backend" is the verb — do not replace it.**  [after #2]
-- [ ] **#4** E2E — ~84 sites across 10 files. Rename `j03-runs.spec.ts`→`j03-evaluations.spec.ts`;
+- [x] **#4** E2E — ~84 sites across 10 files. Rename `j03-runs.spec.ts`→`j03-evaluations.spec.ts`;
       update j05 (13), j07 (10), dod (9), smoke (5), j01 (5 — the preset assertions at
       `:51,:56` die with #1), j12 (`:59`), j13 (27, mostly the contract tranche),
       `helpers/seed.ts`, `j11:72`. Only 2 endpoint tags change here (`j03:85`, `j05:60`).
@@ -117,30 +117,52 @@ and **Evaluate**. User decision 2026-08-09.
       `docs/index.html:273`; `docs/spike-agui.md:495,:506`; `sketches/03,04,10*.svg` endpoint
       tags; `e2e/j13:160-168` (the "casebook becomes an eval set" step is deleted).
       **Must land before #28 (going public).**  [after #6]
+## Adoption — the three that ship WITH the contract, before going public
+## Reordered by the user 2026-08-09. Rationale: these are what let a stranger run Cupel
+## against THEIR backend. Stars need adopters, adopters need an on-ramp. Everything else
+## is improvement of a product nobody has cloned yet.
+## NOTE ids do not move — order is position, not number. #21/#25/#18 sit here deliberately.
+
+- [ ] **#21** `agentic-app-maker` — project scaffolder; generates a runnable project and prints
+      next steps; no backend given = the mock does everything. `docs/plan-agentic-app-maker.md`,
+      5 sub-tasks. **The on-ramp: this is how someone else gets a running app.**
+      [blocked: Q4, Q5, Q6, Q7, Q8 · after #14]
+- [ ] **#25** Hybrid backend fill — implemented endpoints go to the adopter's backend, missing
+      families to the bundled mock, table derived from the `cupel-ready` gap report, visible
+      "served by mock" badges. **Lets someone adopt with a half-built backend instead of
+      bouncing off.**  [blocked: Q4 — #21's `--gap-as-mock` may delete this; answer Q4 FIRST,
+      it decides whether this task exists at all]
+- [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.
+      **The last contracted-but-unbuilt family; leaving it stubbed makes the contract a lie
+      to anyone who runs `cupel-ready`.**  [after #14]
+
+## Go live
+
+- [ ] **#28** Decide repo visibility — **this is the go-live gate.** Both repos private; going
+      public is the point of the stars/community strategy. **Closes the no-back-compat window,
+      so #14 must land first**, and the README/site should be launch-ready.
+
+## PostGoLive — everything after the doors open
+## Not lesser work; work that improves a product people can already clone and run.
+
 - [ ] **#15** Persistence guidance — write `docs/persistence.md` (Postgres spine with
       partitioning + indexes, object storage for span payloads and attachments, ClickHouse/OTLP
       for span metadata, a durable workflow engine for the task queue, Redis for SSE fan-out and
       idempotency); add the "good shape, do NOT copy the physical layer" header to `mock/db.py`
       (which also has no indexes); add a schema-wide tenant/owner column (`conversations.user_id`
-      exists but was added for the Inspector, not as that). Pairs with #21.
+      exists but was added for the Inspector, not as that). Pairs with #21 — **if #21 ships
+      first, this is the doc it should point at, so consider pulling it forward.**
 - [ ] **#16** Context policy widening — frozen/today/custom + fallback for envelope-less turns +
       recorded-tool playback. Contract already shipped; **implementation only**, 6 steps
       (`docs/plan-context-policy.md`). Key risk: frozen must stay the default when the field is
       omitted — assert in all three test layers.  [blocked: Q2]
 - [ ] **#17** Generator control API + drip-rate settings (un-greys `SettingsPage.tsx:253,258,264`,
       which a test pins).  [after #14]
-- [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.  [after #14]
 - [ ] **#19** k8s manifests + a Helm post-upgrade Playwright job that gates the release
       (artifacts + local validation, no live cluster).
 - [ ] **#20** `cupel-cli` — terminal client to any conformant backend; chat with live token
       streaming, conversations/agents/instructions/replay/evaluations/judge/trace/tasks,
       `--json`. `docs/plan-cupel-cli.md`, 4 sub-tasks.  [blocked: Q9, Q10, Q11 · after #14]
-- [ ] **#21** `agentic-app-maker` — project scaffolder; generates a runnable project and prints
-      next steps; no backend given = the mock does everything. `docs/plan-agentic-app-maker.md`,
-      5 sub-tasks.  [blocked: Q4, Q5, Q6, Q7, Q8 · after #14]
-
-## The rest of the roadmap (free, like everything else — there is no paid tier)
-
 - [ ] **#22** Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes
       the version live; mock git server. No free tool does this.
 - [ ] **#23** Public sharing — anonymous tokenised links for conversations/turns, with expiry
@@ -148,9 +170,6 @@ and **Evaluate**. User decision 2026-08-09.
 - [ ] **#24** AG-UI bridge — spike done (`docs/spike-agui.md`), recommends adopt-partially via
       `mock/agui.py` on the existing `adapter?:` seam, ~400–600 LOC. Not a client transport, not
       a contract change.  [blocked: Q3 · after #14]
-- [ ] **#25** Hybrid backend fill — implemented endpoints go to the adopter's backend, missing
-      families to the bundled mock, table derived from the `cupel-ready` gap report, visible
-      "served by mock" badges.  [blocked: Q4 — #21's `--gap-as-mock` may delete this]
 - [ ] **#26** Studio: vary the deploy target in an evaluation — flip `RunConfigPanel`'s existing
       `showEndpoints` flag on for the stepper. UI half only; the contract half is in #14.  [after #14]
 - [ ] **#27** Cross-backend compare — per-request target override in `src/api/client.ts`, N
@@ -158,10 +177,6 @@ and **Evaluate**. User decision 2026-08-09.
       do not apply for free. Overlaps #25 (same client refactor).  [blocked: Q1]
 
 ## Ops and housekeeping — user-owned, dashboard-side
-
-- [ ] **#28** Decide repo visibility. Both repos private; going public is the point of the
-      stars/community strategy. **This closes the no-back-compat window — do #14 first**, and
-      the README/site should be launch-ready.
 - [ ] **#29** Render hostname: the service was renamed `cupel-demo` but its hostname is still
       `skein.onrender.com` (Render pins the one minted at creation). Options: live with it,
       recreate the service (**carry `DEMO_TOKEN` over first** — it is `generateValue: true`, so

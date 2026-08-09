@@ -3,7 +3,7 @@ import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 3 (feature-spec.md:208):
-// "Runs: select conversations + single turns → configure (endpoints
+// "Evaluations: select conversations + single turns → configure (endpoints
 //  multi-select, version change highlighted) → queue → results fill
 //  incrementally"
 // Endpoint tags (feature-spec.md:229-232, sketches 02/03/04):
@@ -13,10 +13,10 @@ import { filmed } from "./helpers/hud";
 // The endpoints MULTI-SELECT is the turn re-fire pivot only (openapi.yaml:1490,
 // RunConfigPanel showEndpoints) — journey 4 drives it.
 
-const CONV_A = "Runs journey A: parcel never arrived";
-const CONV_B = "Runs journey B: duplicate charge";
+const CONV_A = "Evaluations journey A: parcel never arrived";
+const CONV_B = "Evaluations journey B: duplicate charge";
 
-test("runs: pick conversations + one turn → configure (changed fields) → queue → grid fills", async ({
+test("evaluations: pick conversations + one turn → configure (changed fields) → queue → grid fills", async ({
   page,
   request,
   api,
@@ -32,8 +32,8 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
   });
 
   await step("1 Select: a whole conversation plus a single turn of another", async () => {
-    await page.goto("/runs");
-    await page.getByRole("button", { name: "New run" }).click();
+    await page.goto("/evaluations");
+    await page.getByRole("button", { name: "New evaluation" }).click();
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
     await page.getByRole("checkbox", { name: `Select ${CONV_A}` }).check();
     await page.getByRole("button", { name: `Toggle turns of ${CONV_B}` }).click();
@@ -77,11 +77,11 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     await page.getByRole("option", { name: "DeepSeek V3" }).click();
   });
 
-  await step("Queue: the run is accepted and the grid fills incrementally", async () => {
+  await step("Queue: the evaluation is accepted and the grid fills incrementally", async () => {
     api.clear();
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/runs\/run_/);
+    await page.waitForURL(/\/evaluations\/run_/);
     await api.expectCalled("GET /agenttrees/{tree}/runs/{run}");
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
 
@@ -97,12 +97,12 @@ test("runs: pick conversations + one turn → configure (changed fields) → que
     await expect(page.getByText("done", { exact: true })).toBeVisible();
   });
 
-  await step("the finished run is listed and re-openable", async () => {
+  await step("the finished evaluation is listed and re-openable", async () => {
     const runUrl = page.url();
     // The back control is a Mantine Anchor with an onClick and no href, so it
     // has no link role — matched by text (noted for the UX phase).
-    await page.getByText("‹ Runs").click();
-    await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+    await page.getByText("‹ Evaluations").click();
+    await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
     await page.goto(runUrl);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(9);

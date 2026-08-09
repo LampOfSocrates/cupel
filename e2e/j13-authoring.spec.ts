@@ -168,13 +168,13 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     await expect(page.getByTestId("casebook-set-created")).toBeVisible();
   });
 
-  await step("and a replay suite: the same turns re-fired as a run", async () => {
+  await step("and a replay suite: the same turns re-fired as an evaluation", async () => {
     await page.getByRole("button", { name: "Replay", exact: true }).click();
     await api.expectCalled("POST /casebooks/{casebook}/replay");
     const accepted = page.getByTestId("casebook-replay-accepted");
     await expect(accepted).toBeVisible();
     await accepted.getByRole("link").last().click();
-    await page.waitForURL(/\/runs\/run_/);
+    await page.waitForURL(/\/evaluations\/run_/);
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,
     });

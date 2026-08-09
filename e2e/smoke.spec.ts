@@ -60,9 +60,9 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   });
   expect(chatB.ok()).toBeTruthy();
 
-  // --- Runs stepper: pick 2 conversations → configure 1 config → queue ---
-  await page.getByRole("link", { name: "Runs" }).click();
-  await page.getByRole("button", { name: "New run" }).click();
+  // --- Evaluations stepper: pick 2 conversations → configure 1 config → queue ---
+  await page.getByRole("link", { name: "Evaluations" }).click();
+  await page.getByRole("button", { name: "New evaluation" }).click();
   await page.getByRole("checkbox", { name: `Select ${MSG_A}` }).check();
   await page.getByRole("checkbox", { name: `Select ${MSG_B}` }).check();
   await expect(page.getByTestId("picker-summary")).toHaveText("2 conversations · 0 turns");
@@ -74,8 +74,8 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   await page.getByRole("option", { name: "Claude Haiku 4.5" }).click();
   await page.getByRole("button", { name: "Queue" }).click();
 
-  // --- Grid appears and FILLS (live via /tasks/stream, RunDetailPage.tsx) ---
-  await page.waitForURL(/\/runs\/run_/);
+  // --- Grid appears and FILLS (live via /tasks/stream, EvaluationPage.tsx) ---
+  await page.waitForURL(/\/evaluations\/run_/);
   await expect(page.getByTestId("comparison-grid")).toBeVisible();
   // 2 rows (one assistant turn per conversation) × (baseline + 1 config).
   await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(4, {
@@ -84,8 +84,8 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   await expect(page.getByTestId("cell-0-1")).not.toBeEmpty();
   await expect(page.getByText("done", { exact: true })).toBeVisible();
 
-  // --- Judge the run (UI mini-form) → score appears ---
-  await page.getByRole("button", { name: "⚖ Judge this run" }).click();
+  // --- Judge the evaluation (UI mini-form) → score appears ---
+  await page.getByRole("button", { name: "⚖ Judge this evaluation" }).click();
   const judgeForm = page.getByTestId("judge-form");
   await judgeForm.getByRole("combobox", { name: "Judge model" }).click();
   await page.getByRole("option", { name: "Claude Sonnet 5" }).click();

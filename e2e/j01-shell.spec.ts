@@ -5,6 +5,10 @@ import { filmed } from "./helpers/hud";
 // E2E checklist journey 1 (feature-spec.md:206):
 // "Shell: sidebar collapse, presets route to Runs, conversation list
 //  loads/searches, fork nesting expands"
+// The presets clause of that line is DEAD: #1 deleted the Tune/Evaluate
+// presets outright (they were the same page differing only by initial focus),
+// so this journey is shell + list + nesting. feature-spec.md:206 is corrected
+// in #5.
 // Endpoint tags (feature-spec.md:225-226, sketch 07):
 //   GET /me · GET /agenttrees · GET /tasks/stream (badge)
 //   GET /agenttrees/{tree}/conversations (?search, ?forks_of)
@@ -16,12 +20,12 @@ const UNIQUE = "Zephyr courier routing question"; // <48 chars → title verbati
 // under test, so grant it rather than assert around it.
 test.use({ permissions: ["clipboard-write"] });
 
-test("shell: boot → nav + presets route to Runs → search → fork nesting expands", async ({
+test("shell: boot → sidebar → search → fork nesting expands", async ({
   page,
   request,
   api,
 }) => {
-  const step = filmed(page, "Journey 1", 6);
+  const step = filmed(page, "Journey 1", 5);
   // A conversation of our own with a fork, so the nesting step never depends
   // on which seeded conversation happens to be on page 1.
   const chat = await seedChat(request, UNIQUE);
@@ -44,25 +48,6 @@ test("shell: boot → nav + presets route to Runs → search → fork nesting ex
     // walk; here we assert the desktop side of the same state.
     await expect(page.getByTestId("app-navbar")).toHaveAttribute("data-collapsed", "false");
     await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
-  });
-
-  await step("presets route to Runs (Tune → version axis, Evaluate → judge open)", async () => {
-    await page.getByRole("link", { name: "Tune", exact: true }).click();
-    await expect(page).toHaveURL(/\/runs$/);
-    // A preset lands straight in the stepper, not the run list.
-    await expect(page.getByRole("button", { name: "Configure ▸" })).toBeVisible();
-
-    await page.getByRole("link", { name: "Evaluate", exact: true }).click();
-    await expect(page).toHaveURL(/\/runs$/);
-    await page.getByRole("checkbox", { name: `Select ${UNIQUE}` }).check();
-    await page.getByRole("button", { name: "Configure ▸" }).click();
-    // Evaluate arrives with the judge section already expanded.
-    const config = page.getByTestId("config-0");
-    await expect(config.getByLabel("Rubric")).toBeVisible();
-    await expect(config.getByLabel("Judge model")).toBeVisible();
-    await api.expectCalled("GET /eval/rubrics");
-    await page.getByRole("button", { name: "Back" }).click();
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
   await step("conversation list searches (?search= reaches the backend)", async () => {

@@ -4,21 +4,21 @@ import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 7 (feature-spec.md:212):
 // "Editor: edit draft → Test in Runs (snapshot) → back → save v16 → run
-//  relabels"
+//  relabels" — the button is "Test as evaluation" since #3.
 // Endpoint tags (feature-spec.md:236-237, sketch 06):
 //   GET/PUT /agenttrees/{tree}/agents/{id}/instructions
 //   POST …/agents/{id}/snapshots · GET/PUT …/agents/{id}/last-selection
 //
-// Order note: the draft lives in component state, so navigating to Runs and
-// back discards it — "save v16" therefore happens in the same visit that took
+// Order note: the draft lives in component state, so navigating to Evaluations
+// and back discards it — "save v16" therefore happens in the same visit that took
 // the snapshot (which is also what makes the save PROMOTE that snapshot, so
-// the new version is labelled "from snapshot …"). Test in Runs follows. Every
+// the new version is labelled "from snapshot …"). The hand-off follows. Every
 // element of the checklist line is walked; only the order differs.
 // (Unsaved-draft persistence is a UX-phase item, not a contract one.)
 
 const CONV = "Editor journey: change my delivery slot";
 
-test("editor: draft → snapshot → save a new version (relabelled) → Test in Runs", async ({
+test("editor: draft → snapshot → save a new version (relabelled) → Test as evaluation", async ({
   page,
   request,
   api,
@@ -67,7 +67,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     const row = page.getByTestId(`version-${nextVersion}`);
     await expect(row).toBeVisible();
     await expect(row.getByText("live")).toBeVisible();
-    // THE relabel: the run's snapshot is now identifiable as this version.
+    // THE relabel: the evaluation's snapshot is now identifiable as this version.
     await expect(row).toContainText("from snapshot");
     // Nothing was overwritten — the previous live version is still there, and
     // is no longer live.
@@ -76,14 +76,14 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     await expect(previous.getByText("live")).toHaveCount(0);
   });
 
-  await step("Test in Runs: the DRAFT is snapshotted into the run config", async () => {
+  await step("Test as evaluation: the DRAFT is snapshotted into the config", async () => {
     await instructions.fill(
       `${await instructions.inputValue()}\n- Editor journey: untested draft under test.`,
     );
     api.clear();
-    await page.getByRole("button", { name: "Test in Runs ▸" }).click();
+    await page.getByRole("button", { name: "Test as evaluation" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/agents/{agent}/snapshots");
-    await page.waitForURL(/\/runs$/);
+    await page.waitForURL(/\/evaluations$/);
     // First time for THIS agent → empty last-selection lands on Pick. The
     // Refunds agent (not Concierge) precisely so that stays true whatever else
     // the suite has already tested — dod.spec.ts leaves Concierge with a
@@ -95,11 +95,11 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
     await expect(page.getByTestId("snapshot-badge")).toContainText("draft");
   });
 
-  await step("queue it: the run fills against the snapshotted text", async () => {
+  await step("queue it: the evaluation fills against the snapshotted text", async () => {
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("PUT /agenttrees/{tree}/agents/{agent}/last-selection");
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/runs\/run_/);
+    await page.waitForURL(/\/evaluations\/run_/);
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,
     });
@@ -108,8 +108,8 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test in
   await step("repeating the test is two taps (last-selection remembered)", async () => {
     await page.goto("/agents");
     await page.getByRole("button", { name: "Open Refunds" }).click();
-    await page.getByRole("button", { name: "Test in Runs ▸" }).click();
-    await page.waitForURL(/\/runs$/);
+    await page.getByRole("button", { name: "Test as evaluation" }).click();
+    await page.waitForURL(/\/evaluations$/);
     // Remembered selection → straight to Configure, no re-picking.
     await expect(page.getByTestId("snapshot-badge")).toBeVisible();
   });

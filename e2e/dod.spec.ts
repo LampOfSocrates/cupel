@@ -5,7 +5,8 @@ import { expect, test } from "@playwright/test";
 // (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2
 // endpoints → compare → judge → read reasoning → edit agent → Test in Runs →
 // see trace with costs." Scripted as a regression asset; each DoD step is a
-// test.step so failures name the broken step.
+// test.step so failures name the broken step. ("Test in Runs" is now
+// "Test as evaluation" in the UI — #3; cupel-phases.md is corrected in #5.)
 //
 // The "simulate" step is represented by one generator-style write (the drip
 // loop is this, repeated): an external machine-origin POST /chat through the
@@ -15,14 +16,14 @@ import { expect, test } from "@playwright/test";
 const MOCK = "http://localhost:4010";
 const DOD_MSG = "DoD walk parcel stuck in transit"; // <48 chars = title verbatim
 
-test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge → reasoning → edit → Test in Runs → trace with costs", async ({
+test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge → reasoning → edit → Test as evaluation → trace with costs", async ({
   page,
   request,
 }) => {
   test.setTimeout(300_000);
 
-  // Rubric up front: RunDetailPage fetches GET /eval/rubrics once on mount,
-  // so it must exist before any run page loads.
+  // Rubric up front: EvaluationPage fetches GET /eval/rubrics once on mount,
+  // so it must exist before any evaluation page loads.
   const rubricRes = await request.post(`${MOCK}/eval/rubrics`, {
     data: { name: "DoD rubric", prompt: "Score 0-1: grounded and helpful?" },
   });
@@ -88,8 +89,8 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
   });
 
   await test.step("compare: fork pivot grid — column per endpoint, cells fill", async () => {
-    await page.getByText("View run").click();
-    await page.waitForURL(/\/runs\/run_/);
+    await page.getByText("View evaluation").click();
+    await page.waitForURL(/\/evaluations\/run_/);
     const grid = page.getByTestId("comparison-grid");
     await expect(grid).toBeVisible();
     await expect(grid.getByText("prod")).toBeVisible();
@@ -100,8 +101,8 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
     });
   });
 
-  await test.step("judge the run (rubric via API, UI mini-form)", async () => {
-    await page.getByRole("button", { name: "⚖ Judge this run" }).click();
+  await test.step("judge the evaluation (rubric via API, UI mini-form)", async () => {
+    await page.getByRole("button", { name: "⚖ Judge this evaluation" }).click();
     const judgeForm = page.getByTestId("judge-form");
     await judgeForm.getByRole("combobox", { name: "Judge model" }).click();
     await page.getByRole("option", { name: "Claude Sonnet 5" }).click();
@@ -142,21 +143,21 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
     await expect(row.getByText("live")).toBeVisible();
   });
 
-  await test.step("Test in Runs: snapshot draft → pick → queue → grid fills", async () => {
-    // Edit again so Test in Runs snapshots an untested DRAFT (feature-spec.md:86).
+  await test.step("Test as evaluation: snapshot draft → pick → queue → grid fills", async () => {
+    // Edit again so the button snapshots an untested DRAFT (feature-spec.md:86).
     const instructions = page.getByLabel("Instructions");
     await instructions.fill(
-      (await instructions.inputValue()) + "\n- Draft under test via Test in Runs.",
+      (await instructions.inputValue()) + "\n- Draft under test via Test as evaluation.",
     );
-    await page.getByRole("button", { name: "Test in Runs ▸" }).click();
-    await page.waitForURL(/\/runs$/);
+    await page.getByRole("button", { name: "Test as evaluation" }).click();
+    await page.waitForURL(/\/evaluations$/);
     // First-time testing: empty last-selection lands on Pick (openapi.yaml:311).
     await page.getByRole("checkbox", { name: `Select ${DOD_MSG}` }).check();
     await page.getByRole("button", { name: "Configure ▸" }).click();
     // Config prefilled with the snapshot ("v#-draft (hash)" badge).
     await expect(page.getByTestId("snapshot-badge")).toBeVisible();
     await page.getByRole("button", { name: "Queue" }).click();
-    await page.waitForURL(/\/runs\/run_/);
+    await page.waitForURL(/\/evaluations\/run_/);
     // 1 row × (baseline + snapshot config).
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,
