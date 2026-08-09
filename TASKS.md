@@ -50,6 +50,19 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    item 7's rename now spans two languages instead of one; and item 10's backend-language
    question reverts to Python/FastAPI, since the reference implementation stays Python.
 
+7. **IN PROGRESS — staged.** Stage A DONE 2026-08-09 (`79739f5` rename · `9a21a92` citations ·
+   `5636f56` e2e id prefix): the wire says Evaluation, the SQLite schema was migrated with it,
+   and openapi.yaml's 310 drifted feature-spec citations are re-pointed. Version line still
+   reads 0.3.0 — one bump at the end of all stages. Remaining stages: B `EvalSet` merge
+   (versioned membership) · C `Judgment` subject/scorer · D derived status · E declared families
+   · F the bucket-C breaking subset. Found during stage A, fold in where noted:
+   **(i)** `feature-spec.md` still says `/runs` and `run_id`, and openapi.yaml quotes it — fix by
+   **in-place word substitution only**; any line-count change re-breaks the 310 citations just
+   fixed plus 206 in `src/`. **(ii)** `sketches/03-config.svg` and `04-results.svg` still show
+   the old endpoint tags, and the sketches are the source the e2e tags mirror. **(iii)**
+   `Task.result` carries an undeclared `evaluations` key (pre-existing) — bucket C.
+   **(iv)** e2e encodes the mock's id prefix as if it were contract (`waitForURL(/eval_/)`).
+
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,
    soft delete, search semantics, span retention…) **plus** the domain tighten: `Run`→
