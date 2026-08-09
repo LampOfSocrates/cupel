@@ -330,6 +330,61 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(judge.properties.set_id).toBeDefined();
   });
 
+  // Item 7 stage C. The union that lost its argument — four mutually exclusive
+  // nullable foreign keys plus a `type` enum — is now a discriminated subject
+  // (what was judged) plus a scorer (what produced the score). No backward
+  // compatibility: the four keys are GONE, not aliased.
+  it("Judgment is a polymorphic subject + scorer, with evaluation_id as scope", () => {
+    const judgment = doc.components.schemas.Judgment;
+    expect(judgment.required).toEqual(["id", "subject", "scorer", "score", "created_at"]);
+    expect(Object.keys(judgment.properties).sort()).toEqual([
+      "created_at",
+      "evaluation_id",
+      "id",
+      "reasoning",
+      "score",
+      "scorer",
+      "subject",
+    ]);
+    expect(judgment.properties.subject.$ref).toBe("#/components/schemas/JudgmentSubject");
+    expect(judgment.properties.scorer.$ref).toBe("#/components/schemas/Scorer");
+    // evaluation_id is a SCOPE, never a subject: one case scored inside two
+    // evaluations must not collapse to one row.
+    expect(judgment.properties.evaluation_id.nullable).toBe(true);
+
+    // Declared tight — only what something produces today. Adding `evaluation`
+    // (pairwise preference) or `check` later is an enum value, not a reshape.
+    const subject = doc.components.schemas.JudgmentSubject;
+    expect(subject.required).toEqual(["kind", "id"]);
+    expect(subject.properties.kind.enum).toEqual(["case", "turn"]);
+    const scorer = doc.components.schemas.Scorer;
+    expect(scorer.required).toEqual(["kind"]); // a human thumb carries kind alone
+    expect(scorer.properties.kind.enum).toEqual(["llm", "human"]);
+    for (const key of ["ref", "version", "model"]) {
+      expect(scorer.properties[key].nullable, `scorer.${key}`).toBe(true);
+    }
+
+    // The summary aggregates per scorer identity through the SAME schema, so a
+    // future non-rubric scorer needs no second shape.
+    const summary = doc.components.schemas.EvaluationScoreSummary;
+    expect(summary.required).toEqual(["evaluation_id", "scorers"]);
+    expect(summary.properties.scorers.items.properties.scorer.$ref).toBe(
+      "#/components/schemas/Scorer"
+    );
+
+    // listJudgments queries the same vocabulary the response speaks.
+    const params = doc.paths["/eval/judgments"].get.parameters.map((p) => p.name);
+    expect(params).toEqual([
+      "subject_kind",
+      "subject_id",
+      "evaluation_id",
+      "scorer_ref",
+      "conversation_id",
+      "page",
+      "page_size",
+    ]);
+  });
+
   it("case creation is handcrafted XOR sourced; import reports per row (feature-spec.md:125-126)", () => {
     const create = doc.components.schemas.EvalCaseCreate;
     expect(create.oneOf.map((b) => b.required.join())).toEqual(["input,output", "source"]);

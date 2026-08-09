@@ -971,15 +971,17 @@ paths:
       operationId: postFeedback
       summary: 👍/👎 on an assistant message
       description: |
-        feature-spec.md:119: "POST /feedback (writes a type: human judgment —
+        feature-spec.md:119: "POST /feedback (writes a scorer: human judgment —
         single store with /eval/judgments)". Body per dev prompt #3
         (feature-spec.md:272): "POST {message_id, rating} to
-        /feedback". Thumbs "also persist as lightweight judgments, type: human"
+        /feedback". Thumbs "also persist as lightweight judgments, scorer: human"
         (feature-spec.md:60). Judgments are append-only.
 
-        message_id = Turn.id. The returned human judgment is keyed by turn_id
-        (case_id/rubric fields null — a thumb has no rubric or eval case);
-        read it back via GET /eval/judgments?turn_id= to re-render 👍/👎
+        message_id = Turn.id. The returned judgment has subject
+        {kind: turn, id: message_id} and scorer {kind: human} with ref,
+        version and model null — a thumb runs no rubric and no model. Read it
+        back via GET /eval/judgments?subject_kind=turn&subject_id= (or
+        ?conversation_id= for a whole conversation's worth) to re-render 👍/👎
         state on conversation reload.
       requestBody:
         required: true
@@ -1328,7 +1330,7 @@ paths:
         workbench rubric editor: "prompt text, save = new version, test
         against one case" (feature-spec.md:63). Appends the next version of
         this rubric id — never overwrites (invariant cupel-phases.md:160);
-        Judgment.rubric_version keeps old scores comparable
+        Judgment.scorer.version keeps old scores comparable
         (feature-spec.md:59). Complements Phase-1 POST /eval/rubrics
         (existing NAME appends) with the id-addressed save the editor needs.
       parameters: [{ $ref: "#/components/parameters/rubricId" }]
@@ -1742,7 +1744,7 @@ paths:
       operationId: judge
       summary: Enqueue LLM judging
       description: |
-        feature-spec.md:129: "POST /eval/judge ({set_id | case_ids | run_id,
+        feature-spec.md:129: "POST /eval/judge ({set_id | case_ids | evaluation_id,
         judge_model, rubric_id} → enqueued), judgments append-only". Exactly
         one selector (oneOf): evaluation_id ("Judge this evaluation"… auto-creating cases
         from conversation turns if none exist", feature-spec.md:61),
@@ -1778,29 +1780,41 @@ paths:
       operationId: listJudgments
       summary: Judgment history (append-only)
       description: |
-        feature-spec.md:130: "GET /eval/judgments?case_id=&run_id=&rubric_id=
-        (history)". Model (feature-spec.md:59): "Judgment (persisted forever,
-        never overwritten): {case_id, run_id?, judge_model, rubric_id+version,
+        feature-spec.md:130: "GET /eval/judgments?subject_id=&evaluation_id=
+        &scorer_ref= (history)". Model (feature-spec.md:59): "Judgment
+        (persisted forever, never overwritten): {subject, scorer, evaluation_id?,
         score, reasoning, created_at}. Re-judging appends." Thumbs live here
-        too as type: human (feature-spec.md:60, :119) — filter by turn_id or
-        conversation_id to re-render 👍/👎 and per-turn score chips
-        (feature-spec.md:64) on reload. Paginated: the store is append-only
-        and grows forever.
+        too, as scorer kind human (feature-spec.md:60, :119) — filter by
+        subject or by conversation_id to re-render 👍/👎 and per-turn score
+        chips (feature-spec.md:64) on reload. Paginated: the store is
+        append-only and grows forever.
+
+        Every filter is an equality match, AND-ed. subject_kind and subject_id
+        may be used alone or together.
       parameters:
-        - name: case_id
+        - name: subject_kind
           in: query
+          description: Judgment.subject.kind.
+          schema: { type: string, enum: [case, turn] }
+        - name: subject_id
+          in: query
+          description: Judgment.subject.id — an eval case id or a turn id.
           schema: { type: string }
         - name: evaluation_id
           in: query
+          description: Judgment.evaluation_id — the batch scope, not the subject.
           schema: { type: string }
-        - name: rubric_id
+        - name: scorer_ref
           in: query
-          schema: { type: string }
-        - name: turn_id
-          in: query
+          description: Judgment.scorer.ref — the rubric id for an LLM judge.
           schema: { type: string }
         - name: conversation_id
           in: query
+          description: >
+            Scope filter, not a Judgment field: judgments produced against
+            this conversation — its thumbed turns and the cells replayed from
+            it. Serves the chat view, which re-renders every turn's 👍/👎 in
+            one request.
           schema: { type: string }
         - name: page
           in: query
@@ -1823,7 +1837,7 @@ paths:
       operationId: getEvaluationScoreSummary
       summary: Aggregate scores for an evaluation
       description: |
-        feature-spec.md:130: "GET /eval/runs/{run_id}/summary (aggregates)".
+        feature-spec.md:130: "GET /eval/evaluations/{evaluation_id}/summary (aggregates)".
         Feeds the grid's "summary header (mean, distribution sparkline)"
         (feature-spec.md:49), updating live as judging tasks finish
         (feature-spec.md:64).
@@ -1834,7 +1848,7 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Aggregates per rubric.
+          description: Aggregates per scorer identity (kind + ref + version).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvaluationScoreSummary" }
@@ -2871,8 +2885,8 @@ components:
       required: [judgment]
       description: >
         A judgment appended by a finished judging task — "scores stream into
-        the grid live" (feature-spec.md:64). Join keys (case_id/evaluation_id/turn_id)
-        are on the judgment itself.
+        the grid live" (feature-spec.md:64). The join keys are on the judgment
+        itself: subject (what was scored) and evaluation_id (which grid).
       properties:
         judgment: { $ref: "#/components/schemas/Judgment" }
 
@@ -2939,7 +2953,7 @@ components:
       required: [judge_model, rubric_id]
       description: >
         Exactly one of evaluation_id / case_ids / set_id (feature-spec.md:129
-        "{set_id | case_ids | run_id, judge_model, rubric_id}") — enforced
+        "{set_id | case_ids | evaluation_id, judge_model, rubric_id}") — enforced
         by the oneOf. evaluation_id = "Judge this evaluation", auto-creating cases from
         turns if none exist (feature-spec.md:61). set_id (added in v0.3.0
         with EvalSets) judges the set's latest membership version unless
@@ -2969,48 +2983,109 @@ components:
           nullable: true
           description: Pin a specific rubric version; omit for latest. Judgment records what ran (feature-spec.md:59).
 
-    Judgment:
+    JudgmentSubject:
       type: object
-      required: [id, type, score, created_at]
+      required: [kind, id]
       description: >
-        Append-only, never overwritten (feature-spec.md:59; invariant
-        cupel-phases.md:160). type llm: case_id, rubric_id and rubric_version
-        are non-null (the judge always runs a rubric against a case). type
-        human = thumbs via POST /feedback (feature-spec.md:60, :119): keyed by
-        turn_id/conversation_id instead — a thumb has no rubric or case.
+        WHAT was judged, named by a discriminator instead of by whichever of
+        several nullable id columns happened to be set. kind case = an eval
+        case, the unit an LLM judge scores; kind turn = a live conversation
+        turn, which is what a 👍/👎 annotates (feature-spec.md:60).
+
+        Only the kinds something produces today are declared. A later kind —
+        evaluation, for a pairwise preference between two evaluations — is an
+        added enum value, not a reshape, and nothing here has to move for it.
+        There is deliberately no `result` kind: a grid cell is addressed by
+        its case (Result.case_id) plus Judgment.evaluation_id, and judging an
+        eval set resolves every reference item into a case too, so `case` is
+        the one unit every judge path already converges on.
       properties:
+        kind: { type: string, enum: [case, turn] }
         id: { type: string }
-        case_id: { type: string, nullable: true, description: Non-null for type llm. }
-        evaluation_id: { type: string, nullable: true }
-        turn_id:
+
+    Scorer:
+      type: object
+      required: [kind]
+      description: >
+        WHO or WHAT produced the score. kind llm = an LLM judge: ref is the
+        rubric id, version the rubric version that ran, model the judge model
+        (feature-spec.md:59 "judge_model, rubric_id+version"). kind human = a
+        👍/👎 from a person (feature-spec.md:60, :119): ref, version and model
+        are all null, because a thumb runs no rubric and no model — nothing is
+        invented to stand in for one.
+
+        Only the kinds something produces today are declared. A deterministic
+        check (kind check, ref = the check's id, version its version) is the
+        motivating future and needs no reshape of this object. Shared with
+        EvaluationScoreSummary so a scorer has exactly one wire shape.
+      properties:
+        kind: { type: string, enum: [llm, human] }
+        ref:
           type: string
           nullable: true
-          description: Judged/thumbed turn — joins grid cells and re-renders 👍/👎 on reload.
-        conversation_id: { type: string, nullable: true }
-        type: { type: string, enum: [llm, human] }
-        judge_model: { type: string, nullable: true, description: null for type human. }
-        rubric_id: { type: string, nullable: true, description: Non-null for type llm. }
-        rubric_version: { type: integer, nullable: true, description: Non-null for type llm. }
+          description: What the scorer ran — the rubric id for kind llm; null for kind human.
+        version:
+          type: integer
+          nullable: true
+          description: Version of `ref` — the rubric version for kind llm; null for kind human.
+        model:
+          type: string
+          nullable: true
+          description: The judge model for kind llm; null for kind human.
+
+    Judgment:
+      type: object
+      required: [id, subject, scorer, score, created_at]
+      description: >
+        Append-only, never overwritten (feature-spec.md:59; invariant
+        cupel-phases.md:160). One row is one score, addressed by a subject
+        (what was judged) and a scorer (what produced the score) — the
+        discriminated pair that replaced four mutually exclusive nullable
+        foreign keys plus a type enum.
+
+        evaluation_id is deliberately NOT the subject: an LLM judgment of a
+        grid cell judges the CASE, and the evaluation is only the batch the
+        score was produced in. Keeping it as a separate SCOPE is what lets one
+        case be scored inside two evaluations without either overwriting the
+        other's cell — listJudgments' evaluation_id filter,
+        getEvaluationScoreSummary and Result.latest_score all key on the pair.
+      properties:
+        id: { type: string }
+        subject: { $ref: "#/components/schemas/JudgmentSubject" }
+        scorer: { $ref: "#/components/schemas/Scorer" }
+        evaluation_id:
+          type: string
+          nullable: true
+          description: >
+            The evaluation this score was produced inside, when it was one —
+            a scope, not a subject. Null for a thumb, and for judging
+            standalone eval cases or an eval set.
         score:
           type: number
-          description: For type human, 1 = 👍 and 0 = 👎.
+          description: For scorer kind human, 1 = 👍 and 0 = 👎.
         reasoning: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 
     EvaluationScoreSummary:
       type: object
-      required: [evaluation_id, rubrics]
-      description: Feeds "summary header (mean, distribution sparkline)" (feature-spec.md:49).
+      required: [evaluation_id, scorers]
+      description: >
+        Feeds "summary header (mean, distribution sparkline)"
+        (feature-spec.md:49). One group per SCORER IDENTITY — kind + ref +
+        version — so a rubric and a future deterministic check aggregate
+        through the same field, and the header stops being rubric-only.
+        The judge model is NOT part of the group key (two judge models against
+        one rubric version stay one row, as they always have), so each group's
+        scorer carries model: null.
       properties:
         evaluation_id: { type: string }
-        rubrics:
+        scorers:
           type: array
           items:
             type: object
-            required: [rubric_id, rubric_version, mean, count, distribution]
+            required: [scorer, mean, count, distribution]
             properties:
-              rubric_id: { type: string }
-              rubric_version: { type: integer }
+              scorer: { $ref: "#/components/schemas/Scorer" }
               mean: { type: number }
               count: { type: integer }
               distribution:

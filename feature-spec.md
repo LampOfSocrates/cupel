@@ -56,8 +56,8 @@ Evaluation is its own domain, not a bolt-on to runs:
   - `output`: candidate response (from a run, a fork, or pasted)
   - `reference`: expected answer — **handcrafted** in an editor, or **sourced from conversation history** (pick a turn → its response becomes the reference). Nullable (reference-free rubrics allowed).
 - **EvalSet**: named collection of cases (versioned, reusable across runs/models).
-- **Judgment** (persisted forever, never overwritten): `{case_id, run_id?, judge_model, rubric_id+version, score, reasoning, created_at}`. Re-judging appends a new judgment; history per case is queryable, so scores are comparable across time/judges/rubrics.
-- Judge off: pure replay, manual eyeball + thumbs (thumbs also persist as lightweight judgments, `type: human`).
+- **Judgment** (persisted forever, never overwritten): `{subject: {kind, id}, scorer: {kind, ref, version, model}, evaluation_id?, score, reasoning, created_at}`. Re-judging appends a new judgment; history per case is queryable, so scores are comparable across time/judges/rubrics.
+- Judge off: pure replay, manual eyeball + thumbs (thumbs also persist as lightweight judgments, `scorer: human`).
 - **"Judge this evaluation"** on any finished run: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
 - Results grid: score column reads latest judgment per (case, rubric); history popover shows prior judgments.
 - **Eval workbench** (its own entry under **Evaluate** in the sidebar): manage the eval domain directly — case editor (input / output / reference fields; "reference from turn" picker), set manager (create/name/version sets, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference → creates/extends a set in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
@@ -116,7 +116,7 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 - Identity: `GET /me` (user + per-tree permissions; answers in both auth modes), `POST /auth/token`, `POST /auth/logout`; Admin: `GET/PUT /admin/users`, `GET/PUT /admin/users/{id}/permissions`
 - Trees: `GET /agenttrees` (permitted + enabled; admins also see disabled), `GET /agenttrees/{tree}/endpoints` (deploy targets for replay); Admin: `PATCH /admin/agenttrees/{id}` (`{enabled}`)
 - Meta: `GET /models` (chat/run/judge model dropdowns), `GET /healthz` (backend switcher); Generator: `POST /admin/generator` (`{mode: seed|drip|stop, seed?, rates?}`), `GET /admin/generator/status`
-- Chat: `POST /agenttrees/{tree}/chat` (SSE; queued → returns task_id), stop = `DELETE /tasks/{task_id}`, `POST /feedback` (writes a `type: human` judgment — single store with /eval/judgments), `POST /upload`, `GET/PUT /settings`
+- Chat: `POST /agenttrees/{tree}/chat` (SSE; queued → returns task_id), stop = `DELETE /tasks/{task_id}`, `POST /feedback` (writes a `scorer: human` judgment — single store with /eval/judgments), `POST /upload`, `GET/PUT /settings`
 - Agents: `GET /agenttrees/{tree}/agents`, `GET/PUT /agenttrees/{tree}/agents/{id}/instructions` (versioned; carries `format`, YAML saves validated server-side too), `POST /agenttrees/{tree}/agents/{id}/snapshots` (immutable drafts), `GET/PUT /agenttrees/{tree}/agents/{id}/last-selection`
 - Conversations: `GET /agenttrees/{tree}/conversations` (paginated, `?search=`, `?forks_of={id}`, sorted by last activity; incl. turns; lineage on forks), `PATCH`/`DELETE /agenttrees/{tree}/conversations/{id}`
 - Runs: `POST /agenttrees/{tree}/replay`, `POST /agenttrees/{tree}/replay/turn` (`endpoints[]` → task + conversation per endpoint), `GET /agenttrees/{tree}/runs`, `GET /agenttrees/{tree}/runs/{id}`
@@ -126,8 +126,8 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
   - Cases: `POST /eval/cases` (handcrafted or `source: {tree, conversation_id, turn_id}`), `GET /eval/cases/{id}`, `PUT` (new version)
   - Sets: `POST/GET /eval/sets`, `PUT /eval/sets/{id}` (versioned membership)
   - Rubrics: `GET/POST /eval/rubrics`, `PUT /eval/rubrics/{id}` (save = new version)
-  - Judging: `POST /eval/judge` (`{set_id | case_ids | run_id, judge_model, rubric_id}` → enqueued), judgments append-only
-  - Scores: `GET /eval/judgments?case_id=&run_id=&rubric_id=` (history), `GET /eval/runs/{run_id}/summary` (aggregates)
+  - Judging: `POST /eval/judge` (`{set_id | case_ids | evaluation_id, judge_model, rubric_id}` → enqueued), judgments append-only
+  - Scores: `GET /eval/judgments?subject_id=&evaluation_id=&scorer_ref=` (history), `GET /eval/evaluations/{evaluation_id}/summary` (aggregates)
 - Queue: `GET /tasks`, `GET /tasks/{id}` (incl. children), **`GET /tasks/stream`** (SSE: status + progress), `DELETE /tasks/{id}` (cancel, cascades), `POST /tasks/{id}/retry-failed`
 
 ## Shared components (build once)
@@ -225,8 +225,8 @@ The app should never look empty — a generator produces realistic synthetic dat
 | Evaluations · 1 Select | `GET /agenttrees/{tree}/conversations` |
 | Evaluations · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics`, `GET …/runs/{baseline}` |
 | Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
-| Evaluations · 3 Results grid | `GET /agenttrees/{tree}/runs/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/runs/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
-| Judgment drawer | `GET /eval/judgments?case_id=`, `GET /eval/cases/{id}` |
+| Evaluations · 3 Results grid | `GET /agenttrees/{tree}/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
+| Judgment drawer | `GET /eval/judgments?subject_kind=case&subject_id=`, `GET /eval/cases/{id}` |
 | Eval workbench | `POST /eval/cases/import`, `POST/PUT /eval/cases`, `POST/GET/PUT /eval/sets`, `GET/POST/PUT /eval/rubrics`, `POST /eval/judge` |
 | Agent tree view | `GET /agenttrees/{tree}/agents` |
 | Instruction editor | `GET/PUT /agenttrees/{tree}/agents/{id}/instructions`, `POST …/snapshots`, `GET/PUT …/last-selection` |
