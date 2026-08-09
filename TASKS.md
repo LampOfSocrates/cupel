@@ -37,12 +37,11 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    disabled in `eslint.config.js` with the list inline. Left off, the new lint enforces less
    than it appears to.
 
-6. **Port the mock from Python to Node and delete the Python one.** Multi-week: 69 operations,
-   the task queue with parent/child cancellation, SQLite + migrations, the seed-42 generator,
-   both auth modes, BYOK, `CUPEL_STORAGE=local|s3`. Also `requirements.txt` deleted, 160 pytest
-   cases ported, `Dockerfile`, `render.yaml`, Playwright's webServer, README quickstart.
-   Pick a SQLite binding with **no native build step** or the port defeats its own purpose.
-   Payoff: Python leaves the quickstart entirely. Our e2e suite is the acceptance test.
+6. **DROPPED 2026-08-09 (user) — we will never do the Node port.** Number reserved so
+   nothing renumbers. Consequences, recorded so they are not rediscovered: Python 3.11+ stays a
+   hard requirement for anyone running the bundled backend, including whatever item 11 generates;
+   item 7's rename now spans two languages instead of one; and item 10's backend-language
+   question reverts to Python/FastAPI, since the reference implementation stays Python.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

@@ -62,18 +62,20 @@ and getting it wrong is expensive:
 - **Ship the Python mock in the generated app** — free, and contradicts the flow's own
   tech-stack check by making Python a hard requirement for step 2.
 
-**DECIDED 2026-08-09 (user): port to Node, delete the Python mock.** Tracked as #40. Two
-consequences worth stating up front:
+**REVERSED 2026-08-09 (user): the Node port will never happen.** The Python mock stays.
+What that costs, stated plainly so the on-ramp is honest about it:
 
-- **Sequence #40 before #14.** The port carries the OLD names so every step stays green, and
-  #14 then renames a TypeScript mock rather than a Python one — its 151 wire occurrences
-  become a type-checked rename instead of a string replacement across two languages. Porting
-  first makes the contract bump both cheaper and safer. Do **not** try to adopt the new names
-  during the port; that couples two large changes with no green state between them.
-- **The tech check gets shorter, which is the point.** Python 3.11+ and a pip install leave
-  the quickstart entirely. Keep it that way: pick a SQLite binding with **no native build
-  step** (`node:sqlite` if the engine floor can be raised to a major where it is unflagged;
-  `better-sqlite3` needs a toolchain and reintroduces exactly the friction being removed).
+- **Python 3.11+ is a hard prerequisite** for anything that ships the bundled backend, including
+  the generated folder. The tech check at step 3 must say so up front rather than discovering it
+  at first run — a JS/TS agent developer meeting a pip install is exactly the bounce this flow
+  exists to prevent, and if we cannot remove it we must at least not surprise them with it.
+- **Or the generated app ships no mock at all** and the `mock` answer to a family question means
+  "point at a Cupel instance you run separately". That keeps the generated folder pure Node but
+  makes `mine / mock / hide` mean something different — worth deciding deliberately rather than
+  by default.
+
+The one thing that remains non-negotiable either way: **one mock, not two.** A second
+implementation in another language drifts from the contract immediately.
 
 ## Personas
 
@@ -109,7 +111,7 @@ the gap; it should also **name which stage the adopter is on** and what the next
 | | question | recommendation |
 |---|---|---|
 | **1** | Is `<name>-ui/` a **copy** of the source (fork, editable, never updates) or a thin shell depending on a published package (updates flow, less editable)? | Copy — the package is unpublished and `private: true`, so it is the only thing that works today. But say so explicitly in the generated README, because "you will not get our updates" is a real cost the adopter must consent to. |
-| ~~2~~ | Node mock: port and delete Python? | **DECIDED 2026-08-09: port and delete.** #40, sequenced before #14 and #21. |
+| ~~2~~ | Node mock: port and delete Python? | **REVERSED 2026-08-09: never porting.** Python stays; the generated folder either requires Python or ships no mock — see above. |
 | 3 | Does the command accept a bare endpoint (persona B) as well as an OpenAPI document? | Yes — B is the wedge. Without it this flow only serves C. |
 | 4 | Is `hide` per family only, or also per feature within a family? | Per family for v1. Per feature is a settings surface, not a generator flag. |
 | 5 | Name: `<name>-ui` says UI, but the folder contains the mock too. | `<name>-studio` or just `<name>`. Minor, decide before the first README says it. |
