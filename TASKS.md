@@ -57,7 +57,7 @@ and **Evaluate**. User decision 2026-08-09.
 
 ## Ready and small — bugs and residuals
 
-- [ ] **#7** **Latent data-loss bug**: `EditorPage.tsx:99-128` tears the response into six form
+- [x] **#7** **Latent data-loss bug**: `EditorPage.tsx:99-128` tears the response into six form
       buffers and `save()` mutates them locally; the seed-on-data effect re-fires after a save
       and can clobber a draft the user is still typing (the Textarea is not disabled while
       saving). Needs the editor body extracted into a keyed child first.

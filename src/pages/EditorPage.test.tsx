@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
 import { renderApp } from "../test/render";
+import { server } from "../test/msw/server";
 import {
+  BASE,
   instructionSaveRequests,
   mockAgents,
   mockInstructions,
@@ -304,6 +307,90 @@ describe("EditorPage", () => {
     renderEditor("ag_new");
     await screen.findByText("No versions yet — first save creates v1.");
     expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+  });
+
+  // #7 — draft durability. The editor body owns the draft; nothing short of a
+  // genuinely different agent/tree may reset it. Two ways it used to die: a
+  // write failure swapped the whole page for the error screen (taking the
+  // Textarea, and the draft, with it), and a re-seed of the same data would
+  // overwrite text typed while a save was in flight.
+  describe("the draft survives everything short of a new agent", () => {
+    it("a failed save keeps the draft on screen", async () => {
+      server.use(
+        http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, () =>
+          HttpResponse.json({ code: "internal", message: "instruction store down" }, { status: 500 }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderEditor();
+      await setDraft(user, "Twenty minutes of unsaved work.");
+
+      await user.click(screen.getByRole("button", { name: "Save as v4" }));
+      expect(await screen.findByText("instruction store down")).toBeInTheDocument();
+      // the whole point: the save failed, the text did not
+      expect(screen.getByLabelText("Instructions")).toHaveValue(
+        "Twenty minutes of unsaved work.",
+      );
+      expect(screen.getByRole("button", { name: "Save as v4" })).toBeEnabled();
+    });
+
+    it("a failed Test-as-evaluation snapshot keeps the draft on screen", async () => {
+      server.use(
+        http.post(`${BASE}/agenttrees/:tree/agents/:agentId/snapshots`, () =>
+          HttpResponse.json({ code: "internal", message: "instruction store down" }, { status: 500 }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderEditorWithRuns();
+      await setDraft(user, "Draft worth testing.");
+
+      await user.click(screen.getByRole("button", { name: "Test as evaluation" }));
+      expect(await screen.findByText("instruction store down")).toBeInTheDocument();
+      expect(screen.getByLabelText("Instructions")).toHaveValue("Draft worth testing.");
+    });
+
+    it("typing while a save is in flight is not clobbered when it lands", async () => {
+      // The Textarea is deliberately NOT disabled while saving, so this
+      // interleaving is reachable: keystrokes land between the PUT and its
+      // response, and the post-save re-seed must not roll them back.
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      server.use(
+        http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, async (info) => {
+          await gate;
+          return info.request.clone().json().then((body) => {
+            const b = body as { content: string; format?: "text" | "yaml" };
+            return HttpResponse.json(
+              {
+                version: 4,
+                content: b.content,
+                format: b.format ?? "text",
+                created_at: new Date().toISOString(),
+                promoted_from_snapshot_id: null,
+              },
+              { status: 201 },
+            );
+          });
+        }),
+      );
+      const user = userEvent.setup();
+      renderEditor();
+      const textarea = await setDraft(user, "First half.");
+      await user.click(screen.getByRole("button", { name: "Save as v4" }));
+
+      await user.click(textarea);
+      await user.paste(" Second half typed during the save.");
+      release();
+
+      expect(await screen.findByTestId("version-4")).toBeInTheDocument();
+      expect(screen.getByLabelText("Instructions")).toHaveValue(
+        "First half. Second half typed during the save.",
+      );
+      // still dirty — what landed as v4 is only the first half
+      expect(screen.getByText("unsaved changes")).toBeInTheDocument();
+    });
   });
 
   it("format select is metadata only and is sent on save", async () => {
