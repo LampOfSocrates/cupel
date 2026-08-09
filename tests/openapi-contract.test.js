@@ -471,6 +471,49 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(Object.keys(doc.paths["/eval/judgments"])).toEqual(["get"]);
   });
 
+  // ------------------------------------------------------------- families
+  // The contract owns the family vocabulary and declares it as its top-level
+  // `tags` (see the comment above `tags:` in openapi.yaml). These four tests
+  // are what make that a partition instead of a folksonomy: without them a new
+  // operation could quietly carry no tag, or two, and `cupel-ready`'s
+  // by-family report plus the generator's --family <name>=mine|mock|hide would
+  // silently stop covering the whole surface.
+  const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
+  const contractOperations = () =>
+    Object.entries(doc.paths).flatMap(([path, item]) =>
+      HTTP_METHODS.filter((m) => item[m]).map((m) => ({ id: `${m.toUpperCase()} ${path}`, op: item[m] })));
+
+  it("every operation belongs to exactly one family", () => {
+    for (const { id, op } of contractOperations()) {
+      expect(op.tags ?? [], `${id} must carry exactly one family tag`).toHaveLength(1);
+    }
+  });
+
+  it("every family an operation uses is declared, and every declared family is used", () => {
+    const declared = doc.tags.map((t) => t.name);
+    expect(new Set(declared).size, "duplicate tag declaration").toBe(declared.length);
+    const used = new Set(contractOperations().map(({ op }) => op.tags[0]));
+    expect([...used].filter((n) => !declared.includes(n))).toEqual([]);
+    expect(declared.filter((n) => !used.has(n))).toEqual([]);
+  });
+
+  it("every declared family carries a description an adopter can answer from", () => {
+    for (const tag of doc.tags) {
+      expect(tag.description, `tag ${tag.name} needs a description`).toBeTruthy();
+    }
+  });
+
+  it("Health can report the contract version and per-family capabilities (C11)", () => {
+    const health = doc.components.schemas.Health.properties;
+    expect(health.contract_version.type).toBe("string");
+    // Additive: neither is required, so a backend that omits both stays conformant.
+    expect(doc.components.schemas.Health.required).toEqual(["status", "version"]);
+    expect(health.capabilities.additionalProperties.$ref).toBe("#/components/schemas/Capability");
+    const capability = doc.components.schemas.Capability;
+    expect(capability.required).toEqual(["status"]);
+    expect(capability.properties.status.enum).toEqual(["full", "partial", "none"]);
+  });
+
   it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
       expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);

@@ -56,7 +56,8 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | **Runs with no backend at all** — a real bundled backend, seeded with realistic data, so the whole app works before you write any server code |
 | ✅ | **One command.** `npm start` boots it and tells you which backend you are on and where your data lives |
 | ✅ | **Point it at your own backend by editing one file.** Turn the bundled one off and your backend holds all persistence — Cupel stores nothing server-side |
-| ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape |
+| ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape — **grouped into families**, so "implement chat first, evaluations later" is a plan you can measure |
+| ✅ | A backend can say what it implements: its health check reports the contract version and which families it serves, so nothing has to guess |
 | ✅ | **Generate your config from your own OpenAPI file** — base URL, route prefix and auth scheme detected for you |
 | ✅ | Switch between mock, local, staging and prod live from Settings, with health checks |
 | ✅ | **Turn login on or off with one environment variable** — real tokens and a login screen, or straight in as a dev user. Same UI either way |

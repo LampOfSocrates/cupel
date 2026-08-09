@@ -27,6 +27,13 @@
 // (--init bases the exit code on the with-remap run — what you'd get after
 // pasting the block.)
 //
+// The report is grouped BY FAMILY as well as by operation (`families` in
+// --json), because family is the axis an adopter answers on — one
+// full/partial/none line here per `--family <name>=mine|mock|hide` question
+// the project generator will ask. The family names come from the contract's
+// own `tags` (scripts/conformance.mjs families()); this script holds no list
+// of its own, so adding a family to openapi.yaml is the whole change.
+//
 // Comparator depth and limits: scripts/conformance.mjs + docs/readiness.md.
 
 import { readFileSync } from "node:fs";

@@ -71,6 +71,13 @@ export interface AgentTree {
 export interface Health {
   status: "ok";
   version: string;
+  // Health.contract_version / Health.capabilities — which contract the backend
+  // implements and how much of each FAMILY it serves. Families are the
+  // contract's top-level tags (openapi.yaml `tags:`), which is also what
+  // cupel-ready groups its report by. Both optional and additive: a backend
+  // may omit them, so a family absent from the map is UNKNOWN, not "none".
+  contract_version?: string;
+  capabilities?: Record<string, Capability>;
   seed?: string | null; // "Loaded seed dataset — mock only" (openapi.yaml:1100)
   // Health.storage — optional and additive; a conformant backend
   // may omit it entirely, so every read must tolerate undefined.
@@ -78,6 +85,15 @@ export interface Health {
     mode: "local" | "s3";
     restored?: boolean; // s3 only: did this boot restore from the replica?
   };
+}
+
+// openapi.yaml Capability — one family's coverage in a backend. `status` is
+// the promise; the counts and `missing` only make it auditable.
+export interface Capability {
+  status: "full" | "partial" | "none";
+  implemented?: number;
+  operations?: number;
+  missing?: string[];
 }
 
 // openapi.yaml:1102 Model — GET /models feeds the chat model dropdown

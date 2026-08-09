@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import auth, config, storage, tabular
+from . import auth, capabilities, config, storage, tabular
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -504,7 +504,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         it stay conformant). Read from the env per call, like
         config.live_disabled(), so it reflects what mock/boot.py actually
         decided rather than what was requested at import time."""
-        return {"status": "ok", "version": config.VERSION, "seed": app.state.seed,
+        return {"status": "ok", "version": config.VERSION,
+                # Which contract, and how much of it this backend really
+                # serves — openapi.yaml Health.contract_version /
+                # capabilities. Declared in mock/capabilities.py and guarded
+                # against the contract by test_ready.py, so `full` is never a
+                # claim nobody checked.
+                "contract_version": capabilities.CONTRACT_VERSION,
+                "capabilities": capabilities.CAPABILITIES,
+                "seed": app.state.seed,
                 "storage": storage.health_storage()}
 
     @app.get("/models")

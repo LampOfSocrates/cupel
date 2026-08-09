@@ -3,7 +3,13 @@ import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
-import { compare, PHASE1_PATHS, PHASE1_METHODS, renderReport } from "../scripts/conformance.mjs";
+import {
+  compare,
+  PHASE1_PATHS,
+  PHASE1_METHODS,
+  renderReport,
+  UNCLASSIFIED,
+} from "../scripts/conformance.mjs";
 import {
   parseArgs,
   deriveBaseUrl,
@@ -257,6 +263,49 @@ describe("cupel-ready comparator", () => {
     });
     expect(fail).toContain("missing (1): POST /things");
     expect(fail).toContain("conformance: FAIL");
+  });
+
+  // Families come from the contract's own `tags` — the comparator holds no
+  // list of its own, so these tests declare families on the FIXTURE and the
+  // report must follow it, not the real openapi.yaml.
+  describe("by family", () => {
+    const tagged = () => {
+      const c = contract();
+      c.tags = [{ name: "things", description: "things" }, { name: "meta", description: "meta" }];
+      c.paths["/things/{thingId}"].get.tags = ["things"];
+      c.paths["/things"].post.tags = ["meta"];
+      return c;
+    };
+
+    it("rolls each family up as full / partial / none, in declared order", () => {
+      const target = mutate(conformingTarget(), (p) => delete p["/things"]);
+      const report = compare(tagged(), target);
+      expect(report.families.map((f) => [f.name, f.status, f.conformant, f.operations])).toEqual([
+        ["things", "full", 1, 1],
+        ["meta", "none", 0, 1],
+      ]);
+      expect(report.families[1].missing).toEqual(["POST /things"]);
+      expect(renderReport(report, { contractLabel: "c", targetLabel: "t" })).toContain(
+        "meta            0/1 none",
+      );
+    });
+
+    it("an operation with no tag reports as unclassified rather than being dropped", () => {
+      const c = tagged();
+      delete c.paths["/things"].post.tags;
+      const report = compare(c, conformingTarget());
+      expect(report.families.map((f) => f.name)).toEqual(["things", UNCLASSIFIED]);
+      // Nothing is lost: the family rollup covers every checked operation.
+      expect(report.families.reduce((n, f) => n + f.operations, 0)).toBe(report.checked);
+    });
+
+    it("a target spec with no tags simply has no families (the report degrades, not guesses)", () => {
+      const report = compare(contract(), conformingTarget());
+      expect(report.families.map((f) => f.name)).toEqual([UNCLASSIFIED]);
+      expect(renderReport(report, { contractLabel: "c", targetLabel: "t" })).toContain(
+        "2/2 operations conformant.",
+      );
+    });
   });
 });
 

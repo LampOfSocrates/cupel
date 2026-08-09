@@ -70,6 +70,35 @@ export const PHASE1_METHODS = {
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
+// ------------------------------------------------------------------ families
+// The contract's families are its top-level `tags`, and an operation's family
+// is its single tag — see the comment above `tags:` in openapi.yaml for why
+// the declaration lives there and nowhere else. Nothing in this file or in
+// cupel-ready.mjs carries a family list of its own; if it did, the two would
+// drift the first time a family was added.
+//
+// A target/fixture spec that declares no tags simply has no families, and
+// every family-aware output below degrades to nothing rather than inventing a
+// classification. UNCLASSIFIED is what an operation with no tag reports as;
+// the contract has none (tests/openapi-contract.test.js enforces exactly one
+// tag per operation), but an adopter's spec may.
+export const UNCLASSIFIED = "(unclassified)";
+
+/** Declared family names, in document order. */
+export function families(contract) {
+  return (contract.tags ?? []).map((t) => t.name);
+}
+
+/** family name -> description, for a report that explains itself. */
+export function familyDescriptions(contract) {
+  return Object.fromEntries((contract.tags ?? []).map((t) => [t.name, t.description ?? null]));
+}
+
+/** The family of one operation: its single tag. */
+export function operationFamily(op) {
+  return op?.tags?.length ? op.tags[0] : UNCLASSIFIED;
+}
+
 const normalizeTemplate = (path) => path.replace(/\{[^}]*\}/g, "{}");
 
 function mergedParams(pathItem, op) {
@@ -187,7 +216,7 @@ export function compare(contract, target, { prefix = "", phase1Only = false } = 
       const op = pathItem[method];
       if (!op) continue;
       if (phase1Only && PHASE1_METHODS[path] && !PHASE1_METHODS[path].includes(method)) continue;
-      const row = { method: method.toUpperCase(), path, targetPath };
+      const row = { method: method.toUpperCase(), path, targetPath, family: operationFamily(op) };
       if (!targetPath) {
         Object.assign(row, { status: "missing", problems: ["path not in target"] });
       } else {
@@ -210,7 +239,38 @@ export function compare(contract, target, { prefix = "", phase1Only = false } = 
     mismatched: mismatched.map(({ method, path, problems }) => ({ method, path, problems })),
     contract_paths: Object.keys(contract.paths ?? {}).sort(),
     phase1_paths: PHASE1_PATHS,
+    families: familyReport(contract, operations),
   };
+}
+
+/**
+ * Per-family rollup of a compare() run, in the contract's declared order.
+ * Families the run checked nothing for (--phase1-only skips most of them) are
+ * omitted — reporting `0/0 none` for a family nobody asked about would read as
+ * a gap. The `status` values are Health.capabilities' vocabulary on purpose:
+ * this is the same question a backend answers about itself, asked of a spec.
+ */
+export function familyReport(contract, operations) {
+  const order = [...families(contract), UNCLASSIFIED];
+  const byFamily = new Map();
+  for (const op of operations) {
+    const row = byFamily.get(op.family) ?? { operations: 0, conformant: 0, missing: [], mismatched: [] };
+    row.operations++;
+    if (op.status === "ok") row.conformant++;
+    else if (op.status === "missing") row.missing.push(`${op.method} ${op.path}`);
+    else row.mismatched.push(`${op.method} ${op.path}`);
+    byFamily.set(op.family, row);
+  }
+  const seen = new Set(byFamily.keys());
+  const names = [...order.filter((n) => seen.has(n)), ...[...seen].filter((n) => !order.includes(n))];
+  return names.map((name) => {
+    const row = byFamily.get(name);
+    return {
+      name,
+      status: row.conformant === row.operations ? "full" : row.conformant === 0 ? "none" : "partial",
+      ...row,
+    };
+  });
 }
 
 export function renderReport(report, { contractLabel, targetLabel }) {
@@ -230,6 +290,16 @@ export function renderReport(report, { contractLabel, targetLabel }) {
     }
   }
   lines.push("");
+  // By family, because that is the axis an adopter answers on: the generator's
+  // --family <name>=mine|mock|hide takes one answer per line printed here.
+  if (report.families?.length) {
+    lines.push("by family:");
+    for (const family of report.families) {
+      const mark = { full: "✓", partial: "~", none: "✗" }[family.status];
+      lines.push(`  ${mark} ${family.name.padEnd(15)} ${family.conformant}/${family.operations} ${family.status}`);
+    }
+    lines.push("");
+  }
   lines.push(`${report.conformant}/${report.checked} operations conformant.`);
   if (report.missing.length) {
     lines.push(`missing (${report.missing.length}): ${report.missing.map((m) => `${m.method} ${m.path}`).join(", ")}`);

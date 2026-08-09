@@ -28,6 +28,12 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    eval · settings), because `cupel-ready` and item 11's `--family <name>=mine|mock|hide` both
    need those names and would otherwise each invent their own. Additive; fits with
    `Health.capabilities`. Note the merge drops the family count from ten to nine.
+   **Corrected 2026-08-09 by item 7 stage E — that list and that count are both wrong.**
+   Derived from the contract the families are its 14 top-level `tags`; the list above named
+   `instructions` (never a tag of its own — it is `agents`) and omitted `memory`, `trees`,
+   `admin`, `auth`, `identity` and `meta`. The merge moved 15 → 14, not ten → nine. Nothing
+   else in the decision changes: the contract owns the vocabulary and `Health.capabilities`
+   is where a backend answers with it.
 
 2. **DONE `dcd854e`** — Two `useAsync` converts — `ByokSection.tsx:67`, `CompareView.tsx:132`. The other five
    unconverted sites are deliberate; leave them.
@@ -116,6 +122,30 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    `EvaluationPage.tsx:200,:452` gate auto-judge and the Judge button on `status === "done"`,
    so a partial failure must be retried before it can be judged — the right default, but a
    behaviour change, not just a serialiser change.
+   Stage E DONE 2026-08-09 — **the contract declares its families, and Health reports them.**
+   Verified from the contract, not from a doc: **66 operations across 48 paths, in 14
+   families**, every operation carrying exactly one tag and none resisting classification.
+   The **"ten → nine" in item 1(c) above is wrong** and the doc it came from was wrong twice:
+   it named `instructions`, which has never been a tag separate from `agents`, and omitted
+   `memory`, which item 12 itself calls a family. The real move was **15 → 14** (the
+   `casebooks` tag). Mechanism: the top-level **`tags`**, each given a description — chosen
+   over an `x-` extension or a schema enum because the tag is already written on every
+   operation, so the classification lives with the thing it classifies and cannot drift from
+   it; a separate list would need a second edit per new operation and be silently wrong until
+   noticed. Four contract tests make it a partition (exactly one tag per operation, declared,
+   used, described). `Health` gains `contract_version` + `capabilities` (bucket-C **C11**,
+   done early because it is additive and is the natural home for the family names) with a new
+   `Capability` schema, `{status: full|partial|none, implemented?, operations?, missing?}`.
+   `scripts/conformance.mjs` grew `families()`/`familyReport()` and every report is now
+   grouped by family; **no second list was deleted because none existed** — the scripts never
+   carried one, the only family lists were prose in `docs/plan-adopter-onboarding.md:25`
+   (now removed and replaced by a pointer to the contract) and TASKS.md item 1(c). The mock
+   declares its own coverage in `mock/capabilities.py`: **58/66 — `admin` partial (6/8, the
+   generator control API), `memory` and `settings` none, the other eleven full.** It is a
+   cached projection, not a second truth: `test_ready.py` recomputes the whole table from the
+   contract through `cupel-ready --json` and fails on any drift, which is cheaper than
+   bundling `openapi.yaml` plus a YAML parser into the runtime image for a value that only
+   moves when the contract does.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

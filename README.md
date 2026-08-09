@@ -94,6 +94,17 @@ server-side state of its own; the only things it stores are device-local
 browser values (which target is selected, your auth token, a BYOK LLM key).
 You can also switch targets live in Settings → Backend without restarting.
 
+You do not have to implement all of it at once. The contract's 66 operations
+are grouped into **families** — its top-level `tags` in
+[`openapi.yaml`](openapi.yaml), one per operation: `chat`, `conversations`,
+`agents`, `evaluations`, `trace`, `tasks`, `eval`, `memory`, `settings`,
+`trees`, `admin`, `auth`, `identity`, `meta`. `cupel-ready` reports
+full/partial/none per family, so "implement chat first" is a plan you can
+measure, and a backend can *declare* the same thing about itself in
+`GET /healthz` (`contract_version` + `capabilities`). Families are also the
+unit the project scaffolder will ask about, one question each — your endpoints,
+the bundled mock, or hide that part of the UI.
+
 ## Commands
 
 | | |

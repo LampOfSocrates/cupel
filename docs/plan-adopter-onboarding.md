@@ -19,11 +19,25 @@ backend fill (#25). Written 2026-08-09 from the user's description of the intend
 
 **Ask per family, not per operation. APPROVED by the user 2026-08-09**, along with the
 three-answer shape **mine / mock / hide**. A stranger's backend will match almost nothing —
-the contract is ~69 operations across ~10 families, and the worked `cupel-ready --init`
-example only reaches 37/69 because its remap was contrived for a backend already built to
+the contract is 66 operations across 14 families, and the worked `cupel-ready --init`
+example only reaches 37/66 because its remap was contrived for a backend already built to
 this shape. A real first run is closer to 0–5 matched operations, which means 60+ questions
-if we ask per endpoint. Group by family (chat · conversations · agents · instructions ·
-evaluations · trace · tasks · eval workbench · casebooks · settings) and ask at most ten.
+if we ask per endpoint.
+
+**The family list is the contract's, not this document's** (2026-08-09, item 7 stage E): the
+top-level `tags` of `openapi.yaml`, one per operation, read by `cupel-ready` and by the
+generator's `--family <name>=mine|mock|hide`. Do not restate them here — they will drift.
+Two corrections that cost this document its credibility on the point, kept as a warning: the
+list it used to carry (chat · conversations · agents · instructions · evaluations · trace ·
+tasks · eval workbench · casebooks · settings) named `instructions`, which the contract has
+never tagged separately from `agents`, and OMITTED `memory`, which TASKS.md item 12 calls "the
+last contracted but unbuilt family". Derived, the real count is fourteen — the ten above minus
+`casebooks` (merged into `eval` in stage B) and minus `instructions`, plus `auth`, `identity`,
+`admin`, `meta`, `trees` and `memory`.
+
+Fourteen questions, not ten. Four of them are near-automatic for anyone who has an HTTP
+backend at all (`meta`, `identity`, `auth`, `trees`), so the felt length is unchanged and the
+questionnaire now covers the whole surface instead of 80% of it.
 
 Three answers per family, and the third is the one that matters:
 
@@ -93,7 +107,7 @@ accepts *an endpoint*, not a document: "where does your agent answer?" plus how 
 
 ## The adoption ladder — what "guided instructions" should say
 
-The generated app's README should not be a list of 69 operations. It should be four stages,
+The generated app's README should not be a list of 66 operations. It should be four stages,
 each independently useful, with the app fully working at every stage:
 
 1. **Chat only — one endpoint.** Implement the chat endpoint with token streaming. Everything

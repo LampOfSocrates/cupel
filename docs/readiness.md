@@ -45,6 +45,35 @@ restricts the check to the Phase-1 surface (a maintained operation list in
 `scripts/conformance.mjs` mirroring `tests/openapi-contract.test.js` — a tag
 heuristic was rejected because contract tags group by resource, not phase).
 
+### The report is grouped by family
+
+Alongside the per-operation lines, every run prints a **by family** rollup —
+`full` / `partial` / `none` per family, in the contract's declared order:
+
+```
+by family:
+  ✓ chat             3/3 full
+  ~ admin            6/8 partial
+  ✗ memory           0/4 none
+```
+
+Family is the axis worth acting on: it is one question per line
+("your endpoints, the bundled mock, or hide it?"), and it is what the project
+scaffolder's `--family <name>=mine|mock|hide` takes. The names are the
+contract's own — the top-level `tags` of `openapi.yaml`, where every operation
+carries exactly one — so neither this script nor the scaffolder keeps a list
+that could drift from the contract. An operation in *your* spec that carries no
+tag is reported under `(unclassified)` rather than dropped.
+
+A backend can also **declare** the same thing about itself:
+`GET /healthz` may return `contract_version` and a `capabilities` map keyed by
+family (`{status, implemented, operations, missing}`). Both are optional and
+additive — a family missing from the map is *unknown*, not `none` — so
+`cupel-ready` still computes the truth from the two specs; the declaration is
+what lets a UI or a generator ask cheaply instead of guessing. The mock
+declares its own honestly in `mock/capabilities.py`, and a pytest recomputes it
+from the contract so it cannot go stale.
+
 ### Remapped backends
 
 Backends whose routes are named differently (cupel-phases.md:75), e.g.
@@ -105,7 +134,7 @@ npm run ready -- https://nabu.example.com/openapi.json --init --id nabu --label 
   id: "nabu",
   label: "Nabu",
   baseUrl: "https://nabu.example.com", // from the fetched URL's origin (spec declares no absolute servers[0].url)
-  // conformance without remap 5/69 -> with /nabu-service remap 37/69
+  // conformance without remap 5/66 -> with /nabu-service remap 37/66
   remap: (p) => "/nabu-service" + p,
   requiresToken: true, // securityScheme "bearerAuth" (http bearer)
   banner: { label: "NABU BACKEND" }, // non-prod default; use `banner: false` for prod

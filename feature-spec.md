@@ -152,7 +152,7 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 
 ### Settings → Backend (sketch 9)
 - **Target switcher**: Mock / Local / Staging / Prod presets + custom **Base URL** field. All API calls go through one configurable client (`{base}` prefix) — no hardcoded hosts anywhere.
-- **Health check**: `GET {base}/healthz` on select — shows status, latency, server version, and (for mock) the loaded seed.
+- **Health check**: `GET {base}/healthz` on select — shows status, latency, server version, the contract version and the families it implements, and (for mock) the loaded seed.
 - **Mock options** (visible when target = Mock): simulate latency, random task failures (%, for retry-flow testing), SSE streaming on/off, seed dataset picker.
 - Target is device-local (not synced via `/settings`); Prod requires an auth token field. Non-prod targets show a colored banner in the app chrome so nobody mistakes mock data for real.
 

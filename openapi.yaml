@@ -82,21 +82,50 @@ servers:
     description: FastAPI mock (cupel-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
 security:
   - bearerAuth: []
+# FAMILIES. This list IS the contract's family vocabulary — the names
+# `cupel-ready` groups its report by, that a Health.capabilities entry is keyed
+# on, and that the project generator's `--family <name>=mine|mock|hide` takes.
+# There is no second list anywhere; anything that needs the names reads them
+# from here.
+#
+# Mechanism chosen deliberately: plain OpenAPI `tags`, not an `x-` extension
+# and not an enum on a schema. A tag is already written on every operation, so
+# the assignment lives WITH the thing it classifies and cannot drift from it —
+# a separate list would have to be edited a second time whenever an operation
+# is added, and would be silently wrong until someone noticed. It is also
+# readable by every OpenAPI tool and by an adopter's own spec, which an
+# extension is not. Two rules make it a partition rather than a folksonomy,
+# both enforced in tests/openapi-contract.test.js: EVERY operation carries
+# EXACTLY ONE tag, and every tag used is declared here with a description.
 tags:
   - name: auth
+    description: Token issue/revoke for AUTH_MODE=on. Absent in an off-mode backend.
   - name: identity
+    description: Who the caller is and what they may see — GET /me, always called.
   - name: admin
+    description: Super-user surfaces — users, permissions, tree enable/disable, the cross-user Inspector, generator control.
   - name: meta
+    description: Backend self-description — health (this document's capabilities) and the model list.
   - name: trees
+    description: Agent trees and their deploy endpoints; the scope every tree-scoped family hangs off.
   - name: agents
+    description: The agent tree's nodes and their instruction versions, snapshots and selection — the studio's editor surface.
   - name: conversations
+    description: Conversation list/detail/rename/delete and turn history.
   - name: memory
+    description: Per-tree memory — read, edit, clear, compact. Contracted, not implemented anywhere yet.
   - name: chat
+    description: Sending a message and streaming the answer, plus attachments and feedback. The one family a bare agent endpoint can serve alone.
   - name: evaluations
+    description: Replaying conversations or a single turn into a comparison grid, and reading that grid back.
   - name: trace
+    description: The span tree behind a turn, and span payloads.
   - name: tasks
+    description: The background-work queue — listing, detail with children, live stream, cancel, retry-failed.
   - name: eval
+    description: The eval workbench — cases, eval sets, rubrics, judging and score summaries.
   - name: settings
+    description: Server-side settings (upload limits, context policy, fallback envelope).
 
 paths:
   # -------------------------------------------------------------------- auth
@@ -2042,6 +2071,28 @@ components:
       properties:
         status: { type: string, enum: [ok] }
         version: { type: string, description: Server version (feature-spec.md:155). }
+        contract_version:
+          type: string
+          example: 0.3.0
+          description: |
+            The Cupel contract version this backend implements — info.version
+            of the document it was built against, NOT the server's own
+            `version` above. OPTIONAL and additive: a backend that omits it
+            stays conformant, and a client that reads it must tolerate absence.
+        capabilities:
+          type: object
+          description: |
+            Which families this backend implements, so `cupel-ready`, the UI
+            and the project generator can ASK instead of guessing. Keys are
+            family names — the `name`s of this document's top-level `tags`,
+            which are the contract's whole family vocabulary; a key that is not
+            a declared tag is meaningless and a family that is absent from this
+            map is unknown, not `none`.
+
+            OPTIONAL and additive, like `storage`. A backend reports it
+            honestly or not at all: `full` claims every operation in the family
+            is implemented, so an incorrect `full` is worse than silence.
+          additionalProperties: { $ref: "#/components/schemas/Capability" }
         seed:
           type: string
           nullable: true
@@ -2068,6 +2119,32 @@ components:
                 s3 only — whether this boot restored the database from the
                 replica. false on the first ever boot, or after a failed
                 restore (which degrades to a fresh, re-seeded database).
+
+    Capability:
+      type: object
+      required: [status]
+      description: |
+        One family's coverage in a backend, as reported by Health.capabilities.
+      properties:
+        status:
+          type: string
+          enum: [full, partial, none]
+          description: |
+            full = every operation the contract declares for this family is
+            implemented; partial = some but not all — a client should expect
+            404/501 within the family and a UI should degrade rather than hide;
+            none = the family is not served at all, which is what lets a UI
+            hide its surface outright instead of rendering dead controls.
+        implemented:
+          type: integer
+          description: Operations of this family the backend serves. Optional — `status` is the contract; these two only make it auditable.
+        operations:
+          type: integer
+          description: Operations the contract declares for this family, at the contract_version reported alongside.
+        missing:
+          type: array
+          description: The unserved operations, "METHOD /path", when status is partial or none. Optional and unbounded — a diagnostic, not a promise.
+          items: { type: string, example: "GET /settings" }
 
     Model:
       type: object

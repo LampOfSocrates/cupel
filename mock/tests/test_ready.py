@@ -19,6 +19,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from mock import capabilities as cap
 from mock.main import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -149,6 +150,44 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     # merged noun, so the whole contract went 69 -> 66 operations checked.
     # >= not ==, keeping this test's tolerant design: later tasks only add.
     assert report["conformant"] >= 58
+
+
+def test_declared_capabilities_match_the_contract(spec_path):
+    """GET /healthz's capabilities (mock/capabilities.py) must BE the
+    comparator's per-family verdict, not a hand-kept opinion resembling it.
+
+    This is what makes the declaration a projection of the contract rather
+    than a second source of truth: the family names, their operation totals
+    and the missing lists all come from openapi.yaml via `cupel-ready --json`,
+    and any drift — a family added, an endpoint implemented, an operation
+    moved between families — fails here rather than shipping a backend that
+    lies about itself."""
+    proc = cupel_ready(str(spec_path), "--json")
+    report = json.loads(proc.stdout)
+    assert report["mismatched"] == []  # `implemented` below counts conformant ops
+    assert report["contract"]["version"] == cap.CONTRACT_VERSION
+
+    computed = {
+        f["name"]: {
+            "status": f["status"],
+            "implemented": f["conformant"],
+            "operations": f["operations"],
+            **({"missing": sorted(f["missing"])} if f["missing"] else {}),
+        }
+        for f in report["families"]
+    }
+    declared = {
+        name: {**entry, **({"missing": sorted(entry["missing"])} if entry.get("missing") else {})}
+        for name, entry in cap.CAPABILITIES.items()
+    }
+    assert declared == computed
+
+    async def case():
+        async with make_client() as c:
+            health = (await c.get("/healthz")).json()
+            assert health["contract_version"] == cap.CONTRACT_VERSION
+            assert health["capabilities"] == cap.CAPABILITIES
+    run(case())
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
