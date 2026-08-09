@@ -1,319 +1,173 @@
-# Cupel — the todo list
+# Cupel — TODO
 
-**One id scheme: a number.** `#1`, `#2`, … assigned once, never reused, never renumbered.
-No phase/stage/bucket prefixes. Group headings say *when*; they are not part of the id.
+One list. Top to bottom. Numbered 1..N.
 
-- Runner picks the first unchecked box in **Now**, top to bottom.
-- Protocol per task: implement → tests green → commit `#<id>: <summary>` → stop.
-- Detail and evidence for most items: `docs/open-items.md`. This file is the queue.
-- Open questions are `Q1`–`Q11` (see bottom). They are not tasks; they block tasks.
-- Completed work (Phase 1, Phase 2, Stage A) is in git and summarised in
-  `docs/open-items.md` "Closed — do not re-investigate". Old ids (`P2-T17`, `PB-4`, …)
-  survive in commit messages only.
+**If an item starts with DECIDE, it needs you, not a runner.** Everything else is work.
+Commit as `N: <summary>`. Detail and evidence live in `docs/open-items.md`.
 
 Invariants (never break): versions/judgments/snapshots append-only · generator writes only
 via public API · /me always called · no AUTH_MODE branches · one config artifact.
 
----
-
-## Now — kill the "Runs" concept (UI only, no contract change)
-
-Why: Runs / Eval / Casebooks are three peer menu entries for one loop; Tune and Evaluate are
-the same page differing by which field gets focus and whether the judge panel starts open
-(`RunsPage.tsx:439-442`); and `POST /eval/judge` with a `run_id` auto-creates eval cases from
-the run's turns (`openapi.yaml:1556`) — a run *is* an evaluation. Target: two doors, **Chat**
-and **Evaluate**. User decision 2026-08-09.
-
-- [x] **#1** Two doors — merge the sidebar's three peers (`Sidebar.tsx:23-28`) into one
-      Evaluate section. **Delete** the Tune/Evaluate presets (`:36-39,:98-106`) and everything
-      downstream: RunsPage's preset reducer branches (`:140-159,:172,:203,:220,:399-401,
-      :439-442`), `Sidebar.test.tsx:112-120`, `RunsPage.test.tsx:299,:314,:333,:336`.
-      Obsoletes `feature-spec.md:101-103,:294` — they are deleted, not renamed.
-- [x] **#2** Routes — `/runs` → `/evaluations`, `/runs/:runId` → `/evaluations/:id`
-      (`App.tsx:196-198`) **with redirects**: share deep links are in the wild and
-      `CompareView.tsx:416` mints run URLs. Update route pins: `returnTo.test.ts:35` (add a
-      redirect case), `App.test.tsx:152`, `QueuePage.test.tsx:37,:104`, `ForkModal.test.tsx:64`,
-      `CompareView.test.tsx:23`, `EditorPage.test.tsx:209`.  [after #1]
-- [x] **#3** Copy + component names — `RunsPage`→`EvaluationsPage`,
-      `RunDetailPage`→`EvaluationPage`; "Runs"→"Evaluations" (`RunsPage.tsx:323`), "New run"→
-      "New evaluation" (`:325`), "Test in Runs ▸"→"Test as evaluation", the compareSets
-      rejection string (`compareSets.test.ts:75`), `agentic.config.ts:131,:164`.
-      **`docs/features.md:55` "Runs with no backend" is the verb — do not replace it.**  [after #2]
-- [x] **#4** E2E — ~84 sites across 10 files. Rename `j03-runs.spec.ts`→`j03-evaluations.spec.ts`;
-      update j05 (13), j07 (10), dod (9), smoke (5), j01 (5 — the preset assertions at
-      `:51,:56` die with #1), j12 (`:59`), j13 (27, mostly the contract tranche),
-      `helpers/seed.ts`, `j11:72`. Only 2 endpoint tags change here (`j03:85`, `j05:60`).
-      Untouched: j02, j04, j06, j08, j09, j10, mobile.  [after #3]
-- [x] **#5** Docs for this tranche — `feature-spec.md` is heaviest (`:4,:6,:26,:39,:61,:63,:66,
-      :84-89,:96,:99,:101-103,:117,:126,:206,:208,:212,:229-232,:274,:285-288,:294,:302`);
-      plus `README.md:54,:68,:115-116,:122,:126,:132`; `CLAUDE.md:19`;
-      `docs/features.md:70,:79`; `cupel-phases.md:18,:19,:26,:32-34,:61,:65,:138`;
-      `docs/plan-ab-compare.md:17,:73-74,:107,:123,:132`; `docs/plan-cupel-cli.md:49-50,:105`
-      (`run <id>` → `evaluation <id>` is a **naming decision**, not a replace).
-      Fold in: fix `docs/index.html:296` (says 19 journeys, there are 13) and
-      `README.md:116`'s wrong line citation.  [after #4]
-- [ ] **#6** **GATE — revisit with the user.** #1–#5 shipped; re-examine whether the contract
-      tranche (#14) still looks right before spending it. User asked for this checkpoint.
-
-## Ready and small — bugs and residuals
-
-- [x] **#7** **Latent data-loss bug**: `EditorPage.tsx:99-128` tears the response into six form
-      buffers and `save()` mutates them locally; the seed-on-data effect re-fires after a save
-      and can clobber a draft the user is still typing (the Textarea is not disabled while
-      saving). Needs the editor body extracted into a keyed child first.
-- [ ] **#8** `useAsync` — two clean converts left: `ByokSection.tsx:67`, `CompareView.tsx:132`.
-      The other five unconverted sites are deliberate (see `docs/open-items.md`).
-- [ ] **#9** Make `RunConfigPanel`'s `initialFocus` and `judgeInitiallyOpen` controlled
-      (`:119,:125-129`), then the remount-by-key drops to `key={i}`.
-- [x] **#10** Last render-phase ref write (`InspectorPage.tsx:192`), **and add a lint setup at
-      all** — `eslint-plugin-react-hooks@7` (`recommended-latest`). There is no eslint config
-      in the repo, so five `exhaustive-deps` disables are inert and enforce nothing. Do **not**
-      enable the React Compiler (Vite/rolldown, no Babel — 4 deps to reintroduce a Babel pass).
-- [x] **#11** `docs/features.md:65` still marks whitelabel as planned (🗓️). It shipped.
-- [ ] **#41** **`react-hooks/set-state-in-effect` is turned OFF — 20 sites across 18 files.**
-      Deferred by #10 so the lint could reach a green baseline; the rule is disabled in
-      `eslint.config.js` with the file list inline. Every one is a "you-might-not-need-an-effect"
-      reshape, not a caught defect, but 18 files is its own task. Sites: `App.tsx:126` ·
-      `CollectModal.tsx:61` · `ConversationPicker.tsx:112` · `EvalImportModal.tsx:140` ·
-      `ForkModal.tsx:89` · `useAsync.ts:82` · `CasebooksPage.tsx:238` · `ChatPage.tsx:155,:227` ·
-      `EditorPage.tsx:72` · `EvalPage.tsx:134,:579` · `EvaluationPage.tsx:117` ·
-      `InspectorPage.tsx:99,:144` · `SettingsPage.tsx:110` · `TracePage.tsx:91` ·
-      `CompareView.tsx:165` · `Composer.tsx:134` · `ConversationList.tsx:78`.
-      Turn the rule back on when the list is empty — leaving it off indefinitely means the lint
-      #10 installed is enforcing less than it looks like it is.
-- [ ] **#39** **Citation drift from #5.** Deleting the dead preset passages shortened
-      `feature-spec.md` by 5 lines, so **206 `feature-spec.md:NNN` citations are now wrong**:
-      `src/` 136, `e2e/` 33, `tests/` 17, `mock/` 16, `docs/` 1, root docs 3. The shift is exact
-      and mechanical — **old 104–293 → −4, old 295–305 → −5, old 1–103 unchanged**. Fold in the
-      stale *quotes* left by #3, which are a different failure (the quoted UI string no longer
-      exists anywhere): `e2e/j05-judge.spec.ts:7` quotes `'Score this run'` and is **not**
-      self-annotated, unlike the dod/j07/j01 quotes which are; plus
-      `src/pages/EvaluationPage.tsx:445`, `EvaluationsPage.test.tsx:131` (same string) and ~14
-      comments across `EditorPage.tsx`, `EvaluationsPage.tsx`, `client.ts`, `types.ts` still
-      saying "Test in Runs". Cheapest folded into #14, which churns `feature-spec.md` anyway —
-      but the j05 quote is worth fixing before then.
-
-## Before the UX phase
-
-- [ ] **#12** **Test the studio-only hypothesis** (user, 2026-08-09): the wedge persona may
-      never use the chat half — they have their own UI and want only the studio. If true, the
-      first ten minutes end at "my agent's real traffic is being evaluated", not "my agent
-      answered in a real UI", and the README leads with the other door. **Decides #13's shape.**
-- [ ] **#13** **UX phase planning session — with the user.** Known inputs: lead with "bring
-      your own agent" (`cupel-ready --init` is the on-ramp); no tree switcher exists, so
-      cross-tree results cannot be linked; coverage gaps — no visual-regression testing at all,
-      e2e runs against the Vite dev server and never the built bundle Render serves, chromium
-      only, portrait filmed nowhere, and BYOK live mode / s3 restore / a11y+keyboard /
-      SSE-drop / 5xx all untested.  [after #12]
-
-## Contract and the phase after
-
-- [ ] **#14** **Contract v0.4.0 — the big one. Runs before the CLIs, which generate from it.**
-      Two halves in one bump:
-      (a) *Review bucket C, 15 items*: uniform cursor-paginated `Page<T>` · conversations
-      without inlined turns · run-grid pagination + ETag · `POST …/versions` replacing
-      non-idempotent PUTs · readable version history (this is why the workbench cannot show
-      history) · `GET /eval/cases` · `Idempotency-Key` on 202s · SSE event ids + `Last-Event-ID`
-      · `/tasks/stream` subscription filters · per-operation permission semantics + 403s ·
-      `Error.details[]`/`request_id` + 422/429/503 · batch turn fetch · `Health.contract_version`
-      + capabilities · visible soft-delete · search semantics · span retention · close the
-      mock's implementation gap. Plus two later gaps: six ops return 409 `tree_disabled`
-      undeclared, and 422 is undeclared almost everywhere.
-      (b) *The domain tighten, tranche 2* — **no backward compat** (unlaunched, private,
-      unpublished, zero adopters; no shims, no aliases, no deprecation window):
-        1. Rename `Run`→`Evaluation`, `run_id`→`evaluation_id`, `RunConfig`→`Variant`,
-           `RunCell`→`Result`. 151 wire occurrences, 142 in `src/`, 28 in `e2e/`, 48 files.
-           `scripts/conformance.mjs:47,48,59` and `tests/openapi-contract.test.js` move together.
-        2. Merge `Casebook` and `EvalSet` into one noun (reference-vs-frozen becomes a field);
-           **deletes `POST /casebooks/{id}/to-eval-set`**. Leave `Selection` alone.
-        3. `Judgment` gains `subject{kind,id}` + `scorer{kind,ref,version}`; the four nullable
-           keys go. Enables `scorer.kind=check` and pairwise preference later, without a bump.
-        4. `Evaluation.status` becomes derived from its Task. Task owns lifecycle alone —
-           precondition for the Idempotency-Key item and closes the two-tab double-judge residual.
-        5. Fold in `ReplayTurnRequest.configs[]` (a config per endpoint) so one turn re-fire
-           varies endpoint + version + model per column, and widen `endpoint_ids` beyond turn
-           re-fire so an evaluation can vary the deploy target.
-      **Collision to resolve first:** the `variants[]` key vs the new `Variant` type.
-      **Do not rename** `docs/spike-agui.md:226-227,:401` — that is AG-UI's own `run_id`.
-      **Artefacts this forces:** `docs/readiness.md:5` (version) and `:100-113` (the x/69 block);
-      `docs/index.html:273`; `docs/spike-agui.md:495,:506`; `sketches/03,04,10*.svg` endpoint
-      tags; `e2e/j13:160-168` (the "casebook becomes an eval set" step is deleted).
-      **Must land before #28 (going public).**  [after #6]
-## Adoption — the three that ship WITH the contract, before going public
-## Reordered by the user 2026-08-09. Rationale: these are what let a stranger run Cupel
-## against THEIR backend. Stars need adopters, adopters need an on-ramp. Everything else
-## is improvement of a product nobody has cloned yet.
-## NOTE ids do not move — order is position, not number. #21/#25/#18 sit here deliberately.
-
-- [ ] **#21** **Adopter onboarding — one command → `<name>-ui/`.** PLAN: `docs/plan-adopter-onboarding.md`
-      (user 2026-08-09; supersedes the generator half of `docs/plan-agentic-app-maker.md` and
-      ABSORBS #25). Clone → one command → a folder that `npm run`s a chat + studio UI; checks the
-      tech stack first; optionally point it at your backend's OpenAPI; **ask per FAMILY, not per
-      operation** (~10 questions, not 60+) with three answers — **mine / mock / hide**; whatever
-      is not yours is served by the bundled mock with a "served by mock" badge. Then a staged
-      hook-up guide: (1) chat only, one endpoint, their agent answering in a real UI inside an
-      hour · (2) conversations + turns · (3) agents/instructions/versions · (4) evaluations +
-      traces. Each stage is a family flipping `mock`→`mine`; `cupel-ready` should name which
-      stage you are on and the next endpoint to write.
-      **`hide` is load-bearing** — it makes the app feel like theirs, and it is how a
-      studio-only adopter switches chat off, which is how #12 gets tested for free.
-      **The wedge persona has NO OpenAPI document** (they have a framework agent on an HTTP
-      endpoint), so the command must accept a bare endpoint + stream shape, not only a swagger.
-      [blocked: Q5, Q6, Q7, Q8 · needs #40 · after #14]
-- [ ] **#25** **Q4 ANSWERED 2026-08-09 — folded into #21.** Hybrid fill is not a runtime
-      feature; it is the `mock` answer to #21's family question, resolved at generation time and
-      written into the config. **All that survives is the "served by mock" badge** — keep it,
-      it is cheap and without it an adopter cannot tell which half of the screen is real.
-      Do not build the per-request routing layer.  [folded into #21]
-- [ ] **#40** **Port the mock to Node and DELETE the Python one. DECIDED 2026-08-09 — the
-      question is closed, only the execution remains.** Two mocks was never an option: two
-      implementations of one contract drift immediately and every contract change becomes two
-      changes plus a conformance diff — the duplication #14 exists to delete.
-      **Do this BEFORE #14, not after.** The port carries the OLD names so every step stays
-      green; #14 then renames a TypeScript mock instead of a Python one, which makes its 151
-      wire occurrences type-checked end to end rather than string-replaced. Porting first makes
-      the rename cheaper AND safer. Do not try to land the new names during the port — that
-      couples two large changes with no green state in between.
-      Scope: `mock/main.py` (69 operations) · `engine.py` (task queue: parent/child, cancel
-      cascade, retry-failed, SSE fan-out) · `db.py` (SQLite + migrations) · `generator.py`
-      (deterministic seed-42 dataset) · `agui.py` seam · both AUTH_MODEs · BYOK passthrough ·
-      `CUPEL_STORAGE=local|s3` (**Litestream is a separate binary watching the SQLite file, so
-      s3 mode should survive the port unchanged — verify, do not assume**).
-      Also moves: `requirements.txt` deleted · `npm run test:mock` (160 pytest cases) ported to
-      vitest/node:test · `Dockerfile` (FastAPI currently serves the built frontend AND the API)
-      · `render.yaml` · `playwright.config.ts` webServer command · README quickstart.
-      **SQLite driver is a real decision:** `better-sqlite3` is a native module needing a build
-      toolchain — a Windows adoption tax that undercuts the whole point — while `node:sqlite` is
-      built in but flagged on Node 22 and only unflagged/stable on newer majors. Verify current
-      status at implementation time; **consider raising the engine floor from `>=22.18` to a
-      major where `node:sqlite` is unflagged**, so the adopter tech check becomes "do you have
-      Node?" and there is no native build step anywhere.
-      **The payoff is the README's first line:** Python 3.11+ and a pip install disappear from
-      the quickstart entirely.  [before #14 and #21]
-- [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.
-      **The last contracted-but-unbuilt family; leaving it stubbed makes the contract a lie
-      to anyone who runs `cupel-ready`.**  [after #14]
-
-## Go live
-
-- [ ] **#28** Decide repo visibility — **this is the go-live gate.** Both repos private; going
-      public is the point of the stars/community strategy. **Closes the no-back-compat window,
-      so #14 must land first**, and the README/site should be launch-ready.
-
-## PostGoLive — everything after the doors open
-## Not lesser work; work that improves a product people can already clone and run.
-
-- [ ] **#15** Persistence guidance — write `docs/persistence.md` (Postgres spine with
-      partitioning + indexes, object storage for span payloads and attachments, ClickHouse/OTLP
-      for span metadata, a durable workflow engine for the task queue, Redis for SSE fan-out and
-      idempotency); add the "good shape, do NOT copy the physical layer" header to `mock/db.py`
-      (which also has no indexes); add a schema-wide tenant/owner column (`conversations.user_id`
-      exists but was added for the Inspector, not as that). Pairs with #21 — **if #21 ships
-      first, this is the doc it should point at, so consider pulling it forward.**
-- [ ] **#16** Context policy widening — frozen/today/custom + fallback for envelope-less turns +
-      recorded-tool playback. Contract already shipped; **implementation only**, 6 steps
-      (`docs/plan-context-policy.md`). Key risk: frozen must stay the default when the field is
-      omitted — assert in all three test layers.  [blocked: Q2]
-- [ ] **#17** Generator control API + drip-rate settings (un-greys `SettingsPage.tsx:253,258,264`,
-      which a test pins).  [after #14]
-- [ ] **#19** k8s manifests + a Helm post-upgrade Playwright job that gates the release
-      (artifacts + local validation, no live cluster).
-- [ ] **#20** `cupel-cli` — terminal client to any conformant backend; chat with live token
-      streaming, conversations/agents/instructions/replay/evaluations/judge/trace/tasks,
-      `--json`. `docs/plan-cupel-cli.md`, 4 sub-tasks.  [blocked: Q9, Q10, Q11 · after #14]
-- [ ] **#22** Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes
-      the version live; mock git server. No free tool does this.
-- [ ] **#23** Public sharing — anonymous tokenised links for conversations/turns, with expiry
-      and revocation. Extends the in-app deep links; every shared conversation is a billboard.
-- [ ] **#24** AG-UI bridge — spike done (`docs/spike-agui.md`), recommends adopt-partially via
-      `mock/agui.py` on the existing `adapter?:` seam, ~400–600 LOC. Not a client transport, not
-      a contract change.  [blocked: Q3 · after #14]
-- [ ] **#26** Studio: vary the deploy target in an evaluation — flip `RunConfigPanel`'s existing
-      `showEndpoints` flag on for the stepper. UI half only; the contract half is in #14.  [after #14]
-- [ ] **#27** Cross-backend compare — per-request target override in `src/api/client.ts`, N
-      unrelated conversations in N databases. No shared evaluation id means the grid and judging
-      do not apply for free. Overlaps #25 (same client refactor).  [blocked: Q1]
-
-## Ops and housekeeping — user-owned, dashboard-side
-- [ ] **#29** Render hostname: the service was renamed `cupel-demo` but its hostname is still
-      `skein.onrender.com` (Render pins the one minted at creation). Options: live with it,
-      recreate the service (**carry `DEMO_TOKEN` over first** — it is `generateValue: true`, so
-      a new service mints a different one and shared demo links die; the old hostname dies
-      instantly with no redirect), or put a real domain in front. `cupel.io`/`cupel.sh` are free.
-- [ ] **#30** Turn on demo persistence — the code shipped but the hosted demo still runs
-      `CUPEL_STORAGE=local`, so a restart wipes it. Needs an R2/S3 bucket + scoped token, then
-      the `CUPEL_S3_*` env vars. **The s3 path has never once executed** — the first real deploy
-      is the test; `/healthz` `storage.mode` reports whether it degraded to local.
-
-## Doc and code debt
-
-- [ ] **#31** `react-migration.md` is dead weight — a Streamlit→React migration guide requiring
-      an `INVENTORY.md` that does not exist, for a codebase with no Streamlit in it — and
-      **`CLAUDE.md:3` still names it as the mandatory first read**, so it misleads every new
-      session. Delete it and fix CLAUDE.md, or replace it with the evidence rules it was cited for.
-- [ ] **#32** `cupel-phases.md` is stale in five places: `helm install cupel ./chart` (no
-      `chart/` exists); a PR round-trip in the Phase-2 DoD (cancelled); `npm run dev` as the
-      front door (it is `npm start`); `npx cupel-ready`/`npx create-agentic-app`/`cupel chat`
-      (unpublished); and "Phase 4 = hosted multi-tenant platform", contradicted by
-      `docs/features.md:86` "Not planned".
-- [ ] **#33** Stale paid-tier language, contradicting the no-paid-tier decision:
-      `src/lib/shareLink.ts:8`, `src/pages/ChatPage.test.tsx:985` ("PRO-2"),
-      `docs/plan-agentic-app-maker.md:28,:171`. (`docs/deployment.md`'s "free tier" means
-      Render's hosting plan — correct, leave it.)
-- [ ] **#34** `feature-spec.md` has two wrong routes: `:32,:282` say `/agent-trees` (contract
-      says `/agenttrees`); `:127,:151` say unscoped `/turns/{id}/trace` (actual route is
-      tree-scoped).
-- [ ] **#35** `docs/index.html:271-276` shows `npx cupel-ready …` as installable. The package is
-      `private: true` and unpublished — only `npm run ready` and the local bin work.
-- [ ] **#36** `docs/deployment.md:88,111-115,139-146` describes the R2 bucket and the s3
-      boot/restore/`/healthz` behaviour as if configured and observed. None of it has ever run
-      (see #30). Mark untested until it lands.
-- [ ] **#37** The "69 operations" count is copy-pasted into three docs with no source of truth:
-      `docs/spike-agui.md:495` is the authoritative breakdown, restated at
-      `docs/readiness.md:108` and the public `docs/index.html:273`. Any contract change moves
-      all three and nothing enforces it. Fix: derive it from `openapi.yaml` in the readiness
-      script and stop hardcoding it in prose.
-- [ ] **#38** The suite is not clean under **full** shuffle (files *and* tests within files).
-      Two pre-existing failures, both reproducing in isolation: `parity.test.ts` registers a
-      `response:mocked` listener in `beforeAll` that attributes every later request to whatever
-      `currentApiMethod` last held; and `ChatPage.test.tsx > renders tokens incrementally`.
-      File-order shuffle alone is green. Only worth fixing if you want the suite shuffle-clean.
-
-## Ideas — not approved, not queued
-
-- **Evaluation `intent` + `promoted_by_evaluation_id`** — two additive fields that would give
-  the version history *evidence*: why each version exists and what score movement justified
-  keeping it. The column-relabel hack (`types.ts:673-675`) already fakes half of this link.
-  Additive, so unlike the renames it need not wait for #14.
-- **A first-class "Change"/assay object** — intent, base, draft, cohort, evaluations, verdict,
-  delta. Would make #22 a rendering of the core loop rather than a new subsystem, and give
-  regression suites, thresholds and pairwise preference an owner. Only works if it is *inferred*,
-  never ceremony.
-- **Scorer kinds beyond the LLM judge** — deterministic checks (regex, JSON-schema,
-  tool-was-called, latency/cost budget), pairwise preference, N-repetitions for variance,
-  a human annotation queue. All are homeless today because `Rubric` *is* the scorer model.
-  #14(b)3 is the precondition for all of them.
-
-## Open questions — block the tasks named
-
-| # | blocks | question |
-|---|---|---|
-| Q1 | #27 | Who judges a cross-backend compare, and how is that labelled? Nominate one backend as scorer, or judge client-side? |
-| Q2 | #16 | `tools_mode: replay_recorded` on a turn whose trace has no tool spans — silent no-op or cell error? |
-| Q3 | #24 | Also ship a thin client-side AG-UI adapter behind a "nothing is persisted" banner? Spike says no in the first pass. Re-read its five watch items before deciding. |
-| ~~Q4~~ | — | **ANSWERED 2026-08-09: yes, redundant.** Hybrid fill collapses into #21's per-family `mock` answer; only the badge survives. See `docs/plan-adopter-onboarding.md`. |
-| Q5 | #21 | What language is `create-backend`? Recommendation: FastAPI/Python first. |
-| Q6 | #21 | Feature trimming (`--features no-evaluate`) — in or out? Recommendation: out. |
-| Q7 | #21 | Does `--same-repo` touch git state? Recommendation: no, print a suggestion. |
-| Q8 | #21 | Should the generated backend implement chat + conversations for real, not stubs? Recommendation: yes for those two. |
-| Q9 | #20 | A `~/.cupel/config.json` for defaults? Recommendation: credentials only. |
-| Q10 | #20 | Ship on npm as `npx cupel-cli`, or checkout-only? Recommendation: checkout-only first. |
-| Q11 | #20 | `fav`/aliases? Recommendation: defer — needs Q9. |
+Done this session (12 commits on `evaluations-rename`): the "Runs" concept is gone from the
+UI, routes, e2e and docs; the sidebar is two doors (Chat + Evaluate); a real editor data-loss
+bug is fixed; eslint exists for the first time. 620 tests green, tsc clean, lint clean.
+Those items were `#1`–`#11` in the old scheme, and that is how the commits read.
+**This list is open work only, renumbered from 1. Old numbers survive only in git.**
 
 ---
 
-Parked indefinitely: a hosted multi-tenant platform. Not on any roadmap.
-Deliberately skipped, do not "fix": sidebar row virtualisation (rows are user-bounded behind
-an explicit Load more); the three `test.skip` calls in j10/j11/j12 (they are `AUTH_E2E` gates);
-`scripts/cupel-ready.mjs:203`'s literal `"TODO:"` string (intended output for the adopter);
-`src/test/msw/parity.test.ts:655-665` (a deliberate registry of unimplemented operations).
+1. **DECIDE — is the contract plan (item 7) still right?** Three things moved under it: the UI
+   rename already shipped, the Node port now comes first, and merging Casebook+EvalSet changes
+   which families item 11 asks the adopter about. Cheap to confirm, expensive to get wrong.
+
+2. Two `useAsync` converts — `ByokSection.tsx:67`, `CompareView.tsx:132`. The other five
+   unconverted sites are deliberate; leave them.
+
+3. `RunConfigPanel`: make `initialFocus` and `judgeInitiallyOpen` controlled, then the
+   remount-by-key drops to `key={i}`. Both props are dead since the presets were deleted.
+
+4. Fix the spec citations. Deleting the dead preset passages shortened `feature-spec.md` by 5
+   lines, so **206 `feature-spec.md:NNN` citations are off** — old 104–293 → −4, old 295–305 →
+   −5, old 1–103 unchanged. Also `e2e/j05-judge.spec.ts:7` quotes `'Score this run'`, a button
+   string that no longer exists anywhere.
+
+5. Turn `react-hooks/set-state-in-effect` back on — **20 sites across 18 files**, currently
+   disabled in `eslint.config.js` with the list inline. Left off, the new lint enforces less
+   than it appears to.
+
+6. **Port the mock from Python to Node and delete the Python one.** Multi-week: 69 operations,
+   the task queue with parent/child cancellation, SQLite + migrations, the seed-42 generator,
+   both auth modes, BYOK, `CUPEL_STORAGE=local|s3`. Also `requirements.txt` deleted, 160 pytest
+   cases ported, `Dockerfile`, `render.yaml`, Playwright's webServer, README quickstart.
+   Pick a SQLite binding with **no native build step** or the port defeats its own purpose.
+   Payoff: Python leaves the quickstart entirely. Our e2e suite is the acceptance test.
+
+7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
+   idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,
+   soft delete, search semantics, span retention…) **plus** the domain tighten: `Run`→
+   `Evaluation` on the wire, Casebook+EvalSet merged into one noun, `Judgment` gains
+   `subject`/`scorer`, `Evaluation.status` derived from its Task. No backward compatibility —
+   nothing is published and nobody has adopted it. **After item 6, so the rename is
+   type-checked. Before item 14, which closes that window.**
+
+8. **DECIDE — is the generated `<name>-ui/` folder a copy or a dependency?** A copy is
+   editable but never receives updates; a dependency is the reverse. A copy is the only thing
+   that works while the package is unpublished — but the adopter must be told.
+
+9. **DECIDE — does the command accept a bare agent endpoint, not just a Swagger?** Your wedge
+   persona has a framework agent on an HTTP endpoint and **no OpenAPI document at all**.
+   Without this, the on-ramp only serves adopters who already have a service.
+
+10. **DECIDE — the four scaffolder questions.** What language for a generated backend
+    (recommend Python/FastAPI first) · feature trimming in or out (recommend out) · does
+    `--same-repo` touch git state (recommend no) · does the generated backend really implement
+    chat + conversations, or only stubs (recommend real for those two).
+
+11. **One command → `<name>-ui/`.** Clone → one command → a folder that `npm run`s a chat +
+    studio UI. Checks the tech stack, optionally takes your backend's OpenAPI, asks **per
+    family** (~10 questions) with three answers — **mine / mock / hide** — and mocks the rest
+    with a "served by mock" badge. Then a staged hook-up guide: chat only (one endpoint, their
+    agent in a real UI within the hour) → conversations + turns → agents/instructions/versions
+    → evaluations + traces. Plan: `docs/plan-adopter-onboarding.md`.
+
+12. Memory panel — view/edit/clear per tree, compaction as a visible job. The last contracted
+    but unbuilt family; leaving it stubbed makes the contract a lie to anyone running
+    `cupel-ready`.
+
+13. Persistence guidance — `docs/persistence.md` (Postgres spine, object storage for span
+    payloads, ClickHouse/OTLP for span metadata, a durable workflow engine for the queue, Redis
+    for SSE fan-out), the "do NOT copy the physical layer" header on the db module, and a
+    schema-wide owner column. **Item 11 is supposed to point adopters at this**, so it should
+    exist by then.
+
+14. **DECIDE — go public.** Both repos are private. This is the launch, and it closes the
+    no-backward-compatibility window, so item 7 must be done and the README/site ready.
+
+15. **DECIDE — the Render hostname.** The service is named `cupel-demo` but its hostname is
+    still `skein.onrender.com`. Live with it, recreate the service (**carry `DEMO_TOKEN` over
+    first** — a new service mints a different one and shared demo links die; the old hostname
+    dies instantly with no redirect), or put a real domain in front. `cupel.io`/`cupel.sh` free.
+
+16. Turn on demo persistence — the code shipped but the demo still runs local storage, so a
+    restart wipes it. Needs an R2/S3 bucket + scoped token. **That path has never once
+    executed**; the first real deploy is the test.
+
+17. UX phase planning session — with you. Inputs: lead with "bring your own agent"; there is no
+    tree switcher, so cross-tree results cannot be linked; and the coverage gaps — no visual
+    regression testing at all, e2e never runs the built bundle Render serves, chromium only,
+    portrait filmed nowhere, BYOK live mode / s3 restore / a11y / SSE-drop / 5xx all untested.
+
+18. **DECIDE — who judges a cross-backend comparison, and how is that labelled?** Nominate one
+    backend as scorer, or judge client-side. Blocks item 30.
+
+19. **DECIDE — replaying recorded tools on a turn whose trace has no tool spans: silent no-op
+    or cell error?** Blocks item 22.
+
+20. **DECIDE — also ship a thin client-side AG-UI adapter behind a "nothing is persisted"
+    banner?** The spike's own answer is no in a first pass. Blocks item 28.
+
+21. **DECIDE — the three CLI questions.** A `~/.cupel/` config file for defaults (recommend
+    credentials only) · publish to npm or checkout-only (recommend checkout-only first) ·
+    aliases (recommend defer). Blocks item 25.
+
+22. Context policy widening — replay under the original / today's / a custom context, plus
+    recorded-tool playback. Contract already shipped; implementation only, six steps. Frozen
+    must stay the default when the field is omitted — assert it in all three test layers.
+
+23. Generator control API + drip-rate settings — un-greys the placeholders in Settings.
+
+24. k8s manifests + a Helm post-upgrade Playwright job that blocks a bad release.
+
+25. `cupel-cli` — drive any conformant backend from the terminal: chat with live streaming,
+    conversations, agents, instructions, replay, evaluations, judge, trace, tasks, `--json`.
+
+26. Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes the
+    version live. No free tool does this.
+
+27. Public sharing — anonymous tokenised links for conversations and turns, with expiry and
+    revocation. Every shared conversation is a billboard.
+
+28. AG-UI bridge — a server-side adapter so an agent already speaking AG-UI needs no new
+    endpoints. ~400–600 LOC on an existing seam. Not a client transport, not a contract change.
+
+29. Vary the deploy target in an evaluation — flip an existing flag on the stepper. UI half
+    only; the contract half is in item 7.
+
+30. Cross-backend compare — compare two separate backends. No shared evaluation id, so the grid
+    and judging do not apply for free.
+
+31. Delete `react-migration.md` — a Streamlit→React guide for a codebase with no Streamlit,
+    requiring an inventory file that does not exist. **`CLAUDE.md:3` still names it as the
+    mandatory first read**, so it misleads every new session. Fix that line too.
+
+32. `cupel-phases.md` is stale in five places: a helm chart that does not exist, a cancelled PR
+    round-trip, `npm run dev` as the front door, `npx` commands for an unpublished package, and
+    "Phase 4 = hosted multi-tenant platform", which the features doc explicitly says is not
+    planned.
+
+33. Delete the stale paid-tier strings — `shareLink.ts:8`, `ChatPage.test.tsx:985` ("PRO-2"),
+    and two in the scaffolder plan. There is no paid tier.
+
+34. `feature-spec.md` has two wrong routes: `/agent-trees` should be `/agenttrees`, and the
+    trace path is tree-scoped, not bare.
+
+35. `docs/index.html` shows `npx cupel-ready` as installable. The package is private and
+    unpublished — only the local bin works.
+
+36. `docs/deployment.md` describes the R2 bucket and s3 restore as if configured and observed.
+    None of it has ever run (item 16). Mark it untested until it has.
+
+37. Stop hardcoding counts in prose. "69 operations" is copy-pasted into three docs with no
+    source of truth, and `docs/index.html` claims 533 unit tests where the suite now reports
+    620. Derive both, or delete them.
+
+38. Make the suite clean under full shuffle — two pre-existing failures, both reproducing in
+    isolation: a listener in `parity.test.ts` that misattributes later requests, and one
+    streaming test in `ChatPage.test.tsx`. File-order shuffle alone is already green.
+
+---
+
+Not on the list, deliberately: a hosted multi-tenant platform (parked indefinitely); sidebar
+row virtualisation, the three `AUTH_E2E` skips, the `"TODO:"` string the readiness script
+emits for adopters, and the unimplemented-operations registry in the parity test — all four
+are correct as they are, do not "fix" them.
