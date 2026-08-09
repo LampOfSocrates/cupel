@@ -7,7 +7,7 @@ import { filmed } from "./helpers/hud";
 //  history; retroactive 'Judge this evaluation'"
 // Endpoint tags (feature-spec.md:228-230, sketch 04):
 //   GET /eval/rubrics · POST /agenttrees/{tree}/replay (judge in the config)
-//   POST /eval/judge (retroactive) · GET /eval/judgments · GET /eval/runs/{id}/summary
+//   POST /eval/judge (retroactive) · GET /eval/judgments · GET /eval/evaluations/{id}/summary
 
 const CONV = "Judge journey: is my warranty valid?";
 
@@ -56,8 +56,8 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });
-    await expect(page.getByTestId("run-summary")).toBeVisible();
-    await api.expectCalled("GET /eval/runs/{run}/summary");
+    await expect(page.getByTestId("evaluation-summary")).toBeVisible();
+    await api.expectCalled("GET /eval/evaluations/{evaluation}/summary");
   });
 
   await step("judgment drawer: reasoning and append-only history", async () => {
@@ -118,7 +118,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
   await awaitTask(request, replay.task_id);
 
   const judgmentCount = async () => {
-    const res = await request.get(`${API_ORIGIN}/eval/judgments?run_id=${replay.run_id}&page_size=200`);
+    const res = await request.get(`${API_ORIGIN}/eval/judgments?evaluation_id=${replay.evaluation_id}&page_size=200`);
     expect(res.ok(), await res.text()).toBeTruthy();
     return ((await res.json()) as unknown[]).length;
   };
@@ -126,7 +126,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
 
   let judged = 0;
   await step("open the finished evaluation's link — the judge fires anyway", async () => {
-    await page.goto(`/evaluations/${replay.run_id}`);
+    await page.goto(`/evaluations/${replay.evaluation_id}`);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     // The idempotency probe, then the judging pass it did not veto.
     await api.expectCalled("GET /eval/judgments");
@@ -134,7 +134,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });
-    await expect(page.getByTestId("run-summary")).toBeVisible();
+    await expect(page.getByTestId("evaluation-summary")).toBeVisible();
     await expect(page.getByTestId("judging-badge")).toBeHidden({ timeout: 120_000 });
     judged = await judgmentCount();
     expect(judged).toBeGreaterThan(0);
@@ -158,7 +158,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
     api.clear();
     await page.getByRole("link", { name: "Evaluations" }).first().click();
     await page.waitForURL(/\/evaluations$/);
-    await page.goto(`/evaluations/${replay.run_id}`);
+    await page.goto(`/evaluations/${replay.evaluation_id}`);
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });

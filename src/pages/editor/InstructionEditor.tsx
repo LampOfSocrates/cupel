@@ -398,8 +398,8 @@ export function InstructionEditor({
               <Button size="xs" variant="default" onClick={() => void snapshotDraft()} disabled={busy}>
                 Snapshot draft
               </Button>
-              {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Runs
-                  (cupel-phases.md:18 "editor → Runs flow (sketches 06 → 03)"). */}
+              {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Evaluations
+                  (cupel-phases.md:18 "editor → Evaluations flow (sketches 06 → 03)"). */}
               <Button size="xs" variant="light" onClick={() => void testInRuns()} disabled={busy}>
                 Test as evaluation
               </Button>

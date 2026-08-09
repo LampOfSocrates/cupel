@@ -246,17 +246,17 @@ export type CasebookToEvalSetRequest = { set_name: string } | { set_id: string }
 // ReplayRequest's enums and defaults". context_policy is pinned to frozen by
 // the client exactly as on ReplayRequest (widening is future work).
 export interface CasebookReplayRequest {
-  configs: RunConfig[];
+  configs: Variant[];
   context_policy?: "frozen";
 }
 
-// openapi.yaml:3320 CasebookReplayAccepted — "One parent task; one run per
-// tree the casebook's items reference (runs are tree-scoped … a cross-tree
-// casebook therefore yields several runs). Fetch each grid via
-// GET /agenttrees/{tree_id}/runs/{run_id}" (:3323-3327).
+// openapi.yaml:3320 CasebookReplayAccepted — "One parent task; one evaluation
+// per tree the casebook's items reference (evaluations are tree-scoped … a
+// cross-tree casebook therefore yields several). Fetch each grid via
+// GET /agenttrees/{tree_id}/evaluations/{evaluation_id}" (:3323-3327).
 export interface CasebookReplayAccepted {
   task_id: string;
-  runs: Array<{ tree_id: string; run_id: string }>;
+  evaluations: Array<{ tree_id: string; evaluation_id: string }>;
 }
 
 // openapi.yaml:1061 Error — {code, message}; also the SSE `error` event payload
@@ -330,7 +330,7 @@ export interface FeedbackRequest {
 export interface Judgment {
   id: string;
   case_id?: string | null;
-  run_id?: string | null;
+  evaluation_id?: string | null;
   turn_id?: string | null;
   conversation_id?: string | null;
   type: "llm" | "human";
@@ -345,7 +345,7 @@ export interface Judgment {
 // openapi.yaml:970-991 listJudgments query params.
 export interface JudgmentListParams {
   case_id?: string;
-  run_id?: string;
+  evaluation_id?: string;
   rubric_id?: string;
   turn_id?: string;
   conversation_id?: string;
@@ -416,7 +416,7 @@ export interface InstructionHistory {
 }
 
 // openapi.yaml:1206 InstructionSave — ":1212-1217 snapshot_id: Promote this
-// draft snapshot to the new version; runs referencing it relabel
+// draft snapshot to the new version; evaluations referencing it relabel
 // (feature-spec.md:86, :89)".
 export interface InstructionSave {
   content: string;
@@ -553,15 +553,15 @@ export interface RubricUpdate {
   prompt: string;
 }
 
-// openapi.yaml:1857 JudgeRequest — ":1861-1864 Exactly one of run_id /
-// case_ids … run_id = 'Score this run', auto-creating cases from turns if
+// openapi.yaml:1857 JudgeRequest — ":1861-1864 Exactly one of evaluation_id /
+// case_ids … evaluation_id = 'Score this run', auto-creating cases from turns if
 // none exist (feature-spec.md:61)"; rubric_version ":1876-1879 Pin a specific
 // rubric version; omit for latest".
 export interface JudgeRequest {
-  run_id?: string | null;
+  evaluation_id?: string | null;
   case_ids?: string[] | null;
   /** openapi.yaml:2934-2936 — "Judge every case in this eval set"; the oneOf
-   * became run_id | case_ids | set_id in v0.3.0 (:2926-2929). */
+   * became evaluation_id | case_ids | set_id in v0.3.0 (:2926-2929). */
   set_id?: string | null;
   /** ":2939-2941 Pin a set membership version; omit for latest." */
   set_version?: number | null;
@@ -577,12 +577,12 @@ export interface TaskRef {
 
 // openapi.yaml:1796 JudgmentEvent — "A judgment appended by a finished judging
 // task — 'scores stream into the grid live' (feature-spec.md:64). Join keys
-// (case_id/run_id/turn_id) are on the judgment itself."
+// (case_id/evaluation_id/turn_id) are on the judgment itself."
 export interface JudgmentEvent {
   judgment: Judgment;
 }
 
-// openapi.yaml:1909 RunScoreSummary — "Feeds 'summary header (mean,
+// openapi.yaml:1909 EvaluationScoreSummary — "Feeds 'summary header (mean,
 // distribution sparkline)' (feature-spec.md:49)"; distribution ":1925-1928
 // Bucketed score counts for the sparkline".
 export interface RubricScoreSummary {
@@ -593,15 +593,15 @@ export interface RubricScoreSummary {
   distribution: number[];
 }
 
-export interface RunScoreSummary {
-  run_id: string;
+export interface EvaluationScoreSummary {
+  evaluation_id: string;
   rubrics: RubricScoreSummary[];
 }
 
-// openapi.yaml:1483 RunConfig — ":1488-1489 instruction_version XOR
+// openapi.yaml:1483 Variant — ":1488-1489 instruction_version XOR
 // snapshot_id — a snapshot is an untested draft (feature-spec.md:86);
 // neither = the live version. endpoint_ids only applies to turn re-fire."
-export interface RunConfig {
+export interface Variant {
   agent_id?: string | null;
   instruction_version?: number | null;
   snapshot_id?: string | null;
@@ -617,16 +617,16 @@ export interface RunConfig {
 // (client.ts api.replay) — callers never pass it.
 export interface ReplayRequest {
   selection: SelectionItem[];
-  configs: RunConfig[];
-  baseline_run_id?: string | null;
+  configs: Variant[];
+  baseline_evaluation_id?: string | null;
   context_policy?: "frozen";
 }
 
 // openapi.yaml:1548 ReplayAccepted — "Every request returns task_id
-// (feature-spec.md:102)"; run_id feeds GET …/runs/{id} for the grid.
+// (feature-spec.md:102)"; evaluation_id feeds GET …/evaluations/{id} for the grid.
 export interface ReplayAccepted {
   task_id: string;
-  run_id: string;
+  evaluation_id: string;
 }
 
 // openapi.yaml:1556 ReplayTurnRequest — ":1565 feature-spec.md:71 'body
@@ -635,20 +635,20 @@ export interface ReplayTurnRequest {
   conversation_id: string;
   turn_id: string;
   endpoints: string[];
-  config?: RunConfig | null;
+  config?: Variant | null;
   context_policy?: "frozen";
 }
 
 // openapi.yaml:1576 ReplayTurnAccepted — "returns one task_id + new
-// conversation_id per endpoint" (feature-spec.md:71); run_id backs the
+// conversation_id per endpoint" (feature-spec.md:71); evaluation_id backs the
 // fork-comparison pivot (:1581-1585).
 export interface ReplayTurnAccepted {
-  run_id: string;
+  evaluation_id: string;
   results: Array<{ endpoint_id: string; task_id: string; conversation_id: string }>;
 }
 
-// openapi.yaml:1596 RunSummaryItem — GET /agenttrees/{tree}/runs listing.
-export interface RunSummaryItem {
+// openapi.yaml:1596 EvaluationSummaryItem — GET /agenttrees/{tree}/evaluations listing.
+export interface EvaluationSummaryItem {
   id: string;
   tree_id: string;
   status: "queued" | "running" | "done" | "failed" | "cancelled";
@@ -657,9 +657,9 @@ export interface RunSummaryItem {
   label?: string | null;
 }
 
-// openapi.yaml:1645 RunCell — ":1642 One per column, same order; fills
+// openapi.yaml:1645 Result — ":1642 One per column, same order; fills
 // incrementally (feature-spec.md:108)".
-export interface RunCell {
+export interface Result {
   status: "pending" | "running" | "done" | "failed";
   content?: string | null;
   conversation_id?: string | null;
@@ -670,27 +670,27 @@ export interface RunCell {
   error?: string | null;
 }
 
-// openapi.yaml:1607 Run — comparison-grid data: "baseline column + one column
+// openapi.yaml:1607 Evaluation — comparison-grid data: "baseline column + one column
 // per run config, row per turn" (feature-spec.md:49); ":1621 Index 0 =
 // baseline. Column labels relabel when a snapshot promotes."
-export interface RunColumn {
+export interface EvaluationColumn {
   label: string;
-  config: RunConfig;
+  config: Variant;
 }
 
-export interface RunRow {
+export interface EvaluationRow {
   source: { conversation_id: string; turn_id: string };
-  cells: RunCell[];
+  cells: Result[];
 }
 
-export interface Run {
+export interface Evaluation {
   id: string;
   tree_id: string;
   status: "queued" | "running" | "done" | "failed" | "cancelled";
   created_at: string;
   task_id: string;
-  columns: RunColumn[];
-  rows: RunRow[];
+  columns: EvaluationColumn[];
+  rows: EvaluationRow[];
 }
 
 // openapi.yaml:1668 Span — "Span = {id, parent_id, type: agent|llm|tool, name,
@@ -779,7 +779,7 @@ export interface Task {
   progress: TaskProgress;
   parent_id?: string | null;
   result?: {
-    run_id?: string | null;
+    evaluation_id?: string | null;
     conversation_id?: string | null;
     turn_id?: string | null;
     /** openapi.yaml:2795-2802 — "the same per-row report a small synchronous

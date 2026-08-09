@@ -9,7 +9,7 @@ import { filmed } from "./helpers/hud";
 // Endpoint tags (feature-spec.md:225-228, sketches 02/03/04):
 //   GET /agenttrees/{tree}/conversations · GET …/endpoints · GET …/instructions
 //   GET /models · GET /eval/rubrics · POST /agenttrees/{tree}/replay
-//   GET /agenttrees/{tree}/runs/{id}
+//   GET /agenttrees/{tree}/evaluations/{id}
 // The endpoints MULTI-SELECT is the turn re-fire pivot only (openapi.yaml:1490,
 // RunConfigPanel showEndpoints) — journey 4 drives it.
 
@@ -82,7 +82,7 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
     await page.waitForURL(/\/evaluations\/run_/);
-    await api.expectCalled("GET /agenttrees/{tree}/runs/{run}");
+    await api.expectCalled("GET /agenttrees/{tree}/evaluations/{evaluation}");
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
 
     // 3 rows (2 turns of A + 1 turn of B) × (baseline + 2 configs).
@@ -98,12 +98,12 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
   });
 
   await step("the finished evaluation is listed and re-openable", async () => {
-    const runUrl = page.url();
+    const evaluationUrl = page.url();
     // The back control is a Mantine Anchor with an onClick and no href, so it
     // has no link role — matched by text (noted for the UX phase).
     await page.getByText("‹ Evaluations").click();
     await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
-    await page.goto(runUrl);
+    await page.goto(evaluationUrl);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(9);
   });

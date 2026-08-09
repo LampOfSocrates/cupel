@@ -69,7 +69,7 @@ test(
       conversationId: history.conversationId,
       token: admin,
     });
-    let inFlight: { task_id: string; run_id: string };
+    let inFlight: { task_id: string; evaluation_id: string };
 
     await step("an admin disables the tree from Settings", async () => {
       await page.goto("/");

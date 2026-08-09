@@ -15,17 +15,17 @@ import type {
   JudgeConfig,
   Model,
   Rubric,
-  RunConfig,
+  Variant,
 } from "../api/types";
 
-// Runs step 2 — Run Config drawer (feature-spec.md:46-48): "Agent tree +
+// Evaluations step 2 — Variant drawer (feature-spec.md:46-48): "Agent tree +
 // instruction version · Model, temperature · Judge (optional, collapsed by
 // default): toggle on → judge model + rubric fields appear". Fields mirror
-// RunConfig (openapi.yaml:1483-1506); the XOR rule (openapi.yaml:1488-1489
+// Variant (openapi.yaml:1483-1506); the XOR rule (openapi.yaml:1488-1489
 // "instruction_version XOR snapshot_id — a snapshot is an untested draft;
 // neither = the live version") is enforced in UI state: choosing a version
 // clears the snapshot and vice versa is impossible (snapshots arrive only via
-// props/value from Test-in-Runs).
+// props/value from Test-as-evaluation).
 //
 // Diff-from-baseline (feature-spec.md:45 "prefilled from the baseline so
 // changing one axis = one field"; e2e checklist :208 "version change
@@ -41,9 +41,9 @@ import type {
 // feature-spec.md:67).
 
 interface Props {
-  value: RunConfig;
-  onChange: (next: RunConfig) => void;
-  baseline?: RunConfig | null;
+  value: Variant;
+  onChange: (next: Variant) => void;
+  baseline?: Variant | null;
   agents?: Agent[];
   /** Instruction versions available for the selected agent. */
   versions?: number[];
@@ -104,7 +104,7 @@ export function RunConfigPanel({
   const [judgeOpen, setJudgeOpen] = useState(value.judge != null);
   const [judgeDraft, setJudgeDraft] = useState<Partial<JudgeConfig>>(value.judge ?? {});
 
-  const set = (patch: Partial<RunConfig>) => onChange({ ...value, ...patch });
+  const set = (patch: Partial<Variant>) => onChange({ ...value, ...patch });
 
   const changed = {
     agent: baseline != null && (value.agent_id ?? null) !== (baseline.agent_id ?? null),

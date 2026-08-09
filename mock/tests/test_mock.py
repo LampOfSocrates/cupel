@@ -424,7 +424,7 @@ def test_soft_delete_preserves_judgments():
     run(case())
 
 
-# ----------------------------------------------------------------------- runs
+# ----------------------------------------------------------------- evaluations
 def test_replay_grid_fills_and_children_progress():
     async def case():
         async with client_pair() as c:
@@ -443,22 +443,22 @@ def test_replay_grid_fills_and_children_progress():
             assert len(detail["children"]) == 2
             assert all(ch["status"] == "done" for ch in detail["children"])
 
-            run_ = (await c.get(f"/agenttrees/agent1/runs/{acc['run_id']}")).json()
-            assert run_["status"] == "done"
-            assert [col["label"] for col in run_["columns"]] == ["baseline", "deepseek-v3", "v2"]
-            assert len(run_["rows"]) == 2  # one per assistant turn
-            for row in run_["rows"]:
+            evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
+            assert evaluation["status"] == "done"
+            assert [col["label"] for col in evaluation["columns"]] == ["baseline", "deepseek-v3", "v2"]
+            assert len(evaluation["rows"]) == 2  # one per assistant turn
+            for row in evaluation["rows"]:
                 base, c1, c2 = row["cells"]
                 assert base["status"] == "done" and base["content"]
                 assert c1["status"] == "done" and c1["content"] and c1["turn_id"]
                 assert c2["status"] == "done"
                 assert c1["content"] != base["content"]
 
-            listed = (await c.get("/agenttrees/agent1/runs")).json()
-            assert listed[0]["id"] == acc["run_id"]
+            listed = (await c.get("/agenttrees/agent1/evaluations")).json()
+            assert listed[0]["id"] == acc["evaluation_id"]
 
             trace = (await c.get(
-                f"/agenttrees/agent1/turns/{run_['rows'][0]['cells'][1]['turn_id']}/trace")).json()
+                f"/agenttrees/agent1/turns/{evaluation['rows'][0]['cells'][1]['turn_id']}/trace")).json()
             assert trace["spans"]  # replayed turns are traceable
             assert trace["envelope"]  # frozen from the original turn
     run(case())
@@ -495,9 +495,9 @@ def test_replay_turn_forks_with_lineage():
                                  params={"forks_of": conv_id})).json()
             assert forks["total"] == 2
 
-            run_ = (await c.get(f"/agenttrees/agent1/runs/{acc['run_id']}")).json()
-            assert [col["label"] for col in run_["columns"]] == ["baseline", "prod", "staging"]
-            assert len(run_["rows"]) == 1
+            evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
+            assert [col["label"] for col in evaluation["columns"]] == ["baseline", "prod", "staging"]
+            assert len(evaluation["rows"]) == 1
     run(case())
 
 
@@ -546,8 +546,8 @@ def test_replay_cell_turn_reuses_source_envelope(monkeypatch):
                 "configs": [{"model": "deepseek-v3"}],
             })).json()
             await wait_task(c, acc["task_id"])
-            run_ = (await c.get(f"/agenttrees/agent1/runs/{acc['run_id']}")).json()
-            cell = run_["rows"][0]["cells"][1]
+            evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
+            cell = evaluation["rows"][0]["cells"][1]
             trace = (await c.get(
                 f"/agenttrees/agent1/turns/{cell['turn_id']}/trace")).json()
             assert trace["envelope"] == source_env  # frozen, not a fresh stamp
@@ -637,10 +637,10 @@ def test_rubrics_append_only_versions():
     run(case())
 
 
-def test_judge_score_update_is_scoped_to_its_run():
-    """docs/review-2026-08-05.md A1 — `UPDATE run_cells SET latest_score = ?
+def test_judge_score_update_is_scoped_to_its_evaluation():
+    """docs/review-2026-08-05.md A1 — `UPDATE evaluation_cells SET latest_score = ?
     WHERE case_id = ?` carried no run scope, so judging one run overwrote the
-    score on every OTHER run's cell that shares the case. RunCell.latest_score
+    score on every OTHER run's cell that shares the case. Result.latest_score
     is a per-run denormalization ("score column reads latest judgment per
     (case, rubric)", feature-spec.md:62); it must move only for the run being
     judged."""
@@ -649,47 +649,47 @@ def test_judge_score_update_is_scoped_to_its_run():
         async with httpx.AsyncClient(transport=StreamingASGITransport(app),
                                      base_url="http://t") as c:
             conv_id = await seed_conversation(c, n=1)
-            run_ids = []
+            evaluation_ids = []
             for _ in range(2):
                 acc = (await c.post("/agenttrees/agent1/replay", json={
                     "selection": [{"conversation_id": conv_id}],
                     "configs": [{"model": "deepseek-v3"}],
                 })).json()
                 await wait_task(c, acc["task_id"])
-                run_ids.append(acc["run_id"])
+                evaluation_ids.append(acc["evaluation_id"])
 
             rubric = (await c.post("/eval/rubrics",
                                    json={"name": "Accuracy", "prompt": "Is it right?"})).json()
             first = (await c.post("/eval/judge", json={
-                "run_id": run_ids[0], "judge_model": "claude-haiku-4-5",
+                "evaluation_id": evaluation_ids[0], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})).json()
             await wait_task(c, first["task_id"])
-            grid_a = (await c.get(f"/agenttrees/agent1/runs/{run_ids[0]}")).json()
+            grid_a = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[0]}")).json()
             case_id = grid_a["rows"][0]["cells"][1]["case_id"]
             assert case_id
 
-            # Make the two runs share the case. No endpoint attaches an
+            # Make the two evaluations share the case. No endpoint attaches an
             # existing case to a cell (cases are auto-created per cell,
             # openapi.yaml:938-941), so the sharing is planted directly — the
             # defect under test is the UPDATE's scope, not how cells are paired.
             app.state.db.run(
-                "UPDATE run_cells SET case_id = ?, latest_score = NULL"
-                " WHERE run_id = ? AND row_idx = 0 AND col_idx = 1",
-                (case_id, run_ids[1]))
+                "UPDATE evaluation_cells SET case_id = ?, latest_score = NULL"
+                " WHERE evaluation_id = ? AND row_idx = 0 AND col_idx = 1",
+                (case_id, evaluation_ids[1]))
 
             second = (await c.post("/eval/judge", json={
-                "run_id": run_ids[0], "judge_model": "claude-sonnet-5",
+                "evaluation_id": evaluation_ids[0], "judge_model": "claude-sonnet-5",
                 "rubric_id": rubric["id"]})).json()
             await wait_task(c, second["task_id"])
 
-            judged = (await c.get(f"/agenttrees/agent1/runs/{run_ids[0]}")).json()
-            untouched = (await c.get(f"/agenttrees/agent1/runs/{run_ids[1]}")).json()
+            judged = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[0]}")).json()
+            untouched = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[1]}")).json()
             assert judged["rows"][0]["cells"][1]["latest_score"] is not None
             assert untouched["rows"][0]["cells"][1]["latest_score"] is None
     run(case())
 
 
-def test_judge_run_auto_cases_judgments_summary():
+def test_judge_evaluation_auto_cases_judgments_summary():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=2)
@@ -701,13 +701,13 @@ def test_judge_run_auto_cases_judgments_summary():
             rubric = (await c.post("/eval/rubrics",
                                    json={"name": "Accuracy", "prompt": "Is it right?"})).json()
             jr = await c.post("/eval/judge", json={
-                "run_id": acc["run_id"], "judge_model": "claude-haiku-4-5",
+                "evaluation_id": acc["evaluation_id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})
             assert jr.status_code == 202
             await wait_task(c, jr.json()["task_id"])
 
-            run_ = (await c.get(f"/agenttrees/agent1/runs/{acc['run_id']}")).json()
-            scored = [row["cells"][1] for row in run_["rows"]]
+            evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
+            scored = [row["cells"][1] for row in evaluation["rows"]]
             assert all(cell["case_id"] for cell in scored)
             assert all(cell["latest_score"] is not None for cell in scored)
 
@@ -716,27 +716,27 @@ def test_judge_run_auto_cases_judgments_summary():
             assert case_doc["source"]["conversation_id"] == conv_id
 
             judgments = (await c.get("/eval/judgments",
-                                     params={"run_id": acc["run_id"]})).json()
+                                     params={"evaluation_id": acc["evaluation_id"]})).json()
             assert len(judgments) == 2
             assert all(j_["type"] == "llm" and j_["rubric_version"] == 1 for j_ in judgments)
 
             # Re-judging appends, never overwrites (openapi.yaml:962-969).
             jr2 = (await c.post("/eval/judge", json={
-                "run_id": acc["run_id"], "judge_model": "claude-haiku-4-5",
+                "evaluation_id": acc["evaluation_id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})).json()
             await wait_task(c, jr2["task_id"])
             judgments2 = (await c.get("/eval/judgments",
-                                      params={"run_id": acc["run_id"]})).json()
+                                      params={"evaluation_id": acc["evaluation_id"]})).json()
             assert len(judgments2) == 4
 
-            summary = (await c.get(f"/eval/runs/{acc['run_id']}/summary")).json()
+            summary = (await c.get(f"/eval/evaluations/{acc['evaluation_id']}/summary")).json()
             assert summary["rubrics"][0]["count"] == 4
             assert sum(summary["rubrics"][0]["distribution"]) == 4
             assert 0 <= summary["rubrics"][0]["mean"] <= 1.01
 
             bad = await c.post("/eval/judge", json={
                 "judge_model": "m", "rubric_id": rubric["id"]})
-            assert bad.status_code == 422  # exactly one of run_id / case_ids
+            assert bad.status_code == 422  # exactly one of evaluation_id / case_ids
     run(case())
 
 

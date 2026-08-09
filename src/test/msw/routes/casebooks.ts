@@ -167,7 +167,7 @@ export const casebookHandlers = [
   }),
 
   // POST …/replay (openapi.yaml:1804-1830) — 202 CasebookReplayAccepted, "one
-  // run per tree the casebook's items reference … all children of a single
+  // evaluation per tree the casebook's items reference … all children of a single
   // parent task".
   http.post(`${BASE}/casebooks/:casebookId/replay`, async ({ params, request }) => {
     const casebookId = params.casebookId as string;
@@ -182,9 +182,9 @@ export const casebookHandlers = [
     return HttpResponse.json(
       {
         task_id: `task-cb-${counters.replay}`,
-        runs: trees.map((tree_id, i) => ({
+        evaluations: trees.map((tree_id, i) => ({
           tree_id,
-          run_id: `run-cb-${counters.replay}-${i + 1}`,
+          evaluation_id: `evaluation-cb-${counters.replay}-${i + 1}`,
         })),
       },
       { status: 202 },

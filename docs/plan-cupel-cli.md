@@ -57,10 +57,10 @@ Three distinct users, one tool:
 **Naming, decided (#5, 2026-08-09) — do not re-litigate in #20**: the command is
 `evaluation <id>`, not `run <id>`, and the flag is `--evaluation`, not `--run`. The UI killed
 the "Runs" noun in #1–#4 and the CLI is a second front door onto the same product, so it uses
-the product's word. The *wire* is unchanged: the path is still `GET /agenttrees/{tree}/runs/{id}`
-and the field is still `run_id` until the contract bump (#14(b)1) renames them. If #14 lands
-first the CLI needs no rename; if it lands after, the CLI simply reads `run_id` and prints it
-under the evaluation label. `--json` output keys mirror the contract, never the CLI's labels.
+the product's word. **The wire now agrees** (item 7, stage A): the path is
+`GET /agenttrees/{tree}/evaluations/{id}` and the field is `evaluation_id`, so the CLI's
+labels and the contract's keys are the same word and no translation is needed.
+`--json` output keys mirror the contract, never the CLI's labels.
 
 Global flags: `--json` (machine output on every command, no decoration), `--tree <id>`,
 `--quiet`, `--verbose` (prints the request line and status of every call — the debugging

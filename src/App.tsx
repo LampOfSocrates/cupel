@@ -64,9 +64,9 @@ function LoginBounce() {
 // deep links, so they redirect instead of 404ing. Query + hash ride along
 // (a shared link may carry them); `replace` keeps Back out of a redirect loop.
 function LegacyRunsRedirect() {
-  const { runId } = useParams();
+  const { evaluationId } = useParams();
   const { search, hash } = useLocation();
-  return <Navigate to={`/evaluations${runId ? `/${runId}` : ""}${search}${hash}`} replace />;
+  return <Navigate to={`/evaluations${evaluationId ? `/${evaluationId}` : ""}${search}${hash}`} replace />;
 }
 
 export function App() {
@@ -219,11 +219,11 @@ export function App() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/evaluations" element={<EvaluationsPage />} />
-          {/* Step 3 Results — also the detail route for stored runs. */}
-          <Route path="/evaluations/:runId" element={<EvaluationPage />} />
+          {/* Step 3 Results — also the detail route for stored evaluations. */}
+          <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
           {/* Pre-rename paths, still live in shared links (see above). */}
           <Route path="/runs" element={<LegacyRunsRedirect />} />
-          <Route path="/runs/:runId" element={<LegacyRunsRedirect />} />
+          <Route path="/runs/:evaluationId" element={<LegacyRunsRedirect />} />
           {/* Sibling fork comparison — "compare forks of the same turn
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}

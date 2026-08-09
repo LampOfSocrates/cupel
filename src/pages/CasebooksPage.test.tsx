@@ -23,7 +23,7 @@ import { CasebooksPage } from "./CasebooksPage";
 // - DELETE /casebooks/{id}/items/{itemId} (:1759-1775)
 // - POST /casebooks/{id}/to-eval-set (:1777-1802) → EvalSet
 // - POST /casebooks/{id}/replay (:1804-1830) → CasebookReplayAccepted, one
-//   run per tree under one parent task
+//   evaluation per tree under one parent task
 // Items are REFERENCES (:1689-1691), so the item list renders each one by
 // following it to its conversation.
 
@@ -154,8 +154,8 @@ describe("casebook actions", () => {
     });
     const alert = await screen.findByTestId("casebook-replay-accepted");
     expect(alert).toHaveTextContent("Enqueued 1 evaluation under one task");
-    await userEvent.click(within(alert).getByRole("link", { name: "run-cb-1-1" }));
-    expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-cb-1-1");
+    await userEvent.click(within(alert).getByRole("link", { name: "evaluation-cb-1-1" }));
+    expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/evaluation-cb-1-1");
   });
 
   it("carries the chosen model into the replay config", async () => {
@@ -196,8 +196,8 @@ describe("casebook actions", () => {
     await userEvent.click(screen.getByRole("button", { name: "Replay" }));
     const alert = await screen.findByTestId("casebook-replay-accepted");
     expect(alert).toHaveTextContent("Enqueued 2 evaluations under one task");
-    expect(within(alert).getByRole("link", { name: "run-cb-1-1" })).toBeInTheDocument();
-    expect(within(alert).queryByRole("link", { name: "run-cb-1-2" })).not.toBeInTheDocument();
+    expect(within(alert).getByRole("link", { name: "evaluation-cb-1-1" })).toBeInTheDocument();
+    expect(within(alert).queryByRole("link", { name: "evaluation-cb-1-2" })).not.toBeInTheDocument();
     expect(alert).toHaveTextContent(/opens when agent2 is the active tree/);
   });
 });

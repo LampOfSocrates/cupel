@@ -186,17 +186,17 @@ describe("legacy /runs deep links (#2)", () => {
   it("off-mode: a bookmarked /runs/{id} lands on /evaluations/{id}", async () => {
     render(
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs/run-old-1"]}>
+        <MemoryRouter initialEntries={["/runs/evaluation-old-1"]}>
           <App />
           <LocationProbe />
         </MemoryRouter>
       </MantineProvider>,
     );
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/evaluation-old-1"),
     );
-    // Not a 404 shell: the detail page for that run actually rendered.
-    await screen.findByText("Evaluation run-old-1");
+    // Not a 404 shell: the detail page for that evaluation actually rendered.
+    await screen.findByText("Evaluation evaluation-old-1");
   });
 
   it("the bare /runs redirects and keeps the query", async () => {
@@ -230,7 +230,7 @@ describe("legacy /runs deep links (#2)", () => {
     const user = userEvent.setup();
     render(
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs/run-old-1"]}>
+        <MemoryRouter initialEntries={["/runs/evaluation-old-1"]}>
           <App />
           <LocationProbe />
         </MemoryRouter>
@@ -240,17 +240,17 @@ describe("legacy /runs deep links (#2)", () => {
     await screen.findByText("Sign in to continue");
     // The OLD path is what gets carried — sanitizeReturnTo is not a route
     // allowlist, so nothing rewrites it before the round-trip.
-    expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fruns%2Frun-old-1");
+    expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fruns%2Fevaluation-old-1");
 
     await user.type(screen.getByLabelText(/Email/), "admin@demo");
     await user.type(screen.getByLabelText(/^Password/), "demo");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    // Bounced to /runs/run-old-1, then the redirect route takes it home.
+    // Bounced to /runs/evaluation-old-1, then the redirect route takes it home.
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/evaluation-old-1"),
     );
-    await screen.findByText("Evaluation run-old-1");
+    await screen.findByText("Evaluation evaluation-old-1");
   });
 });
 

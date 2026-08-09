@@ -9,7 +9,7 @@ import { ForkComparePage } from "./ForkComparePage";
 // Contract under test — feature-spec.md:73: "Forked conversations appear in
 // GET /conversations (filterable: forks_of={id}), and the comparison grid can
 // pivot to compare forks of the same turn across endpoints (column per
-// endpoint)". This route is the run-id-less reconstruction of that pivot
+// endpoint)". This route is the evaluation-id-less reconstruction of that pivot
 // (design rationale in ForkComparePage.tsx): siblings via ?forks_of=,
 // filtered client-side by lineage.fork_turn_id; baseline = the original turn
 // on the parent; "Open in Chat ↗" per card (feature-spec.md:70).
@@ -56,7 +56,7 @@ describe("ForkComparePage", () => {
     );
 
     // one card per sibling, labeled with the endpoint NAME (GET /endpoints
-    // mapping — same labels the re-fire run's columns carry)
+    // mapping — same labels the re-fire evaluation's columns carry)
     const prodCard = screen.getByTestId("sibling-c2f1");
     await within(prodCard).findByText("prod");
     expect(prodCard).toHaveTextContent(

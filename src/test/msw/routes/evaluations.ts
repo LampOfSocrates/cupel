@@ -1,13 +1,13 @@
-// Replay + turn re-fire and the run grid they materialize.
+// Replay + turn re-fire and the evaluation grid they materialize.
 import { http, HttpResponse } from "msw";
 import type {
   ReplayAccepted,
   ReplayRequest,
   ReplayTurnAccepted,
   ReplayTurnRequest,
-  Run,
-  RunConfig,
-  RunSummaryItem,
+  Evaluation,
+  Variant,
+  EvaluationSummaryItem,
 } from "../../../api/types";
 import { BASE, captureLlmHeaders, conv, counters, enabledTreeGate, treeGate } from "../state";
 import { mockSnapshots } from "./agents";
@@ -22,23 +22,23 @@ import { mockEndpoints } from "./system";
 export const replayRequests: Array<{ tree: string; body: ReplayRequest }> = [];
 export const replayTurnRequests: Array<{ tree: string; body: ReplayTurnRequest }> = [];
 
-// ----------------------------------------------------------------- runs state
-// GET /agenttrees/{tree}/runs (openapi.yaml:654-669, "Runs, newest first") +
-// GET …/runs/{runId} (:671-693, Run schema :1607-1643). Stored runs carry a
-// label for the SUMMARY shape only (RunSummaryItem :1605 has label; Run does
+// ----------------------------------------------------------------- evaluations state
+// GET /agenttrees/{tree}/evaluations (openapi.yaml:654-669, "Evaluations, newest first") +
+// GET …/evaluations/{evaluationId} (:671-693, Evaluation schema :1607-1643). Stored evaluations carry a
+// label for the SUMMARY shape only (EvaluationSummaryItem :1605 has label; Evaluation does
 // not) — the detail handler strips it. Fixtures are MUTABLE: live-fill tests
 // mark cells done / flip status, then poke the /tasks/stream rig;
 // resetHandlerState reseeds.
-type StoredRun = Run & { label?: string | null };
+type StoredEvaluation = Evaluation & { label?: string | null };
 
-function seedRuns(): StoredRun[] {
+function seedEvaluations(): StoredEvaluation[] {
   return [
     {
-      id: "run-old-1",
+      id: "evaluation-old-1",
       tree_id: "agent1",
       status: "done",
       created_at: "2026-08-03T12:00:00Z",
-      task_id: "task-run-old-1",
+      task_id: "task-evaluation-old-1",
       label: "Replay · 1 config(s)",
       columns: [
         { label: "baseline", config: {} },
@@ -55,20 +55,20 @@ function seedRuns(): StoredRun[] {
       ],
     },
     // Finished turn re-fire — the fork-pivot shape (openapi.yaml:636-639:
-    // "a turn re-fire is a run whose grid pivots to 'compare forks of the
+    // "a turn re-fire is an evaluation whose grid pivots to 'compare forks of the
     // same turn across endpoints (column per endpoint)'"). Mirrors the real
     // mock's completed state: columns labeled with endpoint NAMES
     // (mock/main.py:634-635), single row, baseline cell carrying the ORIGINAL
     // conversation/turn (mock/main.py:643-646), endpoint cells carrying the
-    // fork conversation ids (engine.py:361-363; RunCell.conversation_id =
+    // fork conversation ids (engine.py:361-363; Result.conversation_id =
     // "Fork holding this result", openapi.yaml:1651). Ties into the c2 →
     // c2f1/c2f2 fork fixtures in ./conversations.
     {
-      id: "run-refire-1",
+      id: "evaluation-refire-1",
       tree_id: "agent1",
       status: "done",
       created_at: "2026-08-03T14:00:00Z",
-      task_id: "task-run-refire-1",
+      task_id: "task-evaluation-refire-1",
       label: "Re-fire · 2 endpoint(s)",
       columns: [
         { label: "baseline", config: {} },
@@ -105,15 +105,15 @@ function seedRuns(): StoredRun[] {
     },
   ];
 }
-export const mockRuns: StoredRun[] = seedRuns();
-export const runListRequests: string[] = []; // tree ids seen by GET runs
-export const runDetailRequests: string[] = []; // run ids seen by GET run
+export const mockEvaluations: StoredEvaluation[] = seedEvaluations();
+export const evaluationListRequests: string[] = []; // tree ids seen by GET evaluations
+export const evaluationDetailRequests: string[] = []; // evaluation ids seen by GET evaluation
 
 // Column label mirror of the real mock (mock/main.py:110-119 config_label):
 // a snapshot column carries the SNAPSHOT'S label ("v3-draft (a3f1)") looked up
 // server-side — the client never derives it (feature-spec.md:86; relabel to vN
 // on promotion is likewise server-side, mock/main.py:257-262).
-function configLabel(cfg: RunConfig, index: number): string {
+function configLabel(cfg: Variant, index: number): string {
   if (cfg.snapshot_id) {
     const snap = mockSnapshots.find((s) => s.snapshot_id === cfg.snapshot_id);
     return snap?.label ?? `snapshot ${cfg.snapshot_id}`;
@@ -126,9 +126,9 @@ function configLabel(cfg: RunConfig, index: number): string {
 // Grid rows from a selection: one row per assistant turn (feature-spec.md:49),
 // baseline cell done with the stored content, one pending cell per config
 // (mirrors mock/main.py:144-157 assistant_rows + :570-577 cell insert).
-function runRowsFromSelection(selection: ReplayRequest["selection"], configCount: number) {
+function evaluationRowsFromSelection(selection: ReplayRequest["selection"], configCount: number) {
   const all = allConversations();
-  const rows: Run["rows"] = [];
+  const rows: Evaluation["rows"] = [];
   for (const item of selection) {
     const found = all.find((c) => c.id === item.conversation_id);
     for (const turn of found?.turns ?? []) {
@@ -146,7 +146,7 @@ function runRowsFromSelection(selection: ReplayRequest["selection"], configCount
   return rows;
 }
 
-export const runHandlers = [
+export const evaluationHandlers = [
   // POST /agenttrees/{tree}/replay/turn (openapi.yaml:623-652) → 202
   // ReplayTurnAccepted: "one task_id + new conversation_id per endpoint"
   // (feature-spec.md:71); registered before /replay for readability (MSW
@@ -159,13 +159,13 @@ export const runHandlers = [
     if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
       return HttpResponse.json(
-        { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1570-1574)." },
+        { code: "invalid", message: "Phase 1 replays always evaluation frozen (openapi.yaml:1570-1574)." },
         { status: 422 },
       );
     }
     const n = ++counters.replay;
     const accepted: ReplayTurnAccepted = {
-      run_id: `run-${n}`,
+      evaluation_id: `evaluation-${n}`,
       results: body.endpoints.map((endpoint_id, i) => ({
         endpoint_id,
         task_id: `task-fork-${n}-${i + 1}`,
@@ -204,15 +204,15 @@ export const runHandlers = [
         );
       }
       parent.fork_count += accepted.results.length;
-      // Materialize the pivot run like the real mock (mock/main.py:634-660):
+      // Materialize the pivot evaluation like the real mock (mock/main.py:634-660):
       // columns labeled with endpoint NAMES, one row whose baseline cell is
       // done with the ORIGINAL conversation/turn and one pending cell per
       // endpoint (conversation_id arrives when the fork task finishes,
       // engine.py:361-363 — not modeled here; tests use the seeded done
       // fixture for that state).
       const treeEndpoints = mockEndpoints[params.tree as string] ?? [];
-      mockRuns.unshift({
-        id: accepted.run_id,
+      mockEvaluations.unshift({
+        id: accepted.evaluation_id,
         tree_id: params.tree as string,
         status: "running",
         created_at: new Date().toISOString(),
@@ -245,7 +245,7 @@ export const runHandlers = [
   }),
 
   // POST /agenttrees/{tree}/replay (openapi.yaml:586-621) → 202 ReplayAccepted
-  // "Work enqueued; run row appears immediately" (openapi.yaml:617).
+  // "Work enqueued; evaluation row appears immediately" (openapi.yaml:617).
   http.post(`${BASE}/agenttrees/:tree/replay`, async ({ params, request }) => {
     captureLlmHeaders(request);
     const body = (await request.json()) as ReplayRequest;
@@ -254,17 +254,17 @@ export const runHandlers = [
     if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
       return HttpResponse.json(
-        { code: "invalid", message: "Phase 1 replays always run frozen (openapi.yaml:1540-1546)." },
+        { code: "invalid", message: "Phase 1 replays always evaluation frozen (openapi.yaml:1540-1546)." },
         { status: 422 },
       );
     }
     const n = ++counters.replay;
-    const accepted: ReplayAccepted = { task_id: `task-replay-${n}`, run_id: `run-${n}` };
-    // "run row appears immediately and fills incrementally" (openapi.yaml:617)
-    // — materialize the run so the detail route can GET it straight after 202:
+    const accepted: ReplayAccepted = { task_id: `task-replay-${n}`, evaluation_id: `evaluation-${n}` };
+    // "evaluation row appears immediately and fills incrementally" (openapi.yaml:617)
+    // — materialize the evaluation so the detail route can GET it straight after 202:
     // baseline cells done (stored originals), config cells pending.
-    mockRuns.unshift({
-      id: accepted.run_id,
+    mockEvaluations.unshift({
+      id: accepted.evaluation_id,
       tree_id: params.tree as string,
       status: "running",
       created_at: new Date().toISOString(),
@@ -274,21 +274,21 @@ export const runHandlers = [
         { label: "baseline", config: {} },
         ...body.configs.map((cfg, i) => ({ label: configLabel(cfg, i), config: cfg })),
       ],
-      rows: runRowsFromSelection(body.selection, body.configs.length),
+      rows: evaluationRowsFromSelection(body.selection, body.configs.length),
     });
     return HttpResponse.json(accepted, { status: 202 });
   }),
 
-  // GET /agenttrees/{tree}/runs (openapi.yaml:654-669) — "Runs, newest first
-  // (cells omitted; fetch a run for the grid)".
-  http.get(`${BASE}/agenttrees/:tree/runs`, ({ params }) => {
-    runListRequests.push(params.tree as string);
+  // GET /agenttrees/{tree}/evaluations (openapi.yaml:654-669) — "Evaluations, newest first
+  // (cells omitted; fetch one for the grid)".
+  http.get(`${BASE}/agenttrees/:tree/evaluations`, ({ params }) => {
+    evaluationListRequests.push(params.tree as string);
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
-    // "Runs, newest first" is a SERVER rule (openapi.yaml:663;
+    // "Evaluations, newest first" is a SERVER rule (openapi.yaml:663;
     // mock/main.py:1291 ORDER BY rowid DESC), so sort here rather than trust
     // the fixture array's order. Stable — equal timestamps keep insert order.
-    const items: RunSummaryItem[] = mockRuns
+    const items: EvaluationSummaryItem[] = mockEvaluations
       .filter((r) => r.tree_id === params.tree)
       .slice()
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -303,25 +303,25 @@ export const runHandlers = [
     return HttpResponse.json(items);
   }),
 
-  // GET /agenttrees/{tree}/runs/{runId} (openapi.yaml:671-693) — full grid.
-  http.get(`${BASE}/agenttrees/:tree/runs/:runId`, ({ params }) => {
-    runDetailRequests.push(params.runId as string);
+  // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — full grid.
+  http.get(`${BASE}/agenttrees/:tree/evaluations/:evaluationId`, ({ params }) => {
+    evaluationDetailRequests.push(params.evaluationId as string);
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
-    const found = mockRuns.find((r) => r.id === params.runId);
+    const found = mockEvaluations.find((r) => r.id === params.evaluationId);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+      return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
     }
-    const { label: _label, ...run } = found; // label is summary-only (openapi.yaml:1605 vs :1607-1618)
-    return HttpResponse.json(run);
+    const { label: _label, ...evaluation } = found; // label is summary-only (openapi.yaml:1605 vs :1607-1618)
+    return HttpResponse.json(evaluation);
   }),
 ];
 
-export function resetRuns() {
+export function resetEvaluations() {
   replayRequests.length = 0;
   replayTurnRequests.length = 0;
-  mockRuns.length = 0;
-  mockRuns.push(...seedRuns());
-  runListRequests.length = 0;
-  runDetailRequests.length = 0;
+  mockEvaluations.length = 0;
+  mockEvaluations.push(...seedEvaluations());
+  evaluationListRequests.length = 0;
+  evaluationDetailRequests.length = 0;
 }

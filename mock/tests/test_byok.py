@@ -289,9 +289,9 @@ def test_replay_children_generate_live_key_in_memory_only():
             for row in app.state.db.all("SELECT payload FROM tasks"):
                 assert row["payload"] is None or KEY not in row["payload"]
             await wait_task(c, accepted["task_id"])
-            run_doc = (await c.get(
-                f"/agenttrees/agent1/runs/{accepted['run_id']}")).json()
-            cell = run_doc["rows"][0]["cells"][1]
+            evaluation_doc = (await c.get(
+                f"/agenttrees/agent1/evaluations/{accepted['evaluation_id']}")).json()
+            cell = evaluation_doc["rows"][0]["cells"][1]
             assert cell["status"] == "done"
             assert cell["content"] == "LIVE replayed cell."
             assert len(calls) == 1
@@ -321,14 +321,14 @@ def test_judge_children_generate_live_reasoning():
                 "prompt": "Score 0-1 how helpful the response is.",
             })).json()
             jr = await c.post("/eval/judge", json={
-                "run_id": accepted["run_id"], "judge_model": "claude-haiku-4-5",
+                "evaluation_id": accepted["evaluation_id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"],
             }, headers=HEADERS)
             assert jr.status_code == 202, jr.text
             judge_task = jr.json()["task_id"]
             await wait_task(c, judge_task)
             judgments = (await c.get(
-                "/eval/judgments", params={"run_id": accepted["run_id"]})).json()
+                "/eval/judgments", params={"evaluation_id": accepted["evaluation_id"]})).json()
             assert judgments and all(
                 j["reasoning"] == "LIVE judge reasoning." for j in judgments)
             assert judge_task not in app.state.engine.live_keys

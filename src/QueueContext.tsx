@@ -33,7 +33,7 @@ import type { Task, TaskProgress } from "./api/types";
 // GET /tasks/{id}", openapi.yaml:770-771); children are lazily fetched into
 // the parent's `children` on expand via GET /tasks/{id} ("Task with children
 // populated", :826) — chosen over GET /tasks?parent_id= because one call
-// refreshes the parent AND its children together. Chat/Runs pages keep their
+// refreshes the parent AND its children together. Chat/Evaluations pages keep their
 // own scoped stream subscriptions; folding them onto this provider is a
 // possible future simplification.
 

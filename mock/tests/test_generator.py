@@ -46,7 +46,7 @@ async def snapshot(c):
         page = await roots(c, tree)
         out[f"{tree}_convs"] = page["total"]
         out[f"{tree}_forks"] = sum(i["fork_count"] for i in page["items"])
-        out[f"{tree}_runs"] = len((await c.get(f"/agenttrees/{tree}/runs")).json())
+        out[f"{tree}_runs"] = len((await c.get(f"/agenttrees/{tree}/evaluations")).json())
     out["rubrics"] = len((await c.get("/eval/rubrics")).json())
     out["judgments"] = len((await c.get("/eval/judgments",
                                         params={"page_size": 200})).json())
@@ -99,13 +99,13 @@ def test_seed_twice_same_seed_is_idempotent():
                 assert f["lineage"]["parent_conversation_id"] == parents[0]["id"]
                 assert f["lineage"]["fork_turn_id"]
 
-            # >= 1 replay run done with judged cells, across both rubric ids
+            # >= 1 replay evaluation done with judged cells, across both rubric ids
             judged_cells = 0
             for tree in ("agent1", "agent2"):
-                for r in (await c.get(f"/agenttrees/{tree}/runs")).json():
+                for r in (await c.get(f"/agenttrees/{tree}/evaluations")).json():
                     if r["status"] != "done":
                         continue
-                    detail = (await c.get(f"/agenttrees/{tree}/runs/{r['id']}")).json()
+                    detail = (await c.get(f"/agenttrees/{tree}/evaluations/{r['id']}")).json()
                     judged_cells += sum(
                         1 for row in detail["rows"] for cell in row["cells"]
                         if cell["latest_score"] is not None)

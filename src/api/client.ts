@@ -59,9 +59,9 @@ import type {
   Rubric,
   RubricCreate,
   RubricUpdate,
-  Run,
-  RunScoreSummary,
-  RunSummaryItem,
+  Evaluation,
+  EvaluationScoreSummary,
+  EvaluationSummaryItem,
   Selection,
   Snapshot,
   SnapshotCreate,
@@ -130,7 +130,7 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
   // Central 409 surface (extends the central-401 pattern minimally):
   // tree_disabled means "new work blocked, history kept read-only"
   // (openapi.yaml:1974-1979) — one friendly message here, so every caller's
-  // existing error rendering (chat sendError, Runs error alert, …) shows it
+  // existing error rendering (chat sendError, Evaluations error alert, …) shows it
   // without per-page mapping. Callers can still branch on ApiError.code.
   if (code === "tree_disabled") {
     message = `This ${product.tree.one} is disabled — history is read-only.`;
@@ -331,7 +331,7 @@ export const api = {
     request<EvalSet>(`/casebooks/${casebookId}/to-eval-set`, { method: "POST", body }),
 
   // POST /casebooks/{casebookId}/replay (:1804-1830) — 202
-  // CasebookReplayAccepted, "one run per tree touched, all children of a
+  // CasebookReplayAccepted, "one evaluation per tree touched, all children of a
   // single parent task". context_policy is hard-set to the contract default
   // exactly as api.replay does (widening is future work).
   replayCasebook: (casebookId: string, body: CasebookReplayRequest) =>
@@ -345,7 +345,7 @@ export const api = {
   models: () => request<Model[]>("/models"),
 
   // GET /agenttrees/{tree}/endpoints (openapi.yaml:154-172) — "Deploy targets
-  // for replay … Multi-selected in Run Config for turn re-fire
+  // for replay … Multi-selected in Variant for turn re-fire
   // (feature-spec.md:67)".
   endpoints: (tree: string) => request<Endpoint[]>(`/agenttrees/${tree}/endpoints`),
 
@@ -377,7 +377,7 @@ export const api = {
     }),
 
   // POST /agenttrees/{tree}/agents/{agentId}/snapshots (openapi.yaml:268-293)
-  // — "Immutable draft snapshot (for Test in Runs)" (:272); 201 → Snapshot.
+  // — "Immutable draft snapshot (for Test as evaluation)" (:272); 201 → Snapshot.
   createSnapshot: (tree: string, agentId: string, body: SnapshotCreate) =>
     request<Snapshot>(`/agenttrees/${tree}/agents/${agentId}/snapshots`, {
       method: "POST",
@@ -515,15 +515,15 @@ export const api = {
       body: { ...req, context_policy: "frozen" } satisfies ReplayTurnRequest,
     }),
 
-  // GET /agenttrees/{tree}/runs (openapi.yaml:654-669) — "Runs, newest first
-  // (cells omitted; fetch a run for the grid)" (:663).
-  runs: (tree: string) => request<RunSummaryItem[]>(`/agenttrees/${tree}/runs`),
+  // GET /agenttrees/{tree}/evaluations (openapi.yaml:654-669) — "Evaluations, newest first
+  // (cells omitted; fetch one for the grid)" (:663).
+  evaluations: (tree: string) => request<EvaluationSummaryItem[]>(`/agenttrees/${tree}/evaluations`),
 
-  // GET /agenttrees/{tree}/runs/{runId} (openapi.yaml:671-693) — "Full run
+  // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — "Full evaluation
   // with columns and per-turn cells" (:689); "Cells fill incrementally as
   // child tasks finish; live fill arrives via GET /tasks/stream" (:679-680).
-  run: (tree: string, runId: string) =>
-    request<Run>(`/agenttrees/${tree}/runs/${runId}`),
+  evaluation: (tree: string, evaluationId: string) =>
+    request<Evaluation>(`/agenttrees/${tree}/evaluations/${evaluationId}`),
 
   // GET /tasks/stream (openapi.yaml:777-813) — SSE read off a fetch body via
   // the shared parser (sse.ts works for GET too); abort the signal to
@@ -568,7 +568,7 @@ export const api = {
   spanPayload: (spanId: string) =>
     request<SpanPayload>(`/spans/${spanId}/payload`),
 
-  // GET /eval/rubrics (openapi.yaml:868-886) — "Rubrics (for the Run Config
+  // GET /eval/rubrics (openapi.yaml:868-886) — "Rubrics (for the Variant
   // judge section) … Latest version of each rubric" (:872, :881). Rubric
   // EDITOR UI is Phase 2 (:874-875).
   rubrics: () => request<Rubric[]>("/eval/rubrics"),
@@ -645,17 +645,17 @@ export const api = {
   },
 
   // POST /eval/judge (openapi.yaml:931-954) — "Enqueue LLM judging …
-  // {set_id | case_ids | run_id, judge_model, rubric_id} → enqueued),
+  // {set_id | case_ids | evaluation_id, judge_model, rubric_id} → enqueued),
   // judgments append-only"; 202 → TaskRef "(parent task + child per case)".
   judge: (body: JudgeRequest) =>
     request<TaskRef>("/eval/judge", { method: "POST", body }),
 
-  // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — "Aggregate
-  // scores for a run … Feeds the grid's 'summary header (mean, distribution
+  // GET /eval/evaluations/{evaluationId}/summary (openapi.yaml:1001-1022) — "Aggregate
+  // scores for an evaluation … Feeds the grid's 'summary header (mean, distribution
   // sparkline)' (feature-spec.md:49), updating live as judging tasks finish
   // (feature-spec.md:64)".
-  runSummary: (runId: string) =>
-    request<RunScoreSummary>(`/eval/runs/${runId}/summary`),
+  evaluationSummary: (evaluationId: string) =>
+    request<EvaluationScoreSummary>(`/eval/evaluations/${evaluationId}/summary`),
 
   // GET /eval/judgments — "Judgment history (append-only) ... filter by
   // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...

@@ -10,7 +10,7 @@ export interface AppState {
   conversationsVersion: number;
   refreshConversations: () => void;
   // GET /models result, fetched once on first use and cached for the session
-  // (feature-spec.md:118 "chat/run/judge model dropdowns" — Runs reuses it).
+  // (feature-spec.md:118 "chat/run/judge model dropdowns" — Evaluations reuses it).
   models: Model[] | null;
   ensureModels: () => void;
 }

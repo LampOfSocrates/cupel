@@ -13,7 +13,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
 import type { Conversation, SelectionItem, Turn } from "../api/types";
 
-// Runs step 1 — "ConversationPicker: search/filter/multi-select conversations,
+// Evaluations step 1 — "ConversationPicker: search/filter/multi-select conversations,
 // expandable to pick individual turns within a conversation (checkbox per
 // turn)" (feature-spec.md:44; sketch 02). Emits SelectionItem[] per contract
 // (openapi.yaml:1250-1259): "Absent/null = whole conversation; present = just
@@ -23,7 +23,7 @@ import type { Conversation, SelectionItem, Turn } from "../api/types";
 // rather than taking a list prop, because search must be SERVER-side per the
 // contract (?search=, openapi.yaml:352-354; annotated sketch 02 tags the
 // search box "GET /agenttrees/agent1/conversations?search=") and both
-// consumers (Runs Select step, Test-in-Runs prefilter) want identical
+// consumers (Evaluations Select step, Test-as-evaluation prefilter) want identical
 // fetch/search/paging behaviour. Turns ride along on the listing
 // (openapi.yaml:1374-1377 "Included in listings").
 //
@@ -69,7 +69,7 @@ function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
   return items;
 }
 
-// "assistant turns selectable per the Runs semantics" — the grid re-generates
+// "assistant turns selectable per the Evaluations semantics" — the grid re-generates
 // assistant outputs ("row per turn" of regenerated output, feature-spec.md:49),
 // so only assistant turns carry checkboxes; user turns render as dimmed context.
 const assistantTurns = (conv: Conversation): Turn[] =>

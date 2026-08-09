@@ -11,7 +11,7 @@ import { Typography } from "@mantine/core";
 // marked does not sanitize. Mantine 9 `Typography` styles the raw HTML.
 //
 // Parse+sanitize is the single hottest main-thread cost in the app: every
-// transcript turn and every one of a run grid's cells renders one of these,
+// transcript turn and every one of an evaluation grid's cells renders one of these,
 // and a streaming token re-renders the whole page. memo + useMemo make the
 // work proportional to CHANGED content instead of to renders
 // (docs/review-2026-08-05.md A4) — content is a string, so memo's shallow

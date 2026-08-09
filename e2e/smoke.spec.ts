@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // THE smoke e2e (cupel-phases.md:46): "boot on mock → send chat turn
 // (SSE renders) → queue a 2-conversation replay → grid fills → judge one →
 // score appears". Runs against the real mock on :4010 (no MSW) with a fresh
-// scratch DB per run (playwright.config.ts), so all history is created here.
+// scratch DB per evaluation (playwright.config.ts), so all history is created here.
 
 const MOCK = "http://localhost:4010";
 
@@ -97,5 +97,5 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
     timeout: 120_000,
   });
-  await expect(page.getByTestId("run-summary")).toBeVisible();
+  await expect(page.getByTestId("evaluation-summary")).toBeVisible();
 });

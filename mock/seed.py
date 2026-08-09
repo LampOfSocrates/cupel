@@ -1,6 +1,6 @@
 """Structural bootstrap so a fresh server is usable: trees agent1 + agent2
 (cupel-phases.md:43), agents with instruction versions, replay endpoints.
-Conversations/runs/judgments are the generator's job, not the server's.
+Conversations/evaluations/judgments are the generator's job, not the server's.
 """
 
 from .auth import ensure_users

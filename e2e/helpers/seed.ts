@@ -84,7 +84,7 @@ export async function seedTurnFork(
   endpointIds: string[],
   opts: SeedOptions = {},
 ): Promise<{
-  run_id: string;
+  evaluation_id: string;
   results: { endpoint_id: string; task_id: string; conversation_id: string }[];
 }> {
   const tree = opts.tree ?? "agent1";
@@ -106,7 +106,7 @@ export async function seedReplay(
   selection: { conversation_id: string; turn_ids?: string[] }[],
   configs: Record<string, unknown>[],
   opts: SeedOptions = {},
-): Promise<{ task_id: string; run_id: string }> {
+): Promise<{ task_id: string; evaluation_id: string }> {
   const tree = opts.tree ?? "agent1";
   const res = await request.post(`${API_ORIGIN}/agenttrees/${tree}/replay`, {
     data: { selection, configs },

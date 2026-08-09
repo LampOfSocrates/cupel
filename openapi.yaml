@@ -14,6 +14,13 @@ info:
     the Phase 2 plan (cupel-phases.md:69-118); pro-tier endpoints are
     excluded (see below).
 
+    Vocabulary note: what feature-spec.md calls a "run" this contract calls an
+    Evaluation — the path is /agenttrees/{tree}/evaluations, the id field is
+    evaluation_id, and a grid column's config is a Variant. feature-spec.md is
+    not being rewritten, so text QUOTED from it below still reads "run" and
+    "run_id"; the quotes are verbatim on purpose and the contract's own
+    vocabulary is the renamed one.
+
     Scoping rule (feature-spec.md:115): "Tree-scoped: conversation/run/chat
     resources live under /agenttrees/{tree_id}/… — permission checks fall out of
     the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
@@ -84,7 +91,7 @@ tags:
   - name: conversations
   - name: memory
   - name: chat
-  - name: runs
+  - name: evaluations
   - name: trace
   - name: tasks
   - name: eval
@@ -481,7 +488,7 @@ paths:
       summary: Deploy targets for replay
       description: |
         feature-spec.md:121: "GET /agenttrees/{tree}/endpoints (deploy targets
-        for replay)". Multi-selected in Run Config for turn re-fire
+        for replay)". Multi-selected in a Variant for turn re-fire
         (feature-spec.md:67).
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
@@ -592,7 +599,7 @@ paths:
     post:
       tags: [agents]
       operationId: createSnapshot
-      summary: Immutable draft snapshot (for Test in Runs)
+      summary: Immutable draft snapshot (for Test as evaluation)
       description: |
         feature-spec.md:89: "POST /agents/{id}/snapshots (immutable draft
         snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
@@ -690,7 +697,7 @@ paths:
           description: >-
             Only conversations that used this agent — node ⋯ "view recent
             conversations for this agent" (feature-spec.md:26) and the
-            Test-in-Runs prefilter (feature-spec.md:87).
+            Test-as-evaluation prefilter (feature-spec.md:87).
           schema: { type: string }
         - name: origin
           in: query
@@ -986,10 +993,10 @@ paths:
               schema: { $ref: "#/components/schemas/Judgment" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  # -------------------------------------------------------------------- runs
+  # ------------------------------------------------------------- evaluations
   /agenttrees/{tree}/replay:
     post:
-      tags: [runs]
+      tags: [evaluations]
       operationId: replay
       summary: Replay selected conversations/turns under a changed config
       description: |
@@ -1008,7 +1015,7 @@ paths:
 
         The grid is "baseline column + one column per run config, row per
         turn" (feature-spec.md:49): configs[] yields one column each, after
-        the baseline column (the original stored outputs, or baseline_run_id's
+        the baseline column (the original stored outputs, or baseline_evaluation_id's
         outputs when re-comparing).
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
@@ -1018,7 +1025,7 @@ paths:
             schema: { $ref: "#/components/schemas/ReplayRequest" }
       responses:
         "202":
-          description: Work enqueued; run row appears immediately and fills incrementally.
+          description: Work enqueued; the evaluation row appears immediately and fills incrementally.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReplayAccepted" }
@@ -1027,7 +1034,7 @@ paths:
 
   /agenttrees/{tree}/replay/turn:
     post:
-      tags: [runs]
+      tags: [evaluations]
       operationId: replayTurn
       summary: Re-fire one turn against one or many endpoints (forks)
       description: |
@@ -1038,10 +1045,10 @@ paths:
         chosen endpoint, and the result is stored as a normal conversation."
         Return shape (feature-spec.md:71): "returns one task_id + new
         conversation_id per endpoint." Forks carry lineage metadata
-        (feature-spec.md:69). Also returns run_id: a turn re-fire is a run
+        (feature-spec.md:69). Also returns evaluation_id: a turn re-fire is an evaluation
         whose grid pivots to "compare forks of the same turn across endpoints
         (column per endpoint)" (feature-spec.md:73) — fetch it via
-        GET …/runs/{runId}. Replays run frozen (context_policy as on /replay).
+        GET …/evaluations/{evaluationId}. Replays run frozen (context_policy as on /replay).
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
         required: true
@@ -1057,28 +1064,28 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
-  /agenttrees/{tree}/runs:
+  /agenttrees/{tree}/evaluations:
     get:
-      tags: [runs]
-      operationId: listRuns
-      summary: List runs
+      tags: [evaluations]
+      operationId: listEvaluations
+      summary: List evaluations
       description: feature-spec.md:126 "GET /agenttrees/{tree}/runs".
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
-          description: Runs, newest first (cells omitted; fetch a run for the grid).
+          description: Evaluations, newest first (cells omitted; fetch one for the grid).
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/RunSummaryItem" }
+                items: { $ref: "#/components/schemas/EvaluationSummaryItem" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /agenttrees/{tree}/runs/{runId}:
+  /agenttrees/{tree}/evaluations/{evaluationId}:
     get:
-      tags: [runs]
-      operationId: getRun
-      summary: Run detail — comparison grid data
+      tags: [evaluations]
+      operationId: getEvaluation
+      summary: Evaluation detail — comparison grid data
       description: |
         feature-spec.md:126 "GET /agenttrees/{tree}/runs/{id}". Grid shape
         (feature-spec.md:49): "baseline column + one column per run config, row
@@ -1086,16 +1093,16 @@ paths:
         (feature-spec.md:112); live fill arrives via GET /tasks/stream.
       parameters:
         - { $ref: "#/components/parameters/tree" }
-        - name: runId
+        - name: evaluationId
           in: path
           required: true
           schema: { type: string }
       responses:
         "200":
-          description: Full run with columns and per-turn cells.
+          description: Full evaluation with columns and per-turn cells.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Run" }
+              schema: { $ref: "#/components/schemas/Evaluation" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ------------------------------------------------------------------- trace
@@ -1275,13 +1282,13 @@ paths:
     get:
       tags: [eval]
       operationId: listRubrics
-      summary: Rubrics (for the Run Config judge section)
+      summary: Rubrics (for the Variant judge section)
       description: |
         feature-spec.md:132 "GET/POST /eval/rubrics". Rubric EDITOR UI is
         Phase 2 (eval workbench, cupel-phases.md:98); the POST exists so the
         generator can seed "judgments across 2 rubrics" (feature-spec.md:168)
         through the public API (feature-spec.md:185). Consumed by
-        Runs · Configure (feature-spec.md:230).
+        Evaluations · Configure (feature-spec.md:230).
       responses:
         "200":
           description: Latest version of each rubric.
@@ -1553,7 +1560,7 @@ paths:
       description: |
         feature-spec.md:133: "POST /eval/judge ({set_id | case_ids | run_id,
         judge_model, rubric_id} → enqueued), judgments append-only". Exactly
-        one selector (oneOf): run_id ("Score this run… auto-creating cases
+        one selector (oneOf): evaluation_id ("Score this run… auto-creating cases
         from conversation turns if none exist", feature-spec.md:61),
         explicit case_ids, or — since v0.3.0, with EvalSets — set_id
         (latest membership version unless set_version pins one). Judge
@@ -1590,7 +1597,7 @@ paths:
         - name: case_id
           in: query
           schema: { type: string }
-        - name: run_id
+        - name: evaluation_id
           in: query
           schema: { type: string }
         - name: rubric_id
@@ -1617,18 +1624,18 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Judgment" }
 
-  /eval/runs/{runId}/summary:
+  /eval/evaluations/{evaluationId}/summary:
     get:
       tags: [eval]
-      operationId: getRunScoreSummary
-      summary: Aggregate scores for a run
+      operationId: getEvaluationScoreSummary
+      summary: Aggregate scores for an evaluation
       description: |
         feature-spec.md:134: "GET /eval/runs/{run_id}/summary (aggregates)".
         Feeds the grid's "summary header (mean, distribution sparkline)"
         (feature-spec.md:49), updating live as judging tasks finish
         (feature-spec.md:64).
       parameters:
-        - name: runId
+        - name: evaluationId
           in: path
           required: true
           schema: { type: string }
@@ -1637,7 +1644,7 @@ paths:
           description: Aggregates per rubric.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/RunScoreSummary" }
+              schema: { $ref: "#/components/schemas/EvaluationScoreSummary" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # --------------------------------------------------------------- casebooks
@@ -1722,7 +1729,7 @@ paths:
       description: |
         The DELETE of feature-spec.md:117. Removes the casebook and its item
         REFERENCES only: the referenced turns/conversations, and any eval
-        sets or runs already materialized from this casebook, are untouched
+        sets or evaluations already materialized from this casebook, are untouched
         (items are references, not copies).
       parameters: [{ $ref: "#/components/parameters/casebookId" }]
       responses:
@@ -1812,8 +1819,8 @@ paths:
         referenced turn under the given configs — same engine as
         POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
         fields and frozen default. A casebook may reference several trees,
-        so the response carries one run per tree touched, all children of a
-        single parent task; each run's grid is fetched tree-scoped as usual.
+        so the response carries one evaluation per tree touched, all children
+        of a single parent task; each grid is fetched tree-scoped as usual.
       parameters: [{ $ref: "#/components/parameters/casebookId" }]
       requestBody:
         required: true
@@ -2171,7 +2178,8 @@ components:
           type: string
           nullable: true
           description: >
-            Promote this draft snapshot to the new version; runs referencing it
+            Promote this draft snapshot to the new version; evaluations
+            referencing it
             relabel (feature-spec.md:86, :89).
 
     SnapshotCreate:
@@ -2293,7 +2301,7 @@ components:
         fork_turn_id: { type: string }
         endpoint_id: { type: string, nullable: true }
         config:
-          allOf: [{ $ref: "#/components/schemas/RunConfig" }]
+          allOf: [{ $ref: "#/components/schemas/Variant" }]
           nullable: true
 
     Conversation:
@@ -2468,11 +2476,11 @@ components:
             unaffected. The spec version therefore stays 0.3.0.
             Append-only holds: re-rating posts a NEW judgment, never an edit.
 
-    # ------------------------------------------------------------------- runs
-    RunConfig:
+    # ------------------------------------------------------------ evaluations
+    Variant:
       type: object
       description: >
-        Run Config drawer fields (feature-spec.md:46-48): "Agent tree +
+        Variant — the Run Config drawer's fields (feature-spec.md:46-48): "Agent tree +
         instruction version · Model, temperature · Judge (optional…)".
         instruction_version XOR snapshot_id — a snapshot is an untested draft
         (feature-spec.md:86); neither = the live version. endpoint_ids only
@@ -2519,12 +2527,12 @@ components:
           description: >
             One grid column per config (feature-spec.md:49 "baseline column +
             one column per run config").
-          items: { $ref: "#/components/schemas/RunConfig" }
-        baseline_run_id:
+          items: { $ref: "#/components/schemas/Variant" }
+        baseline_evaluation_id:
           type: string
           nullable: true
           description: >
-            Use this prior run's outputs as the baseline column instead of the
+            Use this prior evaluation's outputs as the baseline column instead of the
             stored originals.
         context_policy:
           type: string
@@ -2573,17 +2581,17 @@ components:
             absent from the trace falls back per-call to live or mock,
             logged in the new trace. live = re-execute tools. The WIRE
             default stays live so Phase-1 requests behave unchanged; the
-            Run Config UI preselects replay_recorded under frozen
+            Variant UI preselects replay_recorded under frozen
             (feature-spec.md:79 "Playback is the default under frozen") —
             a UI default, not a wire default.
 
     ReplayAccepted:
       type: object
-      required: [task_id, run_id]
+      required: [task_id, evaluation_id]
       description: Every request returns task_id (feature-spec.md:106).
       properties:
         task_id: { type: string, description: Parent task; children per conversation/turn (feature-spec.md:107). }
-        run_id: { type: string, description: "Fetch via GET /agenttrees/{tree}/runs/{id} for the grid." }
+        evaluation_id: { type: string, description: "Fetch via GET /agenttrees/{tree}/evaluations/{id} for the grid." }
 
     ReplayTurnRequest:
       type: object
@@ -2597,7 +2605,7 @@ components:
           description: feature-spec.md:71 "body includes endpoints[]".
           items: { type: string }
         config:
-          allOf: [{ $ref: "#/components/schemas/RunConfig" }]
+          allOf: [{ $ref: "#/components/schemas/Variant" }]
           nullable: true
         context_policy:
           type: string
@@ -2621,14 +2629,14 @@ components:
 
     ReplayTurnAccepted:
       type: object
-      required: [run_id, results]
+      required: [evaluation_id, results]
       description: feature-spec.md:71 "returns one task_id + new conversation_id per endpoint".
       properties:
-        run_id:
+        evaluation_id:
           type: string
           description: >
-            The run backing the fork-comparison pivot (feature-spec.md:73
-            "column per endpoint") — fetch via GET …/runs/{runId}.
+            The evaluation backing the fork-comparison pivot (feature-spec.md:73
+            "column per endpoint") — fetch via GET …/evaluations/{evaluationId}.
         results:
           type: array
           items:
@@ -2639,7 +2647,7 @@ components:
               task_id: { type: string }
               conversation_id: { type: string, description: The new fork (lineage attached). }
 
-    RunSummaryItem:
+    EvaluationSummaryItem:
       type: object
       required: [id, tree_id, status, created_at, task_id]
       properties:
@@ -2650,7 +2658,7 @@ components:
         task_id: { type: string }
         label: { type: string, nullable: true }
 
-    Run:
+    Evaluation:
       type: object
       required: [id, tree_id, status, created_at, task_id, columns, rows]
       description: >
@@ -2670,7 +2678,7 @@ components:
             required: [label, config]
             properties:
               label: { type: string, example: v15-draft (a3f2) }
-              config: { $ref: "#/components/schemas/RunConfig" }
+              config: { $ref: "#/components/schemas/Variant" }
         rows:
           type: array
           items:
@@ -2686,9 +2694,9 @@ components:
               cells:
                 type: array
                 description: One per column, same order; fills incrementally (feature-spec.md:112).
-                items: { $ref: "#/components/schemas/RunCell" }
+                items: { $ref: "#/components/schemas/Result" }
 
-    RunCell:
+    Result:
       type: object
       required: [status]
       properties:
@@ -2811,7 +2819,7 @@ components:
             results" to the grid, "Open in Chat" to the fork
             (feature-spec.md:64; sketch 05).
           properties:
-            run_id: { type: string, nullable: true }
+            evaluation_id: { type: string, nullable: true }
             conversation_id: { type: string, nullable: true }
             turn_id: { type: string, nullable: true }
             import_report:
@@ -2869,7 +2877,7 @@ components:
       required: [judgment]
       description: >
         A judgment appended by a finished judging task — "scores stream into
-        the grid live" (feature-spec.md:64). Join keys (case_id/run_id/turn_id)
+        the grid live" (feature-spec.md:64). Join keys (case_id/evaluation_id/turn_id)
         are on the judgment itself.
       properties:
         judgment: { $ref: "#/components/schemas/Judgment" }
@@ -2936,18 +2944,18 @@ components:
       type: object
       required: [judge_model, rubric_id]
       description: >
-        Exactly one of run_id / case_ids / set_id (feature-spec.md:133
+        Exactly one of evaluation_id / case_ids / set_id (feature-spec.md:133
         "{set_id | case_ids | run_id, judge_model, rubric_id}") — enforced
-        by the oneOf. run_id = "Score this run", auto-creating cases from
+        by the oneOf. evaluation_id = "Score this run", auto-creating cases from
         turns if none exist (feature-spec.md:61). set_id (added in v0.3.0
         with EvalSets) judges the set's latest membership version unless
         set_version pins one.
       oneOf:
-        - required: [run_id]
+        - required: [evaluation_id]
         - required: [case_ids]
         - required: [set_id]
       properties:
-        run_id: { type: string, nullable: true }
+        evaluation_id: { type: string, nullable: true }
         case_ids:
           type: array
           nullable: true
@@ -2979,7 +2987,7 @@ components:
       properties:
         id: { type: string }
         case_id: { type: string, nullable: true, description: Non-null for type llm. }
-        run_id: { type: string, nullable: true }
+        evaluation_id: { type: string, nullable: true }
         turn_id:
           type: string
           nullable: true
@@ -2995,12 +3003,12 @@ components:
         reasoning: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 
-    RunScoreSummary:
+    EvaluationScoreSummary:
       type: object
-      required: [run_id, rubrics]
+      required: [evaluation_id, rubrics]
       description: Feeds "summary header (mean, distribution sparkline)" (feature-spec.md:49).
       properties:
-        run_id: { type: string }
+        evaluation_id: { type: string }
         rubrics:
           type: array
           items:
@@ -3163,7 +3171,7 @@ components:
         (feature-spec.md:189).
       properties:
         conversations_per_hour: { type: number, nullable: true }
-        runs_per_hour: { type: number, nullable: true }
+        evaluations_per_hour: { type: number, nullable: true }
         fail_pct:
           type: number
           nullable: true
@@ -3209,10 +3217,10 @@ components:
             Produced since seed — all written through the public API
             (invariant cupel-phases.md:160), so they flowed through the
             normal queues and SSE streams.
-          required: [conversations, runs, judgments]
+          required: [conversations, evaluations, judgments]
           properties:
             conversations: { type: integer }
-            runs: { type: integer }
+            evaluations: { type: integer }
             judgments: { type: integer }
 
     # -------------------------------------------------------------- casebooks
@@ -3296,7 +3304,7 @@ components:
           type: array
           minItems: 1
           description: One grid column per config, as on ReplayRequest (feature-spec.md:49).
-          items: { $ref: "#/components/schemas/RunConfig" }
+          items: { $ref: "#/components/schemas/Variant" }
         context_policy:
           type: string
           enum: [frozen, current, custom]
@@ -3319,23 +3327,23 @@ components:
 
     CasebookReplayAccepted:
       type: object
-      required: [task_id, runs]
+      required: [task_id, evaluations]
       description: >
-        One parent task; one run per tree the casebook's items reference
-        (runs are tree-scoped, feature-spec.md:115 — a cross-tree casebook
-        therefore yields several runs). Fetch each grid via
-        GET /agenttrees/{tree_id}/runs/{run_id}.
+        One parent task; one evaluation per tree the casebook's items reference
+        (evaluations are tree-scoped, feature-spec.md:115 — a cross-tree
+        casebook therefore yields several). Fetch each grid via
+        GET /agenttrees/{tree_id}/evaluations/{evaluation_id}.
       properties:
         task_id: { type: string }
-        runs:
+        evaluations:
           type: array
           minItems: 1
           items:
             type: object
-            required: [tree_id, run_id]
+            required: [tree_id, evaluation_id]
             properties:
               tree_id: { type: string }
-              run_id: { type: string }
+              evaluation_id: { type: string }
 
     # --------------------------------------------------------- eval workbench
     EvalCaseCreate:

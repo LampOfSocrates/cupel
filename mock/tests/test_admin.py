@@ -219,7 +219,7 @@ def test_permissions_unknown_user_404_and_bad_body_422(monkeypatch):
 # --------------------------------------------------- tree disable semantics
 def test_disable_blocks_writes_keeps_reads():
     """The documented write-block set (mock/main.py need_enabled_tree): chat,
-    replay, replay/turn, judge-on-run, create agent, PUT instructions, POST
+    replay, replay/turn, judge-on-evaluation, create agent, PUT instructions, POST
     snapshots, PUT last-selection, conversation rename/delete → 409
     tree_disabled; every GET stays 200 — "new work blocked, history kept
     read-only" (cupel-phases.md:77). Off mode (dev user = admin) — the
@@ -232,12 +232,12 @@ def test_disable_blocks_writes_keeps_reads():
             assert r.status_code == 200
             conv_id = r.json()["conversation_id"]
             turn_id = r.json()["turn"]["id"]
-            # And a finished run to point judge at.
+            # And a finished evaluation to point judge at.
             r = await c.post("/agenttrees/agent1/replay", json={
                 "selection": [{"conversation_id": conv_id}],
                 "configs": [{"model": "claude-sonnet-5"}]})
             assert r.status_code == 202
-            run_id = r.json()["run_id"]
+            evaluation_id = r.json()["evaluation_id"]
             await asyncio.sleep(0.05)  # zero-delay engine drains instantly
             await c.post("/eval/rubrics",
                          json={"name": "r", "prompt": "score it"})
@@ -271,10 +271,10 @@ def test_disable_blocks_writes_keeps_reads():
                 assert r.status_code == 409, r.text
                 assert r.json()["code"] == "tree_disabled"
 
-            # Judge on a run whose tree is disabled → 409 (documented rule).
+            # Judge on an evaluation whose tree is disabled → 409 (documented rule).
             rubric = (await c.get("/eval/rubrics")).json()[0]
             r = await c.post("/eval/judge", json={
-                "run_id": run_id, "judge_model": "claude-sonnet-5",
+                "evaluation_id": evaluation_id, "judge_model": "claude-sonnet-5",
                 "rubric_id": rubric["id"]})
             assert r.status_code == 409
             assert r.json()["code"] == "tree_disabled"
@@ -287,8 +287,8 @@ def test_disable_blocks_writes_keeps_reads():
                 "/agenttrees/agent1/agents/ag_concierge/instructions",
                 "/agenttrees/agent1/agents/ag_concierge/last-selection",
                 "/agenttrees/agent1/endpoints",
-                "/agenttrees/agent1/runs",
-                f"/agenttrees/agent1/runs/{run_id}",
+                "/agenttrees/agent1/evaluations",
+                f"/agenttrees/agent1/evaluations/{evaluation_id}",
                 f"/agenttrees/agent1/turns/{turn_id}/trace",
             ]
             for path in reads:

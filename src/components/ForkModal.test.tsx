@@ -17,16 +17,16 @@ import { ForkModal } from "./ForkModal";
 // 623-652): ReplayTurnRequest {conversation_id, turn_id, endpoints (minItems
 // 1), config?, context_policy pinned frozen} (:1556-1574); 202
 // ReplayTurnAccepted "one task_id + new conversation_id per endpoint"
-// (feature-spec.md:71) + run_id (:1576-1594). Endpoints fed by GET
+// (feature-spec.md:71) + evaluation_id (:1576-1594). Endpoints fed by GET
 // /agenttrees/{tree}/endpoints (openapi.yaml:154-172).
 
 function ChatProbe() {
   const { id } = useParams();
   return <div>chat-probe {id}</div>;
 }
-function RunProbe() {
+function EvaluationProbe() {
   const { id } = useParams();
-  return <div>run-probe {id}</div>;
+  return <div>evaluation-probe {id}</div>;
 }
 
 // Custom provider (not renderApp): refreshConversations is a spy so the
@@ -62,7 +62,7 @@ function renderModal(
               }
             />
             <Route path="/chat/:id" element={<ChatProbe />} />
-            <Route path="/evaluations/:id" element={<RunProbe />} />
+            <Route path="/evaluations/:id" element={<EvaluationProbe />} />
           </Routes>
         </MemoryRouter>
       </AppContext.Provider>
@@ -215,8 +215,8 @@ describe("ForkModal", () => {
     await user.click(screen.getByRole("button", { name: "Fork ⑂" }));
     await screen.findByTestId("fork-results");
 
-    // run_id → GET …/runs/{runId} route (openapi.yaml:1581-1585).
+    // evaluation_id → GET …/evaluations/{evaluationId} route (openapi.yaml:1581-1585).
     await user.click(screen.getByText("View evaluation"));
-    await screen.findByText("run-probe run-1");
+    await screen.findByText("evaluation-probe evaluation-1");
   });
 });

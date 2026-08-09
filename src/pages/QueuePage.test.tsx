@@ -19,11 +19,11 @@ import { QueuePage } from "./QueuePage";
 // /tasks/{id} "Task with children populated" (openapi.yaml:826); cancel =
 // DELETE /tasks/{id} "cascades to children" (:836); retry = POST
 // /tasks/{id}/retry-failed 202 (:849-865). Result deep links per Task.result
-// (:1744-1752): run_id → "View results", conversation_id → "Open in Chat".
+// (:1744-1752): evaluation_id → "View results", conversation_id → "Open in Chat".
 
-function RunProbe() {
-  const { runId } = useParams();
-  return <div>run-probe {runId}</div>;
+function EvaluationProbe() {
+  const { evaluationId } = useParams();
+  return <div>evaluation-probe {evaluationId}</div>;
 }
 function ChatProbe() {
   const { conversationId } = useParams();
@@ -34,7 +34,7 @@ const renderQueue = () =>
   renderApp(
     <Routes>
       <Route path="/queue" element={<QueuePage />} />
-      <Route path="/evaluations/:runId" element={<RunProbe />} />
+      <Route path="/evaluations/:evaluationId" element={<EvaluationProbe />} />
       <Route path="/chat/:conversationId" element={<ChatProbe />} />
     </Routes>,
     { route: "/queue", queue: true },
@@ -101,12 +101,12 @@ describe("QueuePage", () => {
     expect(within(children).queryByText("failed")).not.toBeInTheDocument();
   });
 
-  it("deep links: result.run_id → View results → /evaluations/{id}", async () => {
+  it("deep links: result.evaluation_id → View results → /evaluations/{id}", async () => {
     const user = userEvent.setup();
     renderQueue();
     await screen.findByTestId("task-task-seed-replay");
     await user.click(screen.getByRole("link", { name: "View results ↗" }));
-    expect(await screen.findByText("run-probe run-old-1")).toBeInTheDocument();
+    expect(await screen.findByText("evaluation-probe evaluation-old-1")).toBeInTheDocument();
   });
 
   it("deep links: result.conversation_id → Open in Chat → conversation route", async () => {

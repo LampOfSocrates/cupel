@@ -67,11 +67,11 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// Two doors: Chat and Evaluate. Runs / Eval / Casebooks are one workflow, so
+// Two doors: Chat and Evaluate. Evaluations / Eval / Casebooks are one workflow, so
 // they nest under the Evaluate group rather than sitting as three peers —
 // their routes are unchanged and the group is open by default.
 describe("Sidebar Evaluate group", () => {
-  it("nests Runs, Eval and Casebooks under Evaluate, each at its own route", async () => {
+  it("nests Evaluations, Eval and Casebooks under Evaluate, each at its own route", async () => {
     const user = userEvent.setup();
     renderShell();
 

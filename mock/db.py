@@ -71,21 +71,21 @@ CREATE TABLE IF NOT EXISTS tasks (
   stage TEXT, parent_id TEXT, result TEXT, error TEXT, payload TEXT,
   created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT);
 
-CREATE TABLE IF NOT EXISTS runs (
+CREATE TABLE IF NOT EXISTS evaluations (
   id TEXT PRIMARY KEY, tree_id TEXT NOT NULL, task_id TEXT NOT NULL,
   label TEXT, created_at TEXT NOT NULL, columns TEXT NOT NULL);
 
-CREATE TABLE IF NOT EXISTS run_rows (
-  run_id TEXT NOT NULL, row_idx INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS evaluation_rows (
+  evaluation_id TEXT NOT NULL, row_idx INTEGER NOT NULL,
   conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL,
   prompt TEXT NOT NULL, envelope TEXT,
-  PRIMARY KEY (run_id, row_idx));
+  PRIMARY KEY (evaluation_id, row_idx));
 
-CREATE TABLE IF NOT EXISTS run_cells (
-  run_id TEXT NOT NULL, row_idx INTEGER NOT NULL, col_idx INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS evaluation_cells (
+  evaluation_id TEXT NOT NULL, row_idx INTEGER NOT NULL, col_idx INTEGER NOT NULL,
   status TEXT NOT NULL, content TEXT, conversation_id TEXT, turn_id TEXT,
   task_id TEXT, case_id TEXT, latest_score REAL, error TEXT,
-  PRIMARY KEY (run_id, row_idx, col_idx));
+  PRIMARY KEY (evaluation_id, row_idx, col_idx));
 
 -- payload_ref = span id; prompt/response/args/result back GET /spans/{id}/payload.
 CREATE TABLE IF NOT EXISTS spans (
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS eval_sets (
 -- tree-scoped (openapi.yaml:1654-1656), and its items are turn REFERENCES,
 -- never copies (openapi.yaml:3252-3255) — hence a row of ids and nothing
 -- else. Deleting a casebook or an item touches no turn, conversation, eval
--- set or run (openapi.yaml:1722-1726, :1764-1769).
+-- set or evaluation (openapi.yaml:1722-1726, :1764-1769).
 CREATE TABLE IF NOT EXISTS casebooks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
   created_by TEXT, created_at TEXT NOT NULL);
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS inspect_audit (
 
 -- Append-only (cupel-phases.md:160); human thumbs share this store.
 CREATE TABLE IF NOT EXISTS judgments (
-  id TEXT PRIMARY KEY, case_id TEXT, run_id TEXT, turn_id TEXT,
+  id TEXT PRIMARY KEY, case_id TEXT, evaluation_id TEXT, turn_id TEXT,
   conversation_id TEXT, type TEXT NOT NULL, judge_model TEXT,
   rubric_id TEXT, rubric_version INTEGER, score REAL NOT NULL,
   reasoning TEXT, created_at TEXT NOT NULL);
@@ -195,6 +195,7 @@ class Db:
             self.conn.executescript(SCHEMA)
             self._migrate_eval_cases()
             self._migrate_conversation_owner()
+            self._migrate_run_to_evaluation()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -239,6 +240,34 @@ class Db:
             "UPDATE conversations SET user_id = COALESCE("
             " (SELECT t.author FROM turns t WHERE t.conversation_id = conversations.id"
             "  AND t.role = 'user' ORDER BY t.rowid LIMIT 1), 'dev')")
+
+    def _migrate_run_to_evaluation(self):
+        """Older databases carry the pre-rename physical names: tables runs /
+        run_rows / run_cells, and a run_id column on those two plus judgments.
+        The wire renamed Run to Evaluation, and the physical schema follows so
+        this file stays a truthful reference for anyone reading it.
+
+        CREATE TABLE IF NOT EXISTS above has already created the NEW, empty
+        tables on such a database, so each old table's data is moved by
+        dropping the empty newcomer and renaming the old one over it.
+        Idempotent: the presence of the OLD table (and of the old column) is
+        the marker, exactly as the two migrations above use a column's
+        presence. Nothing here runs on a database created after the rename."""
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        for old, new in (("runs", "evaluations"),
+                         ("run_rows", "evaluation_rows"),
+                         ("run_cells", "evaluation_cells")):
+            if old not in tables:
+                continue
+            if new in tables:
+                self.conn.execute(f"DROP TABLE {new}")
+            self.conn.execute(f"ALTER TABLE {old} RENAME TO {new}")
+        for table in ("evaluation_rows", "evaluation_cells", "judgments"):
+            cols = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            if "run_id" in cols and "evaluation_id" not in cols:
+                self.conn.execute(
+                    f"ALTER TABLE {table} RENAME COLUMN run_id TO evaluation_id")
 
     def run(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock:

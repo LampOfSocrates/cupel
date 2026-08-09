@@ -25,7 +25,7 @@ import {
 import { agenticConfig } from "../../../agentic.config";
 import { api } from "../../api/client";
 import { getSseEnabled } from "../../api/backendPrefs";
-import type { Attachment, Run, RunCell, Turn } from "../../api/types";
+import type { Attachment, Evaluation, Result, Turn } from "../../api/types";
 import { useApp } from "../../AppContext";
 import { useAsync } from "../../hooks/useAsync";
 import { Markdown } from "../../lib/markdown";
@@ -44,12 +44,12 @@ import type { ChatSettings } from "./types";
 // The send is "re-fire, but for a new message instead of an existing turn":
 // POST /chat writes the shared user turn and generates the FIRST column, then
 // POST /agenttrees/{tree}/replay/turn fans that turn out to the picked
-// endpoints — "one request, N conversations, ONE run_id" (plan §2a). Because
+// endpoints — "one request, N conversations, ONE evaluation_id" (plan §2a). Because
 // the result IS a run, the comparison grid, the judge, the summary, the queue,
 // cancel and retry-failed all work unchanged (plan §2a), and every fan-out
 // column is a real forked conversation you can open and continue (plan §3).
 //
-// Column 0 is the run's own `baseline` column: the reply the current
+// Column 0 is the evaluation's own `baseline` column: the reply the current
 // configuration produced. It is also the anchor the fan-out needs — nothing in
 // the contract re-fires a turn that does not exist yet — so it is a column, not
 // an extra hidden cost, and the cost warning counts it.
@@ -58,13 +58,13 @@ import type { ChatSettings } from "./types";
 // ReplayTurnRequest carries `endpoints[]` (one column each) but a SINGLE
 // `config` shared by all of them (openapi.yaml ReplayTurnRequest), so
 // per-column instruction version / model is not expressible under contract
-// v0.3.0. Runs (POST /replay with configs[]) is where those axes live today.
+// v0.3.0. Evaluations (POST /replay with configs[]) is where those axes live today.
 // The same limit is what compareSets.ts refuses a preset for, rather than
 // running it as an endpoints-only comparison.
 
 export { MAX_COMPARE_COLUMNS } from "./compareSets";
 
-const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
+const TERMINAL = new Set<Evaluation["status"]>(["done", "failed", "cancelled"]);
 const REFETCH_DEBOUNCE_MS = 300;
 
 /**
@@ -127,8 +127,8 @@ export function CompareView({
   const [baseline, setBaseline] = useState<Turn | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
-  const [run, setRun] = useState<Run | null>(null);
+  const [evaluationId, setEvaluationId] = useState<string | null>(null);
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Same external store the single-column transcript uses: a token re-renders
   // one column, not the page (docs/review-2026-08-05.md A8).
@@ -142,33 +142,33 @@ export function CompareView({
     [],
   );
 
-  const loadRun = useCallback(async () => {
-    if (!runId) return;
+  const loadEvaluation = useCallback(async () => {
+    if (!evaluationId) return;
     try {
-      setRun(await api.run(tree, runId));
+      setEvaluation(await api.evaluation(tree, evaluationId));
     } catch {
       // Non-critical: the columns keep their last state and the
       // "See the comparison" link still opens the grid.
     }
-  }, [tree, runId]);
+  }, [tree, evaluationId]);
 
   useEffect(() => {
-    // KEPT, and a FALSE POSITIVE at that: `loadRun` awaits the GET before it
+    // KEPT, and a FALSE POSITIVE at that: `loadEvaluation` awaits the GET before it
     // touches state, so nothing is set synchronously in this effect body — the
     // rule is following the call into the async function. Not a useAsync read
-    // either: `send` clears the run to null before a new one exists, which the
+    // either: `send` clears the evaluation to null before a new one exists, which the
     // hook's setData deliberately cannot do.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadRun();
-  }, [loadRun]);
+    void loadEvaluation();
+  }, [loadEvaluation]);
 
   // Live fill on the contract's own channel — "Cells fill incrementally as
   // child tasks finish; live fill arrives via GET /tasks/stream"
   // (openapi.yaml:678-680), debounced-refetched exactly as EvaluationPage does.
-  const runTaskId = run?.task_id;
-  const runTerminal = run != null && TERMINAL.has(run.status);
+  const evaluationTaskId = evaluation?.task_id;
+  const evaluationTerminal = evaluation != null && TERMINAL.has(evaluation.status);
   useEffect(() => {
-    if (!runTaskId || runTerminal) return;
+    if (!evaluationTaskId || evaluationTerminal) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     void (async () => {
@@ -176,12 +176,12 @@ export function CompareView({
         for await (const ev of api.taskStream({ signal: controller.signal })) {
           const mine =
             (ev.event === "task" &&
-              (ev.data.id === runTaskId || ev.data.parent_id === runTaskId)) ||
-            (ev.event === "progress" && ev.data.task_id === runTaskId);
+              (ev.data.id === evaluationTaskId || ev.data.parent_id === evaluationTaskId)) ||
+            (ev.event === "progress" && ev.data.task_id === evaluationTaskId);
           if (mine && timer === null) {
             timer = setTimeout(() => {
               timer = null;
-              void loadRun();
+              void loadEvaluation();
             }, REFETCH_DEBOUNCE_MS);
           }
         }
@@ -193,14 +193,14 @@ export function CompareView({
       controller.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [runTaskId, runTerminal, loadRun]);
+  }, [evaluationTaskId, evaluationTerminal, loadEvaluation]);
 
   const send = async (text: string, uploaded: Attachment[]) => {
     setError(null);
     setPrompt(text);
     setBaseline(null);
-    setRun(null);
-    setRunId(null);
+    setEvaluation(null);
+    setEvaluationId(null);
     draft.reset();
     setStreaming(true);
     const abort = new AbortController();
@@ -254,7 +254,7 @@ export function CompareView({
         turn_id: anchor.id,
         endpoints: selected,
       });
-      setRunId(accepted.run_id);
+      setEvaluationId(accepted.evaluation_id);
     } catch (e) {
       if (!abort.signal.aborted) {
         setError(e instanceof Error ? e.message : String(e));
@@ -293,7 +293,7 @@ export function CompareView({
   };
 
   const columnCount = 1 + selected.length;
-  const cells = run?.rows[0]?.cells ?? [];
+  const cells = evaluation?.rows[0]?.cells ?? [];
   const nameOf = (id: string) => endpoints.find((e) => e.id === id)?.name ?? id;
   const atCap = selected.length >= MAX_COMPARE_COLUMNS - 1;
 
@@ -398,21 +398,21 @@ export function CompareView({
                 <Column key={id} label={nameOf(id)} testId={`compare-column-${id}`}>
                   <FanOutCell
                     cell={cells[i + 1]}
-                    started={runId !== null}
+                    started={evaluationId !== null}
                     onOpen={(convId) => navigate(`/chat/${convId}`)}
                   />
                 </Column>
               ))}
             </SimpleGrid>
           )}
-          {runId && (
+          {evaluationId && (
             // Plan §3: "the result IS a run: a 'See the comparison' link opens
             // the existing grid, and the judge works on it with no new code".
             <Group justify="flex-end">
               <Anchor
                 size="xs"
-                onClick={() => navigate(`/evaluations/${runId}`)}
-                data-testid="compare-run-link"
+                onClick={() => navigate(`/evaluations/${evaluationId}`)}
+                data-testid="compare-evaluation-link"
               >
                 See the comparison ↗
               </Anchor>
@@ -468,7 +468,7 @@ function FanOutCell({
   started,
   onOpen,
 }: {
-  cell: RunCell | undefined;
+  cell: Result | undefined;
   started: boolean;
   onOpen: (conversationId: string) => void;
 }) {

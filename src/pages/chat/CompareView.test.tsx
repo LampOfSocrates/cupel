@@ -20,7 +20,7 @@ function renderChat(route = "/chat/c1", overrides: AppStateOverrides = {}) {
     <Routes>
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/chat/:conversationId" element={<ChatPage />} />
-      <Route path="/evaluations/:runId" element={<EvaluationPage />} />
+      <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
     </Routes>,
     { route, ...overrides },
   );
@@ -97,7 +97,7 @@ describe("chat compare mode — cost warning", () => {
 });
 
 describe("chat compare mode — column cap", () => {
-  it("never exceeds three columns and points at Runs instead", async () => {
+  it("never exceeds three columns and points at Evaluations instead", async () => {
     const seeded = mockEndpoints.agent1;
     mockEndpoints.agent1 = [...seeded, { id: "ep_agent1_canary", name: "canary" }];
     try {
@@ -122,7 +122,7 @@ describe("chat compare mode — column cap", () => {
   });
 });
 
-describe("chat compare mode — the result IS a run", () => {
+describe("chat compare mode — the result IS an evaluation", () => {
   it("fans one send out server-side and opens it in the existing grid", async () => {
     const user = userEvent.setup();
     renderChat();
@@ -149,12 +149,12 @@ describe("chat compare mode — the result IS a run", () => {
       "ep_agent1_staging",
     ]);
 
-    // The run is listed by the plain runs endpoint the Runs page reads.
-    const listed = await api.runs("agent1");
+    // The evaluation is listed by the plain evaluations endpoint the Evaluations page reads.
+    const listed = await api.evaluations("agent1");
     expect(listed.some((r) => r.label === "Re-fire · 2 endpoint(s)")).toBe(true);
 
     // …and the existing comparison grid renders it with no new code.
-    await user.click(await screen.findByTestId("compare-run-link"));
+    await user.click(await screen.findByTestId("compare-evaluation-link"));
     const grid = await screen.findByTestId("comparison-grid");
     expect(within(grid).getAllByText("baseline").length).toBeGreaterThan(0);
     expect(within(grid).getByText("prod")).toBeInTheDocument();

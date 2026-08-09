@@ -7,11 +7,11 @@ package; every write is an HTTP call against a RUNNING server.
 
 Modes (feature-spec.md:183-184):
   seed     one-shot baseline: ~20 machine-origin conversations across both
-           trees, forks via POST /replay/turn, replay runs, judgments across
+           trees, forks via POST /replay/turn, replay evaluations, judgments across
            the 2 rubrics, a few thumbs. "Deterministic from --seed N".
   drip     continuous loop: "every N seconds starts a new conversation, adds
            turns to open ones, occasionally forks, queues a replay, judges a
-           finished run". Phase 1 exposes only --interval (rate sliders and
+           finished evaluation". Phase 1 exposes only --interval (rate sliders and
            the /admin/generator control API are Phase 2, cupel-phases.md:98).
   simulate seed then drip — what `npm run simulate` runs (cupel-phases.md:43).
 
@@ -23,8 +23,8 @@ Idempotency of re-running seed with the same --seed:
     (openapi.yaml:1400-1407);
   - forks are skipped when the source conversation already has forks
     (GET …/conversations?forks_of=);
-  - replay runs are skipped when the tree already has that many "Replay ·"
-    runs (runs are listable but carry no idempotency key — count-based skip);
+  - replay evaluations are skipped when the tree already has that many "Replay ·"
+    (evaluations are listable but carry no idempotency key — count-based skip);
   - judging/thumbs check GET /eval/judgments first and skip when present.
     Judgments are append-only BY DESIGN (cupel-phases.md:160), so if a judge
     call did repeat it would append a new score, never overwrite — acceptable.
@@ -249,15 +249,15 @@ class Generator:
 
         existing = {}
         for tree in SEED_CONVERSATIONS:
-            runs = await self._get(f"/agenttrees/{tree}/runs")
-            # Oldest first, so re-runs re-target the same runs for judging.
-            existing[tree] = [r["id"] for r in reversed(runs)
+            evaluations = await self._get(f"/agenttrees/{tree}/evaluations")
+            # Oldest first, so re-runs re-target the same evaluations for judging.
+            existing[tree] = [r["id"] for r in reversed(evaluations)
                               if (r.get("label") or "").startswith("Replay")]
-        run_ids, seen = [], {t: 0 for t in SEED_CONVERSATIONS}
+        evaluation_ids, seen = [], {t: 0 for t in SEED_CONVERSATIONS}
         for spec in plan["replays"]:
             tree = spec["tree"]
             if seen[tree] < len(existing[tree]):
-                run_ids.append(existing[tree][seen[tree]])
+                evaluation_ids.append(existing[tree][seen[tree]])
                 seen[tree] += 1
                 continue
             seen[tree] += 1
@@ -265,22 +265,22 @@ class Generator:
                 "selection": [{"conversation_id": ids[(tree, spec["conv"])]}],
                 "configs": [spec["config"]]})
             await self.wait_task(acc["task_id"])
-            run_ids.append(acc["run_id"])
-        self.log(f"[seed] {len(run_ids)} replay run(s)")
+            evaluation_ids.append(acc["evaluation_id"])
+        self.log(f"[seed] {len(evaluation_ids)} replay evaluation(s)")
 
         rubric_by_name = {r["name"]: r for r in await self._get("/eval/rubrics")}
         judged = 0
-        for i, run_id in enumerate(run_ids[:2]):
-            prior = await self._get("/eval/judgments", run_id=run_id)
+        for i, evaluation_id in enumerate(evaluation_ids[:2]):
+            prior = await self._get("/eval/judgments", evaluation_id=evaluation_id)
             if any(x["type"] == "llm" for x in prior):
                 continue
             rubric = rubric_by_name[RUBRICS[i % len(RUBRICS)][0]]
             acc = await self._post("/eval/judge", {
-                "run_id": run_id, "judge_model": plan["judge_model"],
+                "evaluation_id": evaluation_id, "judge_model": plan["judge_model"],
                 "rubric_id": rubric["id"]})
             await self.wait_task(acc["task_id"])
             judged += 1
-        self.log(f"[seed] {judged} run(s) judged")
+        self.log(f"[seed] {judged} evaluation(s) judged")
 
         thumbed = 0
         for t in plan["thumbs"]:
@@ -357,24 +357,24 @@ class Generator:
             acc = await self._post(f"/agenttrees/{tree}/replay/turn", {
                 "conversation_id": recent["id"], "turn_id": rng.choice(turns)["id"],
                 "endpoints": [rng.choice(eps)["id"]]})
-            return f"forked {recent['id']} -> run {acc['run_id']}"
+            return f"forked {recent['id']} -> evaluation {acc['evaluation_id']}"
         if action == "replay":
             cfg = {"model": rng.choice(("deepseek-v3", "gemini-flash", "claude-haiku-4-5"))}
             acc = await self._post(f"/agenttrees/{tree}/replay", {
                 "selection": [{"conversation_id": recent["id"]}], "configs": [cfg]})
-            return f"queued replay {acc['run_id']} on {recent['id']}"
+            return f"queued replay {acc['evaluation_id']} on {recent['id']}"
         # judge
-        runs = [r for r in await self._get(f"/agenttrees/{tree}/runs")
+        evaluations = [r for r in await self._get(f"/agenttrees/{tree}/evaluations")
                 if r["status"] == "done"]
-        if not runs:
-            return f"judge skipped: no finished runs in {tree}"
+        if not evaluations:
+            return f"judge skipped: no finished evaluations in {tree}"
         await self.ensure_rubrics()
         rubrics = await self._get("/eval/rubrics")
         acc = await self._post("/eval/judge", {
-            "run_id": rng.choice(runs)["id"],
+            "evaluation_id": rng.choice(evaluations)["id"],
             "judge_model": rng.choice(("claude-haiku-4-5", "claude-sonnet-5")),
             "rubric_id": rng.choice(rubrics)["id"]})
-        return f"judging run -> task {acc['task_id']}"
+        return f"judging evaluation -> task {acc['task_id']}"
 
 
 # --------------------------------------------------------------------- CLI

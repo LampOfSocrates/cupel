@@ -69,8 +69,8 @@ function TestAppProvider({
 // and floating-ui hideDetached — without it, popover dropdowns get inline
 // display:none in jsdom (zero layout rects read as "reference hidden") and
 // role queries can't see their contents.
-// `state` = router location state for the initial entry (the editor → Runs
-// Test-in-Runs handoff travels as navigate state, not a URL).
+// `state` = router location state for the initial entry (the editor → Evaluations
+// Test-as-evaluation handoff travels as navigate state, not a URL).
 // `queue` = wrap in QueueProvider with fast timings — OPT-IN so
 // existing tests that count taskStreamRig.clients (EvaluationPage) keep their
 // single-subscription arithmetic.

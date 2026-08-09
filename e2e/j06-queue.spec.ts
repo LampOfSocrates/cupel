@@ -73,16 +73,16 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
   });
 
   const chat = await seedChat(request, FAIL_CONV);
-  const failRun = await seedReplay(request, [{ conversation_id: chat.conversationId }], [
+  const failEvaluation = await seedReplay(request, [{ conversation_id: chat.conversationId }], [
     { model: "deepseek-v3" },
   ]);
-  const failRow = page.getByTestId(`task-${failRun.task_id}`);
+  const failRow = page.getByTestId(`task-${failEvaluation.task_id}`);
 
   await step("an injected failure fails one child, not the batch", async () => {
-    await awaitTask(request, failRun.task_id);
+    await awaitTask(request, failEvaluation.task_id);
     await page.goto("/queue");
     await failRow.getByRole("button", { name: "Toggle children of Replay" }).click();
-    await expect(page.getByTestId(`children-${failRun.task_id}`)).toContainText("failed");
+    await expect(page.getByTestId(`children-${failEvaluation.task_id}`)).toContainText("failed");
     // Partial failure, not a dead batch (feature-spec.md:106).
     await expect(failRow).toContainText("done");
   });
@@ -92,7 +92,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
     await failRow.getByRole("button", { name: "Retry failed" }).click();
     await api.expectCalled("POST /tasks/{id}/retry-failed");
     // The child that failed once now completes, so nothing is left to retry.
-    await expect(page.getByTestId(`children-${failRun.task_id}`)).not.toContainText("failed", {
+    await expect(page.getByTestId(`children-${failEvaluation.task_id}`)).not.toContainText("failed", {
       timeout: 60_000,
     });
     await expect(failRow.getByRole("button", { name: "Retry failed" })).toHaveCount(0);

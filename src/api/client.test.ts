@@ -110,7 +110,7 @@ describe("replay client", () => {
       configs: [{ model: "deepseek-v3" }, { instruction_version: 2 }],
     });
     expect(accepted.task_id).toBe("task-replay-1");
-    expect(accepted.run_id).toBe("run-1");
+    expect(accepted.evaluation_id).toBe("evaluation-1");
     const seen = replayRequests.at(-1)!;
     expect(seen.tree).toBe("agent1");
     expect(seen.body.context_policy).toBe("frozen");
@@ -124,7 +124,7 @@ describe("replay client", () => {
       turn_id: "t9",
       endpoints: ["ep_agent1_prod", "ep_agent1_staging"],
     });
-    expect(accepted.run_id).toBe("run-1");
+    expect(accepted.evaluation_id).toBe("evaluation-1");
     expect(accepted.results.map((r) => r.endpoint_id)).toEqual([
       "ep_agent1_prod",
       "ep_agent1_staging",
@@ -157,7 +157,7 @@ describe("BYOK live-LLM headers", () => {
       turn_id: "t9",
       endpoints: ["ep_agent1_prod"],
     });
-    await api.judge({ run_id: "run-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" });
+    await api.judge({ evaluation_id: "evaluation-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" });
     expect(llmHeaderCaptures.map((c) => c.path)).toEqual([
       "/models",
       "/agenttrees/agent1/chat",

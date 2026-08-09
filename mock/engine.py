@@ -128,17 +128,17 @@ class Engine:
         row = self.db.one("SELECT tree_id FROM turns WHERE id = ?", (turn_id,))
         return row["tree_id"] if row else None
 
-    def run_tree(self, run_id: str | None) -> str | None:
-        if not run_id:
+    def evaluation_tree(self, evaluation_id: str | None) -> str | None:
+        if not evaluation_id:
             return None
-        row = self.db.one("SELECT tree_id FROM runs WHERE id = ?", (run_id,))
+        row = self.db.one("SELECT tree_id FROM evaluations WHERE id = ?", (evaluation_id,))
         return row["tree_id"] if row else None
 
     def task_tree(self, task_id: str) -> str | None:
         """Tree a task's events belong to (docs/review-2026-08-05.md A2).
 
         Resolution order, cheapest first: the tree stamped at creation, the
-        payload's tree_id/run_id/turn_id, a turn the task produced, then the
+        payload's tree_id/evaluation_id/turn_id, a turn the task produced, then the
         parent task. None = unresolvable → the event is withheld from any
         caller who does not hold every tree (Broker docstring)."""
         cached = self._task_trees.get(task_id)
@@ -150,7 +150,7 @@ class Engine:
         payload = unj(task["payload"], {}) or {}
         result = payload.get("result") or {}
         tree = (payload.get("tree_id")
-                or self.run_tree(payload.get("run_id") or result.get("run_id"))
+                or self.evaluation_tree(payload.get("evaluation_id") or result.get("evaluation_id"))
                 or self.turn_tree(payload.get("turn_id") or result.get("turn_id")))
         if not tree:
             row = self.db.one("SELECT tree_id FROM turns WHERE task_id = ? LIMIT 1", (task_id,))
@@ -407,11 +407,11 @@ class Engine:
                          span_timing=(now, now_iso()), note=trace_note)
         return self.db.one("SELECT * FROM turns WHERE id = ?", (tid,))
 
-    def _update_cell(self, run_id, row_idx, col_idx, **fields):
+    def _update_cell(self, evaluation_id, row_idx, col_idx, **fields):
         sets = ", ".join(f"{k} = ?" for k in fields)
         self.db.run(
-            f"UPDATE run_cells SET {sets} WHERE run_id = ? AND row_idx = ? AND col_idx = ?",
-            (*fields.values(), run_id, row_idx, col_idx),
+            f"UPDATE evaluation_cells SET {sets} WHERE evaluation_id = ? AND row_idx = ? AND col_idx = ?",
+            (*fields.values(), evaluation_id, row_idx, col_idx),
         )
 
     # ------------------------------------------------------------ batches
@@ -480,12 +480,12 @@ class Engine:
             return None, model, f"live generation unavailable ({exc}); served canned fallback"
 
     async def _run_replay_unit(self, child, payload):
-        run_id, col_idx = payload["run_id"], payload["col_idx"]
+        evaluation_id, col_idx = payload["evaluation_id"], payload["col_idx"]
         rows, cfg = payload["rows"], payload.get("config") or {}
         for i, row in enumerate(rows):
             if self.is_cancelled(child["id"]) or self.is_cancelled(child["parent_id"]):
                 return
-            self._update_cell(run_id, row["row_idx"], col_idx, status="running")
+            self._update_cell(evaluation_id, row["row_idx"], col_idx, status="running")
             await asyncio.sleep(self.step_delay)
             content, live_model, note = await self._live_generation(
                 child["parent_id"], row["prompt"], cfg)
@@ -493,24 +493,24 @@ class Engine:
                 tree_id=payload["tree_id"], conversation_id=None,
                 prompt=row["prompt"], envelope=row.get("envelope"),
                 agent=payload["agent"], model=live_model or cfg.get("model"),
-                salt=f"{run_id}:{col_idx}", task_id=child["id"],
+                salt=f"{evaluation_id}:{col_idx}", task_id=child["id"],
                 content=content, trace_note=note,
             )
-            self._update_cell(run_id, row["row_idx"], col_idx,
+            self._update_cell(evaluation_id, row["row_idx"], col_idx,
                               status="done", content=turn["content"], turn_id=turn["id"],
                               task_id=child["id"])
             self.progress(
                 child["parent_id"],
                 f"Conversation {payload['conv_index']}/{payload['conv_total']} · turn {i + 1}/{len(rows)}",
             )
-        payload["result"] = {"run_id": run_id}
+        payload["result"] = {"evaluation_id": evaluation_id}
         self.db.run("UPDATE tasks SET payload = ? WHERE id = ?", (j(payload), child["id"]))
 
     async def _run_fork_unit(self, child, payload):
-        run_id, col_idx = payload["run_id"], payload["col_idx"]
+        evaluation_id, col_idx = payload["evaluation_id"], payload["col_idx"]
         if self.is_cancelled(child["id"]) or self.is_cancelled(child["parent_id"]):
             return
-        self._update_cell(run_id, payload["row_idx"], col_idx, status="running")
+        self._update_cell(evaluation_id, payload["row_idx"], col_idx, status="running")
         await asyncio.sleep(self.step_delay)
         cfg = payload.get("config") or {}
         content, live_model, note = await self._live_generation(
@@ -519,14 +519,14 @@ class Engine:
             tree_id=payload["tree_id"], conversation_id=payload["fork_conversation_id"],
             prompt=payload["prompt"], envelope=payload.get("envelope"),
             agent=payload["agent"], model=live_model or cfg.get("model"),
-            salt=f"{run_id}:{payload['endpoint_id']}", task_id=child["id"],
+            salt=f"{evaluation_id}:{payload['endpoint_id']}", task_id=child["id"],
             content=content, trace_note=note,
         )
-        self._update_cell(run_id, payload["row_idx"], col_idx,
+        self._update_cell(evaluation_id, payload["row_idx"], col_idx,
                           status="done", content=turn["content"], turn_id=turn["id"],
                           conversation_id=payload["fork_conversation_id"], task_id=child["id"])
         payload["result"] = {
-            "run_id": run_id,
+            "evaluation_id": evaluation_id,
             "conversation_id": payload["fork_conversation_id"],
             "turn_id": turn["id"],
         }
@@ -576,33 +576,33 @@ class Engine:
             except llm.LiveUnavailable:
                 pass  # canned reasoning stands
         self.db.run(
-            "INSERT INTO judgments (id, case_id, run_id, turn_id, conversation_id, type,"
+            "INSERT INTO judgments (id, case_id, evaluation_id, turn_id, conversation_id, type,"
             " judge_model, rubric_id, rubric_version, score, reasoning, created_at)"
             " VALUES (?, ?, ?, ?, ?, 'llm', ?, ?, ?, ?, ?, ?)",
-            (jid, case_id, payload.get("run_id"), payload.get("turn_id"),
+            (jid, case_id, payload.get("evaluation_id"), payload.get("turn_id"),
              payload.get("conversation_id"), payload["judge_model"],
              payload["rubric_id"], payload["rubric_version"], score, reasoning, now),
         )
-        # A judgment scores ONE run's cell. Unscoped, this overwrote
-        # latest_score on every other run's cell sharing the case
+        # A judgment scores ONE evaluation's cell. Unscoped, this overwrote
+        # latest_score on every other evaluation's cell sharing the case
         # (docs/review-2026-08-05.md A1). Judging standalone eval cases
-        # (openapi.yaml:1865-1867 case_ids) carries no run — there the case is
+        # (openapi.yaml:1865-1867 case_ids) carries no evaluation — there the case is
         # the only addressable scope, so that path keeps the case-wide update.
-        run_id = payload.get("run_id")
-        if run_id:
+        evaluation_id = payload.get("evaluation_id")
+        if evaluation_id:
             self.db.run(
-                "UPDATE run_cells SET latest_score = ? WHERE case_id = ? AND run_id = ?",
-                (score, case_id, run_id))
+                "UPDATE evaluation_cells SET latest_score = ? WHERE case_id = ? AND evaluation_id = ?",
+                (score, case_id, evaluation_id))
         else:
-            self.db.run("UPDATE run_cells SET latest_score = ? WHERE case_id = ?",
+            self.db.run("UPDATE evaluation_cells SET latest_score = ? WHERE case_id = ?",
                         (score, case_id))
         judgment = self.db.one("SELECT * FROM judgments WHERE id = ?", (jid,))
         # Scores stream into the grid live (feature-spec.md:64), to the tree
-        # holding the judged run/turn only (A2).
+        # holding the judged evaluation/turn only (A2).
         self.broker.publish(
             "judgment", {"judgment": judgment_dict(judgment)},
-            self.run_tree(run_id) or self.turn_tree(payload.get("turn_id")))
-        payload["result"] = {"run_id": payload.get("run_id"), "turn_id": payload.get("turn_id")}
+            self.evaluation_tree(evaluation_id) or self.turn_tree(payload.get("turn_id")))
+        payload["result"] = {"evaluation_id": payload.get("evaluation_id"), "turn_id": payload.get("turn_id")}
         self.db.run("UPDATE tasks SET payload = ? WHERE id = ?", (j(payload), child["id"]))
         self.progress(child["parent_id"], f"Case {payload['case_index']}/{payload['case_total']}")
 
@@ -636,7 +636,7 @@ def judgment_dict(row: dict) -> dict:
     return {
         "id": row["id"],
         "case_id": row["case_id"],
-        "run_id": row["run_id"],
+        "evaluation_id": row["evaluation_id"],
         "turn_id": row["turn_id"],
         "conversation_id": row["conversation_id"],
         "type": row["type"],

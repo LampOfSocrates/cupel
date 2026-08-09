@@ -3,7 +3,7 @@ import { useApp } from "../AppContext";
 
 // Read-only banner — "existing conversations stay READABLE (read-only
 // banner) so history and traces aren't lost" (feature-spec.md:20;
-// openapi.yaml:288-291). Rendered by the pages that CREATE work (Chat, Runs):
+// openapi.yaml:288-291). Rendered by the pages that CREATE work (Chat, Evaluations):
 // every write there answers 409 tree_disabled, so the banner explains the
 // state before the user hits the error.
 //

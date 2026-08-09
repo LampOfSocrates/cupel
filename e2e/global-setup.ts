@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 // function of the seed). Seed 42 = the mock's own default and what the Docker
 // image boots with (mock/entrypoint.py CUPEL_SEED), so the suite walks the
 // same dataset a reviewer sees on the demo: 20 conversations (14 agent1,
-// 6 agent2), 4 forks, 3 replay runs, 2 judged, 2 rubrics, 3 thumbs.
+// 6 agent2), 4 forks, 3 replay evaluations, 2 judged, 2 rubrics, 3 thumbs.
 //
 // Costs ~1.4s against the scratch DB. Journeys still create their own
 // conversations for anything they assert on by title — the seed is BACKGROUND,

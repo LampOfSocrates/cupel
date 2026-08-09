@@ -301,13 +301,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return cfg["model"]
         return f"config {index + 1}"
 
-    def run_dict(r: dict) -> dict:
+    def evaluation_dict(r: dict) -> dict:
         task = engine.get_task(r["task_id"])
-        rows = db.all("SELECT * FROM run_rows WHERE run_id = ? ORDER BY row_idx", (r["id"],))
+        rows = db.all("SELECT * FROM evaluation_rows WHERE evaluation_id = ? ORDER BY row_idx", (r["id"],))
         out_rows = []
         for row in rows:
             cells = db.all(
-                "SELECT * FROM run_cells WHERE run_id = ? AND row_idx = ? ORDER BY col_idx",
+                "SELECT * FROM evaluation_cells WHERE evaluation_id = ? AND row_idx = ? ORDER BY col_idx",
                 (r["id"], row["row_idx"]))
             out_rows.append({
                 "source": {"conversation_id": row["conversation_id"], "turn_id": row["turn_id"]},
@@ -430,7 +430,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         while every GET keeps working — "new chat/replay/judge against it
         return 409 tree_disabled; existing conversations stay READABLE"
         (feature-spec.md:20). Blocked writes (documented set): chat, replay,
-        replay/turn, judge-on-a-run-of-this-tree, create agent, PUT
+        replay/turn, judge-on-an-evaluation-of-this-tree, create agent, PUT
         instructions, POST snapshots, PUT last-selection, and conversation
         rename/delete (history is read-only, not just readable). Feedback
         stays allowed — a thumb annotates existing history, it creates no
@@ -648,8 +648,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """PATCH /admin/agenttrees/{treeId} {enabled} (openapi.yaml:267-296):
         toggles availability, never data. Disabling also cancels this tree's
         queued/running batch work — "queued tasks on it are cancelled"
-        (feature-spec.md:20): every run-owning task (replay/replay_turn via
-        runs.task_id, judge via its payload's result.run_id) is cancelled;
+        (feature-spec.md:20): every evaluation-owning task (replay/replay_turn via
+        evaluations.task_id, judge via its payload's result.evaluation_id) is cancelled;
         chat tasks are sub-second in the mock and simply drain."""
         need_admin(request)
         row = db.one("SELECT * FROM trees WHERE id = ?", (treeId,))
@@ -664,9 +664,9 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if not enabled:
             stale = db.all(
                 "SELECT id FROM tasks WHERE status IN ('queued', 'running')"
-                " AND parent_id IS NULL AND (id IN (SELECT task_id FROM runs"
+                " AND parent_id IS NULL AND (id IN (SELECT task_id FROM evaluations"
                 " WHERE tree_id = ?) OR json_extract(payload,"
-                " '$.result.run_id') IN (SELECT id FROM runs WHERE tree_id = ?))",
+                " '$.result.evaluation_id') IN (SELECT id FROM evaluations WHERE tree_id = ?))",
                 (treeId, treeId))
             for t in stale:
                 engine.cancel(t["id"])
@@ -831,14 +831,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             " promoted_from_snapshot_id) VALUES (?, ?, ?, ?, ?, ?)",
             (agentId, version, body["content"], fmt, now, snapshot_id))
         if snapshot_id:
-            # Runs referencing the snapshot relabel to the new version (openapi.yaml:246-248).
-            for r in db.all("SELECT id, columns FROM runs"):
+            # Evaluations referencing the snapshot relabel to the new version (openapi.yaml:246-248).
+            for r in db.all("SELECT id, columns FROM evaluations"):
                 cols, changed = unj(r["columns"], []), False
                 for col in cols:
                     if (col.get("config") or {}).get("snapshot_id") == snapshot_id:
                         col["label"], changed = f"v{version}", True
                 if changed:
-                    db.run("UPDATE runs SET columns = ? WHERE id = ?", (j(cols), r["id"]))
+                    db.run("UPDATE evaluations SET columns = ? WHERE id = ?", (j(cols), r["id"]))
         return {"version": version, "content": body["content"], "format": fmt,
                 "created_at": now, "promoted_from_snapshot_id": snapshot_id}
 
@@ -1102,18 +1102,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
              reasoning, now))
         return judgment_dict(db.one("SELECT * FROM judgments WHERE id = ?", (jid,)))
 
-    # ---------------------------------------------------------------- runs
-    def build_run(tree: str, task_id: str, label: str, columns: list, rows: list) -> str:
-        run_id = new_id("run")
-        db.run("INSERT INTO runs (id, tree_id, task_id, label, created_at, columns)"
+    # --------------------------------------------------------- evaluations
+    def build_evaluation(tree: str, task_id: str, label: str, columns: list, rows: list) -> str:
+        evaluation_id = new_id("eval")
+        db.run("INSERT INTO evaluations (id, tree_id, task_id, label, created_at, columns)"
                " VALUES (?, ?, ?, ?, ?, ?)",
-               (run_id, tree, task_id, label, now_iso(), j(columns)))
+               (evaluation_id, tree, task_id, label, now_iso(), j(columns)))
         for idx, row in enumerate(rows):
-            db.run("INSERT INTO run_rows (run_id, row_idx, conversation_id, turn_id, prompt, envelope)"
+            db.run("INSERT INTO evaluation_rows (evaluation_id, row_idx, conversation_id, turn_id, prompt, envelope)"
                    " VALUES (?, ?, ?, ?, ?, ?)",
-                   (run_id, idx, row["conversation_id"], row["turn_id"], row["prompt"],
+                   (evaluation_id, idx, row["conversation_id"], row["turn_id"], row["prompt"],
                     j(row.get("envelope"))))
-        return run_id
+        return evaluation_id
 
     @app.post("/agenttrees/{tree}/replay", status_code=202)
     async def replay(tree: str, request: Request):
@@ -1138,15 +1138,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             err(422, "invalid", "Selection contains no assistant turns to replay.")
 
         baseline = {}
-        if body.get("baseline_run_id"):
-            prior = db.one("SELECT * FROM runs WHERE id = ? AND tree_id = ?",
-                           (body["baseline_run_id"], tree))
+        if body.get("baseline_evaluation_id"):
+            prior = db.one("SELECT * FROM evaluations WHERE id = ? AND tree_id = ?",
+                           (body["baseline_evaluation_id"], tree))
             if not prior:
-                err(404, "not_found", f"Run '{body['baseline_run_id']}' not found.")
+                err(404, "not_found", f"Evaluation '{body['baseline_evaluation_id']}' not found.")
             last_col = len(unj(prior["columns"], [])) - 1
-            for rr in db.all("SELECT * FROM run_rows WHERE run_id = ?", (prior["id"],)):
+            for rr in db.all("SELECT * FROM evaluation_rows WHERE evaluation_id = ?", (prior["id"],)):
                 cell = db.one(
-                    "SELECT * FROM run_cells WHERE run_id = ? AND row_idx = ? AND col_idx = ?"
+                    "SELECT * FROM evaluation_cells WHERE evaluation_id = ? AND row_idx = ? AND col_idx = ?"
                     " AND status = 'done'", (prior["id"], rr["row_idx"], last_col))
                 if cell and cell["content"]:
                     baseline[rr["turn_id"]] = cell["content"]
@@ -1162,19 +1162,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             for row in rows:
                 row["row_idx"] = len(row_specs)
                 row_specs.append(row)
-        run_id = build_run(tree, parent["id"], f"Replay · {len(configs)} config(s)",
+        evaluation_id = build_evaluation(tree, parent["id"], f"Replay · {len(configs)} config(s)",
                            columns, row_specs)
         db.run("UPDATE tasks SET payload = ? WHERE id = ?",
-               (j({"result": {"run_id": run_id}}), parent["id"]))
+               (j({"result": {"evaluation_id": evaluation_id}}), parent["id"]))
 
         for row in row_specs:
-            db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status, content,"
+            db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
                    " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
-                   (run_id, row["row_idx"], baseline.get(row["turn_id"], row["content"]),
+                   (evaluation_id, row["row_idx"], baseline.get(row["turn_id"], row["content"]),
                     row["conversation_id"], row["turn_id"]))
             for col_idx in range(1, len(columns)):
-                db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status)"
-                       " VALUES (?, ?, ?, 'pending')", (run_id, row["row_idx"], col_idx))
+                db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status)"
+                       " VALUES (?, ?, ?, 'pending')", (evaluation_id, row["row_idx"], col_idx))
 
         for col_idx, cfg in enumerate(configs, start=1):
             for ci, (conv, rows) in enumerate(units, start=1):
@@ -1183,7 +1183,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 if not agent_row and conv["agent_id"]:
                     agent_row = db.one("SELECT * FROM agents WHERE id = ?", (conv["agent_id"],))
                 engine.create_task("replay", parent_id=parent["id"], payload={
-                    "kind": "replay_unit", "run_id": run_id, "tree_id": tree,
+                    "kind": "replay_unit", "evaluation_id": evaluation_id, "tree_id": tree,
                     "col_idx": col_idx, "config": cfg,
                     "agent": agent_row["name"] if agent_row else "assistant",
                     "conv_index": ci, "conv_total": len(units),
@@ -1191,7 +1191,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                               "envelope": r.get("envelope")} for r in rows],
                 })
         engine.spawn(engine.run_batch(parent["id"]))
-        return JSONResponse({"task_id": parent["id"], "run_id": run_id}, status_code=202)
+        return JSONResponse({"task_id": parent["id"], "evaluation_id": evaluation_id}, status_code=202)
 
     @app.post("/agenttrees/{tree}/replay/turn", status_code=202)
     async def replay_turn(tree: str, request: Request):
@@ -1237,19 +1237,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         register_live(parent["id"], request)
         row = {"conversation_id": conv["id"], "turn_id": fork_turn["id"], "prompt": prompt,
                "envelope": unj(fork_turn["envelope"])}
-        run_id = build_run(tree, parent["id"], f"Re-fire · {len(ep_rows)} endpoint(s)",
+        evaluation_id = build_evaluation(tree, parent["id"], f"Re-fire · {len(ep_rows)} endpoint(s)",
                            columns, [row])
         db.run("UPDATE tasks SET payload = ? WHERE id = ?",
-               (j({"result": {"run_id": run_id}}), parent["id"]))
-        db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status, content,"
+               (j({"result": {"evaluation_id": evaluation_id}}), parent["id"]))
+        db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
                " conversation_id, turn_id) VALUES (?, 0, 0, 'done', ?, ?, ?)",
-               (run_id, fork_turn["content"], conv["id"], fork_turn["id"]))
+               (evaluation_id, fork_turn["content"], conv["id"], fork_turn["id"]))
 
         results = []
         now = now_iso()
         for col_idx, ep in enumerate(ep_rows, start=1):
-            db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status)"
-                   " VALUES (?, 0, ?, 'pending')", (run_id, col_idx))
+            db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status)"
+                   " VALUES (?, 0, ?, 'pending')", (evaluation_id, col_idx))
             # Fork: copy history up to the re-fired turn, lineage attached
             # (openapi.yaml:631-639, feature-spec.md:68-69).
             fork_id = new_id("conv")
@@ -1273,7 +1273,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                      t["content"], t["content_type"], t["created_at"], t["envelope"],
                      t["attachments"]))
             child = engine.create_task("replay_turn", parent_id=parent["id"], payload={
-                "kind": "fork_unit", "run_id": run_id, "tree_id": tree, "row_idx": 0,
+                "kind": "fork_unit", "evaluation_id": evaluation_id, "tree_id": tree, "row_idx": 0,
                 "col_idx": col_idx, "config": cfg, "agent": agent_name,
                 "fork_conversation_id": fork_id, "endpoint_id": ep["id"],
                 "endpoint_name": ep["name"], "prompt": prompt,
@@ -1282,26 +1282,26 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             results.append({"endpoint_id": ep["id"], "task_id": child["id"],
                             "conversation_id": fork_id})
         engine.spawn(engine.run_batch(parent["id"]))
-        return JSONResponse({"run_id": run_id, "results": results}, status_code=202)
+        return JSONResponse({"evaluation_id": evaluation_id, "results": results}, status_code=202)
 
-    @app.get("/agenttrees/{tree}/runs")
-    async def list_runs(tree: str):
+    @app.get("/agenttrees/{tree}/evaluations")
+    async def list_evaluations(tree: str):
         need_tree(tree)
         out = []
-        for r in db.all("SELECT * FROM runs WHERE tree_id = ? ORDER BY rowid DESC", (tree,)):
+        for r in db.all("SELECT * FROM evaluations WHERE tree_id = ? ORDER BY rowid DESC", (tree,)):
             task = engine.get_task(r["task_id"])
             out.append({"id": r["id"], "tree_id": r["tree_id"], "status": task["status"],
                         "created_at": r["created_at"], "task_id": r["task_id"],
                         "label": r["label"]})
         return out
 
-    @app.get("/agenttrees/{tree}/runs/{runId}")
-    async def get_run(tree: str, runId: str):
+    @app.get("/agenttrees/{tree}/evaluations/{evaluationId}")
+    async def get_evaluation(tree: str, evaluationId: str):
         need_tree(tree)
-        r = db.one("SELECT * FROM runs WHERE id = ? AND tree_id = ?", (runId, tree))
+        r = db.one("SELECT * FROM evaluations WHERE id = ? AND tree_id = ?", (evaluationId, tree))
         if not r:
-            err(404, "not_found", f"Run '{runId}' not found.")
-        return run_dict(r)
+            err(404, "not_found", f"Evaluation '{evaluationId}' not found.")
+        return evaluation_dict(r)
 
     # --------------------------------------------------------------- trace
     @app.get("/agenttrees/{tree}/turns/{turnId}/trace")
@@ -1375,7 +1375,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         they hold view on. Events whose tree cannot be resolved are withheld
         from limited callers rather than leaked.
 
-        Subscription-side filters (tree/run_id/task_id query params) are a
+        Subscription-side filters (tree/evaluation_id/task_id query params) are a
         contract change and stay open for v0.4.0 (bucket C)."""
         permitted = permitted_trees(request)
 
@@ -1751,12 +1751,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         if not body.get("judge_model") or not body.get("rubric_id"):
             err(422, "invalid", "judge_model and rubric_id are required.")
-        run_id, case_ids, set_id = body.get("run_id"), body.get("case_ids"), body.get("set_id")
-        # v0.3.0 widened the oneOf to run_id | case_ids | set_id
+        evaluation_id, case_ids, set_id = body.get("evaluation_id"), body.get("case_ids"), body.get("set_id")
+        # v0.3.0 widened the oneOf to evaluation_id | case_ids | set_id
         # (openapi.yaml:2926-2929).
-        if sum(1 for sel in (run_id, case_ids, set_id) if sel) != 1:
+        if sum(1 for sel in (evaluation_id, case_ids, set_id) if sel) != 1:
             err(422, "invalid",
-                "Exactly one of run_id / case_ids / set_id is required "
+                "Exactly one of evaluation_id / case_ids / set_id is required "
                 "(openapi.yaml:2926-2929).")
         if set_id:
             # "set_id … judges the set's latest membership version unless
@@ -1789,13 +1789,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         else:
             rubric = versions[-1]
 
-        cases = []  # (case_id, run_id, turn_id, conversation_id)
-        run_tree = None
-        if run_id:
-            r = db.one("SELECT * FROM runs WHERE id = ?", (run_id,))
+        cases = []  # (case_id, evaluation_id, turn_id, conversation_id)
+        evaluation_tree = None
+        if evaluation_id:
+            r = db.one("SELECT * FROM evaluations WHERE id = ?", (evaluation_id,))
             if not r:
-                err(404, "not_found", f"Run '{run_id}' not found.")
-            run_tree = r["tree_id"]
+                err(404, "not_found", f"Evaluation '{evaluation_id}' not found.")
+            evaluation_tree = r["tree_id"]
             # Disable rule for judge (cheapest honest rule, documented):
             # judging is blocked when the RUN'S TREE is disabled — "new
             # chat/replay/judge against it return 409 tree_disabled"
@@ -1804,14 +1804,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             # eval cases are global resources (feature-spec.md:111).
             need_enabled_tree(r["tree_id"])
             cells = db.all(
-                "SELECT * FROM run_cells WHERE run_id = ? AND col_idx > 0 AND status = 'done'",
-                (run_id,))
+                "SELECT * FROM evaluation_cells WHERE evaluation_id = ? AND col_idx > 0 AND status = 'done'",
+                (evaluation_id,))
             for cell in cells:
                 case_id = cell["case_id"]
                 if not case_id:
                     # Auto-create cases from conversation turns (openapi.yaml:938-941).
-                    row = db.one("SELECT * FROM run_rows WHERE run_id = ? AND row_idx = ?",
-                                 (run_id, cell["row_idx"]))
+                    row = db.one("SELECT * FROM evaluation_rows WHERE evaluation_id = ? AND row_idx = ?",
+                                 (evaluation_id, cell["row_idx"]))
                     case_id = new_id("case")
                     db.run(
                         "INSERT INTO eval_cases (id, prompt, envelope, output, source, created_at)"
@@ -1819,11 +1819,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                         (case_id, row["prompt"], row["envelope"], cell["content"] or "",
                          j({"tree": r["tree_id"], "conversation_id": row["conversation_id"],
                             "turn_id": row["turn_id"]}), now_iso()))
-                    db.run("UPDATE run_cells SET case_id = ? WHERE run_id = ? AND row_idx = ?"
-                           " AND col_idx = ?", (case_id, run_id, cell["row_idx"], cell["col_idx"]))
-                cases.append((case_id, run_id, cell["turn_id"], cell["conversation_id"]))
+                    db.run("UPDATE evaluation_cells SET case_id = ? WHERE evaluation_id = ? AND row_idx = ?"
+                           " AND col_idx = ?", (case_id, evaluation_id, cell["row_idx"], cell["col_idx"]))
+                cases.append((case_id, evaluation_id, cell["turn_id"], cell["conversation_id"]))
             if not cases:
-                err(422, "invalid", "Run has no finished cells to judge yet.")
+                err(422, "invalid", "Evaluation has no finished cells to judge yet.")
         else:
             for cid in case_ids:
                 c = latest_case(cid)
@@ -1832,16 +1832,16 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 source = unj(c["source"]) or {}
                 cases.append((cid, None, source.get("turn_id"), source.get("conversation_id")))
 
-        # Judging a run is tree-scoped; judging standalone eval cases is not
+        # Judging an evaluation is tree-scoped; judging standalone eval cases is not
         # (they are global resources, feature-spec.md:111) — its events then
         # reach holders of every tree only (Broker docstring).
         parent = engine.create_task("judge", total=len(cases),
-                                    payload={"result": {"run_id": run_id}},
-                                    tree_id=run_tree)
+                                    payload={"result": {"evaluation_id": evaluation_id}},
+                                    tree_id=evaluation_tree)
         register_live(parent["id"], request)
         for i, (case_id, rid_, turn_id, conversation_id) in enumerate(cases, start=1):
             engine.create_task("judge", parent_id=parent["id"], payload={
-                "kind": "judge_case", "case_id": case_id, "run_id": rid_,
+                "kind": "judge_case", "case_id": case_id, "evaluation_id": rid_,
                 "turn_id": turn_id, "conversation_id": conversation_id,
                 "judge_model": body["judge_model"], "rubric_id": rubric["id"],
                 "rubric_version": rubric["version"], "rubric_name": rubric["name"],
@@ -1851,12 +1851,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return JSONResponse({"task_id": parent["id"]}, status_code=202)
 
     @app.get("/eval/judgments")
-    async def list_judgments(case_id: str | None = None, run_id: str | None = None,
+    async def list_judgments(case_id: str | None = None, evaluation_id: str | None = None,
                              rubric_id: str | None = None, turn_id: str | None = None,
                              conversation_id: str | None = None,
                              page: int = 1, page_size: int = 50):
         where, params = ["1=1"], []
-        for col, val in (("case_id", case_id), ("run_id", run_id), ("rubric_id", rubric_id),
+        for col, val in (("case_id", case_id), ("evaluation_id", evaluation_id), ("rubric_id", rubric_id),
                          ("turn_id", turn_id), ("conversation_id", conversation_id)):
             if val:
                 where.append(f"{col} = ?")
@@ -1868,27 +1868,27 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             [*params, page_size, (page - 1) * page_size])
         return [judgment_dict(r) for r in rows]
 
-    @app.get("/eval/runs/{runId}/summary")
-    async def run_summary(runId: str):
-        if not db.one("SELECT 1 AS x FROM runs WHERE id = ?", (runId,)):
-            err(404, "not_found", f"Run '{runId}' not found.")
+    @app.get("/eval/evaluations/{evaluationId}/summary")
+    async def evaluation_summary(evaluationId: str):
+        if not db.one("SELECT 1 AS x FROM evaluations WHERE id = ?", (evaluationId,)):
+            err(404, "not_found", f"Evaluation '{evaluationId}' not found.")
         groups = db.all(
             "SELECT rubric_id, rubric_version, AVG(score) AS mean, COUNT(*) AS count"
-            " FROM judgments WHERE run_id = ? AND type = 'llm'"
-            " GROUP BY rubric_id, rubric_version", (runId,))
+            " FROM judgments WHERE evaluation_id = ? AND type = 'llm'"
+            " GROUP BY rubric_id, rubric_version", (evaluationId,))
         rubrics = []
         for g in groups:
             scores = db.all(
-                "SELECT score FROM judgments WHERE run_id = ? AND type = 'llm'"
+                "SELECT score FROM judgments WHERE evaluation_id = ? AND type = 'llm'"
                 " AND rubric_id = ? AND rubric_version = ?",
-                (runId, g["rubric_id"], g["rubric_version"]))
+                (evaluationId, g["rubric_id"], g["rubric_version"]))
             distribution = [0, 0, 0, 0, 0]
             for s in scores:
                 distribution[min(int(s["score"] * 5), 4)] += 1
             rubrics.append({"rubric_id": g["rubric_id"], "rubric_version": g["rubric_version"],
                             "mean": round(g["mean"], 4), "count": g["count"],
                             "distribution": distribution})
-        return {"run_id": runId, "rubrics": rubrics}
+        return {"evaluation_id": evaluationId, "rubrics": rubrics}
 
     # ----------------------------------------------------------- casebooks
     # openapi.yaml:1643-1830. "Collect noteworthy turns into Casebooks with one
@@ -1981,7 +1981,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.delete("/casebooks/{casebookId}", status_code=204)
     async def delete_casebook(casebookId: str):
         """"Removes the casebook and its item REFERENCES only: the referenced
-        turns/conversations, and any eval sets or runs already materialized
+        turns/conversations, and any eval sets or evaluations already materialized
         from this casebook, are untouched" (openapi.yaml:1723-1726)."""
         need_casebook(casebookId)
         db.run("DELETE FROM casebook_items WHERE casebook_id = ?", (casebookId,))
@@ -2053,7 +2053,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """"the server reuses the existing eval case for that turn or creates
         one sourced from it (same semantics as POST /eval/cases with source)"
         (openapi.yaml:1785-1787). Lookup is on the stored source triple, so a
-        case created here, by POST /eval/cases, or by run judging all count as
+        case created here, by POST /eval/cases, or by evaluation judging all count as
         the same case — a casebook never duplicates one."""
         source = {"tree": item["tree"], "conversation_id": item["conversation_id"],
                   "turn_id": item["turn_id"]}
@@ -2113,10 +2113,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def replay_casebook(casebookId: str, request: Request):
         """openapi.yaml:1804-1830 — "Replays every referenced turn under the
         given configs — same engine as POST /agenttrees/{tree}/replay … A
-        casebook may reference several trees, so the response carries one run
+        casebook may reference several trees, so the response carries one
         per tree touched, all children of a single parent task".
 
-        Fan-out shape: ONE parent task; per tree one run whose columns are
+        Fan-out shape: ONE parent task; per tree one evaluation whose columns are
         baseline + one per config, and one replay_unit child per (tree,
         config) — the same children mock/engine.py already drives for
         /agenttrees/{tree}/replay, so there is no second replay path."""
@@ -2171,39 +2171,39 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                     tree_id=trees[0] if len(trees) == 1 else None)
         register_live(parent["id"], request)
 
-        runs = []
+        evaluations = []
         for ti, tree in enumerate(trees, start=1):
             rows = by_tree[tree]
             for idx, row in enumerate(rows):
                 row["row_idx"] = idx
-            run_id = build_run(tree, parent["id"],
+            evaluation_id = build_evaluation(tree, parent["id"],
                                f"Casebook · {len(configs)} config(s)", columns, rows)
             for row in rows:
-                db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status, content,"
+                db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
                        " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
-                       (run_id, row["row_idx"], row["content"], row["conversation_id"],
+                       (evaluation_id, row["row_idx"], row["content"], row["conversation_id"],
                         row["turn_id"]))
                 for col_idx in range(1, len(columns)):
-                    db.run("INSERT INTO run_cells (run_id, row_idx, col_idx, status)"
-                           " VALUES (?, ?, ?, 'pending')", (run_id, row["row_idx"], col_idx))
+                    db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status)"
+                           " VALUES (?, ?, ?, 'pending')", (evaluation_id, row["row_idx"], col_idx))
             agent_row = root_agent(tree)
             for col_idx, cfg in enumerate(configs, start=1):
                 cfg_agent = (db.one("SELECT * FROM agents WHERE id = ?", (cfg.get("agent_id"),))
                              if cfg.get("agent_id") else None) or agent_row
                 engine.create_task("replay", parent_id=parent["id"], payload={
-                    "kind": "replay_unit", "run_id": run_id, "tree_id": tree,
+                    "kind": "replay_unit", "evaluation_id": evaluation_id, "tree_id": tree,
                     "col_idx": col_idx, "config": cfg,
                     "agent": cfg_agent["name"] if cfg_agent else "assistant",
                     "conv_index": ti, "conv_total": len(trees),
                     "rows": [{"row_idx": r["row_idx"], "prompt": r["prompt"],
                               "envelope": r.get("envelope")} for r in rows],
                 })
-            runs.append({"tree_id": tree, "run_id": run_id})
+            evaluations.append({"tree_id": tree, "evaluation_id": evaluation_id})
 
         db.run("UPDATE tasks SET payload = ? WHERE id = ?",
-               (j({"result": {"runs": runs}}), parent["id"]))
+               (j({"result": {"evaluations": evaluations}}), parent["id"]))
         engine.spawn(engine.run_batch(parent["id"]))
-        return JSONResponse({"task_id": parent["id"], "runs": runs}, status_code=202)
+        return JSONResponse({"task_id": parent["id"], "evaluations": evaluations}, status_code=202)
 
     # ------------------------------------------------- static SPA (last!)
     # The built Vite bundle, when present, mounts AFTER every API

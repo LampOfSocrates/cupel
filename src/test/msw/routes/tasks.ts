@@ -13,12 +13,12 @@ function seedTasks(): Task[] {
   return [
     {
       // Running replay batch with a failed child → partial failure
-      // (feature-spec.md:106); result.run_id feeds "View results".
+      // (feature-spec.md:106); result.evaluation_id feeds "View results".
       id: "task-seed-replay",
       type: "replay",
       status: "running",
       progress: { done: 1, total: 3, stage: "Conversation 2/3 · turn 1/2" },
-      result: { run_id: "run-old-1" },
+      result: { evaluation_id: "evaluation-old-1" },
       created_at: "2026-08-04T10:05:00Z",
       started_at: "2026-08-04T10:05:01Z",
       children: [

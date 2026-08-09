@@ -1,13 +1,13 @@
 import { memo, type ReactNode } from "react";
 import { Badge, Group, Loader, Table, Text } from "@mantine/core";
 import { Markdown } from "../lib/markdown";
-import type { Run, RunCell, RunRow } from "../api/types";
+import type { Evaluation, Result, EvaluationRow } from "../api/types";
 
-// Runs step 3 — comparison grid (feature-spec.md:49): "baseline column + one
-// column per run config, row per turn". Run.columns index 0 = baseline
+// Evaluations step 3 — comparison grid (feature-spec.md:49): "baseline column + one
+// column per run config, row per turn". Evaluation.columns index 0 = baseline
 // (openapi.yaml:1621); cells "fill incrementally" (openapi.yaml:1642,
-// feature-spec.md:108) — this is a PURE render of whatever Run it's given, so
-// live fill is just re-rendering with the updated Run.
+// feature-spec.md:108) — this is a PURE render of whatever Evaluation it's given, so
+// live fill is just re-rendering with the updated Evaluation.
 //
 // Annotation slot (feature-spec.md:134 "pluggable annotation: thumbs and/or
 // scores"): a render prop invoked for DONE cells only.
@@ -15,34 +15,34 @@ import type { Run, RunCell, RunRow } from "../api/types";
 export interface CellContext {
   rowIndex: number;
   columnIndex: number;
-  source: RunRow["source"];
+  source: EvaluationRow["source"];
 }
 
 interface Props {
-  run: Run;
-  renderAnnotation?: (cell: RunCell, ctx: CellContext) => ReactNode;
+  evaluation: Evaluation;
+  renderAnnotation?: (cell: Result, ctx: CellContext) => ReactNode;
   // Cell-action slot, separate from renderAnnotation on purpose: the
   // annotation slot is for thumbs/score badges, the
   // action slot for per-cell affordances — first user is the ⑂ re-fire on
   // done cells (sketch 04 "+ Re-run this turn with… POST …/replay/turn";
   // feature-spec.md:72 "'re-run this turn with…' on any results cell").
   // Invoked for DONE cells only, like renderAnnotation.
-  renderCellAction?: (cell: RunCell, ctx: CellContext) => ReactNode;
+  renderCellAction?: (cell: Result, ctx: CellContext) => ReactNode;
 }
 
 interface CellProps {
-  cell: RunCell;
+  cell: Result;
   ctx: CellContext;
   renderAnnotation?: Props["renderAnnotation"];
   renderCellAction?: Props["renderCellAction"];
 }
 
-// A live-filling grid refetches the WHOLE Run every ~300 ms
+// A live-filling grid refetches the WHOLE Evaluation every ~300 ms
 // (EvaluationPage.tsx:239, the documented baseline), so every cell object
 // arrives with a fresh identity even when nothing about it changed — a default
 // shallow compare would never hit, and 360 unchanged cells would re-parse
 // their markdown three times a second (docs/review-2026-08-05.md A6). Compare
-// RunCell by value (openapi.yaml:1644-1664) plus the ctx primitives.
+// Result by value (openapi.yaml:1644-1664) plus the ctx primitives.
 // The render props must be referentially stable (useCallback at the call site)
 // for this to bite.
 function sameCell(a: CellProps, b: CellProps): boolean {
@@ -100,14 +100,14 @@ const CellContent = memo(function CellContent({
   }
 }, sameCell);
 
-export function ComparisonView({ run, renderAnnotation, renderCellAction }: Props) {
+export function ComparisonView({ evaluation, renderAnnotation, renderCellAction }: Props) {
   return (
     <Table.ScrollContainer minWidth={400}>
       <Table verticalSpacing="xs" data-testid="comparison-grid">
         <Table.Thead>
           <Table.Tr>
             <Table.Th />
-            {run.columns.map((col, i) => (
+            {evaluation.columns.map((col, i) => (
               <Table.Th key={i}>
                 <Group gap={6} wrap="nowrap">
                   <Text size="xs" fw={600}>
@@ -124,7 +124,7 @@ export function ComparisonView({ run, renderAnnotation, renderCellAction }: Prop
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {run.rows.map((row, rowIndex) => (
+          {evaluation.rows.map((row, rowIndex) => (
             <Table.Tr key={row.source.turn_id}>
               <Table.Td>
                 <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>

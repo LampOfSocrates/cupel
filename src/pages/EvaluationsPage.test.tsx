@@ -7,48 +7,48 @@ import {
   judgeRequests,
   lastSelectionPuts,
   mockLastSelections,
-  mockRuns,
+  mockEvaluations,
   mockSnapshots,
   replayRequests,
   rubricRequests,
-  runListRequests,
+  evaluationListRequests,
   taskStreamRig,
 } from "../test/msw/handlers";
 import { EvaluationsPage } from "./EvaluationsPage";
 import { EvaluationPage } from "./EvaluationPage";
 
-// Contract under test — the Runs stepper (cupel-phases.md:19: "pick (sketch
+// Contract under test — the Evaluations stepper (cupel-phases.md:19: "pick (sketch
 // 02), configure (sketch 03), compare (sketch 04)"):
-// - GET /agenttrees/{tree}/runs "Runs, newest first" (openapi.yaml:663)
+// - GET /agenttrees/{tree}/evaluations "Evaluations, newest first" (openapi.yaml:663)
 // - ReplayRequest {selection, configs, context_policy} (openapi.yaml:
 //   1516-1546) — selection shapes preserved verbatim ("Absent/null = whole
 //   conversation; present = just these turns", :1258), configs "One grid
 //   column per config" (:1531-1532), context_policy pinned frozen by the
 //   client (:1540-1546)
-// - 202 "run row appears immediately and fills incrementally" (:617) →
+// - 202 "evaluation row appears immediately and fills incrementally" (:617) →
 //   navigate to the detail grid.
 
-function renderRuns(route = "/evaluations", state?: unknown) {
+function renderEvaluations(route = "/evaluations", state?: unknown) {
   return renderApp(
     <Routes>
       <Route path="/evaluations" element={<EvaluationsPage />} />
-      <Route path="/evaluations/:runId" element={<EvaluationPage />} />
+      <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
     </Routes>,
     { route, state },
   );
 }
 
 describe("EvaluationsPage — landing", () => {
-  it("lists runs from GET runs and routes to the detail on row click", async () => {
+  it("lists evaluations from GET evaluations and routes to the detail on row click", async () => {
     const user = userEvent.setup();
-    renderRuns();
-    // seeded fixture run-old-1, label from the summary shape
+    renderEvaluations();
+    // seeded fixture evaluation-old-1, label from the summary shape
     await screen.findByText("Replay · 1 config(s)");
-    expect(runListRequests).toEqual(["agent1"]);
+    expect(evaluationListRequests).toEqual(["agent1"]);
 
     await user.click(screen.getByRole("button", { name: /Open Replay · 1 config/ }));
     // detail route renders the stored grid (baseline + v3 columns)
-    await screen.findByText("Evaluation run-old-1");
+    await screen.findByText("Evaluation evaluation-old-1");
     expect(screen.getByText("v3")).toBeInTheDocument();
     expect(screen.getByTestId("cell-0-1")).toHaveAttribute("data-status", "done");
   });
@@ -57,7 +57,7 @@ describe("EvaluationsPage — landing", () => {
 describe("EvaluationsPage — stepper", () => {
   it("gates Configure until the selection is non-empty", async () => {
     const user = userEvent.setup();
-    renderRuns();
+    renderEvaluations();
     await user.click(await screen.findByRole("button", { name: "New evaluation" }));
 
     // Step 1: picker with server-fed conversations
@@ -75,7 +75,7 @@ describe("EvaluationsPage — stepper", () => {
 
   it("queues a replay whose POST body matches the contract exactly, then navigates to the pending grid", async () => {
     const user = userEvent.setup();
-    renderRuns();
+    renderEvaluations();
     await user.click(await screen.findByRole("button", { name: "New evaluation" }));
 
     // Select: a single turn of c1 (expand → tick t2) + all of c2 — both
@@ -113,9 +113,9 @@ describe("EvaluationsPage — stepper", () => {
       context_policy: "frozen",
     });
 
-    // 202 → navigate to the run detail: initial grid with baseline done and
+    // 202 → navigate to the evaluation detail: initial grid with baseline done and
     // one pending cell per config (openapi.yaml:617).
-    await screen.findByText("Evaluation run-1");
+    await screen.findByText("Evaluation evaluation-1");
     expect(screen.getByTestId("cell-0-0")).toHaveAttribute("data-status", "done");
     expect(screen.getByTestId("cell-0-1")).toHaveAttribute("data-status", "pending");
     expect(screen.getByTestId("cell-0-2")).toHaveAttribute("data-status", "pending");
@@ -127,11 +127,11 @@ describe("EvaluationsPage — stepper", () => {
   // Judge trigger — the contract's judging path is POST /eval/judge
   // (openapi.yaml:931-954); the queued replay config carries `judge` as the
   // UI's intent (JudgeConfig, openapi.yaml:1508-1514) and the CLIENT fires
-  // the judge once the run detail page observes the run reach 'done'
+  // the judge once the evaluation detail page observes the evaluation reach 'done'
   // (feature-spec.md:61 "'Judge this evaluation' on any finished run").
-  it("judge config on the queued run fires POST /eval/judge once the run reaches done", async () => {
+  it("judge config on the queued evaluation fires POST /eval/judge once the evaluation reaches done", async () => {
     const user = userEvent.setup();
-    renderRuns();
+    renderEvaluations();
     await user.click(await screen.findByRole("button", { name: "New evaluation" }));
     await screen.findByText("Refund escalation");
     await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
@@ -147,7 +147,7 @@ describe("EvaluationsPage — stepper", () => {
     expect(rubricRequests.length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Queue" }));
-    await screen.findByText("Evaluation run-1");
+    await screen.findByText("Evaluation evaluation-1");
     // the queued config records the judge intent…
     expect(replayRequests[0].body.configs).toEqual([
       { judge: { judge_model: "claude-haiku-4-5", rubric_id: "rub-help" } },
@@ -158,10 +158,10 @@ describe("EvaluationsPage — stepper", () => {
     // run completes server-side → task frame → refetch observes the done
     // transition → judge fired exactly once with the contract body
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
-    const run = mockRuns.find((r) => r.id === "run-1")!;
-    run.status = "done";
+    const evaluation = mockEvaluations.find((r) => r.id === "evaluation-1")!;
+    evaluation.status = "done";
     taskStreamRig.emit("task", {
-      id: run.task_id,
+      id: evaluation.task_id,
       type: "replay",
       status: "done",
       progress: { done: 1, total: 1 },
@@ -170,16 +170,16 @@ describe("EvaluationsPage — stepper", () => {
 
     await waitFor(() => expect(judgeRequests).toHaveLength(1));
     expect(judgeRequests[0]).toEqual({
-      run_id: "run-1",
+      evaluation_id: "evaluation-1",
       judge_model: "claude-haiku-4-5",
       rubric_id: "rub-help",
     });
-    // 202 task_id → subtle judging state on the run header
+    // 202 task_id → subtle judging state on the evaluation header
     await screen.findByTestId("judging-badge");
   });
 });
 
-// Test-in-Runs arrival + per-agent last-selection:
+// Test-as-evaluation arrival + per-agent last-selection:
 // - GET .../last-selection "Remembered selection (empty items = first-time
 //   testing)" (openapi.yaml:309-311); PUT "Remember the conversation
 //   selection for this agent" (:315-317).
@@ -210,7 +210,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/evaluations", arrival);
+    renderEvaluations("/evaluations", arrival);
 
     // two taps: Test as evaluation already happened, Queue is immediately reachable
     expect(await screen.findByTestId("config-0")).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
 
   it('empty last-selection ("first-time testing") → lands on Pick', async () => {
     seedSnapshot();
-    renderRuns("/evaluations", arrival);
+    renderEvaluations("/evaluations", arrival);
     // picker shown, nothing preselected, Configure gated as usual
     expect(
       await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
@@ -240,7 +240,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/evaluations", arrival);
+    renderEvaluations("/evaluations", arrival);
 
     await user.click(await screen.findByRole("button", { name: "Queue" }));
     await waitFor(() => expect(replayRequests).toHaveLength(1));
@@ -256,9 +256,9 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
       context_policy: "frozen",
     });
 
-    // run detail: the snapshot column label comes from the server ("v1-draft
+    // evaluation detail: the snapshot column label comes from the server ("v1-draft
     // (a3f9)" until promotion relabels it — server-side, mock/main.py:257-262)
-    await screen.findByText("Evaluation run-1");
+    await screen.findByText("Evaluation evaluation-1");
     expect(screen.getByText("v1-draft (a3f9)")).toBeInTheDocument();
   });
 
@@ -266,7 +266,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/evaluations", arrival);
+    renderEvaluations("/evaluations", arrival);
     await screen.findByTestId("config-0");
 
     // widen the preloaded selection, then queue
@@ -289,10 +289,10 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
 });
 
 // "Existing conversations stay READABLE (read-only banner)"
-// (feature-spec.md:20) — the runs list of a disabled tree still loads; only
+// (feature-spec.md:20) — the evaluations list of a disabled tree still loads; only
 // NEW work is blocked (409 tree_disabled, surfaced by the central mapping).
 describe("Disabled tree (P2-T07c)", () => {
-  it("shows the read-only banner above a still-readable runs list", async () => {
+  it("shows the read-only banner above a still-readable evaluations list", async () => {
     renderApp(
       <Routes>
         <Route path="/evaluations" element={<EvaluationsPage />} />
@@ -312,7 +312,7 @@ describe("Disabled tree (P2-T07c)", () => {
   });
 
   it("no banner while the tree is enabled", async () => {
-    renderRuns();
+    renderEvaluations();
     expect(await screen.findByText(/Replay · 1 config/)).toBeInTheDocument();
     expect(screen.queryByTestId("read-only-banner")).not.toBeInTheDocument();
   });

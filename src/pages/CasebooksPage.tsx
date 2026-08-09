@@ -52,9 +52,9 @@ import type {
 //      "not previewed" note. The screen says why rather than hiding it.
 //
 // Actions route into existing machinery: "Create eval set" lands in the Eval
-// workbench's set list, "Replay" enqueues one run per tree under a single
-// parent task (openapi.yaml:3320-3327) and links to the queue plus each run.
-// Runs are tree-scoped and the app has one active tree, so a run in another
+// workbench's set list, "Replay" enqueues one evaluation per tree under a single
+// parent task (openapi.yaml:3320-3327) and links to the queue plus each evaluation.
+// Evaluations are tree-scoped and the app has one active tree, so an evaluation in another
 // tree is named but not linked — stated on the screen, never faked.
 
 const CONVERSATION_FETCH_LIMIT = 25;
@@ -390,17 +390,17 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
           <Alert color="blue" mt="xs" data-testid="casebook-replay-accepted">
             <Stack gap={2}>
               <Text size="xs">
-                Enqueued {replay.runs.length} evaluation{replay.runs.length === 1 ? "" : "s"} under one
+                Enqueued {replay.evaluations.length} evaluation{replay.evaluations.length === 1 ? "" : "s"} under one
                 task — <Link to="/queue">watch the queue</Link>.
               </Text>
-              {replay.runs.map((r) => (
-                <Text size="xs" key={r.run_id}>
+              {replay.evaluations.map((r) => (
+                <Text size="xs" key={r.evaluation_id}>
                   {r.tree_id}:{" "}
                   {r.tree_id === activeTree ? (
-                    <Link to={`/evaluations/${r.run_id}`}>{r.run_id}</Link>
+                    <Link to={`/evaluations/${r.evaluation_id}`}>{r.evaluation_id}</Link>
                   ) : (
                     <>
-                      {r.run_id} (opens when {r.tree_id} is the active tree — evaluation pages
+                      {r.evaluation_id} (opens when {r.tree_id} is the active tree — evaluation pages
                       are tree-scoped)
                     </>
                   )}

@@ -21,7 +21,7 @@ restart, so the flag reads as "make sure this backend has data", and seeding
 is skipped whenever the database already holds conversations. Otherwise every
 restart would layer a fresh seed on top of real demo data: the generator's
 idempotency covers chats (deterministic client_message_id) and skips forks /
-replays / judgments by check-before-create, but runs and judgments can still
+replays / judgments by check-before-create, but evaluations and judgments can still
 accrete — which was tolerable only while the disk was ephemeral. The
 deterministic seed is unchanged for the empty case, so a first boot (or a
 boot after a failed restore) still lands on the same dataset as before.

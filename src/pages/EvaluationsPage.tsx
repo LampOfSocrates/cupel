@@ -12,23 +12,23 @@ import {
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Agent, Rubric, RunConfig, SelectionItem } from "../api/types";
+import type { Agent, Rubric, Variant, SelectionItem } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
 
-// Runs 3-step flow (cupel-phases.md:19): "Replay stored conversations
+// Evaluations 3-step flow (cupel-phases.md:19): "Replay stored conversations
 // — or a single turn — under a different instruction version, model, or
-// endpoint — using the Runs stepper: pick (sketch 02), configure (sketch 03),
+// endpoint — using the Evaluations stepper: pick (sketch 02), configure (sketch 03),
 // compare (sketch 04)". Engine (feature-spec.md:41): "take stored
 // conversations or individual turns, re-execute them under a changed config…
 // queue the work, compare outputs."
 //
-// Landing = RunsList of GET /agenttrees/{tree}/runs ("Runs, newest first",
-// openapi.yaml:663) + "New run" opening the stepper; row click → the run
+// Landing = RunsList of GET /agenttrees/{tree}/evaluations ("Evaluations, newest first",
+// openapi.yaml:663) + "New run" opening the stepper; row click → the evaluation
 // detail route (EvaluationPage — step 3 doubles as the results view for old
-// runs).
+// evaluations).
 //
 // Step 2 supports MULTIPLE configs because the grid is "baseline column + one
 // column per run config" (feature-spec.md:49; ReplayRequest.configs[] "One
@@ -41,15 +41,15 @@ import { useApp } from "../AppContext";
 // by default): toggle on → judge model + rubric fields appear") — rubric
 // dropdown fed by GET /eval/rubrics (feature-spec.md:226 "Evaluations · 2 Configure |
 // … GET /eval/rubrics"), judge model from the session models cache. The judge
-// FIRES from EvaluationPage when the run reaches done (see its judge-trigger
+// FIRES from EvaluationPage when the evaluation reaches done (see its judge-trigger
 // note) — queueing here only records the intent in the config.
 //
 // Scope guards (never build ahead, cupel-phases.md:158):
 // - endpoints hidden (showEndpoints defaults false).
-// - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
+// - baseline_evaluation_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 //
-// Test-in-Runs arrival (cupel-phases.md:18 "editor → Evaluations flow
+// Test-as-evaluation arrival (cupel-phases.md:18 "editor → Evaluations flow
 // (sketches 06 → 03)"): the editor navigates here with router state
 // {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set
@@ -62,7 +62,7 @@ import { useApp } from "../AppContext";
 //   the snapshot's label ("v3-draft (a3f1)", feature-spec.md:86).
 // - Queue PUTs last-selection with the selection ACTUALLY queued (preloaded
 //   or user-changed) before POSTing the replay, so the next test remembers it.
-// A fresh "New run" clears the flow — the PUT belongs to Test-in-Runs only.
+// A fresh "New run" clears the flow — the PUT belongs to Test-as-evaluation only.
 
 interface TestInRunsState {
   agent_id: string;
@@ -70,12 +70,12 @@ interface TestInRunsState {
   snapshot_label: string;
 }
 
-/** Router state this page can arrive with — the editor's Test-in-Runs handoff. */
+/** Router state this page can arrive with — the editor's Test-as-evaluation handoff. */
 interface Handoff {
   testInRuns?: TestInRunsState;
 }
 
-const emptyConfig = (): RunConfig => ({});
+const emptyConfig = (): Variant => ({});
 
 // One reducer owns everything the stepper navigates by. Router state has a
 // single reader — the `arrive` case, which both seeds the initial state and
@@ -85,28 +85,28 @@ interface NavState {
   /** location.key already folded in; null before the first arrival. */
   navKey: string | null;
   mode: "list" | "stepper";
-  /** 0 = Select, 1 = Configure; step 2 (Results) lives on the run-detail route. */
+  /** 0 = Select, 1 = Configure; step 2 (Results) lives on the evaluation-detail route. */
   step: number;
   /** Waiting on GET last-selection before the stepper knows its landing step. */
   prefilling: boolean;
   testFlow: TestInRunsState | null;
   selection: SelectionItem[];
-  configs: RunConfig[];
+  configs: Variant[];
 }
 
 type NavAction =
   | { type: "arrive"; key: string; handoff: Handoff | null }
   | { type: "prefilled"; items: SelectionItem[] }
   | { type: "prefillFailed" }
-  | { type: "newRun" }
+  | { type: "newEvaluation" }
   | { type: "cancel" }
   | { type: "goToStep"; step: number }
   | { type: "select"; items: SelectionItem[] }
   | { type: "addConfig" }
   | { type: "removeConfig"; index: number }
-  | { type: "updateConfig"; index: number; config: RunConfig };
+  | { type: "updateConfig"; index: number; config: Variant };
 
-// A fresh stepper entry drops any Test-in-Runs handoff: its config prefill and
+// A fresh stepper entry drops any Test-as-evaluation handoff: its config prefill and
 // its Queue-time last-selection PUT belong to that flow only.
 const freshStepper = (state: NavState): NavState => ({
   ...state,
@@ -145,7 +145,7 @@ function navReducer(state: NavState, action: NavAction): NavState {
       };
     case "prefillFailed":
       return { ...state, prefilling: false };
-    case "newRun":
+    case "newEvaluation":
       return freshStepper(state);
     case "cancel":
       return { ...state, mode: "list" };
@@ -194,7 +194,7 @@ export function EvaluationsPage() {
   );
   const { mode, step, prefilling, testFlow, selection, configs } = nav;
 
-  const { data: runs, error: runsError } = useAsync(() => api.runs(tree), [tree]);
+  const { data: evaluations, error: evaluationsError } = useAsync(() => api.evaluations(tree), [tree]);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
@@ -238,7 +238,7 @@ export function EvaluationsPage() {
     [tree],
   );
 
-  // Test-in-Runs prefill: fetch the per-agent remembered selection on arrival
+  // Test-as-evaluation prefill: fetch the per-agent remembered selection on arrival
   // (GET .../last-selection, openapi.yaml:295-313).
   useEffect(() => {
     if (!testFlow) return;
@@ -259,7 +259,7 @@ export function EvaluationsPage() {
     };
   }, [testFlow, tree, ensureVersions]);
 
-  // Arrivals — fires for every location change, so a Test-in-Runs handoff
+  // Arrivals — fires for every location change, so a Test-as-evaluation handoff
   // reaching a page that is ALREADY mounted still applies; the reducer drops a
   // key it already folded in.
   useEffect(() => {
@@ -270,23 +270,23 @@ export function EvaluationsPage() {
     });
   }, [location]);
 
-  const startStepper = () => dispatch({ type: "newRun" });
+  const startStepper = () => dispatch({ type: "newEvaluation" });
 
-  const queueRun = async () => {
+  const queueEvaluation = async () => {
     setQueueing(true);
     try {
-      // Test-in-Runs: remember the selection ACTUALLY queued for this agent
+      // Test-as-evaluation: remember the selection ACTUALLY queued for this agent
       // before enqueueing (PUT .../last-selection, openapi.yaml:315-332;
       // feature-spec.md:87 "Repeat testing = Test as evaluation → Queue, two
       // taps").
       if (testFlow) {
         await api.putLastSelection(tree, testFlow.agent_id, { items: selection });
       }
-      // POST /agenttrees/{tree}/replay → "202: Work enqueued; run row appears
+      // POST /agenttrees/{tree}/replay → "202: Work enqueued; evaluation row appears
       // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
       // straight to the detail route, which owns the live fill.
       const accepted = await api.replay(tree, { selection, configs });
-      navigate(`/evaluations/${accepted.run_id}`);
+      navigate(`/evaluations/${accepted.evaluation_id}`);
     } catch (e) {
       setError((e as Error).message);
       setQueueing(false);
@@ -302,18 +302,18 @@ export function EvaluationsPage() {
             New evaluation
           </Button>
         </Group>
-        {/* A disabled tree keeps its runs readable while queueing new
+        {/* A disabled tree keeps its evaluations readable while queueing new
             work 409s (feature-spec.md:20 "read-only banner"). */}
         <ReadOnlyTreeBanner />
-        {(runsError ?? error) && (
+        {(evaluationsError ?? error) && (
           <Alert color="red" title="Error">
-            {runsError?.message ?? error}
+            {evaluationsError?.message ?? error}
           </Alert>
         )}
-        {runs == null ? (
+        {evaluations == null ? (
           <Loader size="sm" mx="auto" my="md" />
         ) : (
-          <RunsList runs={runs} onOpen={(run) => navigate(`/evaluations/${run.id}`)} />
+          <RunsList evaluations={evaluations} onOpen={(evaluation) => navigate(`/evaluations/${evaluation.id}`)} />
         )}
       </Stack>
     );
@@ -341,7 +341,7 @@ export function EvaluationsPage() {
               search/filter/multi-select conversations, expandable to pick
               individual turns" — server-side search inside the picker.
               initialSelection restores the current picks (remembered
-              last-selection on Test-in-Runs arrival, or Back from Configure). */}
+              last-selection on Test-as-evaluation arrival, or Back from Configure). */}
           <ConversationPicker
             tree={tree}
             onSelectionChange={(items) => dispatch({ type: "select", items })}
@@ -364,7 +364,7 @@ export function EvaluationsPage() {
 
       {!prefilling && step === 1 && (
         <>
-          {/* Step 2 Configure (feature-spec.md:45): "Run Config drawer …
+          {/* Step 2 Configure (feature-spec.md:45): "Variant drawer …
               prefilled from the baseline so changing one axis = one field".
               baseline = {} = the stored originals / live version
               (openapi.yaml:1489 "neither = the live version"). */}
@@ -420,7 +420,7 @@ export function EvaluationsPage() {
             <Button variant="default" size="xs" onClick={() => dispatch({ type: "goToStep", step: 0 })}>
               Back
             </Button>
-            <Button size="xs" loading={queueing} onClick={() => void queueRun()}>
+            <Button size="xs" loading={queueing} onClick={() => void queueEvaluation()}>
               Queue
             </Button>
           </Group>

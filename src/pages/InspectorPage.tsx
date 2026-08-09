@@ -29,7 +29,7 @@ import { product } from "../lib/product";
 import type { CasebookItemCreate } from "../api/types";
 
 // Inspector (UNSKETCHED — derived from the app's existing dense visual
-// language per cupel-phases.md:95: the Settings → Members table and the runs
+// language per cupel-phases.md:95: the Settings → Members table and the evaluations
 // grid are the references. Paper blocks, size-xs controls, one dense Table).
 //
 // cupel-phases.md:78: "Inspect every conversation in the system as a super

@@ -44,8 +44,8 @@ export const PHASE1_PATHS = [
   "/feedback",
   "/agenttrees/{tree}/replay",
   "/agenttrees/{tree}/replay/turn",
-  "/agenttrees/{tree}/runs",
-  "/agenttrees/{tree}/runs/{runId}",
+  "/agenttrees/{tree}/evaluations",
+  "/agenttrees/{tree}/evaluations/{evaluationId}",
   "/agenttrees/{tree}/turns/{turnId}/trace",
   "/spans/{spanId}/payload",
   "/tasks",
@@ -56,7 +56,7 @@ export const PHASE1_PATHS = [
   "/eval/cases/{caseId}",
   "/eval/judge",
   "/eval/judgments",
-  "/eval/runs/{runId}/summary",
+  "/eval/evaluations/{evaluationId}/summary",
 ];
 
 // v0.3.0 added Phase-2 METHODS onto Phase-1 paths in one place: the versioned

@@ -26,7 +26,7 @@ export function pushHumanJudgment(
   const judgment: Judgment = {
     id: `j-${++counters.judgment}`,
     case_id: null,
-    run_id: null,
+    evaluation_id: null,
     turn_id,
     conversation_id,
     type: "human",
@@ -50,7 +50,7 @@ export function pushLlmJudgment(
 ): Judgment {
   const judgment: Judgment = {
     id: `j-${++counters.judgment}`,
-    run_id: null,
+    evaluation_id: null,
     turn_id: null,
     conversation_id: null,
     type: "llm",
@@ -75,7 +75,7 @@ export const judgmentHandlers = [
     const judgment: Judgment = {
       id: `j-fb-${++counters.judgment}`,
       case_id: null,
-      run_id: null,
+      evaluation_id: null,
       turn_id: body.message_id,
       // DELIBERATE DIVERGENCE (kept): the real mock 404s an unknown
       // message_id (mock/main.py:1089). MSW accepts it with a null
@@ -107,7 +107,7 @@ export const judgmentHandlers = [
     const url = new URL(request.url);
     judgmentRequests.push(url);
     let items = mockJudgments;
-    for (const key of ["case_id", "run_id", "rubric_id", "turn_id", "conversation_id"] as const) {
+    for (const key of ["case_id", "evaluation_id", "rubric_id", "turn_id", "conversation_id"] as const) {
       const value = url.searchParams.get(key);
       if (value) items = items.filter((j) => j[key] === value);
     }

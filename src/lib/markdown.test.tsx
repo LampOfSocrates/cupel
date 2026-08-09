@@ -7,7 +7,7 @@ import { Markdown } from "./markdown";
 
 // docs/review-2026-08-05.md A4: `marked()` + `DOMPurify.sanitize()` ran on
 // every render, so one streamed token re-parsed every turn in the transcript
-// and every cell in a run grid ("~100–500 ms of main-thread work per second on
+// and every cell in an evaluation grid ("~100–500 ms of main-thread work per second on
 // a 30-turn conversation"). The component is memoized and the parse is keyed on
 // [content]; these tests pin that the parser is invoked per CONTENT CHANGE, not
 // per render.

@@ -221,6 +221,11 @@ a config flag.
 
 ### 2.4 Request shape `[V — from `ag_ui.core.RunAgentInput`, 0.1.19]`
 
+> **Naming, to avoid a false match:** every `run_id` / `parent_run_id` / `runId` on this page
+> is **AG-UI's** field — one agent invocation in someone else's protocol. It is unrelated to
+> what Cupel used to call a run: that noun is now `Evaluation` and its field is
+> `evaluation_id` (item 7). AG-UI's `runId` maps to our `task_id`, not to `evaluation_id`.
+
 ```
 thread_id: str            (required)
 run_id: str               (required)

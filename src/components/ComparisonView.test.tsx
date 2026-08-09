@@ -3,9 +3,9 @@ import { render, screen, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { marked } from "marked";
 import { ComparisonView } from "./ComparisonView";
-import type { Run, RunCell } from "../api/types";
+import type { Evaluation, Result } from "../api/types";
 
-// Live fill refetches the whole Run (~300 ms), so cells arrive as fresh
+// Live fill refetches the whole Evaluation (~300 ms), so cells arrive as fresh
 // objects with identical content — see the memoization test at the bottom
 // (docs/review-2026-08-05.md A6).
 vi.mock("marked", async (importOriginal) => {
@@ -13,12 +13,12 @@ vi.mock("marked", async (importOriginal) => {
   return { marked: vi.fn(actual.marked) };
 });
 
-// Contract under test: Run (openapi.yaml:1607-1643) — "columns: Index 0 =
-// baseline"; "cells: One per column, same order; fills incrementally"; RunCell
+// Contract under test: Evaluation (openapi.yaml:1607-1643) — "columns: Index 0 =
+// baseline"; "cells: One per column, same order; fills incrementally"; Result
 // status enum pending/running/done/failed (:1649). Annotation slot per
 // feature-spec.md:134 "pluggable annotation: thumbs and/or scores".
 
-const run: Run = {
+const evaluation: Evaluation = {
   id: "812",
   tree_id: "agent1",
   status: "running",
@@ -46,10 +46,10 @@ const run: Run = {
   ],
 };
 
-function renderView(renderAnnotation?: (cell: RunCell) => React.ReactNode) {
+function renderView(renderAnnotation?: (cell: Result) => React.ReactNode) {
   return render(
     <MantineProvider env="test">
-      <ComparisonView run={run} renderAnnotation={renderAnnotation} />
+      <ComparisonView evaluation={evaluation} renderAnnotation={renderAnnotation} />
     </MantineProvider>,
   );
 }
@@ -58,7 +58,7 @@ describe("ComparisonView", () => {
   it("renders columns in order with the baseline badge on index 0", () => {
     renderView();
     const headers = screen.getAllByRole("columnheader");
-    // leading source column + one per Run column
+    // leading source column + one per Evaluation column
     expect(headers[1]).toHaveTextContent("Baseline");
     expect(headers[1]).toHaveTextContent("baseline");
     expect(headers[2]).toHaveTextContent("prod · v15");
@@ -87,7 +87,7 @@ describe("ComparisonView", () => {
   });
 
   it("invokes the annotation slot for done cells only, passing the cell", () => {
-    const seen: RunCell[] = [];
+    const seen: Result[] = [];
     renderView((cell) => {
       seen.push(cell);
       return <span data-testid="annotation">score {cell.latest_score}</span>;
@@ -98,21 +98,21 @@ describe("ComparisonView", () => {
     expect(within(done).getByTestId("annotation")).toHaveTextContent("score 6.1");
   });
 
-  it("re-renders incrementally when the same run arrives with a filled cell", () => {
+  it("re-renders incrementally when the same evaluation arrives with a filled cell", () => {
     const { rerender } = renderView();
-    const filled: Run = {
-      ...run,
+    const filled: Evaluation = {
+      ...evaluation,
       rows: [
-        run.rows[0],
+        evaluation.rows[0],
         {
-          ...run.rows[1],
-          cells: [{ status: "done", content: "Escalation offered." }, run.rows[1].cells[1]],
+          ...evaluation.rows[1],
+          cells: [{ status: "done", content: "Escalation offered." }, evaluation.rows[1].cells[1]],
         },
       ],
     };
     rerender(
       <MantineProvider env="test">
-        <ComparisonView run={filled} />
+        <ComparisonView evaluation={filled} />
       </MantineProvider>,
     );
     const cell = screen.getByTestId("cell-1-0");
@@ -121,33 +121,33 @@ describe("ComparisonView", () => {
   });
 
   // docs/review-2026-08-05.md A6: "Live-filling grid rebuilds every cell every
-  // 300 ms". EvaluationPage refetches the whole Run on every stream event, so
+  // 300 ms". EvaluationPage refetches the whole Evaluation on every stream event, so
   // the identical grid arrives as brand-new objects. Cells whose content did
   // not change must not re-render (the annotation slot is the observable proxy
   // — it is invoked once per done-cell render) and must not re-parse markdown.
   it("a refetch of unchanged cells re-renders and re-parses nothing", () => {
     const annotations = vi.fn(() => <span data-testid="annotation" />);
     const actions = vi.fn(() => <span data-testid="action" />);
-    const view = (r: Run) => (
+    const view = (r: Evaluation) => (
       <MantineProvider env="test">
-        <ComparisonView run={r} renderAnnotation={annotations} renderCellAction={actions} />
+        <ComparisonView evaluation={r} renderAnnotation={annotations} renderCellAction={actions} />
       </MantineProvider>
     );
-    const { rerender } = render(view(run));
+    const { rerender } = render(view(evaluation));
     const parsesAfterMount = vi.mocked(marked).mock.calls.length;
     expect(parsesAfterMount).toBeGreaterThan(0);
     expect(annotations).toHaveBeenCalledTimes(1); // one done cell
 
-    // Same grid, fresh objects — exactly what GET /runs/{id} returns again.
-    const refetched: Run = structuredClone(run);
+    // Same grid, fresh objects — exactly what GET /evaluations/{id} returns again.
+    const refetched: Evaluation = structuredClone(evaluation);
     rerender(view(refetched));
-    rerender(view(structuredClone(run)));
+    rerender(view(structuredClone(evaluation)));
     expect(vi.mocked(marked).mock.calls.length).toBe(parsesAfterMount);
     expect(annotations).toHaveBeenCalledTimes(1);
     expect(actions).toHaveBeenCalledTimes(1);
 
     // …but a cell that actually filled still updates.
-    const filled: Run = structuredClone(run);
+    const filled: Evaluation = structuredClone(evaluation);
     filled.rows[1].cells[0] = { status: "done", content: "Escalation offered." };
     rerender(view(filled));
     expect(vi.mocked(marked).mock.calls.length).toBe(parsesAfterMount + 1);

@@ -3,9 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { RunConfigPanel } from "./RunConfigPanel";
-import type { Endpoint, Model, Rubric, RunConfig } from "../api/types";
+import type { Endpoint, Model, Rubric, Variant } from "../api/types";
 
-// Contract under test: RunConfig (openapi.yaml:1483-1506) — "instruction_
+// Contract under test: Variant (openapi.yaml:1483-1506) — "instruction_
 // version XOR snapshot_id — a snapshot is an untested draft; neither = the
 // live version"; JudgeConfig requires judge_model + rubric_id (:1508-1514,
 // "Judge section, collapsed by default"). Diff-from-baseline: "prefilled from
@@ -45,7 +45,7 @@ function renderPanel(props: Partial<Parameters<typeof RunConfigPanel>[0]> = {}) 
 describe("RunConfigPanel", () => {
   it("enforces the version/snapshot XOR: picking a version clears the snapshot", async () => {
     const user = userEvent.setup();
-    const value: RunConfig = { snapshot_id: "snap-a3f2" };
+    const value: Variant = { snapshot_id: "snap-a3f2" };
     const onChange = renderPanel({ value, snapshotLabel: "v15-draft (a3f2)" });
 
     // snapshot displayed (feature-spec.md:86 'display as "v15-draft (a3f2)"')
@@ -71,8 +71,8 @@ describe("RunConfigPanel", () => {
   });
 
   it("highlights only the fields that deviate from the baseline", () => {
-    const baseline: RunConfig = { instruction_version: 14, model: "claude-sonnet-5", temperature: 0.7 };
-    const value: RunConfig = { instruction_version: 15, model: "claude-sonnet-5", temperature: 0.7 };
+    const baseline: Variant = { instruction_version: 14, model: "claude-sonnet-5", temperature: 0.7 };
+    const value: Variant = { instruction_version: 15, model: "claude-sonnet-5", temperature: 0.7 };
     renderPanel({ value, baseline });
 
     const changed = document.querySelectorAll("[data-changed]");
@@ -109,7 +109,7 @@ describe("RunConfigPanel", () => {
 
   it("toggling judge off emits judge: null", async () => {
     const user = userEvent.setup();
-    const value: RunConfig = { judge: { judge_model: "claude-opus", rubric_id: "rub-1" } };
+    const value: Variant = { judge: { judge_model: "claude-opus", rubric_id: "rub-1" } };
     const onChange = renderPanel({ value });
     // pre-set judge opens the section
     expect(screen.getByRole("combobox", { name: "Rubric" })).toBeInTheDocument();

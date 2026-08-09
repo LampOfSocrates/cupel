@@ -205,7 +205,7 @@ describe("EditorPage", () => {
   // using the editor → Evaluations flow (sketches 06 → 03)" (cupel-phases.md:18).
   // Real EvaluationsPage mounted at /evaluations so the router-state handoff is exercised
   // end to end, not against a probe.
-  const renderEditorWithRuns = (agentId = "ag_concierge") =>
+  const renderEditorWithEvaluations = (agentId = "ag_concierge") =>
     renderApp(
       <Routes>
         <Route path="/agents/:agentId/editor" element={<EditorPage />} />
@@ -219,13 +219,13 @@ describe("EditorPage", () => {
     // (feature-spec.md:87 "Repeat testing = Test as evaluation → Queue, two taps")
     mockLastSelections.ag_concierge = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderEditorWithRuns();
+    renderEditorWithEvaluations();
     await setDraft(user, "Draft text.");
     await user.click(screen.getByRole("button", { name: "Snapshot draft" }));
     await screen.findByText("v3-draft (a3f1)");
 
     await user.click(screen.getByRole("button", { name: "Test as evaluation" }));
-    // Runs stepper at Configure, config carrying the snapshot + its label
+    // Evaluations stepper at Configure, config carrying the snapshot + its label
     // ("the draft text is snapshotted immutably into the run config
     // (snapshot_id)", feature-spec.md:86) — Queue is the second tap.
     expect(await screen.findByTestId("config-0")).toBeInTheDocument();
@@ -237,7 +237,7 @@ describe("EditorPage", () => {
 
   it("Test as evaluation with an edited draft POSTs a fresh snapshot; empty last-selection lands on Pick", async () => {
     const user = userEvent.setup();
-    renderEditorWithRuns();
+    renderEditorWithEvaluations();
     await setDraft(user, "Draft text.");
     await user.click(screen.getByRole("button", { name: "Snapshot draft" }));
     await screen.findByText("v3-draft (a3f1)");
@@ -341,7 +341,7 @@ describe("EditorPage", () => {
         ),
       );
       const user = userEvent.setup();
-      renderEditorWithRuns();
+      renderEditorWithEvaluations();
       await setDraft(user, "Draft worth testing.");
 
       await user.click(screen.getByRole("button", { name: "Test as evaluation" }));

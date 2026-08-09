@@ -40,7 +40,7 @@ import {
   handlers,
   importConfig,
   mockLastSelections,
-  mockRunSummaries,
+  mockEvaluationSummaries,
   mockTrees,
   pushHumanJudgment,
   pushLlmJudgment,
@@ -90,7 +90,7 @@ const doc = (await SwaggerParser.dereference(
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "patch"] as const;
 
-/** "GET /agenttrees/{tree}/runs" for every operation the contract defines. */
+/** "GET /agenttrees/{tree}/evaluations" for every operation the contract defines. */
 const CONTRACT_OPS = new Set<string>();
 for (const [path, item] of Object.entries(doc.paths)) {
   for (const method of HTTP_METHODS) {
@@ -99,7 +99,7 @@ for (const [path, item] of Object.entries(doc.paths)) {
 }
 
 /**
- * Concrete "/agenttrees/agent1/runs" → templated contract path, or null.
+ * Concrete "/agenttrees/agent1/evaluations" → templated contract path, or null.
  * Literal paths win over templated ones so /tasks/stream never resolves to
  * /tasks/{taskId} (and /eval/cases/import never to /eval/cases/{caseId}).
  */
@@ -308,8 +308,8 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "lastSelection", run: () => api.lastSelection("agent1", "ag_concierge") },
   { apiMethod: "conversations", run: () => api.conversations("agent1", { page: 1 }) },
   { apiMethod: "conversation", run: () => api.conversation("agent1", "c1") },
-  { apiMethod: "runs", run: () => api.runs("agent1") },
-  { apiMethod: "run", run: () => api.run("agent1", "run-old-1") },
+  { apiMethod: "evaluations", run: () => api.evaluations("agent1") },
+  { apiMethod: "evaluation", run: () => api.evaluation("agent1", "evaluation-old-1") },
   { apiMethod: "trace", run: () => api.trace("agent1", "t2") },
   { apiMethod: "spanPayload", run: () => api.spanPayload("sp-llm") },
   { apiMethod: "tasks", run: () => api.tasks({ limit: 10 }) },
@@ -318,12 +318,12 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "evalCase", run: () => api.evalCase("case-1") },
   { apiMethod: "evalSets", run: () => api.evalSets() },
   { apiMethod: "judgments", run: () => api.judgments({ page: 1 }) },
-  { apiMethod: "runSummary", run: () => api.runSummary("run-old-1") },
+  { apiMethod: "evaluationSummary", run: () => api.evaluationSummary("evaluation-old-1") },
   { apiMethod: "casebooks", run: () => api.casebooks() },
   { apiMethod: "casebook", run: () => api.casebook("cb-1") },
 
   // Second reads over the fixtures whose SHAPE differs from the first: forks
-  // carry lineage, the re-fire run carries per-endpoint cells, the finished
+  // carry lineage, the re-fire evaluation carries per-endpoint cells, the finished
   // fork task carries result, a running trace carries an open span, a tool
   // span carries args/result instead of prompt/response.
   {
@@ -336,7 +336,7 @@ const EXERCISES: Exercise[] = [
     label: "conversation (fork, lineage)",
     run: () => api.conversation("agent1", "c2f1"),
   },
-  { apiMethod: "run", label: "run (turn re-fire pivot)", run: () => api.run("agent1", "run-refire-1") },
+  { apiMethod: "evaluation", label: "evaluation (turn re-fire pivot)", run: () => api.evaluation("agent1", "evaluation-refire-1") },
   { apiMethod: "task", label: "task (finished fork, result)", run: () => api.task("task-seed-fork") },
   {
     apiMethod: "tasks",
@@ -442,7 +442,7 @@ const EXERCISES: Exercise[] = [
   },
   {
     apiMethod: "judge",
-    run: () => api.judge({ run_id: "run-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" }),
+    run: () => api.judge({ evaluation_id: "evaluation-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" }),
   },
   { apiMethod: "createRubric", run: () => api.createRubric({ name: "parity", prompt: "Score it." }) },
   { apiMethod: "updateRubric", run: () => api.updateRubric("rub-help", { prompt: "Score it better." }) },
@@ -524,7 +524,7 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     code: "not_found",
     run: () => api.instructions("agent1", "nope"),
   },
-  { label: "run 404", status: 404, code: "not_found", run: () => api.run("agent1", "nope") },
+  { label: "evaluation 404", status: 404, code: "not_found", run: () => api.evaluation("agent1", "nope") },
   { label: "trace 404", status: 404, code: "not_found", run: () => api.trace("agent1", "nope") },
   { label: "spanPayload 404", status: 404, code: "not_found", run: () => api.spanPayload("nope") },
   { label: "task 404", status: 404, code: "not_found", run: () => api.task("nope") },
@@ -548,7 +548,7 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     code: "not_found",
     run: () => api.updateRubric("nope", { prompt: "p" }),
   },
-  { label: "runSummary 404", status: 404, code: "not_found", run: () => api.runSummary("nope") },
+  { label: "evaluationSummary 404", status: 404, code: "not_found", run: () => api.evaluationSummary("nope") },
   { label: "casebook 404", status: 404, code: "not_found", run: () => api.casebook("nope") },
   {
     label: "updateCasebook 404",
@@ -680,9 +680,9 @@ beforeAll(async () => {
   // or `{rubrics: []}` would prove nothing about the item shape. Seed the
   // thin ones so every collection the exercises read has at least one row.
   pushHumanJudgment("t2", "c1", "up", "2026-08-04T09:59:00Z", "clear answer");
-  pushLlmJudgment({ case_id: "case-1", run_id: "run-old-1", score: 0.92 });
-  mockRunSummaries["run-old-1"] = {
-    run_id: "run-old-1",
+  pushLlmJudgment({ case_id: "case-1", evaluation_id: "evaluation-old-1", score: 0.92 });
+  mockEvaluationSummaries["evaluation-old-1"] = {
+    evaluation_id: "evaluation-old-1",
     rubrics: [
       { rubric_id: "rub-help", rubric_version: 2, mean: 0.86, count: 4, distribution: [0, 1, 3] },
     ],
@@ -949,14 +949,14 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
   });
 
   it("collections come back in the order the server would sort them", async () => {
-    // Judgments (openapi.yaml:994) + tasks + runs: newest first.
+    // Judgments (openapi.yaml:994) + tasks + evaluations: newest first.
     await api.postFeedback({ message_id: "t2", rating: "up" });
     await api.postFeedback({ message_id: "t9", rating: "down" });
     expect((await api.judgments({}))[0].turn_id).toBe("t9");
 
-    const runs = await api.runs("agent1");
-    expect(runs.map((r) => r.created_at)).toEqual(
-      [...runs.map((r) => r.created_at)].sort().reverse(),
+    const evaluations = await api.evaluations("agent1");
+    expect(evaluations.map((r) => r.created_at)).toEqual(
+      [...evaluations.map((r) => r.created_at)].sort().reverse(),
     );
     const tasks = await api.tasks();
     expect(tasks.map((t) => t.created_at)).toEqual(
@@ -1052,7 +1052,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     });
     // Reads and feedback stay open — "existing conversations stay READABLE".
     await expect(api.conversation("agent1", "c1")).resolves.toBeTruthy();
-    await expect(api.runs("agent1")).resolves.toBeTruthy();
+    await expect(api.evaluations("agent1")).resolves.toBeTruthy();
     await expect(api.postFeedback({ message_id: "t2", rating: "up" })).resolves.toBeTruthy();
   });
 });

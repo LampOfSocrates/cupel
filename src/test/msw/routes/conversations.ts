@@ -51,7 +51,7 @@ function seedRoots(): Conversation[] {
     fork_count: 2,
     last_activity_at: "2026-08-04T09:00:00Z",
     // t9 is the turn c2f1/c2f2 forked from — the fork-pivot fixtures (the
-    // seeded re-fire run below + sibling compare) read its content as the
+    // seeded re-fire evaluation below + sibling compare) read its content as the
     // baseline "original" cell.
     turns: [
       {

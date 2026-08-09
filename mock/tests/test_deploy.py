@@ -144,7 +144,7 @@ def test_spa_index_and_fallback_and_assets(dist):
             assert r.status_code == 200 and "CUPEL-INDEX" in r.text
             assert r.headers["content-type"].startswith("text/html")
             # client-route refresh -> index.html (SPA fallback)
-            r = await c.get("/runs")
+            r = await c.get("/evaluations")
             assert r.status_code == 200 and "CUPEL-INDEX" in r.text
             # real bundle file served as itself
             r = await c.get("/assets/app.js")

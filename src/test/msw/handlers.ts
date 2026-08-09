@@ -21,7 +21,7 @@
 // idempotent casebook item add, 404-never-403 for absent or unpermitted trees,
 // and the 409 tree_disabled write set. Deliberate divergences are marked
 // "DELIBERATE DIVERGENCE" (or "Documented divergence") at the handler that
-// makes them — ./routes/judgments.ts (POST /feedback) and ./routes/runs.ts
+// makes them — ./routes/judgments.ts (POST /feedback) and ./routes/evaluations.ts
 // (POST /replay/turn) both accept a just-streamed turn id the real mock 404s.
 import { resetSharedState, taskStreamRig } from "./state";
 import { adminHandlers, resetAdmin } from "./routes/admin";
@@ -31,7 +31,7 @@ import { chatHandlers, resetChat } from "./routes/chat";
 import { conversationHandlers, resetConversations } from "./routes/conversations";
 import { evalHandlers, resetEvalWorkbench } from "./routes/evalWorkbench";
 import { judgmentHandlers, resetJudgments } from "./routes/judgments";
-import { runHandlers, resetRuns } from "./routes/runs";
+import { evaluationHandlers, resetEvaluations } from "./routes/evaluations";
 import { systemHandlers, resetSystem } from "./routes/system";
 import { taskHandlers, resetTasks } from "./routes/tasks";
 import { traceHandlers, resetTraces } from "./routes/traces";
@@ -44,7 +44,7 @@ export * from "./routes/chat";
 export * from "./routes/conversations";
 export * from "./routes/evalWorkbench";
 export * from "./routes/judgments";
-export * from "./routes/runs";
+export * from "./routes/evaluations";
 export * from "./routes/system";
 export * from "./routes/tasks";
 export * from "./routes/traces";
@@ -61,7 +61,7 @@ export const handlers = [
   ...chatHandlers,
   ...judgmentHandlers,
   ...evalHandlers,
-  ...runHandlers,
+  ...evaluationHandlers,
   ...traceHandlers,
   ...taskHandlers,
 ];
@@ -78,7 +78,7 @@ export function resetHandlerState() {
   resetCasebooks();
   resetJudgments();
   resetEvalWorkbench();
-  resetRuns();
+  resetEvaluations();
   resetTraces();
   resetTasks();
   taskStreamRig.closeAll();

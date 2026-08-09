@@ -38,11 +38,11 @@ import { InstructionEditor } from "./editor/InstructionEditor";
 //
 // "Test as evaluation" (sketch 06 "Test ▸"; annotated 06 tags it
 // "POST …/refunds/snapshots"): "the draft text is snapshotted immutably into
-// the run config (snapshot_id), so the tested text is exactly what ran even
+// the evaluation config (snapshot_id), so the tested text is exactly what ran even
 // if editing continues" (feature-spec.md:86). The button ensures a snapshot
 // of the CURRENT draft — reusing the last one if the draft is unchanged since
 // it (same content-equality rule the promoting Save uses) — then hands off to
-// the Runs stepper.
+// the Evaluations stepper.
 //
 // Handoff = router state, not query params: the payload carries a display
 // label ("v3-draft (a3f1)") that has no business in a URL, drafts are
@@ -52,7 +52,7 @@ import { InstructionEditor } from "./editor/InstructionEditor";
 // snapshot_label } } }) — consumed by EvaluationsPage (see its prefill note).
 //
 // "Last tested: run …" breadcrumb in the editor: SKIPPED — the editor
-// unmounts on the navigate, so surfacing the queued run back here would need
+// unmounts on the navigate, so surfacing the queued evaluation back here would need
 // new persistence (session storage / server state the contract doesn't have).
 // The spec'd link-back lives on the Results side ("Back to editor" breadcrumb,
 // feature-spec.md:88).

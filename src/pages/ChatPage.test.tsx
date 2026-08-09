@@ -435,7 +435,7 @@ describe("Turn actions", () => {
     mockJudgments.unshift({
       id: "j-llm-1",
       case_id: "case1",
-      run_id: "run1",
+      evaluation_id: "evaluation1",
       turn_id: "t2",
       conversation_id: "c1",
       type: "llm",
@@ -859,7 +859,7 @@ describe("Turn forks (P1-T13)", () => {
 
   // Fork-side entry into the sibling comparison: lineage alone
   // (parent + fork_turn_id) identifies the sibling set ("compare forks of the
-  // same turn across endpoints", feature-spec.md:73) — no run id needed.
+  // same turn across endpoints", feature-spec.md:73) — no evaluation id needed.
   it("Compare siblings on the lineage banner routes to /forks/{parent}/{turn}", async () => {
     const user = userEvent.setup();
     renderApp(

@@ -111,7 +111,7 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });
-    await expect(page.getByTestId("run-summary")).toBeVisible();
+    await expect(page.getByTestId("evaluation-summary")).toBeVisible();
   });
 
   await test.step("read the judge's reasoning (judgment drawer)", async () => {

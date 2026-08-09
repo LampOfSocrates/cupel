@@ -25,16 +25,16 @@ import { Markdown } from "../lib/markdown";
 //
 // Design choice: when the pivot is reached from a
 // RUN (ForkModal "View run"), EvaluationPage renders the server-pivoted
-// grid. From a FORK's lineage banner no run id is discoverable — GET
-// /agenttrees/{tree}/runs takes no turn filter (openapi.yaml:654-669) — but
+// grid. From a FORK's lineage banner no evaluation id is discoverable — GET
+// /agenttrees/{tree}/evaluations takes no turn filter (openapi.yaml:654-669) — but
 // the SIBLINGS are: GET /conversations?forks_of={parent} (openapi.yaml:335)
 // filtered client-side by lineage.fork_turn_id. So this route reconstructs
 // the same one-turn-per-endpoint comparison from conversations alone:
 // ComparisonView-like cards (annotated sketch 04 layout — "Baseline
 // (original)" card + one card per endpoint, each with "Open in Chat ↗"),
-// NOT a synthetic Run object (statuses/task ids would have to be invented).
+// NOT a synthetic Evaluation object (statuses/task ids would have to be invented).
 // Column labels resolve endpoint ids → names via GET /endpoints, matching the
-// re-fire run's server-built column labels (mock/main.py:634-635). A fork's
+// re-fire evaluation's server-built column labels (mock/main.py:634-635). A fork's
 // result is its last turn when that turn is an assistant one (the regenerated
 // turn is appended after the copied history, mock/main.py:664-673 +
 // engine.py:354-363); otherwise the fork is still generating.
@@ -61,7 +61,7 @@ export function ForkComparePage() {
         .then((page) => page.items.filter((c) => c.lineage?.fork_turn_id === turnId)),
     [tree, parentId, turnId],
   );
-  // Label columns with endpoint NAMES like the re-fire run grid does;
+  // Label columns with endpoint NAMES like the re-fire evaluation grid does;
   // non-critical — ids render verbatim if this fails.
   const { data: endpoints } = useAsync(
     () => api.endpoints(tree).catch(() => [] as Endpoint[]),

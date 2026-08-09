@@ -12,7 +12,7 @@ Contract under test (openapi.yaml v0.3.0):
   idempotent (returns the existing item)"), DELETE …/items/{itemId}
 - :1777-1802 POST /casebooks/{id}/to-eval-set ("reuses the existing eval case
   for that turn or creates one sourced from it … then creates a new set")
-- :1804-1830 POST /casebooks/{id}/replay ("one run per tree touched, all
+- :1804-1830 POST /casebooks/{id}/replay ("one evaluation per tree touched, all
   children of a single parent task", CasebookReplayAccepted :3320-3338)
 """
 
@@ -621,8 +621,8 @@ def test_to_eval_set_uses_only_the_items_the_viewer_can_see(monkeypatch):
 
 
 # ----------------------------------------------------------------- replay
-def test_replay_fans_out_one_run_per_tree_under_one_parent_task():
-    """CasebookReplayAccepted — "One parent task; one run per tree the
+def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
+    """CasebookReplayAccepted — "One parent task; one evaluation per tree the
     casebook's items reference" (openapi.yaml:3320-3327)."""
     app = make_app()
 
@@ -641,27 +641,27 @@ def test_replay_fans_out_one_run_per_tree_under_one_parent_task():
                              json={"configs": [{"model": "deepseek-v3"}]})
             assert r.status_code == 202, r.text
             accepted = r.json()
-            assert set(accepted) == {"task_id", "runs"}
-            assert [run_["tree_id"] for run_ in accepted["runs"]] == ["agent1", "agent2"]
-            assert len({run_["run_id"] for run_ in accepted["runs"]}) == 2
+            assert set(accepted) == {"task_id", "evaluations"}
+            assert [evaluation["tree_id"] for evaluation in accepted["evaluations"]] == ["agent1", "agent2"]
+            assert len({evaluation["evaluation_id"] for evaluation in accepted["evaluations"]}) == 2
 
-            # One parent task, children under it, one run each.
-            for run_ in accepted["runs"]:
-                row = app.state.db.one("SELECT * FROM runs WHERE id = ?",
-                                       (run_["run_id"],))
+            # One parent task, children under it, one evaluation each.
+            for evaluation in accepted["evaluations"]:
+                row = app.state.db.one("SELECT * FROM evaluations WHERE id = ?",
+                                       (evaluation["evaluation_id"],))
                 assert row["task_id"] == accepted["task_id"]
-                assert row["tree_id"] == run_["tree_id"]
+                assert row["tree_id"] == evaluation["tree_id"]
             children = app.state.db.all(
                 "SELECT * FROM tasks WHERE parent_id = ?", (accepted["task_id"],))
             assert len(children) == 2  # one config x two trees
 
-            # The agent1 run carries both of that tree's turns; agent2 one.
+            # The agent1 evaluation carries both of that tree's turns; agent2 one.
             grids = {}
-            for run_ in accepted["runs"]:
+            for evaluation in accepted["evaluations"]:
                 got = await c.get(
-                    f"/agenttrees/{run_['tree_id']}/runs/{run_['run_id']}")
+                    f"/agenttrees/{evaluation['tree_id']}/evaluations/{evaluation['evaluation_id']}")
                 assert got.status_code == 200, got.text
-                grids[run_["tree_id"]] = got.json()
+                grids[evaluation["tree_id"]] = got.json()
             assert len(grids["agent1"]["rows"]) == 2
             assert len(grids["agent2"]["rows"]) == 1
             # baseline + one config column
@@ -671,7 +671,7 @@ def test_replay_fans_out_one_run_per_tree_under_one_parent_task():
     run(case())
 
 
-def test_replay_finishes_and_fills_both_runs():
+def test_replay_finishes_and_fills_both_evaluations():
     app = make_app()
 
     async def case():
@@ -691,10 +691,10 @@ def test_replay_finishes_and_fills_both_runs():
                     break
                 await asyncio.sleep(0.01)
             assert task["status"] == "done", task
-            assert task["result"] == {"runs": accepted["runs"]}
-            for run_ in accepted["runs"]:
+            assert task["result"] == {"evaluations": accepted["evaluations"]}
+            for evaluation in accepted["evaluations"]:
                 grid = (await c.get(
-                    f"/agenttrees/{run_['tree_id']}/runs/{run_['run_id']}")).json()
+                    f"/agenttrees/{evaluation['tree_id']}/evaluations/{evaluation['evaluation_id']}")).json()
                 assert grid["status"] == "done"
                 for row in grid["rows"]:
                     assert [cell["status"] for cell in row["cells"]] == ["done", "done"]
@@ -746,7 +746,7 @@ def test_replay_accepts_a_user_turn_reference_by_replaying_its_answer():
             accepted = (await c.post(f"/casebooks/{book['id']}/replay",
                                      json={"configs": [{}]})).json()
             grid = (await c.get(
-                f"/agenttrees/agent1/runs/{accepted['runs'][0]['run_id']}")).json()
+                f"/agenttrees/agent1/evaluations/{accepted['evaluations'][0]['evaluation_id']}")).json()
             assert len(grid["rows"]) == 1
             assert grid["rows"][0]["source"]["turn_id"] == conv["turn"]["id"]
     run(case())

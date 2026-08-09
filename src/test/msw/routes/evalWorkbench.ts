@@ -1,5 +1,5 @@
 // Eval workbench: rubrics, cases (incl. CSV import), sets, the judge trigger
-// and per-run score summaries. Mirrors the real mock's rules — append-only
+// and per-evaluation score summaries. Mirrors the real mock's rules — append-only
 // versions (latest wins), full-membership set versions, and per-row import
 // errors that never abort the batch.
 import { http, HttpResponse } from "msw";
@@ -15,10 +15,10 @@ import type {
   Rubric,
   RubricCreate,
   RubricUpdate,
-  RunScoreSummary,
+  EvaluationScoreSummary,
 } from "../../../api/types";
 import { BASE, captureLlmHeaders, counters, enabledTreeGate, envelope } from "../state";
-import { mockRuns } from "./runs";
+import { mockEvaluations } from "./evaluations";
 import { mockTasks } from "./tasks";
 
 // ------------------------------------------------------------- eval fixtures
@@ -47,7 +47,7 @@ export const rubricRequests: string[] = [];
 
 // GET /eval/cases/{caseId} (openapi.yaml:907-929) — "EvalCase = {input,
 // output, reference?}" (feature-spec.md:54); case-1 mirrors what judging
-// run-old-1 would auto-create from its v3 cell (source c1/t2).
+// evaluation-old-1 would auto-create from its v3 cell (source c1/t2).
 function seedEvalCases(): Record<string, EvalCase> {
   return {
     "case-1": {
@@ -68,7 +68,7 @@ export const mockEvalCases: Record<string, EvalCase> = seedEvalCases();
 export const evalCaseRequests: string[] = [];
 
 // POST /eval/judge (openapi.yaml:931-954) — 202 TaskRef; the judging WORK is
-// driven by tests (fixture mutation + taskStreamRig), like run live fill.
+// driven by tests (fixture mutation + taskStreamRig), like evaluation live fill.
 export const judgeRequests: JudgeRequest[] = [];
 
 // -------------------------------------------------- eval workbench (v0.3.0)
@@ -119,9 +119,9 @@ export const importConfig: {
   },
 };
 
-// GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — mutable per-run
-// summaries; unset runs answer the empty aggregate (no judgments yet).
-export const mockRunSummaries: Record<string, RunScoreSummary> = {};
+// GET /eval/evaluations/{evaluationId}/summary (openapi.yaml:1001-1022) — mutable per-evaluation
+// summaries; unset evaluations answer the empty aggregate (no judgments yet).
+export const mockEvaluationSummaries: Record<string, EvaluationScoreSummary> = {};
 export const summaryRequests: string[] = [];
 
 export const evalHandlers = [
@@ -305,7 +305,7 @@ export const evalHandlers = [
   }),
 
   // POST /eval/judge (openapi.yaml:931-954) — 202 TaskRef "(parent task +
-  // child per case)". oneOf run_id/case_ids enforced like the real mock
+  // child per case)". oneOf evaluation_id/case_ids enforced like the real mock
   // (mock/main.py:841-842); judging results are test-driven via fixture
   // mutation + taskStreamRig, mirroring the live-fill pattern.
   http.post(`${BASE}/eval/judge`, async ({ request }) => {
@@ -318,14 +318,14 @@ export const evalHandlers = [
         { status: 422 },
       );
     }
-    // v0.3.0 widened the oneOf to run_id | case_ids | set_id
+    // v0.3.0 widened the oneOf to evaluation_id | case_ids | set_id
     // (openapi.yaml:2926-2929), matching mock/main.py's judge handler.
-    const selectors = [body.run_id, body.case_ids, body.set_id].filter(Boolean).length;
+    const selectors = [body.evaluation_id, body.case_ids, body.set_id].filter(Boolean).length;
     if (selectors !== 1) {
       return HttpResponse.json(
         {
           code: "invalid",
-          message: "Exactly one of run_id / case_ids / set_id is required (openapi.yaml:2926-2929).",
+          message: "Exactly one of evaluation_id / case_ids / set_id is required (openapi.yaml:2926-2929).",
         },
         { status: 422 },
       );
@@ -333,16 +333,16 @@ export const evalHandlers = [
     // Disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
     // judging is blocked when the RUN'S tree is disabled; case_ids/set_id
     // judging is NOT tree-gated (eval cases are global, feature-spec.md:111).
-    if (body.run_id) {
-      const run = mockRuns.find((r) => r.id === body.run_id);
-      if (!run) {
-        return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+    if (body.evaluation_id) {
+      const evaluation = mockEvaluations.find((r) => r.id === body.evaluation_id);
+      if (!evaluation) {
+        return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
       }
-      const denied = enabledTreeGate(run.tree_id);
+      const denied = enabledTreeGate(evaluation.tree_id);
       if (denied) return denied;
     }
-    // The 202 is a PARENT TASK, and the real mock records the judged run on
-    // it (payload {"result": {"run_id": …}}, mock/main.py:1836-1838). The
+    // The 202 is a PARENT TASK, and the real mock records the judged evaluation on
+    // it (payload {"result": {"evaluation_id": …}}, mock/main.py:1836-1838). The
     // auto-judge idempotency check reads exactly that to spot judging already
     // in flight, so the fixture store must carry it too.
     const taskId = `task-judge-${++counters.judge}`;
@@ -351,21 +351,21 @@ export const evalHandlers = [
       type: "judge",
       status: "queued",
       progress: { done: 0, total: 1 },
-      result: { run_id: body.run_id ?? null },
+      result: { evaluation_id: body.evaluation_id ?? null },
       created_at: "2026-08-04T11:00:00Z",
     });
     return HttpResponse.json({ task_id: taskId }, { status: 202 });
   }),
 
-  // GET /eval/runs/{runId}/summary (openapi.yaml:1001-1022) — per-rubric
-  // aggregates; a run with no judgments answers empty rubrics.
-  http.get(`${BASE}/eval/runs/:runId/summary`, ({ params }) => {
-    const id = params.runId as string;
+  // GET /eval/evaluations/{evaluationId}/summary (openapi.yaml:1001-1022) — per-rubric
+  // aggregates; an evaluation with no judgments answers empty rubrics.
+  http.get(`${BASE}/eval/evaluations/:evaluationId/summary`, ({ params }) => {
+    const id = params.evaluationId as string;
     summaryRequests.push(id);
-    if (!mockRuns.some((r) => r.id === id)) {
-      return HttpResponse.json({ code: "not_found", message: "run not found" }, { status: 404 });
+    if (!mockEvaluations.some((r) => r.id === id)) {
+      return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
     }
-    return HttpResponse.json(mockRunSummaries[id] ?? { run_id: id, rubrics: [] });
+    return HttpResponse.json(mockEvaluationSummaries[id] ?? { evaluation_id: id, rubrics: [] });
   }),
 ];
 
@@ -396,6 +396,6 @@ export function resetEvalWorkbench() {
       { row: 2, column: "answer", message: "output is empty — a case needs a candidate response." },
     ],
   };
-  for (const key of Object.keys(mockRunSummaries)) delete mockRunSummaries[key];
+  for (const key of Object.keys(mockEvaluationSummaries)) delete mockEvaluationSummaries[key];
   summaryRequests.length = 0;
 }

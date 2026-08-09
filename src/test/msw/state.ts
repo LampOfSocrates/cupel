@@ -93,7 +93,7 @@ export function treeGate(tree: string): Response | null {
 // disabled tree answers 409 tree_disabled while every read keeps working
 // ("existing conversations stay READABLE", feature-spec.md:20). The blocked
 // set mirrors mock/main.py:426-441 exactly: chat, replay, replay/turn,
-// judge-on-a-run-of-this-tree, create agent, PUT instructions, POST snapshots,
+// judge-on-an-evaluation-of-this-tree, create agent, PUT instructions, POST snapshots,
 // PUT last-selection, and conversation rename/delete. POST /feedback is NOT in
 // the set — a thumb annotates existing history, it creates no new work.
 // 404 (absent tree) wins over 409, as in the real mock.

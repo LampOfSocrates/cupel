@@ -24,8 +24,8 @@ const PHASE1_PATHS = [
   "/feedback",
   "/agenttrees/{tree}/replay",
   "/agenttrees/{tree}/replay/turn",
-  "/agenttrees/{tree}/runs",
-  "/agenttrees/{tree}/runs/{runId}",
+  "/agenttrees/{tree}/evaluations",
+  "/agenttrees/{tree}/evaluations/{evaluationId}",
   "/agenttrees/{tree}/turns/{turnId}/trace",
   "/spans/{spanId}/payload",
   "/tasks",
@@ -36,7 +36,7 @@ const PHASE1_PATHS = [
   "/eval/cases/{caseId}",
   "/eval/judge",
   "/eval/judgments",
-  "/eval/runs/{runId}/summary",
+  "/eval/evaluations/{evaluationId}/summary",
 ];
 
 // v0.3.0 additions — feature-spec.md:113-119, :124-130 filtered to Phase 2
@@ -86,7 +86,7 @@ describe("P1-T00 OpenAPI contract", () => {
         );
       }
     }
-    for (const resource of ["chat", "conversations", "replay", "runs"]) {
+    for (const resource of ["chat", "conversations", "replay", "evaluations"]) {
       expect(doc.paths[`/agenttrees/{tree}/${resource}`]).toBeDefined();
     }
   });
@@ -163,7 +163,7 @@ describe("P1-T00 OpenAPI contract", () => {
     expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
     // compact + import APPENDED in v0.3.0 — additive, Phase-1 values unchanged
     expect(task.type.enum).toEqual(["chat", "replay", "replay_turn", "judge", "compact", "import"]);
-    expect(task.result.properties.run_id).toBeDefined();
+    expect(task.result.properties.evaluation_id).toBeDefined();
   });
 
   it("envelope is required on turns and shown in the trace header (feature-spec.md:76)", () => {
@@ -299,9 +299,9 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(doc.components.schemas.EvalSetUpdate.required).toEqual(["case_ids"]);
   });
 
-  it("JudgeRequest selects by exactly one of run_id / case_ids / set_id (feature-spec.md:129)", () => {
+  it("JudgeRequest selects by exactly one of evaluation_id / case_ids / set_id (feature-spec.md:129)", () => {
     const judge = doc.components.schemas.JudgeRequest;
-    expect(judge.oneOf.map((b) => b.required.join())).toEqual(["run_id", "case_ids", "set_id"]);
+    expect(judge.oneOf.map((b) => b.required.join())).toEqual(["evaluation_id", "case_ids", "set_id"]);
     expect(judge.properties.set_id).toBeDefined();
   });
 
