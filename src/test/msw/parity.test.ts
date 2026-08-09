@@ -312,7 +312,7 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "evaluation", run: () => api.evaluation("agent1", "evaluation-old-1") },
   { apiMethod: "trace", run: () => api.trace("agent1", "t2") },
   { apiMethod: "spanPayload", run: () => api.spanPayload("sp-llm") },
-  { apiMethod: "tasks", run: () => api.tasks({ limit: 10 }) },
+  { apiMethod: "tasks", run: () => api.tasks({ page_size: 10 }) },
   { apiMethod: "task", run: () => api.task("task-seed-replay") },
   { apiMethod: "rubrics", run: () => api.rubrics() },
   { apiMethod: "evalCase", run: () => api.evalCase("case-1") },
@@ -924,7 +924,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     const second = await api.postFeedback({ message_id: "t2", rating: "down" });
     expect(second.id).not.toBe(first.id);
     const history = await api.judgments({ subject_kind: "turn", subject_id: "t2" });
-    expect(history.map((j) => j.score)).toEqual([0, 1]); // newest first
+    expect(history.items.map((j) => j.score)).toEqual([0, 1]); // newest first
   });
 
   it("PUT instructions creates a NEW version and moves the live pointer", async () => {
@@ -949,7 +949,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
 
     const setAfter = await api.updateEvalSet("set-refunds", { items: [] });
     expect(setAfter.version).toBe(4); // fixture is v3
-    expect((await api.evalSets()).find((s) => s.id === "set-refunds")?.version).toBe(4);
+    expect((await api.evalSets()).items.find((s) => s.id === "set-refunds")?.version).toBe(4);
 
     const rubricAfter = await api.updateRubric("rub-help", { prompt: "p" });
     expect(rubricAfter.version).toBe(3); // fixture is v2
@@ -959,13 +959,13 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     // Judgments (listJudgments) + tasks + evaluations: newest first.
     await api.postFeedback({ message_id: "t2", rating: "up" });
     await api.postFeedback({ message_id: "t9", rating: "down" });
-    expect((await api.judgments({}))[0].subject).toEqual({ kind: "turn", id: "t9" });
+    expect((await api.judgments({})).items[0].subject).toEqual({ kind: "turn", id: "t9" });
 
-    const evaluations = await api.evaluations("agent1");
+    const evaluations = (await api.evaluations("agent1")).items;
     expect(evaluations.map((r) => r.created_at)).toEqual(
       [...evaluations.map((r) => r.created_at)].sort().reverse(),
     );
-    const tasks = await api.tasks();
+    const tasks = (await api.tasks()).items;
     expect(tasks.map((t) => t.created_at)).toEqual(
       [...tasks.map((t) => t.created_at)].sort().reverse(),
     );

@@ -2,7 +2,7 @@
 // (POST /feedback) and the listing every drawer reads (GET /eval/judgments).
 import { http, HttpResponse } from "msw";
 import type { FeedbackRequest, Judgment } from "../../../api/types";
-import { BASE, counters } from "../state";
+import { BASE, counters, pageOf } from "../state";
 import { allConversations } from "./conversations";
 
 // ---------------------------------------------------------- judgments state
@@ -129,9 +129,7 @@ export const judgmentHandlers = [
     const conversationId = url.searchParams.get("conversation_id");
     if (conversationId)
       items = items.filter((j) => conversationScope.get(j.id) === conversationId);
-    const page = Number(url.searchParams.get("page") ?? 1);
-    const pageSize = Number(url.searchParams.get("page_size") ?? 50);
-    return HttpResponse.json(items.slice((page - 1) * pageSize, page * pageSize));
+    return HttpResponse.json(pageOf(items, url, 50));
   }),
 ];
 

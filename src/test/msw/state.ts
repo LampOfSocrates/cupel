@@ -10,7 +10,7 @@
 import { HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
-import type { AgentTree, Conversation, Me } from "../../api/types";
+import type { AgentTree, Conversation, Me, Page } from "../../api/types";
 
 // The test rig registers handlers at the MOCK target's baseUrl, resolved
 // through the same store the client uses — vitest is a dev build,
@@ -118,6 +118,24 @@ export function enabledTreeGate(tree: string): Response | null {
     );
   }
   return null;
+}
+
+/**
+ * THE collection envelope, applied the way the reference mock applies it
+ * (mock/util.py clamp_page + page_of): slice `all` by the request's
+ * ?page/?page_size and report `total` as the count BEFORE slicing. Every
+ * handler that answers a `<Thing>Page` goes through here, so the fake cannot
+ * drift into a second paging convention.
+ */
+export function pageOf<T>(all: T[], url: URL, defaultSize = 20): Page<T> {
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+  const pageSize = Math.max(1, Number(url.searchParams.get("page_size") ?? defaultSize));
+  return {
+    items: all.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    page_size: pageSize,
+    total: all.length,
+  };
 }
 
 export const envelope = {

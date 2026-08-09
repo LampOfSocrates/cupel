@@ -2,7 +2,7 @@
 // rename/delete pair that the tree-disable gate treats as writes.
 import { http, HttpResponse } from "msw";
 import type { Conversation } from "../../../api/types";
-import { BASE, conv, enabledTreeGate, envelope, treeGate } from "../state";
+import { BASE, conv, enabledTreeGate, envelope, pageOf, treeGate } from "../state";
 
 // Roots (lineage null) — sorted by last activity, server-side (openapi.yaml:381).
 // Factory-seeded: the replay/turn handler mutates forks + fork_count, so
@@ -175,9 +175,6 @@ export const conversationHandlers = [
     if (denied) return denied;
     const forksOf = url.searchParams.get("forks_of");
     const search = url.searchParams.get("search")?.toLowerCase();
-    const page = Number(url.searchParams.get("page") ?? 1);
-    const pageSize = Number(url.searchParams.get("page_size") ?? 20);
-
     let items = forksOf ? (mockForks[forksOf] ?? []) : mockRoots;
     // ?agent_id= — "view recent conversations for this agent"
     // (openapi.yaml:365-371).
@@ -187,11 +184,7 @@ export const conversationHandlers = [
     // Server-side sort (openapi.yaml:381; mock/main.py:754, :910
     // ORDER BY last_activity_at DESC) — not a property of the fixture order.
     items = items.slice().sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
-    const total = items.length;
-    items = items.slice((page - 1) * pageSize, page * pageSize);
-    // Listing strips full turns? Contract includes turns in listings
-    // (openapi.yaml:1376) — keep them.
-    return HttpResponse.json({ items, page, page_size: pageSize, total });
+    return HttpResponse.json(pageOf(items, url));
   }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {

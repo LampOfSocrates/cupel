@@ -22,6 +22,36 @@ info:
     "run_id"; the quotes are verbatim on purpose and the contract's own
     vocabulary is the renamed one.
 
+    Collections (ONE shape, everywhere): every operation that returns a
+    collection of user data answers a PAGE — an object
+    `{items, page, page_size, total}` — never a bare array. The schemas are
+    named `<Thing>Page` and all four keys are required; `total` is the count
+    of matches ACROSS pages, which is what lets a client say "showing 20 of
+    143" instead of silently truncating. Offset paging (`?page=`,
+    `?page_size=`), not cursors, is deliberate: the affordance every consuming
+    surface offers is "load more" plus an occasional page jump, both of which
+    need a total; and `LIMIT`/`OFFSET` is portable to any store an adopter
+    implements this contract over, whereas a keyset cursor is per-database
+    work with an opaque encoding every implementor would have to invent.
+    Consequence, stated rather than hidden: a collection ordered newest-first
+    can shift under a client that pages through it while new rows arrive at
+    the head, so a client that appends pages should key rows by id. The two
+    collections that grow while being READ avoid this by construction — a
+    conversation's turns are ordered oldest-first, so growth is at the tail
+    and page 1 never changes, and an evaluation's rows are fixed when the
+    evaluation is created (only its cells fill in).
+
+    Four operations deliberately return a bare array and are NOT paged,
+    because their callers need the whole set for a correct answer and the set
+    is bounded by the backend's own configuration rather than by user data:
+    GET /models and GET /agenttrees/{tree}/endpoints (dropdown enumerations —
+    a page would make the dropdown lie), GET /agenttrees (the scope selector
+    every other path hangs off) and GET /agenttrees/{tree}/agents (a
+    HIERARCHY — a page of nodes yields orphans; paging it needs a lazy-expand
+    traversal, which is a different operation, not a parameter). Each says so
+    at its own response. tests/openapi-contract.test.js enforces both halves:
+    the page shape, and that no fifth bare-array collection appears.
+
     Scoping rule (feature-spec.md:111): "Tree-scoped: conversation/run/chat
     resources live under /agenttrees/{tree_id}/… — permission checks fall out of
     the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
@@ -212,15 +242,21 @@ paths:
         Settings → Members — user list, per-tree permission matrix (view/
         tune/evaluate checkboxes), invite by email. API: GET/PUT
         /admin/users, GET/PUT /admin/users/{id}/permissions." Requires the
-        admin role (403 otherwise).
+        admin role (403 otherwise). Paged: "invite by email" means the user
+        list grows without bound.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
         "200":
-          description: Every user, cross-user (admin-only).
+          description: Page of users, cross-user (admin-only), by email.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/AdminUser" }
+              schema: { $ref: "#/components/schemas/AdminUserPage" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
     put:
@@ -244,7 +280,10 @@ paths:
               items: { $ref: "#/components/schemas/AdminUserUpsert" }
       responses:
         "200":
-          description: The upserted users.
+          description: >-
+            The upserted users — a write ECHO, not a collection: it is exactly
+            the rows the request body named, so it is bounded by the request
+            and carries no page (see the Collections rule in info.description).
           content:
             application/json:
               schema:
@@ -463,7 +502,10 @@ paths:
         feature-spec.md:118: "GET /models (chat/run/judge model dropdowns)".
       responses:
         "200":
-          description: Model list.
+          description: >-
+            Model list — NOT paged (Collections rule, info.description): the
+            set is the backend's own configuration, and every caller is a
+            dropdown that needs all of it to render a correct choice.
           content:
             application/json:
               schema:
@@ -483,7 +525,12 @@ paths:
         "greyed with a 'disabled' badge" (feature-spec.md:20).
       responses:
         "200":
-          description: Trees visible to the current user.
+          description: >-
+            Trees visible to the current user — NOT paged (Collections rule,
+            info.description): this is the SCOPE selector every tree-scoped
+            path hangs off, so a client holding half of it cannot resolve the
+            other half's ids. Paging it would need a searchable tree picker
+            rather than a parameter.
           content:
             application/json:
               schema:
@@ -523,7 +570,10 @@ paths:
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
-          description: Endpoints for this tree.
+          description: >-
+            Endpoints for this tree — NOT paged (Collections rule,
+            info.description): a deploy-target multiselect needs the whole
+            set, which is the backend's configuration, not user data.
           content:
             application/json:
               schema:
@@ -545,7 +595,13 @@ paths:
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
-          description: Flat list of agents with parent links (root has parent_id null).
+          description: >-
+            Flat list of agents with parent links (root has parent_id null) —
+            NOT paged (Collections rule, info.description): this is a
+            HIERARCHY flattened for transport, and a page of it yields nodes
+            whose parents are on another page. Bounding it needs a
+            lazy-expand traversal (children-of-node), which is a different
+            operation rather than a parameter on this one.
           content:
             application/json:
               schema:
@@ -1101,16 +1157,23 @@ paths:
       tags: [evaluations]
       operationId: listEvaluations
       summary: List evaluations
-      description: feature-spec.md:122 "GET /agenttrees/{tree}/runs".
-      parameters: [{ $ref: "#/components/parameters/tree" }]
+      description: |
+        feature-spec.md:122 "GET /agenttrees/{tree}/runs". Paged: a tree
+        accumulates evaluations forever and nothing ever removes one.
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Evaluations, newest first (cells omitted; fetch one for the grid).
+          description: Page of evaluations, newest first (cells omitted; fetch one for the grid).
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/EvaluationSummaryItem" }
+              schema: { $ref: "#/components/schemas/EvaluationSummaryPage" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /agenttrees/{tree}/evaluations/{evaluationId}:
@@ -1197,6 +1260,9 @@ paths:
       description: |
         feature-spec.md:131 "GET /tasks"; polling fallback for the SSE stream
         (feature-spec.md:104); sidebar badge counts pending (feature-spec.md:107).
+        `limit` is GONE — it was a bare top-N with no way to ask for the rest
+        and no way to know there was a rest; `page`/`page_size`/`total` say
+        both (Collections rule, info.description).
       parameters:
         - name: status
           in: query
@@ -1207,17 +1273,18 @@ paths:
           in: query
           description: Children of this task; omit for the default top-level listing.
           schema: { type: string }
-        - name: limit
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
         "200":
-          description: Tasks, newest first. Parents only (unless parent_id given); expand via GET /tasks/{id}.
+          description: Page of tasks, newest first. Parents only (unless parent_id given); expand via GET /tasks/{id}.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Task" }
+              schema: { $ref: "#/components/schemas/TaskPage" }
 
   /tasks/stream:
     get:
@@ -1320,15 +1387,24 @@ paths:
         Phase 2 (eval workbench, cupel-phases.md:98); the POST exists so the
         generator can seed "judgments across 2 rubrics" (feature-spec.md:164)
         through the public API (feature-spec.md:181). Consumed by
-        Evaluations · Configure (feature-spec.md:226).
+        Evaluations · Configure (feature-spec.md:226). Paged: rubrics are
+        user-created and never deleted. A caller filling a rubric PICKER
+        should ask for a full page and compare `total` — a picker that
+        silently omits a rubric is worse than one that says it is showing the
+        first N.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
         "200":
-          description: Latest version of each rubric.
+          description: Page of rubrics, latest version of each, in creation order.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Rubric" }
+              schema: { $ref: "#/components/schemas/RubricPage" }
     post:
       tags: [eval]
       operationId: createRubric
@@ -1548,14 +1624,23 @@ paths:
         (cupel-phases.md:79) and the judge's set picker. Global, not
         tree-scoped: a set may reference turns across trees, and per-item
         visibility still follows the viewer's tree permissions.
+
+        Paged, and this is the collection paging helps most: every row
+        carries its FULL item list, so an unpaged listing grew as the product
+        of set count and set size.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Latest version of every set, items included.
+          description: Page of sets, newest first, latest version of each, items included.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalSetPage" }
     post:
       tags: [eval]
       operationId: createEvalSet
@@ -1853,12 +1938,10 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
         "200":
-          description: Matching judgments, newest first.
+          description: Page of matching judgments, newest first.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Judgment" }
+              schema: { $ref: "#/components/schemas/JudgmentPage" }
 
   /eval/evaluations/{evaluationId}/summary:
     get:
@@ -2427,6 +2510,15 @@ components:
           description: Included in listings (feature-spec.md:121 "incl. turns").
           items: { $ref: "#/components/schemas/Turn" }
 
+    # THE collection shape. Every `<Thing>Page` in this document is exactly
+    # this object with a different `items` type — same four keys, all four
+    # required, no variants. OpenAPI 3.0 has no generics, so the shape is
+    # repeated per type rather than parameterised; what keeps the copies
+    # honest is tests/openapi-contract.test.js, which asserts that every
+    # schema named *Page has precisely {items, page, page_size, total} with
+    # items an array, and that no operation returns a bare-array collection
+    # outside the four documented enumerations. Rationale for offset over
+    # cursors is in info.description.
     ConversationPage:
       type: object
       required: [items, page, page_size, total]
@@ -2434,9 +2526,17 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/Conversation" }
-        page: { type: integer }
-        page_size: { type: integer }
-        total: { type: integer }
+        page:
+          type: integer
+          description: 1-based index of the page returned.
+        page_size:
+          type: integer
+          description: Items per page — the effective value, which may be smaller than requested.
+        total:
+          type: integer
+          description: >-
+            Matches ACROSS all pages, so a caller can say "showing N of
+            total" rather than truncating in silence.
 
     # ------------------------------------------------------------------- chat
     ChatRequest:
@@ -2749,6 +2849,17 @@ components:
         task_id: { type: string }
         label: { type: string, nullable: true }
 
+    EvaluationSummaryPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EvaluationSummaryItem" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
     Evaluation:
       type: object
       required: [id, tree_id, status, created_at, task_id, columns, rows]
@@ -2951,6 +3062,17 @@ components:
           description: Populated on GET /tasks/{id} (feature-spec.md:131).
           items: { $ref: "#/components/schemas/Task" }
 
+    TaskPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
     TaskProgress:
       type: object
       required: [done, total]
@@ -3005,6 +3127,17 @@ components:
         version: { type: integer }
         prompt: { type: string }
         created_at: { type: string, format: date-time }
+
+    RubricPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Rubric" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
 
     RubricCreate:
       type: object
@@ -3170,6 +3303,17 @@ components:
         reasoning: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 
+    JudgmentPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Judgment" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
     EvaluationScoreSummary:
       type: object
       required: [evaluation_id, scorers]
@@ -3248,6 +3392,17 @@ components:
           default: false
           description: True until an invited user first signs in (feature-spec.md:19 "invite by email").
         created_at: { type: string, format: date-time }
+
+    AdminUserPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUser" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
 
     AdminUserUpsert:
       type: object
@@ -3504,6 +3659,17 @@ components:
           type: string
           format: date-time
           description: Creation time of THIS version.
+
+    EvalSetPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EvalSet" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
 
     EvalSetItem:
       type: object

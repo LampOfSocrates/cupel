@@ -26,6 +26,9 @@ export interface AdminUser {
   created_at?: string;
 }
 
+// openapi.yaml AdminUserPage
+export type AdminUserPage = Page<AdminUser>;
+
 // openapi.yaml:3027 AdminUserUpsert — "Upsert keyed by email: a new email
 // creates an invited user ...; an existing email updates name/roles. Null
 // name/roles = leave unchanged" (:3030-3033).
@@ -156,19 +159,32 @@ export interface Conversation {
   turns?: Turn[];
 }
 
-// openapi.yaml:1379 ConversationPage
-export interface ConversationPage {
-  items: Conversation[];
+// THE collection shape — every operation that returns a collection of user
+// data answers this envelope (contract schemas ConversationPage, TaskPage,
+// JudgmentPage, …; the rule itself is openapi.yaml info.description
+// "Collections"). OpenAPI 3.0 has to repeat the four keys per item type;
+// TypeScript does not, so here it is written once and every named page below
+// is an alias. `total` is matches across ALL pages: it is what lets a screen
+// say "showing 20 of 143" instead of quietly truncating.
+export interface Page<T> {
+  items: T[];
   page: number;
   page_size: number;
   total: number;
 }
 
-// openapi.yaml:350-378 listConversations query params
-export interface ConversationListParams {
-  search?: string;
+/** The two query params every paged operation takes. */
+export interface PageParams {
   page?: number;
   page_size?: number;
+}
+
+// openapi.yaml ConversationPage
+export type ConversationPage = Page<Conversation>;
+
+// openapi.yaml listConversations query params
+export interface ConversationListParams extends PageParams {
+  search?: string;
   forks_of?: string;
   agent_id?: string;
   origin?: "interactive" | "machine";
@@ -187,25 +203,18 @@ export interface AdminConversationItem extends Conversation {
   latest_score?: number | null;
 }
 
-// openapi.yaml:3146 AdminConversationPage
-export interface AdminConversationPage {
-  items: AdminConversationItem[];
-  page: number;
-  page_size: number;
-  total: number;
-}
+// openapi.yaml AdminConversationPage
+export type AdminConversationPage = Page<AdminConversationItem>;
 
-// openapi.yaml:314-340 listAdminConversations query params — the Inspector's
+// openapi.yaml listAdminConversations query params — the Inspector's
 // filter row (user, tree, date range, score range) plus pagination.
-export interface AdminConversationListParams {
+export interface AdminConversationListParams extends PageParams {
   user_id?: string;
   tree?: string;
   date_from?: string;
   date_to?: string;
   score_min?: number;
   score_max?: number;
-  page?: number;
-  page_size?: number;
 }
 
 // openapi.yaml:1061 Error — {code, message}; also the SSE `error` event payload
@@ -308,17 +317,18 @@ export interface Judgment {
   created_at: string;
 }
 
+// openapi.yaml JudgmentPage
+export type JudgmentPage = Page<Judgment>;
+
 // openapi.yaml listJudgments query params. Equality filters, AND-ed.
 // conversation_id has no matching Judgment field — it is a scope filter the
 // chat view uses to re-render a whole conversation's 👍/👎 in one request.
-export interface JudgmentListParams {
+export interface JudgmentListParams extends PageParams {
   subject_kind?: "case" | "turn";
   subject_id?: string;
   evaluation_id?: string;
   scorer_ref?: string;
   conversation_id?: string;
-  page?: number;
-  page_size?: number;
 }
 
 // openapi.yaml:1250 SelectionItem — ":1258 Absent/null = whole conversation;
@@ -417,6 +427,9 @@ export interface Rubric {
   prompt: string;
   created_at: string;
 }
+
+// openapi.yaml RubricPage
+export type RubricPage = Page<Rubric>;
 
 // openapi.yaml:1508 JudgeConfig — "Judge section, collapsed by default
 // (feature-spec.md:48)".
@@ -521,6 +534,9 @@ export interface EvalSet {
   items: EvalSetItem[];
   created_at: string;
 }
+
+// openapi.yaml EvalSetPage
+export type EvalSetPage = Page<EvalSet>;
 
 export interface EvalSetCreate {
   name: string;
@@ -680,6 +696,9 @@ export interface EvaluationSummaryItem {
   label?: string | null;
 }
 
+// openapi.yaml EvaluationSummaryPage
+export type EvaluationSummaryPage = Page<EvaluationSummaryItem>;
+
 // openapi.yaml:1645 Result — ":1642 One per column, same order; fills
 // incrementally (feature-spec.md:108)".
 export interface Result {
@@ -783,12 +802,13 @@ export interface TaskProgressEvent {
   progress: TaskProgress;
 }
 
-// openapi.yaml:747-767 GET /tasks query params — status / parent_id
-// ("Children of this task; omit for the default top-level listing") / limit.
-export interface TaskListParams {
+// openapi.yaml GET /tasks query params — status / parent_id ("Children of
+// this task; omit for the default top-level listing") + paging. `limit` is
+// gone: it was a top-N with no way to ask for the rest and no way to know
+// there was a rest.
+export interface TaskListParams extends PageParams {
   status?: Task["status"];
   parent_id?: string;
-  limit?: number;
 }
 
 // openapi.yaml:1726 Task — returned by DELETE /tasks/{taskId}
@@ -815,3 +835,6 @@ export interface Task {
   finished_at?: string | null;
   children?: Task[] | null;
 }
+
+// openapi.yaml TaskPage
+export type TaskPage = Page<Task>;

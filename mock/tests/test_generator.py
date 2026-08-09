@@ -27,7 +27,7 @@ async def settle(c, timeout=20):
     """Wait until no top-level task is queued/running (drip fires and forgets)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        tasks = (await c.get("/tasks", params={"limit": 200})).json()
+        tasks = (await c.get("/tasks", params={"page_size": 200})).json()["items"]
         if all(t["status"] in ("done", "failed", "cancelled") for t in tasks):
             return
         await asyncio.sleep(0.05)
@@ -46,10 +46,10 @@ async def snapshot(c):
         page = await roots(c, tree)
         out[f"{tree}_convs"] = page["total"]
         out[f"{tree}_forks"] = sum(i["fork_count"] for i in page["items"])
-        out[f"{tree}_runs"] = len((await c.get(f"/agenttrees/{tree}/evaluations")).json())
-    out["rubrics"] = len((await c.get("/eval/rubrics")).json())
+        out[f"{tree}_runs"] = len((await c.get(f"/agenttrees/{tree}/evaluations")).json()["items"])
+    out["rubrics"] = len((await c.get("/eval/rubrics")).json()["items"])
     out["judgments"] = len((await c.get("/eval/judgments",
-                                        params={"page_size": 200})).json())
+                                        params={"page_size": 200})).json()["items"])
     return out
 
 
@@ -84,7 +84,7 @@ def test_seed_twice_same_seed_is_idempotent():
             assert snap1 == snap2
 
             # exactly the 2 rubrics (feature-spec.md:164 "judgments across 2 rubrics")
-            rubrics = (await c.get("/eval/rubrics")).json()
+            rubrics = (await c.get("/eval/rubrics")).json()["items"]
             assert {r["name"] for r in rubrics} == {name for name, _ in RUBRICS}
             assert len(rubrics) == 2
 
@@ -102,7 +102,7 @@ def test_seed_twice_same_seed_is_idempotent():
             # >= 1 replay evaluation done with judged cells, across both rubric ids
             judged_cells = 0
             for tree in ("agent1", "agent2"):
-                for r in (await c.get(f"/agenttrees/{tree}/evaluations")).json():
+                for r in (await c.get(f"/agenttrees/{tree}/evaluations")).json()["items"]:
                     if r["status"] != "done":
                         continue
                     detail = (await c.get(f"/agenttrees/{tree}/evaluations/{r['id']}")).json()
@@ -111,7 +111,7 @@ def test_seed_twice_same_seed_is_idempotent():
                         if cell["latest_score"] is not None)
             assert judged_cells >= 1
             llm = [x for x in (await c.get("/eval/judgments",
-                                           params={"page_size": 200})).json()
+                                           params={"page_size": 200})).json()["items"]
                    if x["scorer"]["kind"] == "llm"]
             assert len({x["scorer"]["ref"] for x in llm}) == 2
 
@@ -151,11 +151,11 @@ def test_seed_deterministic_across_fresh_dbs():
 def test_drip_appends_activity_through_public_api():
     async def case():
         async with make_client() as c:
-            before = len((await c.get("/tasks", params={"limit": 200})).json())
+            before = len((await c.get("/tasks", params={"page_size": 200})).json()["items"])
             gen = Generator(c, seed=3, log=lambda *_: None)
             await gen.drip(interval=0, iterations=4)
             await settle(c)
-            tasks = (await c.get("/tasks", params={"limit": 200})).json()
+            tasks = (await c.get("/tasks", params={"page_size": 200})).json()["items"]
             assert len(tasks) > before  # activity flowed through the task queue
             total = 0
             for tree in ("agent1", "agent2"):

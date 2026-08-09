@@ -77,6 +77,12 @@ export function EvalPage() {
   const [tab, setTab] = useState<string | null>("cases");
   const [sets, setSets] = useState<EvalSet[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
+  // GET /eval/sets and GET /eval/rubrics are paged, so both lists here are
+  // prefixes. Holding the server's total is what lets each tab offer the rest
+  // instead of ending silently at the page boundary; both are 0 until the
+  // first fetch lands.
+  const [setsPage, setSetsPage] = useState({ page: 1, total: 0 });
+  const [rubricsPage, setRubricsPage] = useState({ page: 1, total: 0 });
   const [error, setError] = useState<string | null>(null);
 
   // Cases known to this screen, keyed by id (loaded per set, plus whatever was
@@ -106,10 +112,23 @@ export function EvalPage() {
   }, [ensureModels]);
 
   const loadSets = useCallback(async () => {
-    const list = await api.evalSets();
-    setSets(list);
-    return list;
+    const page = await api.evalSets();
+    setSets(page.items);
+    setSetsPage({ page: page.page, total: page.total });
+    return page.items;
   }, []);
+
+  const loadMoreSets = useCallback(async () => {
+    const page = await api.evalSets({ page: setsPage.page + 1 });
+    setSets((prev) => [...(prev ?? []), ...page.items]);
+    setSetsPage({ page: page.page, total: page.total });
+  }, [setsPage.page]);
+
+  const loadMoreRubrics = useCallback(async () => {
+    const page = await api.rubrics({ page: rubricsPage.page + 1 });
+    setRubrics((prev) => [...(prev ?? []), ...page.items]);
+    setRubricsPage({ page: page.page, total: page.total });
+  }, [rubricsPage.page]);
 
   const handleImported = useCallback(() => {
     loadSets().catch(() => undefined);
@@ -118,11 +137,13 @@ export function EvalPage() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([api.evalSets(), api.rubrics()])
-      .then(([setList, rubricList]) => {
+      .then(([setPage, rubricPage]) => {
         if (cancelled) return;
-        setSets(setList);
-        setRubrics(rubricList);
-        setRubricId((id) => id ?? rubricList[0]?.id ?? null);
+        setSets(setPage.items);
+        setSetsPage({ page: setPage.page, total: setPage.total });
+        setRubrics(rubricPage.items);
+        setRubricsPage({ page: rubricPage.page, total: rubricPage.total });
+        setRubricId((id) => id ?? rubricPage.items[0]?.id ?? null);
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -183,7 +204,7 @@ export function EvalPage() {
     setJudgments(null);
     api
       .judgments({ subject_kind: "case", subject_id: c.id })
-      .then(setJudgments)
+      .then((page) => setJudgments(page.items))
       .catch(() => setJudgments([]));
   }, []);
 
@@ -503,6 +524,8 @@ export function EvalPage() {
         <Tabs.Panel value="sets" pt="sm">
           <SetsTab
             sets={sets}
+            total={setsPage.total}
+            onLoadMore={loadMoreSets}
             cases={cases}
             activeTree={tree}
             knownCaseIds={Array.from(
@@ -524,7 +547,14 @@ export function EvalPage() {
         <Tabs.Panel value="rubrics" pt="sm">
           <RubricsTab
             rubrics={rubrics}
-            onChanged={() => api.rubrics().then(setRubrics)}
+            onChanged={() =>
+              api.rubrics().then((page) => {
+                setRubrics(page.items);
+                setRubricsPage({ page: page.page, total: page.total });
+              })
+            }
+            total={rubricsPage.total}
+            onLoadMore={loadMoreRubrics}
             onError={setError}
           />
         </Tabs.Panel>
@@ -597,6 +627,9 @@ function refKey(source: EvalCaseSource) {
 
 interface SetsTabProps {
   sets: EvalSet[] | null;
+  /** Sets matching across all pages (EvalSetPage.total) — the list is a prefix. */
+  total: number;
+  onLoadMore: () => Promise<void>;
   cases: Record<string, EvalCase>;
   knownCaseIds: string[];
   activeTree: string;
@@ -608,6 +641,8 @@ interface SetsTabProps {
 
 function SetsTab({
   sets,
+  total,
+  onLoadMore,
   cases,
   knownCaseIds,
   activeTree,
@@ -862,6 +897,16 @@ function SetsTab({
                 </Group>
               </UnstyledButton>
             ))}
+            {sets != null && total > sets.length && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                data-testid="sets-load-more"
+                onClick={() => void onLoadMore()}
+              >
+                Load more ({sets.length} of {total})
+              </Button>
+            )}
           </Stack>
         </Stack>
       </Paper>
@@ -1127,10 +1172,15 @@ function inputKey(input: EvalSetItemCreate): string {
 // ---------------------------------------------------------------- rubrics
 function RubricsTab({
   rubrics,
+  total,
+  onLoadMore,
   onChanged,
   onError,
 }: {
   rubrics: Rubric[] | null;
+  /** Rubrics matching across all pages (RubricPage.total) — the list is a prefix. */
+  total: number;
+  onLoadMore: () => Promise<void>;
   onChanged: () => void;
   onError: (message: string) => void;
 }) {
@@ -1205,6 +1255,16 @@ function RubricsTab({
                 </Group>
               </UnstyledButton>
             ))}
+            {rubrics != null && total > rubrics.length && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                data-testid="rubrics-load-more"
+                onClick={() => void onLoadMore()}
+              >
+                Load more ({rubrics.length} of {total})
+              </Button>
+            )}
           </Stack>
           <Divider my={2} />
           <TextInput

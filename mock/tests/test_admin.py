@@ -96,7 +96,7 @@ def test_off_mode_dev_user_is_admin():
             assert (await c.get("/me")).json()["roles"] == ["admin", "inspect"]
             r = await c.get("/admin/users")
             assert r.status_code == 200
-            assert sorted(u["email"] for u in r.json()) == [
+            assert sorted(u["email"] for u in r.json()["items"]) == [
                 "admin@demo", "restricted@demo"]
             r = await c.patch("/admin/agenttrees/agent2",
                               json={"enabled": False})
@@ -115,7 +115,9 @@ def test_list_users_shape(monkeypatch):
             token = await login(c)
             r = await c.get("/admin/users", headers=bearer(token))
             assert r.status_code == 200
-            users = {u["email"]: u for u in r.json()}
+            page = r.json()
+            assert page["page"] == 1 and page["total"] == len(page["items"])
+            users = {u["email"]: u for u in page["items"]}
             admin = users["admin@demo"]
             # AdminUser (openapi.yaml:3009-3025): roles only, no permissions
             # field — per-tree rights live in the matrix endpoint.
@@ -148,7 +150,7 @@ def test_put_users_upserts_by_email_invite_and_update(monkeypatch):
             assert by_email["restricted@demo"]["roles"] == ["inspect"]
 
             listing = await c.get("/admin/users", headers=bearer(token))
-            emails = sorted(u["email"] for u in listing.json())
+            emails = sorted(u["email"] for u in listing.json()["items"])
             assert emails == ["admin@demo", "new@demo", "restricted@demo"]
             # Invited users cannot sign in — no password flow in the mock.
             r = await c.post("/auth/token",
@@ -272,7 +274,7 @@ def test_disable_blocks_writes_keeps_reads():
                 assert r.json()["code"] == "tree_disabled"
 
             # Judge on an evaluation whose tree is disabled → 409 (documented rule).
-            rubric = (await c.get("/eval/rubrics")).json()[0]
+            rubric = (await c.get("/eval/rubrics")).json()["items"][0]
             r = await c.post("/eval/judge", json={
                 "evaluation_id": evaluation_id, "judge_model": "claude-sonnet-5",
                 "rubric_id": rubric["id"]})

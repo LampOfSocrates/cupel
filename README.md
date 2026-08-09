@@ -105,6 +105,14 @@ measure, and a backend can *declare* the same thing about itself in
 unit the project scaffolder will ask about, one question each — your endpoints,
 the bundled mock, or hide that part of the UI.
 
+One shape you implement once and reuse: every operation that returns a
+collection of user data answers `{items, page, page_size, total}` and takes
+`?page`/`?page_size` — offset paging, because `total` is what lets a screen say
+"showing 20 of 143" instead of quietly truncating, and because `LIMIT`/`OFFSET`
+ports to any store. Four operations deliberately return a bare array and say so
+at their own response: the model and endpoint enumerations, the agent-tree list
+and the agent hierarchy, all of which a caller needs whole.
+
 ## Commands
 
 | | |

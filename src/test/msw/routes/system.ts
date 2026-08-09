@@ -123,7 +123,7 @@ export const systemHandlers = [
   }),
   http.get(`${LOCAL_BASE}/tasks`, () => {
     localBaseRequests.push("/tasks");
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], page: 1, page_size: 50, total: 0 });
   }),
   http.get(`${LOCAL_BASE}/tasks/stream`, () => {
     localBaseRequests.push("/tasks/stream");

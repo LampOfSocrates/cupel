@@ -338,7 +338,7 @@ def test_feedback_appends_human_judgment():
             assert judg["subject"] == {"kind": "turn", "id": turn_id}
             assert judg["scorer"]["ref"] is None and judg["scorer"]["version"] is None
             assert judg["scorer"]["model"] is None and judg["evaluation_id"] is None
-            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]
             assert len(got) == 1 and got[0]["id"] == judg["id"]
             assert (await c.post("/feedback",
                                  json={"message_id": "nope", "rating": "up"})).status_code == 404
@@ -371,7 +371,7 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
             assert judg["scorer"]["ref"] is None
 
             # append-only: two judgments for the turn, newest first
-            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]
             assert [g["id"] for g in got] == [judg["id"], bare["id"]]
             assert [g["reasoning"] for g in got] == ["wrong refund window", None]
 
@@ -379,7 +379,7 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
             again = (await c.post("/feedback",
                                   json={"message_id": turn_id, "rating": "up",
                                         "comment": "fixed, thanks"})).json()
-            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]
             assert len(got) == 3
             assert got[0]["id"] == again["id"] and got[0]["reasoning"] == "fixed, thanks"
             assert got[2]["reasoning"] is None  # the original bare thumb, untouched
@@ -423,7 +423,7 @@ def test_soft_delete_preserves_judgments():
             turn_id = conv["turns"][1]["id"]
             await c.post("/feedback", json={"message_id": turn_id, "rating": "down"})
             await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")
-            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]
             assert len(got) == 1  # judgments survive the tombstone (openapi.yaml:438-443)
     run(case())
 
@@ -458,7 +458,7 @@ def test_replay_grid_fills_and_children_progress():
                 assert c2["status"] == "done"
                 assert c1["content"] != base["content"]
 
-            listed = (await c.get("/agenttrees/agent1/evaluations")).json()
+            listed = (await c.get("/agenttrees/agent1/evaluations")).json()["items"]
             assert listed[0]["id"] == acc["evaluation_id"]
 
             trace = (await c.get(
@@ -636,7 +636,7 @@ def test_rubrics_append_only_versions():
             r2 = (await c.post("/eval/rubrics",
                                json={"name": "Helpfulness", "prompt": "v2"})).json()
             assert r2["id"] == r1["id"] and r2["version"] == 2
-            latest = (await c.get("/eval/rubrics")).json()
+            latest = (await c.get("/eval/rubrics")).json()["items"]
             assert len(latest) == 1 and latest[0]["version"] == 2
     run(case())
 
@@ -720,7 +720,7 @@ def test_judge_evaluation_auto_cases_judgments_summary():
             assert case_doc["source"]["conversation_id"] == conv_id
 
             judgments = (await c.get("/eval/judgments",
-                                     params={"evaluation_id": acc["evaluation_id"]})).json()
+                                     params={"evaluation_id": acc["evaluation_id"]})).json()["items"]
             assert len(judgments) == 2
             assert all(j_["scorer"]["kind"] == "llm" and j_["scorer"]["version"] == 1
                        and j_["subject"]["kind"] == "case" for j_ in judgments)
@@ -731,7 +731,7 @@ def test_judge_evaluation_auto_cases_judgments_summary():
                 "rubric_id": rubric["id"]})).json()
             await wait_task(c, jr2["task_id"])
             judgments2 = (await c.get("/eval/judgments",
-                                      params={"evaluation_id": acc["evaluation_id"]})).json()
+                                      params={"evaluation_id": acc["evaluation_id"]})).json()["items"]
             assert len(judgments2) == 4
 
             summary = (await c.get(f"/eval/evaluations/{acc['evaluation_id']}/summary")).json()
@@ -778,6 +778,40 @@ def test_tasks_stream_emits_task_progress_span_events():
     run(case())
 
 
+def test_every_collection_answers_the_same_page_envelope():
+    """One collection shape (openapi.yaml info.description, "Collections").
+
+    The point of the test is that the four keys mean the same thing on every
+    listing: `total` counts matches ACROSS pages (not the slice), a
+    page_size over the operation's maximum is clamped rather than rejected,
+    and page 2 of a 1-per-page walk is disjoint from page 1."""
+    async def case():
+        async with client_pair() as c:
+            await seed_conversation(c, n=1)
+            await seed_conversation(c, n=1)
+            for path in ("/agenttrees/agent1/conversations", "/tasks", "/eval/sets",
+                         "/eval/rubrics", "/eval/judgments", "/admin/users",
+                         "/agenttrees/agent1/evaluations"):
+                page = (await c.get(path)).json()
+                assert set(page) == {"items", "page", "page_size", "total"}, path
+                assert page["page"] == 1 and isinstance(page["total"], int), path
+                assert len(page["items"]) <= page["page_size"], path
+                # Clamped, never rejected — page 0 means the first page.
+                assert (await c.get(path, params={"page": 0})).json()["page"] == 1, path
+
+            first = (await c.get("/agenttrees/agent1/conversations",
+                                 params={"page": 1, "page_size": 1})).json()
+            second = (await c.get("/agenttrees/agent1/conversations",
+                                  params={"page": 2, "page_size": 1})).json()
+            assert first["total"] == second["total"] >= 2
+            assert first["items"][0]["id"] != second["items"][0]["id"]
+            # page_size above the declared maximum is clamped to it.
+            wide = (await c.get("/agenttrees/agent1/conversations",
+                                params={"page_size": 5000})).json()
+            assert wide["page_size"] == 100
+    run(case())
+
+
 def test_task_listing_defaults_to_parents():
     async def case():
         async with client_pair() as c:
@@ -787,11 +821,11 @@ def test_task_listing_defaults_to_parents():
                 "configs": [{"model": "x"}],
             })).json()
             await wait_task(c, acc["task_id"])
-            top = (await c.get("/tasks")).json()
+            top = (await c.get("/tasks")).json()["items"]
             assert all(t["parent_id"] is None for t in top)
-            children = (await c.get("/tasks", params={"parent_id": acc["task_id"]})).json()
+            children = (await c.get("/tasks", params={"parent_id": acc["task_id"]})).json()["items"]
             assert children and all(t["parent_id"] == acc["task_id"] for t in children)
-            done = (await c.get("/tasks", params={"status": "done"})).json()
+            done = (await c.get("/tasks", params={"status": "done"})).json()["items"]
             assert all(t["status"] == "done" for t in done)
             retry = await c.post(f"/tasks/{acc['task_id']}/retry-failed")
             assert retry.status_code == 202
@@ -819,7 +853,7 @@ def test_fail_marker_injects_one_failure_then_retry_succeeds(monkeypatch):
             # child, which is what retry-failed and the UI's retry button read.
             parent = await wait_task(c, acc["task_id"])
             assert parent["status"] == "done"
-            children = (await c.get("/tasks", params={"parent_id": acc["task_id"]})).json()
+            children = (await c.get("/tasks", params={"parent_id": acc["task_id"]})).json()["items"]
             assert [ch["status"] for ch in children] == ["failed"]
             assert "injected failure" in children[0]["error"]
 
@@ -855,7 +889,7 @@ def test_evaluation_status_is_derived_from_its_task(monkeypatch):
             url = f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}"
             assert (await c.get(url)).json()["status"] == "failed"
             # The summary list derives it through the same function.
-            listed = (await c.get("/agenttrees/agent1/evaluations")).json()
+            listed = (await c.get("/agenttrees/agent1/evaluations")).json()["items"]
             assert listed[0]["status"] == "failed"
 
             await c.post(f"/tasks/{acc['task_id']}/retry-failed")

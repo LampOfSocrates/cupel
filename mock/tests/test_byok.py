@@ -328,7 +328,7 @@ def test_judge_children_generate_live_reasoning():
             judge_task = jr.json()["task_id"]
             await wait_task(c, judge_task)
             judgments = (await c.get(
-                "/eval/judgments", params={"evaluation_id": accepted["evaluation_id"]})).json()
+                "/eval/judgments", params={"evaluation_id": accepted["evaluation_id"]})).json()["items"]
             assert judgments and all(
                 j["reasoning"] == "LIVE judge reasoning." for j in judgments)
             assert judge_task not in app.state.engine.live_keys

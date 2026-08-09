@@ -42,6 +42,16 @@ const ACTIVE = new Set<Task["status"]>(["queued", "running"]);
 export interface QueueState {
   /** Parent tasks, newest first (GET /tasks order, openapi.yaml:769). */
   tasks: Task[];
+  /**
+   * Parent tasks the server says MATCH, across all pages (TaskPage.total) —
+   * `tasks` holds the pages fetched so far plus whatever the stream pushed,
+   * so the two differ whenever the queue is longer than what has been loaded.
+   * The queue view renders both rather than implying it shows everything.
+   * 0 until the first listing lands.
+   */
+  total: number;
+  /** Fetch the next page and merge it in (see loadMore's note on drift). */
+  loadMore: () => Promise<void>;
   /** Queued + running parents (badge count, feature-spec.md:107). */
   pendingCount: number;
   /** Anything running → sidebar spinner (feature-spec.md:107). */
@@ -79,6 +89,16 @@ export function QueueProvider({
   pollAfterFailures = 2,
 }: Props) {
   const [byId, setById] = useState<Record<string, Task>>({});
+  // Paging state for the parent listing. `total` is the server's count of
+  // matching parents; `pages` is how many we have asked for, so a reconnect
+  // reconcile re-reads everything already on screen instead of silently
+  // shrinking the list back to page 1.
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const pagesRef = useRef(pages);
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
   // Latest map for `retryFailed` to consult (was this parent expanded?) without
   // taking `byId` as a dependency — that would rebuild the context value, and
   // so re-render every consumer, on each stream frame.
@@ -147,8 +167,12 @@ export function QueueProvider({
 
     const refresh = async () => {
       try {
-        const list = await api.tasks();
-        if (!stopped) applyList(list);
+        for (let page = 1; page <= pagesRef.current; page += 1) {
+          const listed = await api.tasks({ page });
+          if (stopped) return;
+          applyList(listed.items);
+          setTotal(listed.total);
+        }
       } catch {
         // next poll tick / reconnect retries
       }
@@ -218,10 +242,27 @@ export function QueueProvider({
 
   const refreshList = useCallback(async () => {
     try {
-      applyList(await api.tasks());
+      const listed = await api.tasks();
+      applyList(listed.items);
+      setTotal(listed.total);
     } catch {
       // stream frames will re-sync
     }
+  }, [applyList]);
+
+  // "Load more" for a collection that grows at the HEAD while you page it:
+  // new tasks shift offsets, so page N+1 can repeat rows page N already
+  // showed. Nothing has to be de-duplicated here because the store is a map
+  // keyed by task id — a repeat overwrites its own entry — which is the
+  // mitigation openapi.yaml's Collections note names for newest-first
+  // listings. The cost of the drift is at most a few rows arriving later than
+  // they otherwise would; the next reconcile pulls them in.
+  const loadMore = useCallback(async () => {
+    const next = pagesRef.current + 1;
+    const listed = await api.tasks({ page: next });
+    applyList(listed.items);
+    setTotal(listed.total);
+    setPages(next);
   }, [applyList]);
 
   // "cancel (parent cancels children)" (feature-spec.md:106): optimistic flip
@@ -276,8 +317,8 @@ export function QueueProvider({
   const running = useMemo(() => tasks.some((t) => t.status === "running"), [tasks]);
 
   const value = useMemo(
-    () => ({ tasks, pendingCount, running, loadChildren, cancel, retryFailed }),
-    [tasks, pendingCount, running, loadChildren, cancel, retryFailed],
+    () => ({ tasks, total, loadMore, pendingCount, running, loadChildren, cancel, retryFailed }),
+    [tasks, total, loadMore, pendingCount, running, loadChildren, cancel, retryFailed],
   );
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

@@ -350,7 +350,7 @@ def test_set_create_list_and_versioned_membership():
                                    json={"name": "refund-fails-lite"})).json()
             assert named["version"] == 3 and named["name"] == "refund-fails-lite"
 
-            listed = (await c.get("/eval/sets")).json()
+            listed = (await c.get("/eval/sets")).json()["items"]
             assert [s["id"] for s in listed] == [s1["id"]]  # latest version each
             assert listed[0]["version"] == 3 and case_ids(listed[0]) == [d["id"]]
     run(case())
@@ -380,7 +380,7 @@ def test_rubric_put_appends_a_new_version():
             assert v2.status_code == 201, v2.text
             assert v2.json() == {**v1, "version": 2, "prompt": "Stricter wording.",
                                  "created_at": v2.json()["created_at"]}
-            latest = (await c.get("/eval/rubrics")).json()
+            latest = (await c.get("/eval/rubrics")).json()["items"]
             mine = [r for r in latest if r["id"] == v1["id"]]
             assert len(mine) == 1 and mine[0]["version"] == 2
 
@@ -414,7 +414,7 @@ def test_judge_by_set_id_fans_out_over_membership():
             for c_ in cases:
                 judgments = (await c.get("/eval/judgments",
                                          params={"subject_kind": "case",
-                                                 "subject_id": c_["id"]})).json()
+                                                 "subject_id": c_["id"]})).json()["items"]
                 assert len(judgments) == 1
                 assert judgments[0]["subject"] == {"kind": "case", "id": c_["id"]}
                 assert judgments[0]["scorer"] == {
@@ -441,7 +441,7 @@ def test_judge_by_set_version_pins_the_older_membership():
             assert len(detail["children"]) == 1
             assert (await c.get("/eval/judgments",
                                 params={"subject_kind": "case",
-                                        "subject_id": cases[2]["id"]})).json() == []
+                                        "subject_id": cases[2]["id"]})).json()["items"] == []
 
             missing = await c.post("/eval/judge", json={
                 "set_id": s1["id"], "set_version": 9,
@@ -488,7 +488,7 @@ def test_import_csv_creates_cases_and_a_named_set():
             second = (await c.get(f"/eval/cases/{report['created_case_ids'][1]}")).json()
             assert second["reference"] is None  # blank cell -> nullable reference
 
-            sets = (await c.get("/eval/sets")).json()
+            sets = (await c.get("/eval/sets")).json()["items"]
             assert [s["id"] for s in sets] == [report["set_id"]]
             assert sets[0]["name"] == "imported"
             assert case_ids(sets[0]) == report["created_case_ids"]
@@ -536,7 +536,7 @@ def test_import_honours_column_mapping_and_extends_an_existing_set():
             assert imported["output"] == "used-as-output"
             assert imported["reference"] is None  # reference unmapped
 
-            sets = (await c.get("/eval/sets")).json()
+            sets = (await c.get("/eval/sets")).json()["items"]
             assert sets[0]["version"] == 2  # membership appended, not overwritten
             assert case_ids(sets[0]) == [seed["id"], report["created_case_ids"][0]]
     run(case())
@@ -587,7 +587,7 @@ def test_import_large_file_returns_202_with_the_same_report_on_the_task():
             assert report["rows_imported"] == IMPORT_SYNC_MAX_ROWS
             assert [e["row"] for e in report["errors"]] == [6]
             assert report["set_id"]
-            sets = (await c.get("/eval/sets")).json()
+            sets = (await c.get("/eval/sets")).json()["items"]
             assert sets[0]["id"] == report["set_id"]
             assert len(sets[0]["items"]) == IMPORT_SYNC_MAX_ROWS
     run(case())

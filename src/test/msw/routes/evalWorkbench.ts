@@ -22,7 +22,7 @@ import type {
   RubricUpdate,
   EvaluationScoreSummary,
 } from "../../../api/types";
-import { BASE, captureLlmHeaders, counters, enabledTreeGate, envelope } from "../state";
+import { BASE, captureLlmHeaders, counters, enabledTreeGate, envelope, pageOf } from "../state";
 import { mockEvaluations } from "./evaluations";
 import { mockTasks } from "./tasks";
 
@@ -186,9 +186,9 @@ export const summaryRequests: string[] = [];
 
 export const evalHandlers = [
   // GET /eval/rubrics (openapi.yaml:868-886) — "Latest version of each rubric".
-  http.get(`${BASE}/eval/rubrics`, () => {
+  http.get(`${BASE}/eval/rubrics`, ({ request }) => {
     rubricRequests.push("rubrics");
-    return HttpResponse.json(mockRubrics);
+    return HttpResponse.json(pageOf(mockRubrics, new URL(request.url), 50));
   }),
 
   // POST /eval/rubrics (openapi.yaml:1293-1311) — "new name = v1"; an existing
@@ -287,7 +287,9 @@ export const evalHandlers = [
   }),
 
   // GET /eval/sets — "Latest version of every set, items included".
-  http.get(`${BASE}/eval/sets`, () => HttpResponse.json(mockEvalSets)),
+  http.get(`${BASE}/eval/sets`, ({ request }) =>
+    HttpResponse.json(pageOf(mockEvalSets, new URL(request.url))),
+  ),
 
   // POST /eval/sets — created at version 1.
   http.post(`${BASE}/eval/sets`, async ({ request }) => {

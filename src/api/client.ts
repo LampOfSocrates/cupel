@@ -10,6 +10,7 @@ import type {
   AdminConversationListParams,
   AdminConversationPage,
   AdminUser,
+  AdminUserPage,
   AdminUserUpsert,
   Agent,
   AgentCreate,
@@ -34,6 +35,7 @@ import type {
   EvalSetFreezeRequest,
   EvalSetItemCreate,
   EvalSetMetadataUpdate,
+  EvalSetPage,
   EvalSetReplayAccepted,
   EvalSetReplayRequest,
   EvalSetUpdate,
@@ -46,8 +48,10 @@ import type {
   Judgment,
   JudgmentEvent,
   JudgmentListParams,
+  JudgmentPage,
   Me,
   Model,
+  PageParams,
   PermissionMatrix,
   ReplayAccepted,
   ReplayRequest,
@@ -55,10 +59,11 @@ import type {
   ReplayTurnRequest,
   Rubric,
   RubricCreate,
+  RubricPage,
   RubricUpdate,
   Evaluation,
   EvaluationScoreSummary,
-  EvaluationSummaryItem,
+  EvaluationSummaryPage,
   Selection,
   Snapshot,
   SnapshotCreate,
@@ -66,6 +71,7 @@ import type {
   SpanPayload,
   Task,
   TaskListParams,
+  TaskPage,
   TaskProgressEvent,
   TaskRef,
   TokenEvent,
@@ -250,7 +256,8 @@ export const api = {
   // Admin — Settings → Members / Agent trees, role-gated server-side
   // (403 Forbidden without the admin role, openapi.yaml:1966-1970).
   // GET /admin/users (openapi.yaml:169-189) — "Every user, cross-user".
-  adminUsers: () => request<AdminUser[]>("/admin/users"),
+  adminUsers: (params: PageParams = {}) =>
+    request<AdminUserPage>("/admin/users", { query: params as Query }),
 
   // PUT /admin/users (openapi.yaml:190-218) — "upsert keyed by email: a new
   // email creates an invited user (invite by email)".
@@ -419,7 +426,7 @@ export const api = {
   // sidebar badge)"; response is "Tasks, newest first. Parents only (unless
   // parent_id given); expand via GET /tasks/{id}" (:769-771).
   tasks: (params: TaskListParams = {}) =>
-    request<Task[]>("/tasks", { query: params as Query }),
+    request<TaskPage>("/tasks", { query: params as Query }),
 
   // GET /tasks/{taskId} (openapi.yaml:815-830) — "Task with children
   // populated" (:826); the queue panel's expand fetch.
@@ -466,7 +473,10 @@ export const api = {
 
   // GET /agenttrees/{tree}/evaluations (openapi.yaml:654-669) — "Evaluations, newest first
   // (cells omitted; fetch one for the grid)" (:663).
-  evaluations: (tree: string) => request<EvaluationSummaryItem[]>(`/agenttrees/${tree}/evaluations`),
+  evaluations: (tree: string, params: PageParams = {}) =>
+    request<EvaluationSummaryPage>(`/agenttrees/${tree}/evaluations`, {
+      query: params as Query,
+    }),
 
   // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — "Full evaluation
   // with columns and per-turn cells" (:689); "Cells fill incrementally as
@@ -520,7 +530,8 @@ export const api = {
   // GET /eval/rubrics (openapi.yaml:868-886) — "Rubrics (for the Variant
   // judge section) … Latest version of each rubric" (:872, :881). Rubric
   // EDITOR UI is Phase 2 (:874-875).
-  rubrics: () => request<Rubric[]>("/eval/rubrics"),
+  rubrics: (params: PageParams = {}) =>
+    request<RubricPage>("/eval/rubrics", { query: params as Query }),
 
   // POST /eval/rubrics (openapi.yaml:1293-1311) — "Create a rubric
   // (append-only; new name = v1) … Posting an existing rubric's name appends
@@ -553,7 +564,8 @@ export const api = {
   // Eval sets — the noun Casebook merged into. Global, not tree-scoped: no
   // tree in any of these paths, and one set may reference turns across trees.
   // GET /eval/sets — "Latest version of every set, items included".
-  evalSets: () => request<EvalSet[]>("/eval/sets"),
+  evalSets: (params: PageParams = {}) =>
+    request<EvalSetPage>("/eval/sets", { query: params as Query }),
 
   // POST /eval/sets — "Create an eval set (version 1)"; membership changes
   // afterwards append versions through PUT, …/items or …/freeze.
@@ -648,5 +660,5 @@ export const api = {
   // filter by subject or by conversation_id to re-render 👍/👎 ... on reload.
   // ... Matching judgments, newest first".
   judgments: (params: JudgmentListParams = {}) =>
-    request<Judgment[]>("/eval/judgments", { query: params as Query }),
+    request<JudgmentPage>("/eval/judgments", { query: params as Query }),
 };

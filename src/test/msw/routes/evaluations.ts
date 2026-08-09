@@ -9,7 +9,15 @@ import type {
   Variant,
   EvaluationSummaryItem,
 } from "../../../api/types";
-import { BASE, captureLlmHeaders, conv, counters, enabledTreeGate, treeGate } from "../state";
+import {
+  BASE,
+  captureLlmHeaders,
+  conv,
+  counters,
+  enabledTreeGate,
+  pageOf,
+  treeGate,
+} from "../state";
 import { mockSnapshots } from "./agents";
 import { allConversations, mockForks } from "./conversations";
 import { mockEndpoints } from "./system";
@@ -281,7 +289,7 @@ export const evaluationHandlers = [
 
   // GET /agenttrees/{tree}/evaluations (openapi.yaml:654-669) — "Evaluations, newest first
   // (cells omitted; fetch one for the grid)".
-  http.get(`${BASE}/agenttrees/:tree/evaluations`, ({ params }) => {
+  http.get(`${BASE}/agenttrees/:tree/evaluations`, ({ params, request }) => {
     evaluationListRequests.push(params.tree as string);
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
@@ -300,7 +308,7 @@ export const evaluationHandlers = [
         task_id,
         label: label ?? null,
       }));
-    return HttpResponse.json(items);
+    return HttpResponse.json(pageOf(items, new URL(request.url)));
   }),
 
   // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — full grid.

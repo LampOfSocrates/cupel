@@ -68,11 +68,13 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
       `${API_ORIGIN}/eval/judgments?evaluation_id=${evaluationId}&page_size=200`,
     );
     expect(listed.ok(), await listed.text()).toBeTruthy();
-    const history = (await listed.json()) as {
-      subject: { kind: string; id: string };
-      scorer: { kind: string; ref: string; version: number; model: string };
-      evaluation_id: string;
-    }[];
+    const history = ((await listed.json()) as {
+      items: {
+        subject: { kind: string; id: string };
+        scorer: { kind: string; ref: string; version: number; model: string };
+        evaluation_id: string;
+      }[];
+    }).items;
     expect(history.length).toBeGreaterThan(0);
     for (const j of history) {
       expect(j.subject.kind).toBe("case");
@@ -160,7 +162,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
   const judgmentCount = async () => {
     const res = await request.get(`${API_ORIGIN}/eval/judgments?evaluation_id=${replay.evaluation_id}&page_size=200`);
     expect(res.ok(), await res.text()).toBeTruthy();
-    return ((await res.json()) as unknown[]).length;
+    return ((await res.json()) as { items: unknown[] }).items.length;
   };
   expect(await judgmentCount(), "the evaluation is unjudged until the page opens").toBe(0);
 

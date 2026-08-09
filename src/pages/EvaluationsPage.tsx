@@ -194,7 +194,19 @@ export function EvaluationsPage() {
   );
   const { mode, step, prefilling, testFlow, selection, configs } = nav;
 
-  const { data: evaluations, error: evaluationsError } = useAsync(() => api.evaluations(tree), [tree]);
+  // GET /agenttrees/{tree}/evaluations is paged — a tree accumulates
+  // evaluations forever. The page is kept whole (not just its items) so the
+  // list below can say how much of it is on screen and fetch the rest.
+  const {
+    data: evaluationPage,
+    error: evaluationsError,
+    setData: setEvaluationPage,
+  } = useAsync(() => api.evaluations(tree), [tree]);
+  const loadMoreEvaluations = async () => {
+    if (!evaluationPage) return;
+    const next = await api.evaluations(tree, { page: evaluationPage.page + 1 });
+    setEvaluationPage((prev) => ({ ...next, items: [...prev.items, ...next.items] }));
+  };
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
@@ -213,7 +225,10 @@ export function EvaluationsPage() {
       api.agents(tree).then(setAgents).catch((e: Error) => setError(e.message));
     }
     if (rubrics == null) {
-      api.rubrics().then(setRubrics).catch((e: Error) => setError(e.message));
+      api
+        .rubrics({ page_size: 100 })
+        .then((page) => setRubrics(page.items))
+        .catch((e: Error) => setError(e.message));
     }
   }, [mode, step, agents, rubrics, tree, ensureModels]);
 
@@ -310,10 +325,27 @@ export function EvaluationsPage() {
             {evaluationsError?.message ?? error}
           </Alert>
         )}
-        {evaluations == null ? (
+        {evaluationPage == null ? (
           <Loader size="sm" mx="auto" my="md" />
         ) : (
-          <RunsList evaluations={evaluations} onOpen={(evaluation) => navigate(`/evaluations/${evaluation.id}`)} />
+          <>
+            <RunsList
+              evaluations={evaluationPage.items}
+              onOpen={(evaluation) => navigate(`/evaluations/${evaluation.id}`)}
+            />
+            {/* The list is one page of a collection that only ever grows —
+                say which slice of it this is rather than trailing off. */}
+            {evaluationPage.total > evaluationPage.items.length && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                data-testid="evaluations-load-more"
+                onClick={() => void loadMoreEvaluations()}
+              >
+                Load more ({evaluationPage.items.length} of {evaluationPage.total})
+              </Button>
+            )}
+          </>
         )}
       </Stack>
     );

@@ -361,13 +361,13 @@ def ref(conv, tree="agent1", **extra):
 def test_eval_set_crud():
     async def case():
         async with make_client() as c:
-            assert (await c.get("/eval/sets")).json() == []
+            assert (await c.get("/eval/sets")).json()["items"] == []
             s = await seed_set(c, "Refund failures")
             assert s["name"] == "Refund failures"
             assert s["items"] == [] and s["description"] is None
             assert s["version"] == 1 and s["created_at"]
 
-            assert [x["id"] for x in (await c.get("/eval/sets")).json()] == [s["id"]]
+            assert [x["id"] for x in (await c.get("/eval/sets")).json()["items"]] == [s["id"]]
             assert (await c.get(f"/eval/sets/{s['id']}")).json()["id"] == s["id"]
 
             r = await c.patch(f"/eval/sets/{s['id']}",
@@ -382,7 +382,7 @@ def test_eval_set_crud():
             assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 204
             assert (await c.get(f"/eval/sets/{s['id']}")).status_code == 404
             assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 404
-            assert (await c.get("/eval/sets")).json() == []
+            assert (await c.get("/eval/sets")).json()["items"] == []
     run(case())
 
 
@@ -530,7 +530,7 @@ def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
             seen = (await c.get(f"/eval/sets/{s['id']}", headers=limited)).json()
             assert [i["source"]["tree"] for i in seen["items"]] == ["agent1"]
             assert [i["source"]["tree"] for i in
-                    (await c.get("/eval/sets", headers=limited)).json()[0]["items"]] == ["agent1"]
+                    (await c.get("/eval/sets", headers=limited)).json()["items"][0]["items"]] == ["agent1"]
 
             # ...and the hidden item cannot be added or acted on.
             assert (await c.post(f"/eval/sets/{s['id']}/items", headers=limited,
@@ -684,7 +684,7 @@ def test_judging_a_set_resolves_reference_items_to_cases():
                     break
                 await asyncio.sleep(0.01)
             assert task["status"] == "done", task
-            judged = (await c.get("/eval/judgments")).json()
+            judged = (await c.get("/eval/judgments")).json()["items"]
             assert len(judged) == 1
             # The judgment's subject IS the resolved case (stage C: judging a
             # set resolves each reference item to one, and the case is what the

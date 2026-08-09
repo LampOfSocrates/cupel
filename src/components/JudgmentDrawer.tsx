@@ -37,7 +37,14 @@ export function JudgmentDrawer({ caseId, opened, onClose, rubrics = [] }: Props)
     [caseId],
   );
   const evalCase = data?.[0] ?? null;
-  const history = data?.[1] ?? null;
+  // GET /eval/judgments is paged and the store is append-only, so a
+  // long-lived case can hold more judgments than one page. The heading
+  // reports the SERVER's total and the list says when it is showing only the
+  // most recent — the drawer is a read-only history, so naming the gap is the
+  // honest minimum; there is no browsing affordance to add without designing
+  // one.
+  const history = data?.[1]?.items ?? null;
+  const historyTotal = data?.[1]?.total ?? 0;
 
   // The scorer names itself: kind human = a thumb, which runs no rubric and
   // no model (openapi.yaml Scorer), so there is nothing further to label.
@@ -88,8 +95,13 @@ export function JudgmentDrawer({ caseId, opened, onClose, rubrics = [] }: Props)
           )}
           <Divider />
           <Text size="xs" c="dimmed" fw={600} data-testid="judgment-history-heading">
-            History ({history.length}) — append-only, every past score kept
+            History ({historyTotal}) — append-only, every past score kept
           </Text>
+          {historyTotal > history.length && (
+            <Text size="xs" c="dimmed" data-testid="judgment-history-truncated">
+              Showing the {history.length} most recent.
+            </Text>
+          )}
           {history.length === 0 && (
             <Text size="xs" c="dimmed">
               No judgments yet.

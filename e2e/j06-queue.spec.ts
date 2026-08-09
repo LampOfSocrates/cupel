@@ -63,7 +63,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
       await expect
         .poll(async () => {
           const res = await request.get(`${API_ORIGIN}/tasks?parent_id=${big.task_id}`);
-          const children = await res.json();
+          const children = (await res.json()).items;
           return children.filter(
             (c: { status: string }) => c.status === "queued" || c.status === "running",
           ).length;

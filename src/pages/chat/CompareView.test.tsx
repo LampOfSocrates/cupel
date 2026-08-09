@@ -151,7 +151,7 @@ describe("chat compare mode — the result IS an evaluation", () => {
 
     // The evaluation is listed by the plain evaluations endpoint the Evaluations page reads.
     const listed = await api.evaluations("agent1");
-    expect(listed.some((r) => r.label === "Re-fire · 2 endpoint(s)")).toBe(true);
+    expect(listed.items.some((r) => r.label === "Re-fire · 2 endpoint(s)")).toBe(true);
 
     // …and the existing comparison grid renders it with no new code.
     await user.click(await screen.findByTestId("compare-evaluation-link"));

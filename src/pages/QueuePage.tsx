@@ -1,4 +1,4 @@
-import { Anchor, Group, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Button, Group, Stack, Text, Title } from "@mantine/core";
 import { Link } from "react-router";
 import type { Task } from "../api/types";
 import { TaskQueue } from "../components";
@@ -40,8 +40,12 @@ function resultLinks(task: Task) {
 }
 
 export function QueuePage() {
-  const { tasks, loadChildren, cancel, retryFailed } = useQueue();
+  const { tasks, total, loadMore, loadChildren, cancel, retryFailed } = useQueue();
   const runningCount = tasks.filter((t) => t.status === "running").length;
+  // GET /tasks is paged, so this view can be showing a prefix of the queue.
+  // Say so rather than letting "12 tasks" read as "the whole queue": the count
+  // is only stated when it differs, and the button is the way out of it.
+  const more = total > tasks.length;
 
   return (
     <Stack gap="sm" maw={640}>
@@ -49,6 +53,7 @@ export function QueuePage() {
         <Title order={3}>Tasks</Title>
         {/* Sketch 05 header: "3 running · SSE live" */}
         <Text size="xs" c="dimmed">
+          {more ? `${tasks.length} of ${total} · ` : ""}
           {runningCount} running · SSE live
         </Text>
       </Group>
@@ -59,6 +64,11 @@ export function QueuePage() {
         onExpand={(id) => void loadChildren(id)}
         renderResult={resultLinks}
       />
+      {more && (
+        <Button variant="subtle" size="compact-xs" onClick={() => void loadMore()}>
+          Load more
+        </Button>
+      )}
     </Stack>
   );
 }

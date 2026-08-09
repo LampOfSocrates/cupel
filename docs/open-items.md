@@ -211,7 +211,20 @@ Phase 3 begins only after Stage B closes and the user says so.
 
 Tracked as one task above; listed here so nobody re-reads the review doc.
 
-C1 uniform cursor-paginated `Page<T>` collections · C2 conversations without inlined turns ·
+**C1 uniform paginated `Page<T>` collections — DONE 2026-08-10** (item 7 stage F1). Landed as
+OFFSET paging, not the cursors the review asked for: every consuming surface offers "load
+more" or a page jump, and both need the `total` a cursor page does not carry — the Inspector's
+page counter and the new "showing N of M" footers are that total. `LIMIT`/`OFFSET` is also
+portable to whatever store an adopter implements the contract over, where a keyset cursor is
+per-database work with an encoding each implementor would have to invent. The shape is
+`{items, page, page_size, total}`, one `<Thing>Page` schema per item type, enforced by three
+tests in `tests/openapi-contract.test.js`. Four bare-array responses stay, each documented at
+its own response: `GET /models`, `GET /agenttrees/{tree}/endpoints` (backend-configured
+enumerations a dropdown needs whole), `GET /agenttrees` (the scope selector every path hangs
+off) and `GET /agenttrees/{tree}/agents` (a hierarchy — a page of it orphans nodes). The last
+two are the honest gap: paging them needs a searchable tree picker and a lazy-expand
+traversal respectively, both real UX, both item 17. `GET /tasks` lost `limit` in the process.
+· C2 conversations without inlined turns ·
 C3 run-grid pagination + ETag · C4 `POST …/versions` replacing non-idempotent PUTs (mock
 still `PUT /eval/rubrics/{id}`:1454, `/eval/cases/{id}`:1669, `/eval/sets/{id}`:1731, all 201) ·
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this

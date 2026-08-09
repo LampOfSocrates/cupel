@@ -165,6 +165,13 @@ For every contract operation (path + method), checked contract → target
   success response, every `required` key of the contract's object schema
   (or its array items) must appear among the target schema's properties.
 
+Collections fall out of the schema rule rather than needing one of their own:
+every contract listing declares a `<Thing>Page` object whose `required` keys
+are `items`, `page`, `page_size` and `total`, so a target that still returns a
+bare array reports the four as missing. `page`/`page_size` are optional query
+params, so a target that ignores them is conformant but will answer its whole
+collection to a caller expecting a page.
+
 Deliberately **not** checked: deep JSON-Schema diffing (types, enums, nested
 required, formats), error responses, header/cookie params, security
 declarations, `x-sse-events` frame schemas, and runtime behaviour — a

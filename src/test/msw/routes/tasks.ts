@@ -2,7 +2,7 @@
 // (which doubles as chat stop-generation).
 import { http, HttpResponse } from "msw";
 import type { Task } from "../../../api/types";
-import { BASE, cancelledTasks, sseEncoder, taskStreamClients } from "../state";
+import { BASE, cancelledTasks, pageOf, sseEncoder, taskStreamClients } from "../state";
 
 // ---------------------------------------------------------------- task state
 // GET /tasks + /tasks/{id} + retry-failed fixtures (openapi.yaml:747-865).
@@ -81,7 +81,6 @@ export const taskHandlers = [
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
     const parentId = url.searchParams.get("parent_id");
-    const limit = Number(url.searchParams.get("limit") ?? "50");
     let list: Task[] = parentId
       ? (mockTasks.find((t) => t.id === parentId)?.children ?? [])
       : mockTasks
@@ -92,7 +91,7 @@ export const taskHandlers = [
           .sort((a, b) => b.created_at.localeCompare(a.created_at))
           .map(({ children: _children, ...task }) => task);
     if (status) list = list.filter((t) => t.status === status);
-    return HttpResponse.json(list.slice(0, limit));
+    return HttpResponse.json(pageOf(list, url, 50));
   }),
 
   // GET /tasks/stream (openapi.yaml:777-813) — held open until the client

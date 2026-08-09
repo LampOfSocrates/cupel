@@ -65,11 +65,21 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
+  // GET /eval/sets is paged, so this picker holds a PAGE, not "the sets".
+  // Everything below reads page.items and the footer states the rest —
+  // a picker that silently omits a set is how a turn ends up collected twice.
   const {
-    data: sets,
+    data: page,
     error: loadError,
-    setData: setSets,
+    setData: setPage,
   } = useAsync(() => api.evalSets(), []);
+  const sets = page?.items ?? null;
+
+  const loadMore = async () => {
+    if (!page) return;
+    const next = await api.evalSets({ page: page.page + 1 });
+    setPage((prev) => ({ ...next, items: [...prev.items, ...next.items] }));
+  };
 
   const add = async (evalSet: EvalSet) => {
     if (!target) return;
@@ -86,7 +96,10 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
           ? `Already in ${evalSet.name} — nothing added.`
           : `Added to ${evalSet.name}, now v${updated.version}.`,
       );
-      setSets((list) => list.map((s) => (s.id === updated.id ? updated : s)));
+      setPage((prev) => ({
+        ...prev,
+        items: prev.items.map((s) => (s.id === updated.id ? updated : s)),
+      }));
       onCollected?.(updated);
     } catch (e) {
       setError((e as Error).message);
@@ -102,7 +115,7 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
     setError(null);
     try {
       const created = await api.createEvalSet({ name });
-      setSets((list) => [created, ...list]);
+      setPage((prev) => ({ ...prev, items: [created, ...prev.items], total: prev.total + 1 }));
       setNewName("");
       await add(created);
     } catch (e) {
@@ -169,6 +182,16 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
               </Button>
             </Group>
           ))}
+          {page != null && page.total > page.items.length && (
+            <Button
+              variant="subtle"
+              size="compact-xs"
+              data-testid="collect-load-more"
+              onClick={() => void loadMore()}
+            >
+              Load more ({page.items.length} of {page.total})
+            </Button>
+          )}
         </Stack>
       </ScrollArea.Autosize>
       <Divider label="Or create one" labelPosition="left" />

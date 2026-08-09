@@ -174,7 +174,7 @@ class Generator:
         return body
 
     async def ensure_rubrics(self):
-        existing = {r["name"] for r in await self._get("/eval/rubrics")}
+        existing = {r["name"] for r in (await self._get("/eval/rubrics"))["items"]}
         for name, prompt in RUBRICS:
             if name not in existing:
                 await self._post("/eval/rubrics", {"name": name, "prompt": prompt})
@@ -249,7 +249,7 @@ class Generator:
 
         existing = {}
         for tree in SEED_CONVERSATIONS:
-            evaluations = await self._get(f"/agenttrees/{tree}/evaluations")
+            evaluations = (await self._get(f"/agenttrees/{tree}/evaluations"))["items"]
             # Oldest first, so re-runs re-target the same evaluations for judging.
             existing[tree] = [r["id"] for r in reversed(evaluations)
                               if (r.get("label") or "").startswith("Replay")]
@@ -268,11 +268,11 @@ class Generator:
             evaluation_ids.append(acc["evaluation_id"])
         self.log(f"[seed] {len(evaluation_ids)} replay evaluation(s)")
 
-        rubric_by_name = {r["name"]: r for r in await self._get("/eval/rubrics")}
+        rubric_by_name = {r["name"]: r for r in (await self._get("/eval/rubrics"))["items"]}
         judged = 0
         for i, evaluation_id in enumerate(evaluation_ids[:2]):
             prior = await self._get("/eval/judgments", evaluation_id=evaluation_id)
-            if any(x["scorer"]["kind"] == "llm" for x in prior):
+            if any(x["scorer"]["kind"] == "llm" for x in prior["items"]):
                 continue
             rubric = rubric_by_name[RUBRICS[i % len(RUBRICS)][0]]
             acc = await self._post("/eval/judge", {
@@ -290,7 +290,7 @@ class Generator:
             turn = [x for x in conv["turns"] if x["role"] == "assistant"][-1]
             prior = await self._get("/eval/judgments",
                                     subject_kind="turn", subject_id=turn["id"])
-            if any(x["scorer"]["kind"] == "human" for x in prior):
+            if any(x["scorer"]["kind"] == "human" for x in prior["items"]):
                 continue
             await self._post("/feedback", {"message_id": turn["id"], "rating": t["rating"]})
             thumbed += 1
@@ -365,12 +365,12 @@ class Generator:
                 "selection": [{"conversation_id": recent["id"]}], "configs": [cfg]})
             return f"queued replay {acc['evaluation_id']} on {recent['id']}"
         # judge
-        evaluations = [r for r in await self._get(f"/agenttrees/{tree}/evaluations")
+        evaluations = [r for r in (await self._get(f"/agenttrees/{tree}/evaluations"))["items"]
                 if r["status"] == "done"]
         if not evaluations:
             return f"judge skipped: no finished evaluations in {tree}"
         await self.ensure_rubrics()
-        rubrics = await self._get("/eval/rubrics")
+        rubrics = (await self._get("/eval/rubrics"))["items"]
         acc = await self._post("/eval/judge", {
             "evaluation_id": rng.choice(evaluations)["id"],
             "judge_model": rng.choice(("claude-haiku-4-5", "claude-sonnet-5")),

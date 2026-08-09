@@ -209,9 +209,12 @@ export function ChatPage() {
     // :983-985). Non-critical: a failure leaves thumbs unset, transcript
     // still renders.
     api
-      .judgments({ conversation_id: conversationId })
-      .then((judgments) => {
-        if (!cancelled) setThumbs(deriveThumbs(judgments));
+      // page_size at the operation's maximum: one page has to cover the
+      // whole transcript's thumbs, because deriveThumbs is newest-wins and a
+      // missing page would silently render an OLD thumb as current.
+      .judgments({ conversation_id: conversationId, page_size: 200 })
+      .then((page) => {
+        if (!cancelled) setThumbs(deriveThumbs(page.items));
       })
       .catch(() => {});
     return () => {

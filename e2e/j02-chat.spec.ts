@@ -98,12 +98,19 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
       `${API_ORIGIN}/eval/judgments?conversation_id=${conversationId}`,
     );
     expect(res.ok(), await res.text()).toBeTruthy();
-    const history = (await res.json()) as {
-      subject: { kind: string; id: string };
-      scorer: { kind: string; ref: string | null; version: number | null; model: string | null };
-      evaluation_id: string | null;
-      score: number;
-    }[];
+    // listJudgments answers the contract's page envelope, not a bare array
+    // (openapi.yaml JudgmentPage) — `total` is the count across pages.
+    const page_ = (await res.json()) as {
+      items: {
+        subject: { kind: string; id: string };
+        scorer: { kind: string; ref: string | null; version: number | null; model: string | null };
+        evaluation_id: string | null;
+        score: number;
+      }[];
+      total: number;
+    };
+    const history = page_.items;
+    expect(page_.total).toBe(3);
     // Append-only: 👍, then the comment re-rate, then 👎 — newest first.
     expect(history.length).toBe(3);
     expect(history.map((j) => j.score)).toEqual([0, 1, 1]);

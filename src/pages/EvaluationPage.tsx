@@ -76,7 +76,10 @@ export function EvaluationPage() {
   // dropdowns" — session cache). Missing rubric names degrade to raw ids.
   useEffect(() => {
     ensureModels();
-    api.rubrics().then(setRubrics).catch(() => {});
+    // page_size at the maximum: rubrics only LABEL the summary here and feed
+    // the judge form, so a prefix is tolerable — but ask for as much as one
+    // request can carry before falling back to raw ids.
+    api.rubrics({ page_size: 100 }).then((page) => setRubrics(page.items)).catch(() => {});
   }, [ensureModels]);
 
   return <EvaluationBody key={`${tree}/${evaluationId}`} rubrics={rubrics} />;
@@ -212,8 +215,8 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
           scorer_ref: autoRubricId,
           page_size: 1,
         });
-        if (!alive.current || prior.length > 0) return;
-        const inFlight = (await api.tasks({ limit: 50 })).find(
+        if (!alive.current || prior.items.length > 0) return;
+        const inFlight = (await api.tasks({ page_size: 50 })).items.find(
           (t) =>
             t.type === "judge" &&
             TASK_IN_FLIGHT.has(t.status) &&

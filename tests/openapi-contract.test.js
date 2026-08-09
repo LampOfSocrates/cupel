@@ -514,6 +514,68 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(capability.properties.status.enum).toEqual(["full", "partial", "none"]);
   });
 
+  // ---------------------------------------------------------- collections
+  // ONE collection shape (see the Collections rule in info.description and the
+  // comment above ConversationPage). OpenAPI 3.0 cannot express Page<T>, so
+  // the four keys are repeated per type — these three tests are what stop the
+  // copies from drifting and what stops a fifth unpaged listing appearing by
+  // habit.
+  const PAGE_KEYS = ["items", "page", "page_size", "total"];
+
+  // The four bare-array 200s that are NOT collections of user data, each with
+  // the reason it is exempt written at its own response in openapi.yaml.
+  const UNPAGED = new Set([
+    "GET /models", // backend-configured dropdown enumeration
+    "GET /agenttrees", // the scope selector every other path hangs off
+    "GET /agenttrees/{tree}/endpoints", // backend-configured multiselect
+    "GET /agenttrees/{tree}/agents", // a hierarchy — a page of it orphans nodes
+    "PUT /admin/users", // write echo: exactly the rows the body named
+  ]);
+
+  it("every *Page schema is the same four-key envelope", () => {
+    const pages = Object.entries(doc.components.schemas).filter(([n]) => n.endsWith("Page"));
+    expect(pages.length, "no page schemas found — did they get renamed?").toBeGreaterThan(5);
+    for (const [name, schema] of pages) {
+      expect(schema.type, `${name}.type`).toBe("object");
+      expect([...(schema.required ?? [])].sort(), `${name}.required`).toEqual([...PAGE_KEYS].sort());
+      expect(Object.keys(schema.properties ?? {}).sort(), `${name} properties`).toEqual(
+        [...PAGE_KEYS].sort(),
+      );
+      expect(schema.properties.items.type, `${name}.items`).toBe("array");
+      for (const key of ["page", "page_size", "total"]) {
+        expect(schema.properties[key].type, `${name}.${key}`).toBe("integer");
+      }
+    }
+  });
+
+  it("no collection returns a bare array outside the documented exemptions", () => {
+    for (const { id, op } of contractOperations()) {
+      for (const [status, res] of Object.entries(op.responses ?? {})) {
+        const schema = res.content?.["application/json"]?.schema;
+        if (!schema || schema.type !== "array") continue;
+        expect(UNPAGED.has(id), `${id} ${status} returns a bare array — page it or exempt it`).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  it("every paged operation takes page + page_size, and every exemption says why", () => {
+    for (const { id, op } of contractOperations()) {
+      const ref = op.responses?.["200"]?.content?.["application/json"]?.schema?.$ref ?? "";
+      if (!ref.endsWith("Page")) continue;
+      const params = (op.parameters ?? []).map((p) => p.name);
+      expect(params, `${id} needs page`).toContain("page");
+      expect(params, `${id} needs page_size`).toContain("page_size");
+    }
+    for (const id of UNPAGED) {
+      const [method, path] = id.split(" ");
+      const op = doc.paths[path][method.toLowerCase()];
+      const text = JSON.stringify(op.responses["200"].description ?? "");
+      expect(text, `${id} must say why it is not paged`).toMatch(/NOT paged|write ECHO/);
+    }
+  });
+
   it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
       expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);

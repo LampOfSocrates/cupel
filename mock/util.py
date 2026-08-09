@@ -18,6 +18,22 @@ def det_hash(*parts) -> int:
     return int(h, 16)
 
 
+def clamp_page(page: int, page_size: int, max_size: int) -> tuple[int, int]:
+    """The one offset-paging clamp every collection route uses (openapi.yaml
+    info.description, "Collections"). Out-of-range values are CLAMPED rather
+    than rejected — a caller asking for page 0 wants the first page, and a
+    422 there teaches nothing. page_size's ceiling is the operation's own
+    declared maximum, so it is passed in rather than assumed."""
+    return max(1, page), min(max(1, page_size), max_size)
+
+
+def page_of(items: list, page: int, page_size: int, total: int) -> dict:
+    """THE collection envelope — every `<Thing>Page` schema in the contract is
+    this object with a different item type. `total` counts matches across ALL
+    pages, which is what lets a client say "showing N of total"."""
+    return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
 def stamp_envelope() -> dict:
     """Server stamps every new turn at generation/receipt (openapi.yaml:1319-1325)."""
     return {

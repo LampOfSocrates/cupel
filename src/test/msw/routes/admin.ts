@@ -7,7 +7,7 @@ import type {
   AdminUserUpsert,
   TreePermission,
 } from "../../../api/types";
-import { BASE, conv, counters, mockTrees } from "../state";
+import { BASE, conv, counters, mockTrees, pageOf } from "../state";
 import { mockRoots } from "./conversations";
 
 // Admin fixtures — GET/PUT /admin/users (openapi.yaml:169-218),
@@ -94,7 +94,9 @@ export const adminHandlers = [
   // (openapi.yaml:184). Role gating is SERVER-side (403 Forbidden,
   // openapi.yaml:1966-1970); the UI hides the section on /me.roles instead of
   // relying on the error, so the happy path here always answers 200.
-  http.get(`${BASE}/admin/users`, () => HttpResponse.json(mockAdminUsers)),
+  http.get(`${BASE}/admin/users`, ({ request }) =>
+    HttpResponse.json(pageOf(mockAdminUsers, new URL(request.url), 50)),
+  ),
 
   // PUT /admin/users — "upsert keyed by email: a new email creates an invited
   // user ...; an existing email updates name/roles" (openapi.yaml:195-200).

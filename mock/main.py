@@ -18,7 +18,7 @@ from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
 from .static import mount_spa, resolve_static_dir
-from .util import canned_title, new_id, now_iso, sse, stamp_envelope
+from .util import canned_title, clamp_page, new_id, now_iso, page_of, sse, stamp_envelope
 
 
 def err(status: int, code: str, message: str):
@@ -577,13 +577,17 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 "created_at": u["created_at"]}
 
     @app.get("/admin/users")
-    async def list_users(request: Request):
-        """GET /admin/users (openapi.yaml:169-189): "Every user, cross-user
-        (admin-only)"."""
+    async def list_users(request: Request, page: int = 1, page_size: int = 50):
+        """listUsers — a page of users, cross-user (admin-only). Ordered by
+        email so the page boundary is stable while invites are being created;
+        rowid order would reshuffle the tail on every invite."""
         need_admin(request)
         auth.ensure_users(db)
-        return [admin_user_dict(u)
-                for u in db.all("SELECT * FROM users ORDER BY rowid")]
+        page, page_size = clamp_page(page, page_size, 100)
+        total = db.one("SELECT COUNT(*) AS n FROM users")["n"]
+        rows = db.all("SELECT * FROM users ORDER BY email LIMIT ? OFFSET ?",
+                      (page_size, (page - 1) * page_size))
+        return page_of([admin_user_dict(u) for u in rows], page, page_size, total)
 
     @app.put("/admin/users")
     async def put_users(request: Request):
@@ -723,7 +727,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
            conversations stay hidden; a tombstone is not history to browse.
         """
         need_inspect(request)
-        page, page_size = max(1, page), min(max(1, page_size), 100)
+        page, page_size = clamp_page(page, page_size, 100)
         where, params = ["c.deleted = 0"], []
         allowed = permitted_trees(request)
         if allowed is not None:
@@ -783,7 +787,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             "date_to": date_to, "score_min": score_min, "score_max": score_max,
             "page": page, "page_size": page_size,
         }, len(items))
-        return {"items": items, "page": page, "page_size": page_size, "total": total}
+        return page_of(items, page, page_size, total)
 
     # -------------------------------------------------------------- agents
     @app.get("/agenttrees/{tree}/agents")
@@ -898,7 +902,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                  page_size: int = 20, forks_of: str | None = None,
                                  agent_id: str | None = None, origin: str | None = None):
         need_tree(tree)
-        page, page_size = max(1, page), min(max(1, page_size), 100)
+        page, page_size = clamp_page(page, page_size, 100)
         where, params = ["c.tree_id = ?", "c.deleted = 0"], [tree]
         if forks_of:
             where.append("json_extract(c.lineage, '$.parent_conversation_id') = ?")
@@ -922,8 +926,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         rows = db.all(
             f"SELECT c.* {base} ORDER BY c.last_activity_at DESC, c.rowid DESC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size])
-        return {"items": [conversation_dict(c) for c in rows],
-                "page": page, "page_size": page_size, "total": total}
+        return page_of([conversation_dict(c) for c in rows], page, page_size, total)
 
     @app.get("/agenttrees/{tree}/conversations/{conversationId}")
     async def get_conversation(tree: str, conversationId: str):
@@ -1302,15 +1305,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return JSONResponse({"evaluation_id": evaluation_id, "results": results}, status_code=202)
 
     @app.get("/agenttrees/{tree}/evaluations")
-    async def list_evaluations(tree: str):
+    async def list_evaluations(tree: str, page: int = 1, page_size: int = 20):
         need_tree(tree)
-        out = []
-        for r in db.all("SELECT * FROM evaluations WHERE tree_id = ? ORDER BY rowid DESC", (tree,)):
-            out.append({"id": r["id"], "tree_id": r["tree_id"],
-                        "status": engine.evaluation_status(r["id"], r["task_id"]),
-                        "created_at": r["created_at"], "task_id": r["task_id"],
-                        "label": r["label"]})
-        return out
+        page, page_size = clamp_page(page, page_size, 100)
+        total = db.one("SELECT COUNT(*) AS n FROM evaluations WHERE tree_id = ?", (tree,))["n"]
+        rows = db.all("SELECT * FROM evaluations WHERE tree_id = ?"
+                      " ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                      (tree, page_size, (page - 1) * page_size))
+        items = [{"id": r["id"], "tree_id": r["tree_id"],
+                  "status": engine.evaluation_status(r["id"], r["task_id"]),
+                  "created_at": r["created_at"], "task_id": r["task_id"],
+                  "label": r["label"]} for r in rows]
+        return page_of(items, page, page_size, total)
 
     @app.get("/agenttrees/{tree}/evaluations/{evaluationId}")
     async def get_evaluation(tree: str, evaluationId: str):
@@ -1366,7 +1372,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # --------------------------------------------------------------- tasks
     @app.get("/tasks")
     async def list_tasks(status: str | None = None, parent_id: str | None = None,
-                         limit: int = 50):
+                         page: int = 1, page_size: int = 50):
+        """listTasks — a page, not the old bare top-N `limit`. The queue is the
+        clearest case for `total`: it grows while you watch it, and a client
+        that only ever saw 50 rows could not tell a quiet queue from a
+        truncated one."""
         where, params = [], []
         if parent_id:
             where.append("parent_id = ?")
@@ -1376,10 +1386,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if status:
             where.append("status = ?")
             params.append(status)
+        page, page_size = clamp_page(page, page_size, 200)
+        clause = " AND ".join(where)
+        total = db.one(f"SELECT COUNT(*) AS n FROM tasks WHERE {clause}", params)["n"]
         rows = db.all(
-            f"SELECT * FROM tasks WHERE {' AND '.join(where)} ORDER BY rowid DESC LIMIT ?",
-            [*params, min(max(1, limit), 200)])
-        return [task_dict(t) for t in rows]
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY rowid DESC LIMIT ? OFFSET ?",
+            [*params, page_size, (page - 1) * page_size])
+        return page_of([task_dict(t) for t in rows], page, page_size, total)
 
     @app.get("/tasks/stream", responses=SSE_RESPONSES)
     async def stream_tasks(request: Request):
@@ -1443,12 +1456,16 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     # ---------------------------------------------------------------- eval
     @app.get("/eval/rubrics")
-    async def list_rubrics():
-        rows = db.all(
-            "SELECT r.* FROM rubrics r WHERE r.version ="
-            " (SELECT MAX(version) FROM rubrics WHERE id = r.id) ORDER BY r.rowid")
-        return [{"id": r["id"], "name": r["name"], "version": r["version"],
-                 "prompt": r["prompt"], "created_at": r["created_at"]} for r in rows]
+    async def list_rubrics(page: int = 1, page_size: int = 50):
+        latest = ("FROM rubrics r WHERE r.version ="
+                  " (SELECT MAX(version) FROM rubrics WHERE id = r.id)")
+        page, page_size = clamp_page(page, page_size, 100)
+        total = db.one(f"SELECT COUNT(*) AS n {latest}")["n"]
+        rows = db.all(f"SELECT r.* {latest} ORDER BY r.rowid LIMIT ? OFFSET ?",
+                      (page_size, (page - 1) * page_size))
+        items = [{"id": r["id"], "name": r["name"], "version": r["version"],
+                  "prompt": r["prompt"], "created_at": r["created_at"]} for r in rows]
+        return page_of(items, page, page_size, total)
 
     @app.post("/eval/rubrics", status_code=201)
     async def create_rubric(request: Request):
@@ -1843,12 +1860,17 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return built
 
     @app.get("/eval/sets")
-    async def list_sets(request: Request):
-        """"Returns the latest version of each set, membership included"."""
-        out = []
-        for s in db.all("SELECT * FROM eval_sets ORDER BY rowid DESC"):
-            out.append(set_dict(s, latest_version(s["id"]), request))
-        return out
+    async def list_sets(request: Request, page: int = 1, page_size: int = 20):
+        """"Returns the latest version of each set, membership included" — a
+        page of them. Every row carries its full item list, so this is the
+        listing whose unpaged size was the product of set count and set
+        size."""
+        page, page_size = clamp_page(page, page_size, 100)
+        total = db.one("SELECT COUNT(*) AS n FROM eval_sets")["n"]
+        rows = db.all("SELECT * FROM eval_sets ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                      (page_size, (page - 1) * page_size))
+        items = [set_dict(s, latest_version(s["id"]), request) for s in rows]
+        return page_of(items, page, page_size, total)
 
     @app.post("/eval/sets", status_code=201)
     async def create_set(request: Request):
@@ -2223,12 +2245,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             if val:
                 where.append(f"{col} = ?")
                 params.append(val)
-        page, page_size = max(1, page), min(max(1, page_size), 200)
+        page, page_size = clamp_page(page, page_size, 200)
+        clause = " AND ".join(where)
+        total = db.one(f"SELECT COUNT(*) AS n FROM judgments WHERE {clause}", params)["n"]
         rows = db.all(
-            f"SELECT * FROM judgments WHERE {' AND '.join(where)}"
-            " ORDER BY rowid DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM judgments WHERE {clause} ORDER BY rowid DESC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size])
-        return [judgment_dict(r) for r in rows]
+        return page_of([judgment_dict(r) for r in rows], page, page_size, total)
 
     @app.get("/eval/evaluations/{evaluationId}/summary")
     async def evaluation_summary(evaluationId: str):

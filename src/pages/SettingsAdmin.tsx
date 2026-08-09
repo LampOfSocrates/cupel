@@ -46,6 +46,14 @@ const PERMISSIONS: TreePermission[] = ["view", "tune", "evaluate"];
 export function MembersSection() {
   const { trees } = useApp();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  // GET /admin/users is paged (invite-by-email grows it without bound), so
+  // the table can be showing a prefix. `total` is the server's count; the
+  // footer states it and offers the rest rather than implying the roster is
+  // complete. Each page also costs one GET permissions per row, which is the
+  // second reason not to fetch them all at once.
+  const [userTotal, setUserTotal] = useState(0);
+  const [userPage, setUserPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [matrices, setMatrices] = useState<Record<string, Record<string, TreePermission[]>>>({});
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState("");
@@ -55,10 +63,11 @@ export function MembersSection() {
     let cancelled = false;
     api
       .adminUsers()
-      .then(async (list) => {
-        const perms = await Promise.all(list.map((u) => api.userPermissions(u.id)));
+      .then(async (page) => {
+        const perms = await Promise.all(page.items.map((u) => api.userPermissions(u.id)));
         if (cancelled) return;
-        setUsers(list);
+        setUsers(page.items);
+        setUserTotal(page.total);
         setMatrices(Object.fromEntries(perms.map((p) => [p.user_id, p.permissions])));
       })
       .catch((e: Error) => {
@@ -68,6 +77,25 @@ export function MembersSection() {
       cancelled = true;
     };
   }, []);
+
+  const loadMoreUsers = async () => {
+    setLoadingMore(true);
+    try {
+      const next = await api.adminUsers({ page: userPage + 1 });
+      const perms = await Promise.all(next.items.map((u) => api.userPermissions(u.id)));
+      setUsers((prev) => [...(prev ?? []), ...next.items]);
+      setUserTotal(next.total);
+      setUserPage(next.page);
+      setMatrices((m) => ({
+        ...m,
+        ...Object.fromEntries(perms.map((p) => [p.user_id, p.permissions])),
+      }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const toggle = (userId: string, treeId: string, perm: TreePermission) => {
     const previous = matrices[userId] ?? {};
@@ -112,6 +140,7 @@ export function MembersSection() {
           for (const u of upserted) next[u.id] ??= {};
           return next;
         });
+        setUserTotal((n) => n + upserted.length);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setInviting(false));
@@ -178,6 +207,17 @@ export function MembersSection() {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+        )}
+        {users !== null && userTotal > users.length && (
+          <Button
+            variant="subtle"
+            size="compact-xs"
+            loading={loadingMore}
+            data-testid="members-load-more"
+            onClick={() => void loadMoreUsers()}
+          >
+            Load more ({users.length} of {userTotal})
+          </Button>
         )}
         <Group gap="xs" wrap="nowrap" maw={420}>
           <TextInput
