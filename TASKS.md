@@ -4,6 +4,8 @@ One list. Top to bottom. Numbered 1..N.
 
 **If an item starts with DECIDE, it needs you, not a runner.** Everything else is work.
 Commit as `N: <summary>`. Detail and evidence live in `docs/open-items.md`.
+Done items stay in place marked DONE — **numbers never shift**, so `N` in a commit always
+means `N` here.
 
 Invariants (never break): versions/judgments/snapshots append-only · generator writes only
 via public API · /me always called · no AUTH_MODE branches · one config artifact.
@@ -20,18 +22,18 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    rename already shipped, the Node port now comes first, and merging Casebook+EvalSet changes
    which families item 11 asks the adopter about. Cheap to confirm, expensive to get wrong.
 
-2. Two `useAsync` converts — `ByokSection.tsx:67`, `CompareView.tsx:132`. The other five
+2. **DONE `dcd854e`** — Two `useAsync` converts — `ByokSection.tsx:67`, `CompareView.tsx:132`. The other five
    unconverted sites are deliberate; leave them.
 
-3. `RunConfigPanel`: make `initialFocus` and `judgeInitiallyOpen` controlled, then the
+3. **DONE `9b4803e`** (deleted, not made controlled — both props had no caller). `RunConfigPanel`: make `initialFocus` and `judgeInitiallyOpen` controlled, then the
    remount-by-key drops to `key={i}`. Both props are dead since the presets were deleted.
 
-4. Fix the spec citations. Deleting the dead preset passages shortened `feature-spec.md` by 5
+4. **DONE `5401d37`** — 226 citations re-pointed across 83 files, plus the stale quotes. Fix the spec citations. Deleting the dead preset passages shortened `feature-spec.md` by 5
    lines, so **206 `feature-spec.md:NNN` citations are off** — old 104–293 → −4, old 295–305 →
    −5, old 1–103 unchanged. Also `e2e/j05-judge.spec.ts:7` quotes `'Score this run'`, a button
    string that no longer exists anywhere.
 
-5. Turn `react-hooks/set-state-in-effect` back on — **20 sites across 18 files**, currently
+5. **DONE `f9a48ac` `e9abb14` `85ecc66` `2d3820e`** — 21 sites, 12 reshaped, 9 suppressed individually with reasons. Turn `react-hooks/set-state-in-effect` back on — **20 sites across 18 files**, currently
    disabled in `eslint.config.js` with the list inline. Left off, the new lint enforces less
    than it appears to.
 
