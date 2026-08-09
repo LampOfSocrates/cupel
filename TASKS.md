@@ -18,9 +18,16 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
 
 ---
 
-1. **DECIDE — is the contract plan (item 7) still right?** Three things moved under it: the UI
-   rename already shipped, the Node port now comes first, and merging Casebook+EvalSet changes
-   which families item 11 asks the adopter about. Cheap to confirm, expensive to get wrong.
+1. **DECIDED 2026-08-09 — the contract plan stands, with three amendments.**
+   (a) The merged noun is **`EvalSet`** — familiar to adopters, even though it will hold live
+   references as well as frozen cases. (b) **Membership is versioned**, taking the eval-set
+   policy rather than the casebook one: judgments reference sets, so membership must be
+   reproducible. Consequence to design for — casebook editing quietly becomes "append a new
+   membership version", which the UI does not model today. (c) **The contract declares its
+   families** (chat · conversations · agents · instructions · evaluations · trace · tasks ·
+   eval · settings), because `cupel-ready` and item 11's `--family <name>=mine|mock|hide` both
+   need those names and would otherwise each invent their own. Additive; fits with
+   `Health.capabilities`. Note the merge drops the family count from ten to nine.
 
 2. **DONE `dcd854e`** — Two `useAsync` converts — `ByokSection.tsx:67`, `CompareView.tsx:132`. The other five
    unconverted sites are deliberate; leave them.
