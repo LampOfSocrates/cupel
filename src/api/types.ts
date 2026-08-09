@@ -554,7 +554,7 @@ export interface RubricUpdate {
 }
 
 // openapi.yaml:1857 JudgeRequest — ":1861-1864 Exactly one of evaluation_id /
-// case_ids … evaluation_id = 'Score this run', auto-creating cases from turns if
+// case_ids … evaluation_id = 'Judge this evaluation', auto-creating cases from turns
 // none exist (feature-spec.md:61)"; rubric_version ":1876-1879 Pin a specific
 // rubric version; omit for latest".
 export interface JudgeRequest {
