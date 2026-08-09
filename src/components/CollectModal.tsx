@@ -14,32 +14,35 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
-import type { Casebook, CasebookItemCreate } from "../api/types";
+import type { EvalCaseSource, EvalSet } from "../api/types";
 
 // ⊞ collect — "Collect noteworthy turns into Casebooks with one
-// keystroke" (cupel-phases.md:79). One modal behind every ⊞ entry point
+// keystroke" (cupel-phases.md:79). Since Casebook and EvalSet merged, the
+// keystroke collects into an EVAL SET: one modal behind every ⊞ entry point
 // (feature-spec.md:236 "Inspector | GET /admin/conversations,
-// POST /casebooks/{id}/items"): pick an existing casebook or type a new name,
-// add an optional note, POST the REFERENCE.
+// POST /casebooks/{id}/items", now POST /eval/sets/{setId}/items) — pick an
+// existing set or type a new name, add an optional note, POST the REFERENCE.
 //
-// Two contract facts shape the UX:
-// - An item is {tree, conversation_id, turn_id} + note — a REFERENCE, never a
-//   copy (openapi.yaml:1739-1741). Nothing about the turn's text is sent.
-// - "Re-adding the same turn is idempotent (returns the existing item)"
-//   (openapi.yaml:1744), so collecting twice is safe and the modal never has
-//   to pre-check membership. It reports "already in this casebook" by
-//   comparing the returned item's id against what the casebook already held.
+// Three contract facts shape the UX:
+// - The item is {source: {tree, conversation_id, turn_id}} + note — a
+//   REFERENCE, never a copy. Nothing about the turn's text is sent.
+// - Membership is VERSIONED, so collecting appends a version rather than
+//   mutating the set. The modal says so, because "add" quietly meaning "new
+//   version" is exactly the kind of thing a UI should not hide.
+// - Adding a turn the set already holds "appends nothing and returns that
+//   version unchanged", so the modal never pre-checks membership: an
+//   unchanged version number IS the "already there" signal.
 //
-// Create-new is inline (POST /casebooks then POST …/items) rather than a
+// Create-new is inline (POST /eval/sets then POST …/items) rather than a
 // second screen — the whole point is one keystroke from noticing a turn.
 
 interface Props {
   opened: boolean;
   /** The turn being collected; null while nothing is targeted. */
-  target: CasebookItemCreate | null;
+  target: EvalCaseSource | null;
   onClose: () => void;
   /** Fired after a successful add, so callers can refresh their own view. */
-  onCollected?: (casebook: Casebook) => void;
+  onCollected?: (set: EvalSet) => void;
 }
 
 // Fresh form per open WITHOUT a reset effect: Mantine's Modal does not render
@@ -49,7 +52,7 @@ interface Props {
 // still has a Modal to run, and so the fetch stops when the modal does.
 export function CollectModal({ opened, target, onClose, onCollected }: Props) {
   return (
-    <Modal opened={opened} onClose={onClose} title="Collect turn into a casebook" size="md">
+    <Modal opened={opened} onClose={onClose} title="Collect turn into an eval set" size="md">
       <CollectBody target={target} onCollected={onCollected} />
     </Modal>
   );
@@ -63,29 +66,28 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
   const [done, setDone] = useState<string | null>(null);
 
   const {
-    data: casebooks,
+    data: sets,
     error: loadError,
-    setData: setCasebooks,
-  } = useAsync(() => api.casebooks(), []);
+    setData: setSets,
+  } = useAsync(() => api.evalSets(), []);
 
-  const add = async (casebook: Casebook) => {
+  const add = async (evalSet: EvalSet) => {
     if (!target) return;
-    setBusy(casebook.id);
+    setBusy(evalSet.id);
     setError(null);
     try {
-      const item = await api.addCasebookItem(casebook.id, {
-        ...target,
+      const updated = await api.addEvalSetItem(evalSet.id, {
+        source: target,
         note: note.trim() || null,
       });
-      const already = casebook.items.some((i) => i.id === item.id);
+      const already = updated.version === evalSet.version;
       setDone(
         already
-          ? `Already in ${casebook.name} — nothing added.`
-          : `Added to ${casebook.name}.`,
+          ? `Already in ${evalSet.name} — nothing added.`
+          : `Added to ${evalSet.name}, now v${updated.version}.`,
       );
-      const refreshed = await api.casebook(casebook.id).catch(() => casebook);
-      setCasebooks((list) => list.map((c) => (c.id === refreshed.id ? refreshed : c)));
-      onCollected?.(refreshed);
+      setSets((list) => list.map((s) => (s.id === updated.id ? updated : s)));
+      onCollected?.(updated);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -99,8 +101,8 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
     setBusy("__new__");
     setError(null);
     try {
-      const created = await api.createCasebook({ name });
-      setCasebooks((list) => [created, ...list]);
+      const created = await api.createEvalSet({ name });
+      setSets((list) => [created, ...list]);
       setNewName("");
       await add(created);
     } catch (e) {
@@ -112,8 +114,9 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
   return (
     <Stack gap="xs">
       <Text size="xs" c="dimmed">
-        Casebooks store a <strong>reference</strong> to this turn — the transcript stays in
-        its conversation, and removing the item later changes nothing else.
+        A set stores a <strong>reference</strong> to this turn — the transcript stays in its
+        conversation. Membership is versioned, so collecting appends a new version rather
+        than editing the current one.
       </Text>
       {target && (
         <Text size="xs" c="dimmed" data-testid="collect-target">
@@ -140,27 +143,27 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
         </Alert>
       )}
       <Divider label="Add to" labelPosition="left" />
-      {!casebooks && !error && !loadError && <Loader size="sm" />}
-      {casebooks?.length === 0 && (
+      {!sets && !error && !loadError && <Loader size="sm" />}
+      {sets?.length === 0 && (
         <Text size="xs" c="dimmed" data-testid="collect-empty">
-          No casebooks yet — name one below and this turn becomes its first entry.
+          No eval sets yet — name one below and this turn becomes its first entry.
         </Text>
       )}
       <ScrollArea.Autosize mah={220}>
         <Stack gap={4}>
-          {casebooks?.map((cb) => (
-            <Group key={cb.id} gap={6} wrap="nowrap" justify="space-between">
-              <Text size="sm" truncate title={cb.description ?? undefined}>
-                {cb.name}{" "}
+          {sets?.map((s) => (
+            <Group key={s.id} gap={6} wrap="nowrap" justify="space-between">
+              <Text size="sm" truncate title={s.description ?? undefined}>
+                {s.name}{" "}
                 <Text span size="xs" c="dimmed">
-                  {cb.items.length} item{cb.items.length === 1 ? "" : "s"}
+                  v{s.version} · {s.items.length} item{s.items.length === 1 ? "" : "s"}
                 </Text>
               </Text>
               <Button
                 size="compact-xs"
                 variant="light"
-                loading={busy === cb.id}
-                onClick={() => add(cb)}
+                loading={busy === s.id}
+                onClick={() => add(s)}
               >
                 ⊞ Add
               </Button>
@@ -173,8 +176,8 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
         <TextInput
           size="xs"
           style={{ flex: 1 }}
-          placeholder="New casebook name"
-          aria-label="New casebook name"
+          placeholder="New eval set name"
+          aria-label="New eval set name"
           value={newName}
           onChange={(e) => setNewName(e.currentTarget.value)}
         />

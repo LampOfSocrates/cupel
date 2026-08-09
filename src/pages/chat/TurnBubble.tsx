@@ -185,7 +185,7 @@ export function TurnBubble({
               size="sm"
               variant="subtle"
               color="gray"
-              aria-label="Collect into casebook"
+              aria-label="Collect into eval set"
               onClick={onCollect}
             >
               ⊞

@@ -6,10 +6,11 @@ import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
 import { ConversationList } from "./ConversationList";
 
-// Two doors: Chat (talk to the agent) and Evaluate (the studio loop). Evaluations,
-// Eval and Casebooks are ONE workflow — what to test, the results, how to
+// Two doors: Chat (talk to the agent) and Evaluate (the studio loop).
+// Evaluations and Eval are ONE workflow — what to test, the results, how to
 // score — so they nest under a single Evaluate group instead of sitting as
-// three peers. Their routes are unchanged; only the grouping is. The group
+// peers. Casebooks was a third entry until Casebook and EvalSet merged; the
+// collections it listed are the Eval workbench's Sets tab now. The group
 // starts open: it is the whole point of the second door, not a disclosure.
 // Chat carries the recent list (feature-spec.md:5 "Expanded sidebar shows
 // recent conversations under Chat"); Queue carries the pending badge + running
@@ -33,7 +34,6 @@ const NAV: (NavLeaf | NavGroup)[] = [
     children: [
       { to: "/evaluations", label: "Evaluations" },
       { to: "/eval", label: "Eval" },
-      { to: "/casebooks", label: "Casebooks" },
     ],
   },
   { to: "/inspector", label: "Inspector", role: "inspect" },

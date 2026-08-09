@@ -26,7 +26,7 @@ import { ScoreChip } from "../components/ScoreChip";
 import { relativeTime } from "../lib/relativeTime";
 import { Markdown } from "../lib/markdown";
 import { product } from "../lib/product";
-import type { CasebookItemCreate } from "../api/types";
+import type { EvalCaseSource } from "../api/types";
 
 // Inspector (UNSKETCHED — derived from the app's existing dense visual
 // language per cupel-phases.md:95: the Settings → Members table and the evaluations
@@ -50,7 +50,7 @@ import type { CasebookItemCreate } from "../api/types";
 // KEYBOARD MAP (feature-spec.md:285 "keyboard nav j/k/a"):
 //   j — next conversation row (loads it in the reader)
 //   k — previous conversation row
-//   a — ⊞ collect the focused turn into a casebook
+//   a — ⊞ collect the focused turn into an eval set
 // Keys are ignored while typing in a filter field or while a modal is open.
 //
 // Filters live in the URL (feature-spec.md:285 "filters as URL params"), so an
@@ -156,7 +156,7 @@ export function InspectorPage() {
   const setFocusedTurnId = (turnId: string) => setFocusPick({ of: transcript, turnId });
 
   // ------------------------------------------------------- ⊞ collect + keys
-  const [collectTarget, setCollectTarget] = useState<CasebookItemCreate | null>(null);
+  const [collectTarget, setCollectTarget] = useState<EvalCaseSource | null>(null);
   const collect = useCallback(
     (turnId: string | null) => {
       if (!selected || !turnId) return;
@@ -208,7 +208,7 @@ export function InspectorPage() {
           <Title order={4}>Inspector</Title>
           <Text size="xs" c="dimmed">
             Every conversation in the system, across users. Filter, read the transcript inline,
-            and press <Kbd>a</Kbd> to collect a turn into a casebook. Every query here is
+            and press <Kbd>a</Kbd> to collect a turn into an eval set. Every query here is
             audit-logged server-side.
           </Text>
         </div>

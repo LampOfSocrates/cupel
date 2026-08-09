@@ -7,7 +7,10 @@ import {
   evalCaseCreates,
   evalCasePuts,
   evalSetCreates,
+  evalSetDeletes,
+  evalSetFreezes,
   evalSetPuts,
+  evalSetReplays,
   importConfig,
   importRequests,
   judgeRequests,
@@ -23,8 +26,9 @@ import { EvalPage } from "./EvalPage";
 // editor (prompt text, save = new version…)"):
 // - POST /eval/cases (openapi.yaml:1340-1369) handcrafted + sourced
 // - PUT /eval/cases/{caseId} (:1455-1483) "save = NEW version"
-// - GET/POST /eval/sets (:1484-1523), PUT /eval/sets/{setId} (:1524-1547)
-//   "each save is a new version carrying its full case_ids list"
+// - GET/POST /eval/sets, PUT /eval/sets/{setId} "each save is a new version
+//   carrying its FULL item list", DELETE, POST …/items, …/freeze, …/replay —
+//   the merged noun, so this tab is also where collected turns land
 // - PUT /eval/rubrics/{rubricId} (:1313-1338) "save = new version"
 // - POST /eval/cases/import (:1370-1429) mapping + per-row report, 200 and 202
 // - POST /eval/judge with set_id (:2926-2936)
@@ -189,19 +193,64 @@ describe("sets tab", () => {
     expect(evalSetCreates[0]).toEqual({ name: "regressions" });
   });
 
-  it("membership changes PUT the FULL case_ids list as a new version", async () => {
+  it("membership changes PUT the FULL item list as a new version", async () => {
     renderEval();
     await openTab("Sets");
     await userEvent.click(await screen.findByTestId("set-row-set-refunds"));
 
-    // case-1 is already a member (seeded set) — removing it sends the
+    // case-1 is already a frozen member (seeded set) — removing it sends the
     // remaining membership, not a delta.
-    await userEvent.click(await screen.findByTestId("toggle-case-1"));
+    await userEvent.click(await screen.findByTestId("toggle-esi-1"));
     await userEvent.click(screen.getByRole("button", { name: "Save membership as new version" }));
 
     await waitFor(() => expect(evalSetPuts).toHaveLength(1));
-    expect(evalSetPuts[0]).toEqual({ setId: "set-refunds", body: { case_ids: [] } });
+    expect(evalSetPuts[0]).toEqual({ setId: "set-refunds", body: { items: [] } });
     expect(await screen.findByTestId("set-notice")).toHaveTextContent("version 4");
+  });
+
+  it("holds turn references and frozen cases in one list, and freezes in place", async () => {
+    // The merge, on screen: what used to be a casebook is a set whose members
+    // are references until you freeze them.
+    renderEval();
+    await openTab("Sets");
+    await userEvent.click(await screen.findByTestId("set-row-set-misses"));
+    expect(await screen.findByTestId("set-item")).toHaveTextContent("hedged answer");
+    expect(screen.getByTestId("set-item")).toHaveTextContent("agent1");
+
+    await userEvent.click(screen.getByRole("button", { name: /Freeze 1 reference/ }));
+    await waitFor(() => expect(evalSetFreezes).toHaveLength(1));
+    expect(evalSetFreezes[0]).toEqual({ setId: "set-misses", body: {} });
+    // Versioned membership surfaced: the freeze appended v3.
+    expect(await screen.findByTestId("set-notice")).toHaveTextContent("version 3");
+    await waitFor(() =>
+      expect(screen.getByTestId("set-item")).toHaveTextContent("frozen case"),
+    );
+  });
+
+  it("replays the referenced turns and links each evaluation", async () => {
+    renderEval();
+    await openTab("Sets");
+    await userEvent.click(await screen.findByTestId("set-row-set-misses"));
+    await userEvent.click(screen.getByRole("button", { name: "Replay" }));
+
+    await waitFor(() => expect(evalSetReplays).toHaveLength(1));
+    expect(evalSetReplays[0]).toEqual({
+      setId: "set-misses",
+      body: { configs: [{}], context_policy: "frozen" },
+    });
+    const accepted = await screen.findByTestId("set-replay-accepted");
+    expect(accepted).toHaveTextContent("agent1");
+  });
+
+  it("deleting a set removes it from the list", async () => {
+    renderEval();
+    await openTab("Sets");
+    await userEvent.click(await screen.findByTestId("set-row-set-misses"));
+    await userEvent.click(screen.getByRole("button", { name: "Delete set" }));
+    await waitFor(() => expect(evalSetDeletes).toEqual(["set-misses"]));
+    await waitFor(() =>
+      expect(screen.queryByTestId("set-row-set-misses")).not.toBeInTheDocument(),
+    );
   });
 
   it("judges a whole set, pinning the membership version on screen", async () => {
@@ -227,7 +276,7 @@ describe("sets tab", () => {
     mockEvalSets.length = 0;
     renderEval();
     await openTab("Sets");
-    expect(await screen.findByTestId("sets-empty")).toHaveTextContent(/named, versioned bundle/i);
+    expect(await screen.findByTestId("sets-empty")).toHaveTextContent(/named, versioned collection/i);
   });
 });
 

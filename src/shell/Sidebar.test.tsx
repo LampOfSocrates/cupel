@@ -67,11 +67,13 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// Two doors: Chat and Evaluate. Evaluations / Eval / Casebooks are one workflow, so
-// they nest under the Evaluate group rather than sitting as three peers —
-// their routes are unchanged and the group is open by default.
+// Two doors: Chat and Evaluate. Evaluations and Eval are one workflow, so they
+// nest under the Evaluate group rather than sitting as peers — their routes are
+// unchanged and the group is open by default. Casebooks was a third entry until
+// Casebook and EvalSet merged; its collections are the Eval workbench's Sets
+// tab now, and /casebooks no longer exists.
 describe("Sidebar Evaluate group", () => {
-  it("nests Evaluations, Eval and Casebooks under Evaluate, each at its own route", async () => {
+  it("nests Evaluations and Eval under Evaluate, each at its own route", async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -79,11 +81,11 @@ describe("Sidebar Evaluate group", () => {
     for (const [label, path] of [
       ["Evaluations", "/evaluations"],
       ["Eval", "/eval"],
-      ["Casebooks", "/casebooks"],
     ]) {
       await user.click(screen.getByRole("link", { name: label }));
       expect(screen.getByTestId("loc")).toHaveTextContent(`${path}|null`);
     }
+    expect(screen.queryByRole("link", { name: "Casebooks" })).not.toBeInTheDocument();
   });
 });
 

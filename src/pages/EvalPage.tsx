@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import {
   Alert,
   Badge,
@@ -22,7 +23,17 @@ import { useApp } from "../AppContext";
 import { EvalImportModal } from "../components/EvalImportModal";
 import { TurnSourceModal } from "../components/TurnSourceModal";
 import { product } from "../lib/product";
-import type { EvalCase, EvalSet, Judgment, Rubric } from "../api/types";
+import type {
+  Conversation,
+  EvalCase,
+  EvalCaseSource,
+  EvalSet,
+  EvalSetItem,
+  EvalSetItemCreate,
+  EvalSetReplayAccepted,
+  Judgment,
+  Rubric,
+} from "../api/types";
 
 // Eval workbench (sketch 10) — "Hand-craft expected answers and have
 // the judge score AI against them — type/paste references, pull them from real
@@ -124,14 +135,18 @@ export function EvalPage() {
   // Membership of the chosen bucket → one GET /eval/cases/{id} per member.
   const bucketCaseIds = useMemo(() => {
     if (bucket === SESSION_BUCKET) return sessionCaseIds;
-    return sets?.find((s) => s.id === bucket)?.case_ids ?? [];
+    // A bucket is a set's FROZEN members: a reference item has no case to
+    // read yet, so it appears here only once frozen.
+    return (sets?.find((s) => s.id === bucket)?.items ?? [])
+      .filter((i) => i.kind === "frozen" && i.case_id)
+      .map((i) => i.case_id as string);
   }, [bucket, sessionCaseIds, sets]);
 
   useEffect(() => {
     const missing = bucketCaseIds.filter((id) => !cases[id]);
     if (missing.length === 0) return;
     let cancelled = false;
-    // KEPT: an incremental cache FILL, same shape as CasebooksPage — one GET
+    // KEPT: an incremental cache FILL, same shape as the Sets tab's — one GET
     // per case id the cache is missing, merged in. A failed case is caught to
     // null and never lands, so "is anything still missing" is not an equivalent
     // derivation of the flag; it would never clear.
@@ -242,7 +257,7 @@ export function EvalPage() {
     { value: SESSION_BUCKET, label: `Created here (${sessionCaseIds.length})` },
     ...(sets ?? []).map((s) => ({
       value: s.id,
-      label: `${s.name} v${s.version} · ${s.case_ids.length}`,
+      label: `${s.name} v${s.version} · ${s.items.length}`,
     })),
   ];
 
@@ -489,8 +504,14 @@ export function EvalPage() {
           <SetsTab
             sets={sets}
             cases={cases}
+            activeTree={tree}
             knownCaseIds={Array.from(
-              new Set([...sessionCaseIds, ...(sets ?? []).flatMap((s) => s.case_ids)]),
+              new Set([
+                ...sessionCaseIds,
+                ...(sets ?? []).flatMap((s) =>
+                  s.items.filter((i) => i.case_id).map((i) => i.case_id as string),
+                ),
+              ]),
             )}
             rubricOptions={rubricOptions}
             modelOptions={modelOptions}
@@ -547,10 +568,38 @@ export function EvalPage() {
 }
 
 // ------------------------------------------------------------------- sets
+// THE MERGED SURFACE. Casebook and EvalSet are one noun, so the Casebooks page
+// is gone and its work happens here: a set holds turn REFERENCES (⊞ collect)
+// and FROZEN cases side by side, freezing replaces "turn this casebook into an
+// eval set", and replay/judge hang off the same selection. No new screen was
+// invented for the merge — the two panes are the set manager
+// (feature-spec.md:63) with the casebook's actions folded in.
+//
+// VERSIONED MEMBERSHIP IS THE BEHAVIOUR CHANGE. Casebook editing used to
+// mutate freely; every membership change now appends a version. It is surfaced
+// three ways rather than hidden: the version badge next to the set name, the
+// line under it saying so, and the notice each mutation writes ("Membership
+// saved as version N"). Add/remove are STAGED into one Save so a session of
+// edits is one version rather than one per click; freeze and ⊞ collect apply
+// immediately, because each is a single deliberate act.
+//
+// REFERENCE-NOT-COPY, and its cost (carried over from the deleted Casebooks
+// page): rendering a reference means following its source, and the contract has
+// no batch turn fetch (review bucket C10). Two bounds keep that honest:
+// requests are DEDUPED by (tree, conversation_id), and at most
+// CONVERSATION_FETCH_LIMIT conversations are fetched per set — beyond that an
+// item renders as a bare reference with a visible "not previewed" note.
+const CONVERSATION_FETCH_LIMIT = 25;
+
+function refKey(source: EvalCaseSource) {
+  return `${source.tree}/${source.conversation_id}`;
+}
+
 interface SetsTabProps {
   sets: EvalSet[] | null;
   cases: Record<string, EvalCase>;
   knownCaseIds: string[];
+  activeTree: string;
   rubricOptions: { value: string; label: string }[];
   modelOptions: { value: string; label: string }[];
   onChanged: () => Promise<EvalSet[]>;
@@ -561,6 +610,7 @@ function SetsTab({
   sets,
   cases,
   knownCaseIds,
+  activeTree,
   rubricOptions,
   modelOptions,
   onChanged,
@@ -569,11 +619,13 @@ function SetsTab({
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [membership, setMembership] = useState<string[]>([]);
-  const [savingMembership, setSavingMembership] = useState(false);
+  const [membership, setMembership] = useState<EvalSetItemCreate[]>([]);
+  const [busy, setBusy] = useState(false);
   const [pickedRubricId, setRubricId] = useState<string | null>(null);
   const [judgeModel, setJudgeModel] = useState<string | null>(null);
-  const [judgeNotice, setJudgeNotice] = useState<string | null>(null);
+  const [replayModel, setReplayModel] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [replay, setReplay] = useState<EvalSetReplayAccepted | null>(null);
 
   const selected = sets?.find((s) => s.id === selectedId) ?? null;
 
@@ -583,10 +635,83 @@ function SetsTab({
   // the moment the options do rather than one effect-render later.
   const rubricId = pickedRubricId ?? rubricOptions[0]?.value ?? null;
 
+  // Bounded reference following (see the header). Deduped per conversation,
+  // capped at CONVERSATION_FETCH_LIMIT.
+  const wanted = useMemo(() => {
+    const keys: string[] = [];
+    for (const item of selected?.items ?? []) {
+      if (item.kind !== "reference" || !item.source) continue;
+      const key = refKey(item.source);
+      if (!keys.includes(key)) keys.push(key);
+    }
+    return keys.slice(0, CONVERSATION_FETCH_LIMIT);
+  }, [selected]);
+
+  const [conversations, setConversations] = useState<Record<string, Conversation>>({});
+  const [loadingRefs, setLoadingRefs] = useState(false);
+
+  useEffect(() => {
+    const missing = wanted.filter((key) => !conversations[key]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    // KEPT: an incremental cache FILL, not a data/loading/error read — the
+    // effect fetches only the ids the cache is missing and merges them in. The
+    // flag cannot be derived as "something is still missing" either: a
+    // conversation whose GET fails is caught to null and never lands, so a
+    // derived flag would stay true forever.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoadingRefs(true);
+    Promise.all(
+      missing.map((key) => {
+        const [tree, id] = key.split("/");
+        return api
+          .conversation(tree, id)
+          .then((conv) => [key, conv] as const)
+          .catch(() => null);
+      }),
+    )
+      .then((loaded) => {
+        if (cancelled) return;
+        setConversations((prev) => {
+          const next = { ...prev };
+          for (const entry of loaded) if (entry) next[entry[0]] = entry[1];
+          return next;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRefs(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // conversations intentionally omitted: the missing-set computation already
+    // reads it, and including it would re-run the effect on every fill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted]);
+
+  function itemLabel(item: EvalSetItem): string {
+    if (item.kind === "frozen") {
+      const c = item.case_id ? cases[item.case_id] : undefined;
+      return c ? shorten(c.input.prompt) : (item.case_id ?? "case");
+    }
+    const source = item.source!;
+    const turn = conversations[refKey(source)]?.turns?.find((t) => t.id === source.turn_id);
+    if (turn) return shorten(turn.content);
+    const previewable = wanted.includes(refKey(source));
+    return `${source.conversation_id} · ${source.turn_id}${previewable ? "" : " — not previewed"}`;
+  }
+
   function select(s: EvalSet) {
     setSelectedId(s.id);
-    setMembership(s.case_ids);
-    setJudgeNotice(null);
+    setMembership(s.items.map(toInput));
+    setNotice(null);
+    setReplay(null);
+  }
+
+  function applied(saved: EvalSet, message: string) {
+    setSelectedId(saved.id);
+    setMembership(saved.items.map(toInput));
+    setNotice(message);
   }
 
   async function create() {
@@ -604,18 +729,65 @@ function SetsTab({
 
   async function saveMembership() {
     if (!selected) return;
-    setSavingMembership(true);
+    setBusy(true);
     try {
-      // "The full membership for the NEW version" (openapi.yaml:3431-3437).
-      const saved = await api.updateEvalSet(selected.id, { case_ids: membership });
+      // "The full membership for the NEW version" — items absent from this
+      // list leave the set.
+      const saved = await api.updateEvalSet(selected.id, { items: membership });
       await onChanged();
-      setSelectedId(saved.id);
-      setMembership(saved.case_ids);
-      setJudgeNotice(`Membership saved as version ${saved.version}.`);
+      applied(saved, `Membership saved as version ${saved.version}.`);
     } catch (e) {
       onError((e as Error).message);
     } finally {
-      setSavingMembership(false);
+      setBusy(false);
+    }
+  }
+
+  async function freeze() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      // What "turn a casebook into an eval set" became: the references become
+      // cases in place, keeping their id and their provenance.
+      const saved = await api.freezeEvalSetItems(selected.id);
+      await onChanged();
+      applied(saved, `Froze the live references into cases — now version ${saved.version}.`);
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api.deleteEvalSet(selected.id);
+      setSelectedId(null);
+      setMembership([]);
+      await onChanged();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runReplay() {
+    if (!selected) return;
+    setBusy(true);
+    setReplay(null);
+    try {
+      setReplay(
+        await api.replayEvalSet(selected.id, {
+          configs: [replayModel ? { model: replayModel } : {}],
+        }),
+      );
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -623,20 +795,29 @@ function SetsTab({
     if (!selected || !rubricId || !judgeModel) return;
     try {
       // "set_id … judges the set's latest membership version unless
-      // set_version pins one" (openapi.yaml:2921-2923) — the workbench pins
-      // the version it is showing, so the judgment is attributable to exactly
-      // that membership.
+      // set_version pins one" — the workbench pins the version it is showing,
+      // so the judgment is attributable to exactly that membership.
       const ref = await api.judge({
         set_id: selected.id,
         set_version: selected.version,
         rubric_id: rubricId,
         judge_model: judgeModel,
       });
-      setJudgeNotice(`Judging queued as task ${ref.task_id} — watch the Queue.`);
+      setNotice(`Judging queued as task ${ref.task_id} — watch the Queue.`);
     } catch (e) {
       onError((e as Error).message);
     }
   }
+
+  const memberKeys = membership.map(inputKey);
+  const dirty =
+    selected !== null &&
+    JSON.stringify(memberKeys) !== JSON.stringify(selected.items.map(toInput).map(inputKey));
+  const references = selected?.items.filter((i) => i.kind === "reference") ?? [];
+  const replayOptions = [
+    { value: "", label: "Live instructions (no override)" },
+    ...modelOptions,
+  ];
 
   return (
     <Group align="flex-start" gap="sm" wrap="nowrap">
@@ -656,8 +837,8 @@ function SetsTab({
           {sets === null && <Loader size="xs" />}
           {sets?.length === 0 && (
             <Text size="xs" c="dimmed" data-testid="sets-empty">
-              No eval sets yet. A set is a named, versioned bundle of cases you can judge
-              in one go and reuse across models.
+              No eval sets yet. A set is a named, versioned collection of noteworthy turns
+              and frozen cases — judge it, replay it, reuse it across models.
             </Text>
           )}
           <Stack gap={2}>
@@ -676,7 +857,7 @@ function SetsTab({
                     v{s.version}
                   </Badge>
                   <Text size="xs" c="dimmed">
-                    {s.case_ids.length}
+                    {s.items.length}
                   </Text>
                 </Group>
               </UnstyledButton>
@@ -692,27 +873,105 @@ function SetsTab({
           </Text>
         ) : (
           <Stack gap={6}>
-            <Group gap={6}>
-              <Text fw={600} size="sm">
-                {selected.name}
-              </Text>
-              <Badge size="xs" variant="light">
-                v{selected.version}
-              </Badge>
-              <Text size="xs" c="dimmed">
-                Membership is versioned — saving appends a new version rather than
-                editing this one.
-              </Text>
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap={6}>
+                <Text fw={600} size="sm">
+                  {selected.name}
+                </Text>
+                <Badge size="xs" variant="light">
+                  v{selected.version}
+                </Badge>
+                {loadingRefs && <Loader size={12} />}
+              </Group>
+              <Button size="compact-xs" variant="subtle" color="red" onClick={remove}>
+                Delete set
+              </Button>
             </Group>
+            <Text size="xs" c="dimmed">
+              {selected.description ? `${selected.description} · ` : ""}
+              Membership is versioned — every add, removal or freeze appends a new version
+              rather than editing this one, so judgments stay attributable to the membership
+              they ran against.
+            </Text>
+
+            {/* Members: turn references and frozen cases in one list. */}
+            <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+              Members
+            </Text>
+            {selected.items.length === 0 && (
+              <Text size="xs" c="dimmed" data-testid="set-items-empty">
+                Nothing collected yet. Press <strong>a</strong> on a turn in the Inspector —
+                or use ⊞ anywhere a turn is shown — to reference one here, or add a case
+                below.
+              </Text>
+            )}
+            <ScrollArea.Autosize mah={260}>
+              <Stack gap={4}>
+                {selected.items.map((item) => {
+                  const key = itemKey(item);
+                  const inSet = memberKeys.includes(key);
+                  return (
+                    <Group key={item.id} gap={6} wrap="nowrap" data-testid="set-item">
+                      <Button
+                        size="compact-xs"
+                        variant={inSet ? "light" : "subtle"}
+                        color={inSet ? "red" : "blue"}
+                        data-testid={`toggle-${item.id}`}
+                        onClick={() =>
+                          setMembership((m) =>
+                            inSet
+                              ? m.filter((x) => inputKey(x) !== key)
+                              : [...m, toInput(item)],
+                          )
+                        }
+                      >
+                        {inSet ? "Remove" : "Add back"}
+                      </Button>
+                      <Badge
+                        size="xs"
+                        variant="light"
+                        color={item.kind === "frozen" ? "grape" : "blue"}
+                        style={{ flexShrink: 0 }}
+                      >
+                        {item.kind === "frozen" ? "frozen case" : (item.source?.tree ?? "reference")}
+                      </Badge>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="xs" truncate>
+                          {itemLabel(item)}
+                        </Text>
+                        {item.note && (
+                          <Text size="xs" c="dimmed" truncate>
+                            {item.note}
+                          </Text>
+                        )}
+                      </div>
+                    </Group>
+                  );
+                })}
+              </Stack>
+            </ScrollArea.Autosize>
+            {references.length > 0 &&
+              new Set(references.map((i) => refKey(i.source!))).size > CONVERSATION_FETCH_LIMIT && (
+                <Text size="xs" c="dimmed" data-testid="set-preview-cap">
+                  Previewing the first {CONVERSATION_FETCH_LIMIT} conversations only — items
+                  are references and this API has no batch turn fetch, so previewing every
+                  one would mean one request per conversation.
+                </Text>
+              )}
+
+            {/* Cases this session knows about, addable to the staged membership. */}
+            <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+              Add a case
+            </Text>
             {knownCaseIds.length === 0 && (
               <Text size="xs" c="dimmed">
                 No cases are loaded yet — create or import some on the Cases tab first.
               </Text>
             )}
-            <ScrollArea.Autosize mah={320}>
+            <ScrollArea.Autosize mah={160}>
               <Stack gap={2}>
                 {knownCaseIds.map((id) => {
-                  const inSet = membership.includes(id);
+                  const inSet = memberKeys.includes(`case:${id}`);
                   return (
                     <Group key={id} gap={6} wrap="nowrap">
                       <Button
@@ -722,7 +981,9 @@ function SetsTab({
                         data-testid={`toggle-${id}`}
                         onClick={() =>
                           setMembership((m) =>
-                            inSet ? m.filter((x) => x !== id) : [...m, id],
+                            inSet
+                              ? m.filter((x) => inputKey(x) !== `case:${id}`)
+                              : [...m, { case_id: id }],
                           )
                         }
                       >
@@ -736,11 +997,27 @@ function SetsTab({
                 })}
               </Stack>
             </ScrollArea.Autosize>
-            <Group>
-              <Button size="xs" onClick={saveMembership} loading={savingMembership}>
+
+            <Group gap={6}>
+              <Button size="xs" onClick={saveMembership} loading={busy} disabled={!dirty}>
                 Save membership as new version
               </Button>
+              <Button
+                size="xs"
+                variant="light"
+                onClick={freeze}
+                loading={busy}
+                disabled={references.length === 0}
+              >
+                Freeze {references.length} reference{references.length === 1 ? "" : "s"}
+              </Button>
             </Group>
+            <Text size="xs" c="dimmed">
+              Freezing copies each referenced turn into an eval case so the set can be judged
+              and re-judged against fixed content; the item keeps its place and its
+              provenance.
+            </Text>
+
             <Divider my={4} />
             <Group gap={6} align="flex-end">
               <Select
@@ -762,14 +1039,62 @@ function SetsTab({
               <Button
                 size="xs"
                 onClick={judgeSet}
-                disabled={!rubricId || !judgeModel || selected.case_ids.length === 0}
+                disabled={!rubricId || !judgeModel || selected.items.length === 0}
               >
                 Judge set
               </Button>
             </Group>
-            {judgeNotice && (
+
+            <Group gap={6} align="flex-end">
+              <Select
+                size="xs"
+                label="Replay config"
+                data={replayOptions}
+                value={replayModel ?? ""}
+                allowDeselect={false}
+                onChange={(value) => setReplayModel(value || null)}
+                w={220}
+              />
+              <Button
+                size="xs"
+                variant="light"
+                loading={busy}
+                disabled={references.length === 0}
+                onClick={runReplay}
+              >
+                Replay
+              </Button>
+              <Text size="xs" c="dimmed">
+                Replay re-fires the referenced turns; frozen cases have no turn to re-fire.
+              </Text>
+            </Group>
+            {replay && (
+              <Alert color="blue" data-testid="set-replay-accepted">
+                <Stack gap={2}>
+                  <Text size="xs">
+                    Enqueued {replay.evaluations.length} evaluation
+                    {replay.evaluations.length === 1 ? "" : "s"} under one task —{" "}
+                    <Link to="/queue">watch the queue</Link>.
+                  </Text>
+                  {replay.evaluations.map((r) => (
+                    <Text size="xs" key={r.evaluation_id}>
+                      {r.tree_id}:{" "}
+                      {r.tree_id === activeTree ? (
+                        <Link to={`/evaluations/${r.evaluation_id}`}>{r.evaluation_id}</Link>
+                      ) : (
+                        <>
+                          {r.evaluation_id} (opens when {r.tree_id} is the active tree —
+                          evaluation pages are tree-scoped)
+                        </>
+                      )}
+                    </Text>
+                  ))}
+                </Stack>
+              </Alert>
+            )}
+            {notice && (
               <Text size="xs" c="dimmed" data-testid="set-notice">
-                {judgeNotice}
+                {notice}
               </Text>
             )}
           </Stack>
@@ -777,6 +1102,26 @@ function SetsTab({
       </Paper>
     </Group>
   );
+}
+
+// An item and a membership input are the same thing seen from two sides; both
+// reduce to the REFERENT the server keys item identity on.
+function toInput(item: EvalSetItem): EvalSetItemCreate {
+  return item.kind === "frozen"
+    ? { case_id: item.case_id!, note: item.note }
+    : { source: item.source!, note: item.note };
+}
+
+function itemKey(item: EvalSetItem): string {
+  return item.kind === "frozen"
+    ? `case:${item.case_id}`
+    : `turn:${item.source!.tree}/${item.source!.conversation_id}/${item.source!.turn_id}`;
+}
+
+function inputKey(input: EvalSetItemCreate): string {
+  return "case_id" in input
+    ? `case:${input.case_id}`
+    : `turn:${input.source.tree}/${input.source.conversation_id}/${input.source.turn_id}`;
 }
 
 // ---------------------------------------------------------------- rubrics

@@ -6,10 +6,10 @@ import { renderApp } from "../test/render";
 import {
   adminConversationConfig,
   adminConversationRequests,
-  casebookCreates,
-  casebookItemPosts,
+  evalSetCreates,
+  evalSetItemPosts,
   mockAdminMe,
-  mockCasebooks,
+  mockEvalSets,
 } from "../test/msw/handlers";
 import { Shell } from "../shell/Shell";
 import { product } from "../lib/product";
@@ -24,7 +24,7 @@ import { InspectorPage } from "./InspectorPage";
 // - AdminConversationItem's user_id + latest_score columns (:3129-3144)
 // - the reader loads GET /agenttrees/{tree}/conversations/{id} for the
 //   selected row (admin rows carry no transcript)
-// - POST /casebooks/{id}/items (:1732-1757) from the ⊞ action / `a` key
+// - POST /eval/sets/{setId}/items from the ⊞ action / `a` key
 // - role gating: no `inspect` role → no nav entry and no route
 
 function renderInspector(route = "/inspector") {
@@ -196,7 +196,7 @@ describe("inline transcript reader", () => {
 });
 
 describe("⊞ collect", () => {
-  it("posts the focused turn as a reference to the chosen casebook", async () => {
+  it("posts the focused turn as a reference to the chosen eval set", async () => {
     renderInspector();
     await screen.findByTestId("inspector-reader");
     await waitFor(() => expect(screen.getAllByTestId("reader-turn")).toHaveLength(2));
@@ -206,14 +206,18 @@ describe("⊞ collect", () => {
     fireEvent.change(screen.getByLabelText("Note (optional)"), {
       target: { value: "hedged" },
     });
-    await userEvent.click(screen.getByRole("button", { name: "⊞ Add" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "⊞ Add" })[0]);
 
-    await waitFor(() => expect(casebookItemPosts).toHaveLength(1));
-    expect(casebookItemPosts[0]).toEqual({
-      casebookId: "cb-1",
-      body: { tree: "agent1", conversation_id: "c1", turn_id: "t2", note: "hedged" },
+    await waitFor(() => expect(evalSetItemPosts).toHaveLength(1));
+    expect(evalSetItemPosts[0]).toEqual({
+      setId: "set-refunds",
+      body: {
+        source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+        note: "hedged",
+      },
     });
-    expect(await screen.findByTestId("collect-done")).toHaveTextContent(/already in/i);
+    // Versioned membership surfaced: the add appended one.
+    expect(await screen.findByTestId("collect-done")).toHaveTextContent("now v4");
   });
 
   it("opens the collect dialog on the `a` key", async () => {
@@ -231,24 +235,22 @@ describe("⊞ collect", () => {
     expect(await screen.findByTestId("collect-target")).toHaveTextContent("agent1 · c1 · t1");
   });
 
-  it("creates a casebook inline and adds the turn to it", async () => {
-    mockCasebooks.length = 0;
+  it("creates an eval set inline and adds the turn to it", async () => {
+    mockEvalSets.length = 0;
     renderInspector();
     await waitFor(() => expect(screen.getAllByTestId("reader-turn")).toHaveLength(2));
     fireEvent.keyDown(window, { key: "a" });
     expect(await screen.findByTestId("collect-empty")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("New casebook name"), {
+    fireEvent.change(screen.getByLabelText("New eval set name"), {
       target: { value: "Weekend triage" },
     });
     await userEvent.click(screen.getByRole("button", { name: "Create + add" }));
 
-    await waitFor(() => expect(casebookCreates).toEqual([{ name: "Weekend triage" }]));
-    await waitFor(() => expect(casebookItemPosts).toHaveLength(1));
-    expect(casebookItemPosts[0].body).toEqual({
-      tree: "agent1",
-      conversation_id: "c1",
-      turn_id: "t2",
+    await waitFor(() => expect(evalSetCreates).toEqual([{ name: "Weekend triage" }]));
+    await waitFor(() => expect(evalSetItemPosts).toHaveLength(1));
+    expect(evalSetItemPosts[0].body).toEqual({
+      source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
       note: null,
     });
     expect(await screen.findByTestId("collect-done")).toHaveTextContent("Added to Weekend triage");
@@ -269,12 +271,12 @@ describe("role gating (never mode gating)", () => {
   it("shows the Inspector nav entry when /me.roles includes inspect", async () => {
     renderShell(mockAdminMe);
     expect(await screen.findByRole("link", { name: "Inspector" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Casebooks" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Eval" })).toBeInTheDocument();
   });
 
   it("hides it when the role is absent", async () => {
     renderShell({ ...mockAdminMe, roles: [] });
-    expect(await screen.findByRole("link", { name: "Casebooks" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Eval" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Inspector" })).not.toBeInTheDocument();
   });
 });

@@ -22,7 +22,6 @@ import { ForkComparePage } from "./pages/ForkComparePage";
 import { TracePage } from "./pages/TracePage";
 import { EvalPage } from "./pages/EvalPage";
 import { InspectorPage } from "./pages/InspectorPage";
-import { CasebooksPage } from "./pages/CasebooksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
@@ -236,12 +235,9 @@ export function App() {
               directly: case editor …, set manager …, rubric editor"
               (feature-spec.md:63). Global, not tree-scoped
               (feature-spec.md:111), so the route carries no tree. */}
+          {/* Its Sets tab is also where collected turns land: Casebook and
+              EvalSet are one noun now, so there is no second route. */}
           <Route path="/eval" element={<EvalPage />} />
-          {/* Casebooks — global like Eval (a casebook may reference
-              turns across trees, openapi.yaml:1654-1656), so no tree in the
-              route. Open to any signed-in user: the contract role-gates the
-              Inspector, not /casebooks. */}
-          <Route path="/casebooks" element={<CasebooksPage />} />
           {/* Inspector — ROLE-gated, never mode-gated: the route
               exists only when /me.roles includes `inspect` (openapi.yaml:308
               "Requires the inspect role"). Without it the path falls through
