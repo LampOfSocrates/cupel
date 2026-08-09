@@ -62,7 +62,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Control who can view, tune or evaluate each agent tree; disable a tree so new work stops but history stays readable |
 | ✅ | Fill the app with realistic activity for a demo, on demand |
 | ✅ | Send a client a token-gated demo URL |
-| 🗓️ | **Put your own name on it** — one command asks for your product name and backend, and writes the config |
+| ✅ | **Put your own name on it** — `npm run init` asks for your product name and backend and writes the config in place, keeping your comments, extra targets and compare presets |
 | 🗓️ | **Switch between agent trees in the UI** (today the active tree comes from config) |
 | 🗓️ | Keep a hosted instance's data across restarts — the code is written, it needs an object-storage bucket |
 | 🗓️ | Work with **any AG-UI agent** through a bridge, so an agent that already speaks that protocol needs no new endpoints for chat |

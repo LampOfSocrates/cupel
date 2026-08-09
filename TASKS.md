@@ -69,7 +69,18 @@ and **Evaluate**. User decision 2026-08-09.
       all** — `eslint-plugin-react-hooks@7` (`recommended-latest`). There is no eslint config
       in the repo, so five `exhaustive-deps` disables are inert and enforce nothing. Do **not**
       enable the React Compiler (Vite/rolldown, no Babel — 4 deps to reintroduce a Babel pass).
-- [ ] **#11** `docs/features.md:65` still marks whitelabel as planned (🗓️). It shipped.
+- [x] **#11** `docs/features.md:65` still marks whitelabel as planned (🗓️). It shipped.
+- [ ] **#39** **Citation drift from #5.** Deleting the dead preset passages shortened
+      `feature-spec.md` by 5 lines, so **206 `feature-spec.md:NNN` citations are now wrong**:
+      `src/` 136, `e2e/` 33, `tests/` 17, `mock/` 16, `docs/` 1, root docs 3. The shift is exact
+      and mechanical — **old 104–293 → −4, old 295–305 → −5, old 1–103 unchanged**. Fold in the
+      stale *quotes* left by #3, which are a different failure (the quoted UI string no longer
+      exists anywhere): `e2e/j05-judge.spec.ts:7` quotes `'Score this run'` and is **not**
+      self-annotated, unlike the dod/j07/j01 quotes which are; plus
+      `src/pages/EvaluationPage.tsx:445`, `EvaluationsPage.test.tsx:131` (same string) and ~14
+      comments across `EditorPage.tsx`, `EvaluationsPage.tsx`, `client.ts`, `types.ts` still
+      saying "Test in Runs". Cheapest folded into #14, which churns `feature-spec.md` anyway —
+      but the j05 quote is worth fixing before then.
 
 ## Before the UX phase
 
