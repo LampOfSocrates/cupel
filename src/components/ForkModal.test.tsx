@@ -156,7 +156,7 @@ describe("ForkModal", () => {
     await screen.findByText("chat-probe c-fork-1-1");
   });
 
-  it("View run routes to the run backing the fork pivot", async () => {
+  it("View evaluation routes to the evaluation backing the fork pivot", async () => {
     const user = userEvent.setup();
     renderModal();
 
@@ -165,7 +165,7 @@ describe("ForkModal", () => {
     await screen.findByTestId("fork-results");
 
     // run_id → GET …/runs/{runId} route (openapi.yaml:1581-1585).
-    await user.click(screen.getByText("View run"));
+    await user.click(screen.getByText("View evaluation"));
     await screen.findByText("run-probe run-1");
   });
 });

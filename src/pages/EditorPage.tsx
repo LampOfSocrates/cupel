@@ -64,7 +64,7 @@ import { relativeTime } from "../lib/relativeTime";
 // session-local so a deep link to this handoff is meaningless after reload,
 // and react-router state costs no new persistence. Shape:
 // navigate("/evaluations", { state: { testInRuns: { agent_id, snapshot_id,
-// snapshot_label } } }) — consumed by RunsPage (see its prefill note).
+// snapshot_label } } }) — consumed by EvaluationsPage (see its prefill note).
 //
 // "Last tested: run …" breadcrumb in the editor: SKIPPED — the editor
 // unmounts on the navigate, so surfacing the queued run back here would need
@@ -448,7 +448,7 @@ export function EditorPage() {
               {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Runs
                   (cupel-phases.md:18 "editor → Runs flow (sketches 06 → 03)"). */}
               <Button size="xs" variant="light" onClick={() => void testInRuns()} disabled={busy}>
-                Test in Runs ▸
+                Test as evaluation
               </Button>
               <Button size="xs" onClick={() => void save()} disabled={busy || !dirty}>
                 Save as v{nextVersion}

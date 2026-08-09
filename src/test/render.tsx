@@ -72,7 +72,7 @@ function TestAppProvider({
 // `state` = router location state for the initial entry (the editor → Runs
 // Test-in-Runs handoff travels as navigate state, not a URL).
 // `queue` = wrap in QueueProvider with fast timings — OPT-IN so
-// existing tests that count taskStreamRig.clients (RunDetailPage) keep their
+// existing tests that count taskStreamRig.clients (EvaluationPage) keep their
 // single-subscription arithmetic.
 export function renderApp(
   ui: ReactNode,

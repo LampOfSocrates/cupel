@@ -11,7 +11,7 @@ import {
   snapshotRequests,
 } from "../test/msw/handlers";
 import { EditorPage } from "./EditorPage";
-import { RunsPage } from "./RunsPage";
+import { EvaluationsPage } from "./EvaluationsPage";
 
 // Contract under test:
 // - GET .../instructions → live pointer + full ascending history
@@ -56,7 +56,7 @@ describe("EditorPage", () => {
     // save disabled until dirty; Test in Runs always available — "drafts are
     // testable without saving" (feature-spec.md:86)
     expect(screen.getByRole("button", { name: "Save as v4" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Test in Runs ▸" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Test as evaluation" })).toBeEnabled();
   });
 
   it("save PUTs {content, format}; the new version appends and becomes live", async () => {
@@ -200,13 +200,13 @@ describe("EditorPage", () => {
   // "Test an instruction change in one click: 'Test in Runs'
   // snapshots your draft and replays your usual conversations against it —
   // using the editor → Runs flow (sketches 06 → 03)" (cupel-phases.md:18).
-  // Real RunsPage mounted at /evaluations so the router-state handoff is exercised
+  // Real EvaluationsPage mounted at /evaluations so the router-state handoff is exercised
   // end to end, not against a probe.
   const renderEditorWithRuns = (agentId = "ag_concierge") =>
     renderApp(
       <Routes>
         <Route path="/agents/:agentId/editor" element={<EditorPage />} />
-        <Route path="/evaluations" element={<RunsPage />} />
+        <Route path="/evaluations" element={<EvaluationsPage />} />
       </Routes>,
       { route: `/agents/${agentId}/editor` },
     );
@@ -221,7 +221,7 @@ describe("EditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Snapshot draft" }));
     await screen.findByText("v3-draft (a3f1)");
 
-    await user.click(screen.getByRole("button", { name: "Test in Runs ▸" }));
+    await user.click(screen.getByRole("button", { name: "Test as evaluation" }));
     // Runs stepper at Configure, config carrying the snapshot + its label
     // ("the draft text is snapshotted immutably into the run config
     // (snapshot_id)", feature-spec.md:86) — Queue is the second tap.
@@ -240,7 +240,7 @@ describe("EditorPage", () => {
     await screen.findByText("v3-draft (a3f1)");
     await setDraft(user, "Draft text. Edited.");
 
-    await user.click(screen.getByRole("button", { name: "Test in Runs ▸" }));
+    await user.click(screen.getByRole("button", { name: "Test as evaluation" }));
     // "empty items = first-time testing" (openapi.yaml:311) → Pick step
     await screen.findByText("Refund escalation");
     expect(screen.getByRole("button", { name: "Configure ▸" })).toBeDisabled();

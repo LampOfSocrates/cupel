@@ -212,7 +212,7 @@ export function AgentTreesSection() {
     if (
       !enabled &&
       !window.confirm(
-        `Disable "${tree.name}"? New chats and runs are blocked; history stays readable.`,
+        `Disable "${tree.name}"? New chats and evaluations are blocked; history stays readable.`,
       )
     ) {
       return;

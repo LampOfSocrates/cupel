@@ -12,8 +12,8 @@ import { AppContext } from "./AppContext";
 import { QueueProvider } from "./QueueContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
-import { RunsPage } from "./pages/RunsPage";
-import { RunDetailPage } from "./pages/RunDetailPage";
+import { EvaluationsPage } from "./pages/EvaluationsPage";
+import { EvaluationPage } from "./pages/EvaluationPage";
 import { QueuePage } from "./pages/QueuePage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { EditorPage } from "./pages/EditorPage";
@@ -202,9 +202,9 @@ export function App() {
           <Route index element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
-          <Route path="/evaluations" element={<RunsPage />} />
+          <Route path="/evaluations" element={<EvaluationsPage />} />
           {/* Step 3 Results — also the detail route for stored runs. */}
-          <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+          <Route path="/evaluations/:runId" element={<EvaluationPage />} />
           {/* Pre-rename paths, still live in shared links (see above). */}
           <Route path="/runs" element={<LegacyRunsRedirect />} />
           <Route path="/runs/:runId" element={<LegacyRunsRedirect />} />

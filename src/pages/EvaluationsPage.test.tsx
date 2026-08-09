@@ -14,8 +14,8 @@ import {
   runListRequests,
   taskStreamRig,
 } from "../test/msw/handlers";
-import { RunsPage } from "./RunsPage";
-import { RunDetailPage } from "./RunDetailPage";
+import { EvaluationsPage } from "./EvaluationsPage";
+import { EvaluationPage } from "./EvaluationPage";
 
 // Contract under test — the Runs stepper (cupel-phases.md:19: "pick (sketch
 // 02), configure (sketch 03), compare (sketch 04)"):
@@ -31,14 +31,14 @@ import { RunDetailPage } from "./RunDetailPage";
 function renderRuns(route = "/evaluations", state?: unknown) {
   return renderApp(
     <Routes>
-      <Route path="/evaluations" element={<RunsPage />} />
-      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations" element={<EvaluationsPage />} />
+      <Route path="/evaluations/:runId" element={<EvaluationPage />} />
     </Routes>,
     { route, state },
   );
 }
 
-describe("RunsPage — landing", () => {
+describe("EvaluationsPage — landing", () => {
   it("lists runs from GET runs and routes to the detail on row click", async () => {
     const user = userEvent.setup();
     renderRuns();
@@ -48,17 +48,17 @@ describe("RunsPage — landing", () => {
 
     await user.click(screen.getByRole("button", { name: /Open Replay · 1 config/ }));
     // detail route renders the stored grid (baseline + v3 columns)
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     expect(screen.getByText("v3")).toBeInTheDocument();
     expect(screen.getByTestId("cell-0-1")).toHaveAttribute("data-status", "done");
   });
 });
 
-describe("RunsPage — stepper", () => {
+describe("EvaluationsPage — stepper", () => {
   it("gates Configure until the selection is non-empty", async () => {
     const user = userEvent.setup();
     renderRuns();
-    await user.click(await screen.findByRole("button", { name: "New run" }));
+    await user.click(await screen.findByRole("button", { name: "New evaluation" }));
 
     // Step 1: picker with server-fed conversations
     await screen.findByText("Refund escalation");
@@ -76,7 +76,7 @@ describe("RunsPage — stepper", () => {
   it("queues a replay whose POST body matches the contract exactly, then navigates to the pending grid", async () => {
     const user = userEvent.setup();
     renderRuns();
-    await user.click(await screen.findByRole("button", { name: "New run" }));
+    await user.click(await screen.findByRole("button", { name: "New evaluation" }));
 
     // Select: a single turn of c1 (expand → tick t2) + all of c2 — both
     // SelectionItem shapes (openapi.yaml:1250-1259).
@@ -115,7 +115,7 @@ describe("RunsPage — stepper", () => {
 
     // 202 → navigate to the run detail: initial grid with baseline done and
     // one pending cell per config (openapi.yaml:617).
-    await screen.findByText("Run run-1");
+    await screen.findByText("Evaluation run-1");
     expect(screen.getByTestId("cell-0-0")).toHaveAttribute("data-status", "done");
     expect(screen.getByTestId("cell-0-1")).toHaveAttribute("data-status", "pending");
     expect(screen.getByTestId("cell-0-2")).toHaveAttribute("data-status", "pending");
@@ -132,7 +132,7 @@ describe("RunsPage — stepper", () => {
   it("judge config on the queued run fires POST /eval/judge once the run reaches done", async () => {
     const user = userEvent.setup();
     renderRuns();
-    await user.click(await screen.findByRole("button", { name: "New run" }));
+    await user.click(await screen.findByRole("button", { name: "New evaluation" }));
     await screen.findByText("Refund escalation");
     await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
     await user.click(screen.getByRole("button", { name: "Configure ▸" }));
@@ -147,7 +147,7 @@ describe("RunsPage — stepper", () => {
     expect(rubricRequests.length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Queue" }));
-    await screen.findByText("Run run-1");
+    await screen.findByText("Evaluation run-1");
     // the queued config records the judge intent…
     expect(replayRequests[0].body.configs).toEqual([
       { judge: { judge_model: "claude-haiku-4-5", rubric_id: "rub-help" } },
@@ -188,7 +188,7 @@ describe("RunsPage — stepper", () => {
 //   testing drops into Select".
 // - feature-spec.md:86: config carries snapshot_id; "Unsaved snapshots
 //   display as 'v15-draft (a3f2)'" — column label comes from the SERVER.
-describe("RunsPage — Test in Runs arrival", () => {
+describe("EvaluationsPage — Test in Runs arrival", () => {
   const arrival = {
     testInRuns: {
       agent_id: "ag_refunds",
@@ -258,7 +258,7 @@ describe("RunsPage — Test in Runs arrival", () => {
 
     // run detail: the snapshot column label comes from the server ("v1-draft
     // (a3f9)" until promotion relabels it — server-side, mock/main.py:257-262)
-    await screen.findByText("Run run-1");
+    await screen.findByText("Evaluation run-1");
     expect(screen.getByText("v1-draft (a3f9)")).toBeInTheDocument();
   });
 
@@ -295,7 +295,7 @@ describe("Disabled tree (P2-T07c)", () => {
   it("shows the read-only banner above a still-readable runs list", async () => {
     renderApp(
       <Routes>
-        <Route path="/evaluations" element={<RunsPage />} />
+        <Route path="/evaluations" element={<EvaluationsPage />} />
       </Routes>,
       {
         route: "/evaluations",

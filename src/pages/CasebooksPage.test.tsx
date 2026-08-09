@@ -153,7 +153,7 @@ describe("casebook actions", () => {
       body: { configs: [{}], context_policy: "frozen" },
     });
     const alert = await screen.findByTestId("casebook-replay-accepted");
-    expect(alert).toHaveTextContent("Enqueued 1 run under one task");
+    expect(alert).toHaveTextContent("Enqueued 1 evaluation under one task");
     await userEvent.click(within(alert).getByRole("link", { name: "run-cb-1-1" }));
     expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-cb-1-1");
   });
@@ -172,7 +172,7 @@ describe("casebook actions", () => {
     );
   });
 
-  it("names a run in another tree instead of linking it (run pages are tree-scoped)", async () => {
+  it("names an evaluation in another tree instead of linking it (evaluation pages are tree-scoped)", async () => {
     mockCasebooks[0].items = [
       {
         id: "cbi-1",
@@ -195,7 +195,7 @@ describe("casebook actions", () => {
     await screen.findAllByTestId("casebook-item");
     await userEvent.click(screen.getByRole("button", { name: "Replay" }));
     const alert = await screen.findByTestId("casebook-replay-accepted");
-    expect(alert).toHaveTextContent("Enqueued 2 runs under one task");
+    expect(alert).toHaveTextContent("Enqueued 2 evaluations under one task");
     expect(within(alert).getByRole("link", { name: "run-cb-1-1" })).toBeInTheDocument();
     expect(within(alert).queryByRole("link", { name: "run-cb-1-2" })).not.toBeInTheDocument();
     expect(alert).toHaveTextContent(/opens when agent2 is the active tree/);

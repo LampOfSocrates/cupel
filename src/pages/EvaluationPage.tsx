@@ -58,7 +58,7 @@ const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
 const TASK_IN_FLIGHT = new Set(["queued", "running"]);
 const REFETCH_DEBOUNCE_MS = 300;
 
-export function RunDetailPage() {
+export function EvaluationPage() {
   const { tree, models, ensureModels } = useApp();
   const { runId = "" } = useParams();
   const navigate = useNavigate();
@@ -222,7 +222,7 @@ export function RunDetailPage() {
         await fireJudge(autoJudgeModel, autoRubricId, true);
       } catch {
         // A failed pre-check must not fire blind and must not blank the page
-        // — the manual "Judge this run" affordance stays.
+        // — the manual "Judge this evaluation" affordance stays.
       }
     })();
   }, [runId, autoJudgeModel, autoRubricId, fireJudge]);
@@ -424,9 +424,9 @@ export function RunDetailPage() {
       <Group justify="space-between">
         <Group gap="xs">
           <Anchor size="xs" onClick={() => navigate("/evaluations")}>
-            ‹ Runs
+            ‹ Evaluations
           </Anchor>
-          <Title order={4}>Run {run.id}</Title>
+          <Title order={4}>Evaluation {run.id}</Title>
           <Badge size="sm" variant="light" color={STATUS_COLOR[run.status]}>
             {run.status}
           </Badge>
@@ -450,7 +450,7 @@ export function RunDetailPage() {
               variant="light"
               onClick={() => setJudgeFormOpen((o) => !o)}
             >
-              ⚖ Judge this run
+              ⚖ Judge this evaluation
             </Button>
           )}
           {(run.status === "queued" || run.status === "running") && (

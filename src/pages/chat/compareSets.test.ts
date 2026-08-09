@@ -72,7 +72,7 @@ describe("compareSets — the column cap is not negotiable", () => {
     expect(sets).toEqual([]); // NOT offered with the first two variants
     expect(only({ sets, issues }).id).toBe("too-many");
     expect(issues[0].reason).toContain("declares 3 variants");
-    expect(issues[0].reason).toContain("Runs");
+    expect(issues[0].reason).toContain("Evaluations");
     expect(MAX_COMPARE_VARIANTS).toBe(2);
   });
 

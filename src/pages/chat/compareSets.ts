@@ -130,7 +130,7 @@ export function validateCompareSets(raw: unknown): CompareSetsResult {
         reason:
           `declares ${set.variants.length} variants. The baseline reply is column 1, so ` +
           `at most ${MAX_COMPARE_VARIANTS} fit in the ${MAX_COMPARE_COLUMNS}-column chat ` +
-          "view — split the set, or compare this many at once in Runs.",
+          "view — split the set, or compare this many at once in Evaluations.",
       });
       return;
     }

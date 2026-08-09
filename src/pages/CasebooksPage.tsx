@@ -384,7 +384,7 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
           <Alert color="blue" mt="xs" data-testid="casebook-replay-accepted">
             <Stack gap={2}>
               <Text size="xs">
-                Enqueued {replay.runs.length} run{replay.runs.length === 1 ? "" : "s"} under one
+                Enqueued {replay.runs.length} evaluation{replay.runs.length === 1 ? "" : "s"} under one
                 task — <Link to="/queue">watch the queue</Link>.
               </Text>
               {replay.runs.map((r) => (
@@ -394,8 +394,8 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
                     <Link to={`/evaluations/${r.run_id}`}>{r.run_id}</Link>
                   ) : (
                     <>
-                      {r.run_id} (opens when {r.tree_id} is the active tree — run pages are
-                      tree-scoped)
+                      {r.run_id} (opens when {r.tree_id} is the active tree — evaluation pages
+                      are tree-scoped)
                     </>
                   )}
                 </Text>

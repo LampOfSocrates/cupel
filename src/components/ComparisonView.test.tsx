@@ -121,7 +121,7 @@ describe("ComparisonView", () => {
   });
 
   // docs/review-2026-08-05.md A6: "Live-filling grid rebuilds every cell every
-  // 300 ms". RunDetailPage refetches the whole Run on every stream event, so
+  // 300 ms". EvaluationPage refetches the whole Run on every stream event, so
   // the identical grid arrives as brand-new objects. Cells whose content did
   // not change must not re-render (the annotation slot is the observable proxy
   // — it is invoked once per done-cell render) and must not re-parse markdown.

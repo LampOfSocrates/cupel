@@ -31,7 +31,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
   {
     label: "Evaluate",
     children: [
-      { to: "/evaluations", label: "Runs" },
+      { to: "/evaluations", label: "Evaluations" },
       { to: "/eval", label: "Eval" },
       { to: "/casebooks", label: "Casebooks" },
     ],

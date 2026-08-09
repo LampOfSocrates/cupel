@@ -99,7 +99,7 @@ export function TracePage() {
   useEffect(() => {
     if (!hasRunning) return;
     const controller = new AbortController();
-    // `stopped` mirrors RunDetailPage/QueueContext: the fetch abort alone
+    // `stopped` mirrors EvaluationPage/QueueContext: the fetch abort alone
     // can't be relied on to interrupt an in-flight body read in every
     // transport (MSW's jsdom one doesn't), so merges are gated explicitly.
     let stopped = false;

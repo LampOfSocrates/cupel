@@ -18,7 +18,7 @@ export function RunsList({ runs, onOpen, onTaskClick }: Props) {
   if (runs.length === 0) {
     return (
       <Text size="xs" c="dimmed" ta="center" my="sm">
-        No runs yet
+        No evaluations yet
       </Text>
     );
   }
@@ -31,7 +31,7 @@ export function RunsList({ runs, onOpen, onTaskClick }: Props) {
             px={6}
             py={4}
             style={{ flex: 1, minWidth: 0 }}
-            aria-label={`Open ${run.label ?? `Run ${run.id}`}`}
+            aria-label={`Open ${run.label ?? `Evaluation ${run.id}`}`}
           >
             <Group justify="space-between" wrap="nowrap" gap={6}>
               <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
@@ -39,7 +39,7 @@ export function RunsList({ runs, onOpen, onTaskClick }: Props) {
                   {run.status}
                 </Badge>
                 <Text size="xs" truncate>
-                  {run.label ?? `Run ${run.id}`}
+                  {run.label ?? `Evaluation ${run.id}`}
                 </Text>
               </Group>
               <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
@@ -51,7 +51,7 @@ export function RunsList({ runs, onOpen, onTaskClick }: Props) {
             <Anchor
               component="button"
               size="xs"
-              aria-label={`Task for ${run.label ?? `Run ${run.id}`}`}
+              aria-label={`Task for ${run.label ?? `Evaluation ${run.id}`}`}
               onClick={() => onTaskClick(run.task_id)}
             >
               task

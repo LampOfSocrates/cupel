@@ -166,7 +166,7 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
             {/* run_id backs the fork-comparison pivot (openapi.yaml:1581-1585)
                 — link to the existing run detail route. */}
             <Anchor size="xs" onClick={() => go(`/evaluations/${accepted.run_id}`)}>
-              View run
+              View evaluation
             </Anchor>
             <Button size="xs" variant="default" onClick={onClose}>
               Close

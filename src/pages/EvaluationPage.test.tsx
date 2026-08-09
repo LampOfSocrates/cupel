@@ -16,7 +16,7 @@ import {
   runDetailRequests,
   taskStreamRig,
 } from "../test/msw/handlers";
-import { RunDetailPage } from "./RunDetailPage";
+import { EvaluationPage } from "./EvaluationPage";
 import type { Run } from "../api/types";
 
 // Contract under test — GET …/runs/{runId} (openapi.yaml:671-693): "Cells
@@ -69,18 +69,18 @@ function TraceProbe() {
 function renderDetail(runId: string) {
   return renderApp(
     <Routes>
-      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations/:runId" element={<EvaluationPage />} />
     </Routes>,
     { route: `/evaluations/${runId}` },
   );
 }
 
-describe("RunDetailPage", () => {
+describe("EvaluationPage", () => {
   it("refetches the run on a family /tasks/stream event and renders the newly-done cell", async () => {
     const run = seedRunningRun();
     renderDetail("run-live");
 
-    await screen.findByText("Run run-live");
+    await screen.findByText("Evaluation run-live");
     expect(screen.getByTestId("cell-0-1")).toHaveAttribute("data-status", "pending");
     // live-fill subscription open before we emit
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
@@ -101,7 +101,7 @@ describe("RunDetailPage", () => {
   it("ignores events from other task families", async () => {
     seedRunningRun();
     renderDetail("run-live");
-    await screen.findByText("Run run-live");
+    await screen.findByText("Evaluation run-live");
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
     const fetches = runDetailRequests.length;
 
@@ -116,7 +116,7 @@ describe("RunDetailPage", () => {
   it("stops refetching once the run status is terminal", async () => {
     const run = seedRunningRun();
     renderDetail("run-live");
-    await screen.findByText("Run run-live");
+    await screen.findByText("Evaluation run-live");
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
 
     // parent task done → run terminal on the next refetch
@@ -150,7 +150,7 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     seedRunningRun();
     renderDetail("run-live");
-    await screen.findByText("Run run-live");
+    await screen.findByText("Evaluation run-live");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(cancelRequests).toEqual(["task-live"]));
@@ -163,7 +163,7 @@ describe("RunDetailPage", () => {
   it("done cell ⑂ re-fires seeded with that cell's source conversation/turn", async () => {
     const user = userEvent.setup();
     renderDetail("run-old-1"); // done fixture — row source c1/t2, both cells done
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
 
     // one ⑂ per done cell (baseline + v3), both carrying the row's source
     const forkButtons = screen.getAllByRole("button", { name: "Re-run turn t2 with…" });
@@ -196,12 +196,12 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<EvaluationPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
       { route: "/evaluations/run-refire-1" },
     );
-    await screen.findByText("Run run-refire-1");
+    await screen.findByText("Evaluation run-refire-1");
 
     // column labels are endpoint NAMES, server-provided — no client reshaping
     expect(screen.getByRole("columnheader", { name: /baseline/ })).toBeInTheDocument();
@@ -218,12 +218,12 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<EvaluationPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
       { route: "/evaluations/run-refire-1" },
     );
-    await screen.findByText("Run run-refire-1");
+    await screen.findByText("Evaluation run-refire-1");
 
     await user.click(screen.getByTestId("open-in-chat-0-0"));
     await screen.findByText("chat-probe c2"); // original, not a fork
@@ -231,7 +231,7 @@ describe("RunDetailPage", () => {
 
   it("plain replay runs get no Open in Chat links (cells carry no conversation_id)", async () => {
     renderDetail("run-old-1");
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     expect(screen.queryByText("Open in Chat ↗")).not.toBeInTheDocument();
   });
 
@@ -244,12 +244,12 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<EvaluationPage />} />
         <Route path="/trace/:turnId" element={<TraceProbe />} />
       </Routes>,
       { route: "/evaluations/run-refire-1" },
     );
-    await screen.findByText("Run run-refire-1");
+    await screen.findByText("Evaluation run-refire-1");
 
     // all 3 cells of the re-fire fixture carry a turn_id → 3 ⌁ (original + 2 forks)
     expect(screen.getAllByRole("button", { name: /Open trace for turn/ })).toHaveLength(3);
@@ -259,7 +259,7 @@ describe("RunDetailPage", () => {
 
   it("cells without a turn_id get no ⌁", async () => {
     renderDetail("run-old-1"); // plain replay fixture — cells carry no turn_id
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     expect(
       screen.queryByRole("button", { name: /Open trace for turn/ }),
     ).not.toBeInTheDocument();
@@ -267,7 +267,7 @@ describe("RunDetailPage", () => {
 
   it("terminal stored runs render without a cancel affordance or subscription", async () => {
     renderDetail("run-old-1"); // seeded done fixture
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     await sleep(50);
     expect(taskStreamRig.clients).toBe(0);
@@ -287,7 +287,7 @@ describe("RunDetailPage", () => {
 //   forever, never overwritten … Re-judging appends")
 // - POST /eval/judge {run_id, judge_model, rubric_id} → 202 TaskRef
 //   (openapi.yaml:931-954).
-describe("RunDetailPage — eval (P1-T12b)", () => {
+describe("EvaluationPage — eval (P1-T12b)", () => {
   it("renders the summary header: per-rubric mean + count + inline distribution", async () => {
     mockRunSummaries["run-old-1"] = {
       run_id: "run-old-1",
@@ -309,7 +309,7 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
 
   it("unjudged runs render no summary header and no chips", async () => {
     renderDetail("run-old-1");
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     expect(screen.queryByTestId("run-summary")).not.toBeInTheDocument();
     expect(screen.queryByTestId("score-chip-0-1")).not.toBeInTheDocument();
   });
@@ -330,7 +330,7 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
     });
 
     renderDetail("run-old-1");
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     const chip = screen.getByTestId("score-chip-0-1");
     expect(chip).toHaveTextContent("0.87"); // denormalized latest score
     expect(screen.queryByTestId("score-chip-0-0")).not.toBeInTheDocument(); // baseline unjudged
@@ -355,14 +355,14 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
     expect(judgmentRequests.at(-1)?.searchParams.get("case_id")).toBe("case-1");
   });
 
-  it("manual 'Judge this run' POSTs /eval/judge and streams scores + summary live until the judge task finishes", async () => {
+  it("manual 'Judge this evaluation' POSTs /eval/judge and streams scores + summary live until the judge task finishes", async () => {
     const user = userEvent.setup();
     renderDetail("run-old-1");
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     // done run, nothing judging → no stream subscription
     expect(taskStreamRig.clients).toBe(0);
 
-    await user.click(screen.getByRole("button", { name: "⚖ Judge this run" }));
+    await user.click(screen.getByRole("button", { name: "⚖ Judge this evaluation" }));
     const form = await screen.findByTestId("judge-form");
     const judgeBtn = within(form).getByRole("button", { name: "Judge" });
     expect(judgeBtn).toBeDisabled(); // JudgeRequest requires judge_model + rubric_id
@@ -420,9 +420,9 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
   it("judgment frames from OTHER runs don't trigger a refetch", async () => {
     const user = userEvent.setup();
     renderDetail("run-old-1");
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     // subscribe by starting a judge (only live path that opens the stream here)
-    await user.click(screen.getByRole("button", { name: "⚖ Judge this run" }));
+    await user.click(screen.getByRole("button", { name: "⚖ Judge this evaluation" }));
     const form = await screen.findByTestId("judge-form");
     await user.click(within(form).getByRole("combobox", { name: "Judge model" }));
     await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
@@ -447,7 +447,7 @@ describe("RunDetailPage — eval (P1-T12b)", () => {
   it("a finished run without judge config never calls POST /eval/judge", async () => {
     const run = seedRunningRun(); // configs carry no judge
     renderDetail("run-live");
-    await screen.findByText("Run run-live");
+    await screen.findByText("Evaluation run-live");
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
 
     run.status = "done";
@@ -503,11 +503,11 @@ function seedJudgeConfigRun(status: Run["status"], id = "run-auto") {
 const priorJudgmentProbes = () =>
   judgmentRequests.filter((u) => u.searchParams.get("run_id") === "run-auto");
 
-describe("RunDetailPage — auto-judge (UX phase)", () => {
+describe("EvaluationPage — auto-judge (UX phase)", () => {
   it("opening an ALREADY-done run with a judge config and no judgments fires exactly once", async () => {
     seedJudgeConfigRun("done");
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
 
     await waitFor(() =>
       expect(judgeRequests).toEqual([{ run_id: "run-auto", ...AUTO_JUDGE }]),
@@ -531,7 +531,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
     });
 
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(priorJudgmentProbes()).toHaveLength(1));
     await sleep(100);
     expect(judgeRequests).toHaveLength(0);
@@ -546,7 +546,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
     });
 
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(judgeRequests).toHaveLength(1));
     expect(judgeRequests[0].rubric_id).toBe("rub-help");
     // settle the judging subscription before teardown, so a stream fetch
@@ -557,7 +557,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
   it("a run that finishes WHILE watched still auto-judges once, and the badge clears", async () => {
     const run = seedJudgeConfigRun("running");
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
     expect(judgeRequests).toHaveLength(0); // nothing to judge yet
 
@@ -587,14 +587,14 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
   it("a remount mid-judging adopts the in-flight task instead of judging again", async () => {
     seedJudgeConfigRun("done");
     const first = renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(judgeRequests).toHaveLength(1));
     first.unmount();
 
     // Reload/second tab: no judgment has landed yet, but the judge parent task
     // is queued — the page adopts it rather than appending a duplicate pass.
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await screen.findByTestId("judging-badge");
     await sleep(200);
     expect(judgeRequests).toHaveLength(1);
@@ -603,7 +603,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
   it("a remount after judging finished does not re-judge", async () => {
     seedJudgeConfigRun("done");
     const first = renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(judgeRequests).toHaveLength(1));
     first.unmount();
 
@@ -615,7 +615,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
     mockTasks.find((t) => t.id === "task-judge-1")!.status = "done";
 
     renderDetail("run-auto");
-    await screen.findByText("Run run-auto");
+    await screen.findByText("Evaluation run-auto");
     await waitFor(() => expect(priorJudgmentProbes().length).toBeGreaterThan(1));
     await sleep(100);
     expect(judgeRequests).toHaveLength(1);
@@ -624,7 +624,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
 
   it("an already-done run with NO judge config never probes or judges", async () => {
     renderDetail("run-old-1"); // done fixture, no judge in any config
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
     await sleep(100);
     expect(judgeRequests).toHaveLength(0);
     expect(judgmentRequests.filter((u) => u.searchParams.get("run_id"))).toHaveLength(0);
@@ -635,7 +635,7 @@ describe("RunDetailPage — auto-judge (UX phase)", () => {
     async (status) => {
       seedJudgeConfigRun(status);
       renderDetail("run-auto");
-      await screen.findByText("Run run-auto");
+      await screen.findByText("Evaluation run-auto");
       await sleep(100);
       expect(judgeRequests).toHaveLength(0);
       expect(priorJudgmentProbes()).toHaveLength(0);

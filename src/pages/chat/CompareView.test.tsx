@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { agenticConfig, type CompareSet } from "../../../agentic.config";
 import { ChatPage } from "../ChatPage";
-import { RunDetailPage } from "../RunDetailPage";
+import { EvaluationPage } from "../EvaluationPage";
 import { api } from "../../api/client";
 import { renderApp, type AppStateOverrides } from "../../test/render";
 import { mockEndpoints, mockMe, replayTurnRequests } from "../../test/msw/handlers";
@@ -20,7 +20,7 @@ function renderChat(route = "/chat/c1", overrides: AppStateOverrides = {}) {
     <Routes>
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/chat/:conversationId" element={<ChatPage />} />
-      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations/:runId" element={<EvaluationPage />} />
     </Routes>,
     { route, ...overrides },
   );
@@ -108,7 +108,7 @@ describe("chat compare mode — column cap", () => {
       // Three deploy targets exist, but the picker stops at MAX-1 endpoints.
       expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent("3 variants");
       expect(screen.queryByRole("button", { name: "Remove canary" })).not.toBeInTheDocument();
-      expect(screen.getByTestId("compare-cap-hint")).toHaveTextContent("use Runs");
+      expect(screen.getByTestId("compare-cap-hint")).toHaveTextContent("use Evaluations");
 
       await user.type(screen.getByPlaceholderText("Message…"), "which is best?");
       await user.click(screen.getByRole("button", { name: "Send" }));
@@ -232,7 +232,7 @@ describe("chat compare mode — saved comparisons from agentic.config.ts", () =>
     const issues = screen.getByTestId("compare-preset-issues");
     expect(issues).toHaveTextContent("four-ways");
     expect(issues).toHaveTextContent("declares 3 variants");
-    expect(issues).toHaveTextContent("compare this many at once in Runs");
+    expect(issues).toHaveTextContent("compare this many at once in Evaluations");
 
     // Not offered as its first two variants — the set is gone, the good one stays.
     await user.click(screen.getByPlaceholderText("Pick a saved comparison"));

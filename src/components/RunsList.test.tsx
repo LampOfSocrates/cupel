@@ -45,7 +45,7 @@ describe("RunsList", () => {
 
     const second = screen.getByTestId("run-811");
     expect(within(second).getByText("failed")).toBeInTheDocument();
-    expect(within(second).getByText("Run 811")).toBeInTheDocument(); // null label fallback
+    expect(within(second).getByText("Evaluation 811")).toBeInTheDocument(); // null label fallback
     expect(within(second).getByText("3h")).toBeInTheDocument();
   });
 
@@ -58,7 +58,7 @@ describe("RunsList", () => {
     await user.click(screen.getByRole("button", { name: "Open v14 vs v15" }));
     expect(onOpen).toHaveBeenCalledWith(runs[0]);
 
-    await user.click(screen.getByRole("button", { name: "Task for Run 811" }));
+    await user.click(screen.getByRole("button", { name: "Task for Evaluation 811" }));
     expect(onTaskClick).toHaveBeenCalledWith("task-811");
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
@@ -69,6 +69,6 @@ describe("RunsList", () => {
         <RunsList runs={[]} />
       </MantineProvider>,
     );
-    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+    expect(screen.getByText("No evaluations yet")).toBeInTheDocument();
   });
 });

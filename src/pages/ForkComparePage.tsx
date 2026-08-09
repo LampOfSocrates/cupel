@@ -24,7 +24,7 @@ import { Markdown } from "../lib/markdown";
 // endpoint)."
 //
 // Design choice: when the pivot is reached from a
-// RUN (ForkModal "View run"), RunDetailPage renders the server-pivoted
+// RUN (ForkModal "View run"), EvaluationPage renders the server-pivoted
 // grid. From a FORK's lineage banner no run id is discoverable — GET
 // /agenttrees/{tree}/runs takes no turn filter (openapi.yaml:654-669) — but
 // the SIBLINGS are: GET /conversations?forks_of={parent} (openapi.yaml:335)

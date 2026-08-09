@@ -167,7 +167,7 @@ export function CompareView({
 
   // Live fill on the contract's own channel — "Cells fill incrementally as
   // child tasks finish; live fill arrives via GET /tasks/stream"
-  // (openapi.yaml:678-680), debounced-refetched exactly as RunDetailPage does.
+  // (openapi.yaml:678-680), debounced-refetched exactly as EvaluationPage does.
   const runTaskId = run?.task_id;
   const runTerminal = run != null && TERMINAL.has(run.status);
   useEffect(() => {
@@ -359,7 +359,7 @@ export function CompareView({
         <Text size="xs" c="dimmed" data-testid="compare-cap-hint">
           {MAX_COMPARE_COLUMNS} columns is the readable maximum here —{" "}
           <Anchor size="xs" onClick={() => navigate("/evaluations")}>
-            use Runs
+            use Evaluations
           </Anchor>{" "}
           to compare more.
         </Text>

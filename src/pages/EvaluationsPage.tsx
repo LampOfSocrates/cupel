@@ -27,7 +27,7 @@ import { useApp } from "../AppContext";
 //
 // Landing = RunsList of GET /agenttrees/{tree}/runs ("Runs, newest first",
 // openapi.yaml:663) + "New run" opening the stepper; row click → the run
-// detail route (RunDetailPage — step 3 doubles as the results view for old
+// detail route (EvaluationPage — step 3 doubles as the results view for old
 // runs).
 //
 // Step 2 supports MULTIPLE configs because the grid is "baseline column + one
@@ -41,7 +41,7 @@ import { useApp } from "../AppContext";
 // by default): toggle on → judge model + rubric fields appear") — rubric
 // dropdown fed by GET /eval/rubrics (feature-spec.md:230 "Runs · 2 Configure |
 // … GET /eval/rubrics"), judge model from the session models cache. The judge
-// FIRES from RunDetailPage when the run reaches done (see its judge-trigger
+// FIRES from EvaluationPage when the run reaches done (see its judge-trigger
 // note) — queueing here only records the intent in the config.
 //
 // Scope guards (never build ahead, cupel-phases.md:158):
@@ -182,7 +182,7 @@ const initialNav = (handoff: Handoff | null, key: string): NavState =>
     { type: "arrive", key, handoff },
   );
 
-export function RunsPage() {
+export function EvaluationsPage() {
   const { tree, models, ensureModels } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -296,9 +296,9 @@ export function RunsPage() {
     return (
       <Stack gap="sm" p="md" maw={640}>
         <Group justify="space-between">
-          <Title order={3}>Runs</Title>
+          <Title order={3}>Evaluations</Title>
           <Button size="xs" onClick={startStepper}>
-            New run
+            New evaluation
           </Button>
         </Group>
         {/* A disabled tree keeps its runs readable while queueing new

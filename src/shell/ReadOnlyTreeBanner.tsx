@@ -18,8 +18,8 @@ export function ReadOnlyTreeBanner() {
   if (!active || active.enabled) return null;
   return (
     <Alert color="yellow" py={6} data-testid="read-only-banner">
-      {active.name} is disabled — history is read-only. New chats and runs are
-      blocked until it is re-enabled in Settings.
+      {active.name} is disabled — history is read-only. New chats and evaluations
+      are blocked until it is re-enabled in Settings.
     </Alert>
   );
 }

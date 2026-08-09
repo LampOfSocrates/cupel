@@ -196,7 +196,7 @@ describe("legacy /runs deep links (#2)", () => {
       expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
     );
     // Not a 404 shell: the detail page for that run actually rendered.
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
   });
 
   it("the bare /runs redirects and keeps the query", async () => {
@@ -250,7 +250,7 @@ describe("legacy /runs deep links (#2)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
     );
-    await screen.findByText("Run run-old-1");
+    await screen.findByText("Evaluation run-old-1");
   });
 });
 

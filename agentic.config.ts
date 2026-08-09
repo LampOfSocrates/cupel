@@ -128,7 +128,7 @@ export interface LocalMockConfig {
  * unchanged once `ReplayTurnRequest.configs[]` lands (queued with the contract
  * bump, docs/open-items.md) — at that point the picker applies these instead
  * of rejecting them, and no existing `compareSets` entry has to be rewritten.
- * Vary version/model across many conversations in Runs meanwhile.
+ * Vary version/model across many conversations in Evaluate meanwhile.
  */
 export interface CompareVariantConfig {
   instruction_version?: number;
@@ -161,7 +161,7 @@ export interface CompareVariantSpec {
  * live configuration answers — is always column 1, so a set carries at most
  * TWO variants. A longer set is refused outright and named in the UI; it is
  * never trimmed to fit, because a silently shortened comparison is a wrong
- * comparison. Compare more than three at once in Runs.
+ * comparison. Compare more than three at once in Evaluate.
  */
 export interface CompareSet {
   /** Stable identifier, unique across sets. */

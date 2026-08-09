@@ -38,7 +38,7 @@ interface CellProps {
 }
 
 // A live-filling grid refetches the WHOLE Run every ~300 ms
-// (RunDetailPage.tsx:239, the documented baseline), so every cell object
+// (EvaluationPage.tsx:239, the documented baseline), so every cell object
 // arrives with a fresh identity even when nothing about it changed — a default
 // shallow compare would never hit, and 360 unchanged cells would re-parse
 // their markdown three times a second (docs/review-2026-08-05.md A6). Compare

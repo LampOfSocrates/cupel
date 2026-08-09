@@ -34,7 +34,7 @@ and **Evaluate**. User decision 2026-08-09.
       `CompareView.tsx:416` mints run URLs. Update route pins: `returnTo.test.ts:35` (add a
       redirect case), `App.test.tsx:152`, `QueuePage.test.tsx:37,:104`, `ForkModal.test.tsx:64`,
       `CompareView.test.tsx:23`, `EditorPage.test.tsx:209`.  [after #1]
-- [ ] **#3** Copy + component names — `RunsPage`→`EvaluationsPage`,
+- [x] **#3** Copy + component names — `RunsPage`→`EvaluationsPage`,
       `RunDetailPage`→`EvaluationPage`; "Runs"→"Evaluations" (`RunsPage.tsx:323`), "New run"→
       "New evaluation" (`:325`), "Test in Runs ▸"→"Test as evaluation", the compareSets
       rejection string (`compareSets.test.ts:75`), `agentic.config.ts:131,:164`.
