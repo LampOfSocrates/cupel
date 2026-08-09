@@ -678,13 +678,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # requires the inspect role, audit-logged".
     #
     # Latest-judgment score per conversation, as SQL so score_min/score_max can
-    # filter on it. Judgments attach either to the conversation (human thumbs,
-    # POST /feedback) or to one of its turns (LLM judging) — both count
-    # (openapi.yaml:3141-3144 "Latest judgment score across the conversation's
-    # turns"). Newest wins: judgments are append-only, so MAX(rowid).
+    # filter on it. A judgment counts if it is scoped to the conversation (the
+    # denormalized column, mock/db.py judgments) or if its SUBJECT is one of
+    # the conversation's turns — both count (AdminConversationItem.latest_score,
+    # "Latest judgment score across the conversation's turns"). Newest wins:
+    # judgments are append-only, so MAX(rowid).
     LATEST_SCORE_SQL = (
         "(SELECT jg.score FROM judgments jg WHERE jg.conversation_id = c.id"
-        "  OR jg.turn_id IN (SELECT t.id FROM turns t WHERE t.conversation_id = c.id)"
+        "  OR (jg.subject_kind = 'turn' AND jg.subject_id IN"
+        "      (SELECT t.id FROM turns t WHERE t.conversation_id = c.id))"
         " ORDER BY jg.rowid DESC LIMIT 1)")
 
     @app.get("/admin/conversations")
@@ -1094,10 +1096,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         # before. Append-only: a re-rating inserts a NEW row, never an UPDATE.
         comment = body.get("comment")
         reasoning = comment.strip() if isinstance(comment, str) and comment.strip() else None
-        # Thumbs persist as type:human judgments in the single store (openapi.yaml:562-571).
+        # Thumbs persist in the single judgment store: subject = the TURN that
+        # was thumbed, scorer = {kind: human} with ref/version/model all null —
+        # a thumb runs no rubric and no model, and nothing is invented to stand
+        # in for one (openapi.yaml Scorer).
         db.run(
-            "INSERT INTO judgments (id, turn_id, conversation_id, type, score, reasoning, created_at)"
-            " VALUES (?, ?, ?, 'human', ?, ?, ?)",
+            "INSERT INTO judgments (id, subject_kind, subject_id, scorer_kind,"
+            " conversation_id, score, reasoning, created_at)"
+            " VALUES (?, 'turn', ?, 'human', ?, ?, ?, ?)",
             (jid, turn["id"], turn["conversation_id"], 1.0 if rating == "up" else 0.0,
              reasoning, now))
         return judgment_dict(db.one("SELECT * FROM judgments WHERE id = ?", (jid,)))
@@ -2189,13 +2195,20 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return JSONResponse({"task_id": parent["id"]}, status_code=202)
 
     @app.get("/eval/judgments")
-    async def list_judgments(case_id: str | None = None, evaluation_id: str | None = None,
-                             rubric_id: str | None = None, turn_id: str | None = None,
+    async def list_judgments(subject_kind: str | None = None, subject_id: str | None = None,
+                             evaluation_id: str | None = None, scorer_ref: str | None = None,
                              conversation_id: str | None = None,
                              page: int = 1, page_size: int = 50):
+        """listJudgments — equality filters, AND-ed, newest first.
+
+        conversation_id is the one filter with no matching wire field: it
+        selects on the denormalized scope column (mock/db.py judgments), which
+        is what lets the chat view re-render every turn's 👍/👎 in one request
+        instead of one per turn."""
         where, params = ["1=1"], []
-        for col, val in (("case_id", case_id), ("evaluation_id", evaluation_id), ("rubric_id", rubric_id),
-                         ("turn_id", turn_id), ("conversation_id", conversation_id)):
+        for col, val in (("subject_kind", subject_kind), ("subject_id", subject_id),
+                         ("evaluation_id", evaluation_id), ("scorer_ref", scorer_ref),
+                         ("conversation_id", conversation_id)):
             if val:
                 where.append(f"{col} = ?")
                 params.append(val)
@@ -2210,23 +2223,32 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def evaluation_summary(evaluationId: str):
         if not db.one("SELECT 1 AS x FROM evaluations WHERE id = ?", (evaluationId,)):
             err(404, "not_found", f"Evaluation '{evaluationId}' not found.")
+        # One group per SCORER IDENTITY — kind + ref + version. The judge model
+        # is not part of the key (two judge models against one rubric version
+        # stay one row, as they always have), so the group's scorer reports
+        # model: null. The old `type = 'llm'` filter is gone rather than
+        # renamed: judgments carrying an evaluation_id are produced by judging
+        # that evaluation, so the filter never excluded a row, and dropping it
+        # is what lets a future non-LLM scorer aggregate here for free.
         groups = db.all(
-            "SELECT rubric_id, rubric_version, AVG(score) AS mean, COUNT(*) AS count"
-            " FROM judgments WHERE evaluation_id = ? AND type = 'llm'"
-            " GROUP BY rubric_id, rubric_version", (evaluationId,))
-        rubrics = []
+            "SELECT scorer_kind, scorer_ref, scorer_version,"
+            " AVG(score) AS mean, COUNT(*) AS count"
+            " FROM judgments WHERE evaluation_id = ?"
+            " GROUP BY scorer_kind, scorer_ref, scorer_version", (evaluationId,))
+        scorers = []
         for g in groups:
             scores = db.all(
-                "SELECT score FROM judgments WHERE evaluation_id = ? AND type = 'llm'"
-                " AND rubric_id = ? AND rubric_version = ?",
-                (evaluationId, g["rubric_id"], g["rubric_version"]))
+                "SELECT score FROM judgments WHERE evaluation_id = ?"
+                " AND scorer_kind = ? AND scorer_ref IS ? AND scorer_version IS ?",
+                (evaluationId, g["scorer_kind"], g["scorer_ref"], g["scorer_version"]))
             distribution = [0, 0, 0, 0, 0]
             for s in scores:
                 distribution[min(int(s["score"] * 5), 4)] += 1
-            rubrics.append({"rubric_id": g["rubric_id"], "rubric_version": g["rubric_version"],
+            scorers.append({"scorer": {"kind": g["scorer_kind"], "ref": g["scorer_ref"],
+                                       "version": g["scorer_version"], "model": None},
                             "mean": round(g["mean"], 4), "count": g["count"],
                             "distribution": distribution})
-        return {"evaluation_id": evaluationId, "rubrics": rubrics}
+        return {"evaluation_id": evaluationId, "scorers": scorers}
 
     # ------------------------------------------------- static SPA (last!)
     # The built Vite bundle, when present, mounts AFTER every API

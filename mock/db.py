@@ -159,11 +159,30 @@ CREATE TABLE IF NOT EXISTS inspect_audit (
   created_at TEXT NOT NULL);
 
 -- Append-only (cupel-phases.md:160); human thumbs share this store.
+--
+-- One row = one score, addressed by a SUBJECT (what was judged) and a SCORER
+-- (what produced the score) — openapi.yaml JudgmentSubject / Scorer. That pair
+-- replaced four mutually exclusive nullable foreign keys (case_id, run_id,
+-- turn_id, conversation_id) plus a `type` enum, which made the table a union
+-- with no discriminator: a thumb was the turn_id rows, an LLM score the
+-- case_id rows, and nothing in the schema said so.
+--
+-- evaluation_id is NOT the subject: an LLM judgment of a grid cell judges the
+-- CASE, and the evaluation is the batch it was produced in. It stays a
+-- separate scope so one case can be scored inside two evaluations without
+-- either overwriting the other's cell (mock/engine.py _run_judge_case).
+--
+-- conversation_id is the one denormalization here and is deliberately NOT a
+-- wire field: it exists so GET /eval/judgments?conversation_id= and the
+-- Inspector's latest-score filter stay single queries rather than joins
+-- through turns and eval-case sources. It is a scope index, never a subject.
 CREATE TABLE IF NOT EXISTS judgments (
-  id TEXT PRIMARY KEY, case_id TEXT, evaluation_id TEXT, turn_id TEXT,
-  conversation_id TEXT, type TEXT NOT NULL, judge_model TEXT,
-  rubric_id TEXT, rubric_version INTEGER, score REAL NOT NULL,
-  reasoning TEXT, created_at TEXT NOT NULL);
+  id TEXT PRIMARY KEY,
+  subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL,
+  scorer_kind TEXT NOT NULL, scorer_ref TEXT, scorer_version INTEGER,
+  scorer_model TEXT,
+  evaluation_id TEXT, conversation_id TEXT,
+  score REAL NOT NULL, reasoning TEXT, created_at TEXT NOT NULL);
 """
 
 
@@ -192,6 +211,7 @@ class Db:
             self._migrate_conversation_owner()
             self._migrate_run_to_evaluation()
             self._migrate_casebooks_into_eval_sets()
+            self._migrate_judgment_subject_scorer()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -342,6 +362,53 @@ class Db:
                 (book["id"], json.dumps(items), book["created_at"]))
         self.conn.executescript(
             "DROP TABLE IF EXISTS casebook_items; DROP TABLE IF EXISTS casebooks;")
+
+    def _migrate_judgment_subject_scorer(self):
+        """Older databases carry the union shape: judgments(case_id,
+        evaluation_id, turn_id, conversation_id, type, judge_model, rubric_id,
+        rubric_version, …). The wire replaced that with a polymorphic subject
+        plus a scorer, and the physical schema follows so this file stays a
+        truthful reference.
+
+        SQLite cannot drop four columns and add six in place, so rebuild once,
+        in the style of _migrate_eval_cases above. The mapping is total —
+        every old row had exactly one of case_id / turn_id set:
+          case_id non-null -> subject (case, case_id), the LLM judge path
+          otherwise        -> subject (turn, turn_id), a POST /feedback thumb
+          type             -> scorer_kind (llm | human, 1:1)
+          rubric_id/_version/judge_model -> scorer_ref/_version/_model
+        evaluation_id and conversation_id carry over untouched: the first is
+        the batch scope, the second the query index documented on the table.
+
+        MUST run after _migrate_run_to_evaluation, which is what renames this
+        table's run_id column to evaluation_id. Idempotent: the OLD column's
+        presence is the marker, exactly as the migrations above. A row with
+        neither id would be unaddressable under the new shape; none can exist
+        (both insert paths set one), and the WHERE says so rather than
+        silently inventing a subject for one."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(judgments)")}
+        if "case_id" not in cols:
+            return
+        self.conn.executescript(
+            "ALTER TABLE judgments RENAME TO judgments_pre_t7c;"
+            " CREATE TABLE judgments ("
+            "   id TEXT PRIMARY KEY,"
+            "   subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL,"
+            "   scorer_kind TEXT NOT NULL, scorer_ref TEXT,"
+            "   scorer_version INTEGER, scorer_model TEXT,"
+            "   evaluation_id TEXT, conversation_id TEXT,"
+            "   score REAL NOT NULL, reasoning TEXT, created_at TEXT NOT NULL);"
+            " INSERT INTO judgments (id, subject_kind, subject_id, scorer_kind,"
+            "   scorer_ref, scorer_version, scorer_model, evaluation_id,"
+            "   conversation_id, score, reasoning, created_at)"
+            "   SELECT id,"
+            "     CASE WHEN case_id IS NOT NULL THEN 'case' ELSE 'turn' END,"
+            "     COALESCE(case_id, turn_id),"
+            "     type, rubric_id, rubric_version, judge_model, evaluation_id,"
+            "     conversation_id, score, reasoning, created_at"
+            "   FROM judgments_pre_t7c"
+            "   WHERE COALESCE(case_id, turn_id) IS NOT NULL;"
+            " DROP TABLE judgments_pre_t7c;")
 
     def run(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock:

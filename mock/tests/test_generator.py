@@ -112,8 +112,8 @@ def test_seed_twice_same_seed_is_idempotent():
             assert judged_cells >= 1
             llm = [x for x in (await c.get("/eval/judgments",
                                            params={"page_size": 200})).json()
-                   if x["type"] == "llm"]
-            assert len({x["rubric_id"] for x in llm}) == 2
+                   if x["scorer"]["kind"] == "llm"]
+            assert len({x["scorer"]["ref"] for x in llm}) == 2
 
             # every generated conversation is machine-origin with channel+author
             for tree in ("agent1", "agent2"):

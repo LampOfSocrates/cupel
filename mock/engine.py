@@ -575,13 +575,20 @@ class Engine:
                     judge_prompt)
             except llm.LiveUnavailable:
                 pass  # canned reasoning stands
+        # Subject = the CASE (openapi.yaml JudgmentSubject): every judge path —
+        # a grid cell, explicit case_ids, or an eval set whose reference items
+        # were resolved — converges on a case, so there is no separate `result`
+        # subject kind. The evaluation is the batch SCOPE, and conversation_id
+        # the query index (mock/db.py judgments); the turn is reachable through
+        # the case's source, so it is not duplicated here.
         self.db.run(
-            "INSERT INTO judgments (id, case_id, evaluation_id, turn_id, conversation_id, type,"
-            " judge_model, rubric_id, rubric_version, score, reasoning, created_at)"
-            " VALUES (?, ?, ?, ?, ?, 'llm', ?, ?, ?, ?, ?, ?)",
-            (jid, case_id, payload.get("evaluation_id"), payload.get("turn_id"),
-             payload.get("conversation_id"), payload["judge_model"],
-             payload["rubric_id"], payload["rubric_version"], score, reasoning, now),
+            "INSERT INTO judgments (id, subject_kind, subject_id, scorer_kind,"
+            " scorer_ref, scorer_version, scorer_model, evaluation_id,"
+            " conversation_id, score, reasoning, created_at)"
+            " VALUES (?, 'case', ?, 'llm', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (jid, case_id, payload["rubric_id"], payload["rubric_version"],
+             payload["judge_model"], payload.get("evaluation_id"),
+             payload.get("conversation_id"), score, reasoning, now),
         )
         # A judgment scores ONE evaluation's cell. Unscoped, this overwrote
         # latest_score on every other evaluation's cell sharing the case
@@ -633,16 +640,18 @@ class Engine:
 
 
 def judgment_dict(row: dict) -> dict:
+    """Row -> openapi.yaml Judgment. conversation_id stays behind: it is a
+    physical query index (mock/db.py judgments), not a wire field."""
     return {
         "id": row["id"],
-        "case_id": row["case_id"],
+        "subject": {"kind": row["subject_kind"], "id": row["subject_id"]},
+        "scorer": {
+            "kind": row["scorer_kind"],
+            "ref": row["scorer_ref"],
+            "version": row["scorer_version"],
+            "model": row["scorer_model"],
+        },
         "evaluation_id": row["evaluation_id"],
-        "turn_id": row["turn_id"],
-        "conversation_id": row["conversation_id"],
-        "type": row["type"],
-        "judge_model": row["judge_model"],
-        "rubric_id": row["rubric_id"],
-        "rubric_version": row["rubric_version"],
         "score": row["score"],
         "reasoning": row["reasoning"],
         "created_at": row["created_at"],

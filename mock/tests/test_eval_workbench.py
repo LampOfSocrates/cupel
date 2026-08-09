@@ -257,6 +257,63 @@ def test_casebooks_migrate_into_eval_sets(tmp_path):
         again.conn.close()
 
 
+def test_judgments_migrate_to_subject_and_scorer(tmp_path):
+    """The reshape migration (db.py Db._migrate_judgment_subject_scorer): a
+    database written against the union shape opens fine, and both of its
+    disjoint row shapes land on the right subject. Also proves the ORDERING
+    dependency — this file still carries the pre-rename `run_id` column, so
+    _migrate_run_to_evaluation must have renamed it before the rebuild reads
+    an evaluation_id."""
+    path = str(tmp_path / "pre-subject.sqlite")
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "CREATE TABLE judgments (id TEXT PRIMARY KEY, case_id TEXT,"
+        " run_id TEXT, turn_id TEXT, conversation_id TEXT, type TEXT NOT NULL,"
+        " judge_model TEXT, rubric_id TEXT, rubric_version INTEGER,"
+        " score REAL NOT NULL, reasoning TEXT, created_at TEXT NOT NULL);"
+        # an LLM score of a grid cell: case + the run it belonged to
+        " INSERT INTO judgments VALUES ('judg_llm', 'case_a', 'run_1',"
+        " 'turn_1', 'conv_1', 'llm', 'claude-haiku-4-5', 'rub_help', 2, 0.87,"
+        " 'Cites detail.', '2026-01-01T00:00:00Z');"
+        # a thumb: turn only, no rubric and no model
+        " INSERT INTO judgments VALUES ('judg_thumb', NULL, NULL, 'turn_2',"
+        " 'conv_1', 'human', NULL, NULL, NULL, 1.0, NULL,"
+        " '2026-01-02T00:00:00Z');")
+    conn.commit()
+    conn.close()
+
+    db = Db(path)
+    try:
+        cols = {r[1] for r in db.conn.execute("PRAGMA table_info(judgments)")}
+        assert not {"case_id", "turn_id", "type", "rubric_id", "rubric_version",
+                    "judge_model", "run_id"} & cols
+        assert "subject_kind" in cols and "scorer_ref" in cols
+
+        llm = db.one("SELECT * FROM judgments WHERE id = 'judg_llm'")
+        assert (llm["subject_kind"], llm["subject_id"]) == ("case", "case_a")
+        assert (llm["scorer_kind"], llm["scorer_ref"], llm["scorer_version"],
+                llm["scorer_model"]) == ("llm", "rub_help", 2, "claude-haiku-4-5")
+        assert llm["evaluation_id"] == "run_1"  # scope, renamed by the stage-A migration
+        assert llm["conversation_id"] == "conv_1"  # query index, not a wire field
+
+        thumb = db.one("SELECT * FROM judgments WHERE id = 'judg_thumb'")
+        assert (thumb["subject_kind"], thumb["subject_id"]) == ("turn", "turn_2")
+        assert thumb["scorer_kind"] == "human"
+        assert (thumb["scorer_ref"], thumb["scorer_version"],
+                thumb["scorer_model"], thumb["evaluation_id"]) == (None, None, None, None)
+    finally:
+        db.conn.close()
+    # Idempotent: reopening the same file rebuilds nothing and loses nothing.
+    again = Db(path)
+    try:
+        assert len(again.all("SELECT * FROM judgments")) == 2
+        tables = {r[0] for r in again.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "judgments_pre_t7c" not in tables
+    finally:
+        again.conn.close()
+
+
 # -------------------------------------------------------------------- sets
 # Since the Casebook merge a set's membership is a list of ITEMS, and a case in
 # a set is a FROZEN item ({"case_id": ...}). Reference items — the other kind —
@@ -356,11 +413,13 @@ def test_judge_by_set_id_fans_out_over_membership():
 
             for c_ in cases:
                 judgments = (await c.get("/eval/judgments",
-                                         params={"case_id": c_["id"]})).json()
+                                         params={"subject_kind": "case",
+                                                 "subject_id": c_["id"]})).json()
                 assert len(judgments) == 1
-                assert judgments[0]["rubric_id"] == rubric["id"]
-                assert judgments[0]["rubric_version"] == rubric["version"]
-                assert judgments[0]["type"] == "llm"
+                assert judgments[0]["subject"] == {"kind": "case", "id": c_["id"]}
+                assert judgments[0]["scorer"] == {
+                    "kind": "llm", "ref": rubric["id"], "version": rubric["version"],
+                    "model": "claude-haiku-4-5"}
     run(case())
 
 
@@ -380,7 +439,9 @@ def test_judge_by_set_version_pins_the_older_membership():
             task = await wait_task(c, r.json()["task_id"])
             detail = (await c.get(f"/tasks/{task['id']}")).json()
             assert len(detail["children"]) == 1
-            assert (await c.get("/eval/judgments", params={"case_id": cases[2]["id"]})).json() == []
+            assert (await c.get("/eval/judgments",
+                                params={"subject_kind": "case",
+                                        "subject_id": cases[2]["id"]})).json() == []
 
             missing = await c.post("/eval/judge", json={
                 "set_id": s1["id"], "set_version": 9,

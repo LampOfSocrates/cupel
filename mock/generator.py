@@ -272,7 +272,7 @@ class Generator:
         judged = 0
         for i, evaluation_id in enumerate(evaluation_ids[:2]):
             prior = await self._get("/eval/judgments", evaluation_id=evaluation_id)
-            if any(x["type"] == "llm" for x in prior):
+            if any(x["scorer"]["kind"] == "llm" for x in prior):
                 continue
             rubric = rubric_by_name[RUBRICS[i % len(RUBRICS)][0]]
             acc = await self._post("/eval/judge", {
@@ -288,8 +288,9 @@ class Generator:
             conv_id = ids[(spec["tree"], spec["ci"])]
             conv = await self._get(f"/agenttrees/{spec['tree']}/conversations/{conv_id}")
             turn = [x for x in conv["turns"] if x["role"] == "assistant"][-1]
-            prior = await self._get("/eval/judgments", turn_id=turn["id"])
-            if any(x["type"] == "human" for x in prior):
+            prior = await self._get("/eval/judgments",
+                                    subject_kind="turn", subject_id=turn["id"])
+            if any(x["scorer"]["kind"] == "human" for x in prior):
                 continue
             await self._post("/feedback", {"message_id": turn["id"], "rating": t["rating"]})
             thumbed += 1

@@ -333,9 +333,12 @@ def test_feedback_appends_human_judgment():
             r = await c.post("/feedback", json={"message_id": turn_id, "rating": "up"})
             assert r.status_code == 201
             judg = r.json()
-            assert judg["type"] == "human" and judg["score"] == 1.0
-            assert judg["case_id"] is None and judg["rubric_id"] is None
-            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            assert judg["scorer"]["kind"] == "human" and judg["score"] == 1.0
+            # A thumb subjects the TURN and invents no rubric to score it with.
+            assert judg["subject"] == {"kind": "turn", "id": turn_id}
+            assert judg["scorer"]["ref"] is None and judg["scorer"]["version"] is None
+            assert judg["scorer"]["model"] is None and judg["evaluation_id"] is None
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
             assert len(got) == 1 and got[0]["id"] == judg["id"]
             assert (await c.post("/feedback",
                                  json={"message_id": "nope", "rating": "up"})).status_code == 404
@@ -362,12 +365,13 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
                                                 "comment": "  wrong refund window  "})
             assert r.status_code == 201
             judg = r.json()
-            assert judg["type"] == "human" and judg["score"] == 0.0
+            assert judg["scorer"]["kind"] == "human" and judg["score"] == 0.0
             assert judg["reasoning"] == "wrong refund window"  # trimmed
-            assert judg["case_id"] is None and judg["rubric_id"] is None
+            assert judg["subject"] == {"kind": "turn", "id": turn_id}
+            assert judg["scorer"]["ref"] is None
 
             # append-only: two judgments for the turn, newest first
-            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
             assert [g["id"] for g in got] == [judg["id"], bare["id"]]
             assert [g["reasoning"] for g in got] == ["wrong refund window", None]
 
@@ -375,7 +379,7 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
             again = (await c.post("/feedback",
                                   json={"message_id": turn_id, "rating": "up",
                                         "comment": "fixed, thanks"})).json()
-            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
             assert len(got) == 3
             assert got[0]["id"] == again["id"] and got[0]["reasoning"] == "fixed, thanks"
             assert got[2]["reasoning"] is None  # the original bare thumb, untouched
@@ -419,7 +423,7 @@ def test_soft_delete_preserves_judgments():
             turn_id = conv["turns"][1]["id"]
             await c.post("/feedback", json={"message_id": turn_id, "rating": "down"})
             await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")
-            got = (await c.get("/eval/judgments", params={"turn_id": turn_id})).json()
+            got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()
             assert len(got) == 1  # judgments survive the tombstone (openapi.yaml:438-443)
     run(case())
 
@@ -718,7 +722,8 @@ def test_judge_evaluation_auto_cases_judgments_summary():
             judgments = (await c.get("/eval/judgments",
                                      params={"evaluation_id": acc["evaluation_id"]})).json()
             assert len(judgments) == 2
-            assert all(j_["type"] == "llm" and j_["rubric_version"] == 1 for j_ in judgments)
+            assert all(j_["scorer"]["kind"] == "llm" and j_["scorer"]["version"] == 1
+                       and j_["subject"]["kind"] == "case" for j_ in judgments)
 
             # Re-judging appends, never overwrites (openapi.yaml:962-969).
             jr2 = (await c.post("/eval/judge", json={
@@ -730,9 +735,12 @@ def test_judge_evaluation_auto_cases_judgments_summary():
             assert len(judgments2) == 4
 
             summary = (await c.get(f"/eval/evaluations/{acc['evaluation_id']}/summary")).json()
-            assert summary["rubrics"][0]["count"] == 4
-            assert sum(summary["rubrics"][0]["distribution"]) == 4
-            assert 0 <= summary["rubrics"][0]["mean"] <= 1.01
+            group = summary["scorers"][0]
+            assert group["scorer"] == {"kind": "llm", "ref": rubric["id"],
+                                       "version": 1, "model": None}
+            assert group["count"] == 4
+            assert sum(group["distribution"]) == 4
+            assert 0 <= group["mean"] <= 1.01
 
             bad = await c.post("/eval/judge", json={
                 "judge_model": "m", "rubric_id": rubric["id"]})

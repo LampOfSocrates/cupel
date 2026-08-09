@@ -686,7 +686,11 @@ def test_judging_a_set_resolves_reference_items_to_cases():
             assert task["status"] == "done", task
             judged = (await c.get("/eval/judgments")).json()
             assert len(judged) == 1
-            case_row = (await c.get(f"/eval/cases/{judged[0]['case_id']}")).json()
+            # The judgment's subject IS the resolved case (stage C: judging a
+            # set resolves each reference item to one, and the case is what the
+            # score names).
+            assert judged[0]["subject"]["kind"] == "case"
+            case_row = (await c.get(f"/eval/cases/{judged[0]['subject']['id']}")).json()
             assert case_row["source"]["turn_id"] == conv["turn"]["id"]
             # Membership is untouched: still one REFERENCE item, still v2.
             after = (await c.get(f"/eval/sets/{s['id']}")).json()
