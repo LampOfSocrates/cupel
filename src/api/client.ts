@@ -16,14 +16,6 @@ import type {
   AgentTree,
   Attachment,
   AuthTokenResponse,
-  Casebook,
-  CasebookCreate,
-  CasebookItem,
-  CasebookItemCreate,
-  CasebookReplayAccepted,
-  CasebookReplayRequest,
-  CasebookToEvalSetRequest,
-  CasebookUpdate,
   ChatDoneEvent,
   ChatRequest,
   ChatResponse,
@@ -39,6 +31,11 @@ import type {
   EvalCaseUpdate,
   EvalSet,
   EvalSetCreate,
+  EvalSetFreezeRequest,
+  EvalSetItemCreate,
+  EvalSetMetadataUpdate,
+  EvalSetReplayAccepted,
+  EvalSetReplayRequest,
   EvalSetUpdate,
   FeedbackRequest,
   Health,
@@ -290,55 +287,6 @@ export const api = {
   // filter row and mirrors them into the URL.
   adminConversations: (params: AdminConversationListParams = {}) =>
     request<AdminConversationPage>("/admin/conversations", { query: params as Query }),
-
-  // Casebooks (openapi.yaml:1643-1830). Global, not tree-scoped
-  // (:1654-1656) — no tree in any of these paths.
-  // GET /casebooks — "All casebooks visible to the user, items included".
-  casebooks: () => request<Casebook[]>("/casebooks"),
-
-  // POST /casebooks (:1665-1680) — "Starts empty; add items via POST
-  // /casebooks/{id}/items".
-  createCasebook: (body: CasebookCreate) =>
-    request<Casebook>("/casebooks", { method: "POST", body }),
-
-  // GET /casebooks/{casebookId} (:1683-1699) — "Items are turn REFERENCES —
-  // render transcripts by following each item's tree/conversation_id/turn_id".
-  casebook: (casebookId: string) => request<Casebook>(`/casebooks/${casebookId}`),
-
-  // PATCH /casebooks/{casebookId} (:1700-1717) — "metadata only".
-  updateCasebook: (casebookId: string, body: CasebookUpdate) =>
-    request<Casebook>(`/casebooks/${casebookId}`, { method: "PATCH", body }),
-
-  // DELETE /casebooks/{casebookId} (:1718-1730) — "Removes the casebook and
-  // its item REFERENCES only".
-  deleteCasebook: (casebookId: string) =>
-    request<void>(`/casebooks/${casebookId}`, { method: "DELETE" }),
-
-  // POST /casebooks/{casebookId}/items (:1732-1757) — the ⊞ action. "Re-adding
-  // the same turn is idempotent (returns the existing item)" (:1744), so the
-  // UI never needs to check membership before collecting.
-  addCasebookItem: (casebookId: string, body: CasebookItemCreate) =>
-    request<CasebookItem>(`/casebooks/${casebookId}/items`, { method: "POST", body }),
-
-  // DELETE /casebooks/{casebookId}/items/{itemId} (:1759-1775).
-  removeCasebookItem: (casebookId: string, itemId: string) =>
-    request<void>(`/casebooks/${casebookId}/items/${itemId}`, { method: "DELETE" }),
-
-  // POST /casebooks/{casebookId}/to-eval-set (:1777-1802) — "Materialize the
-  // casebook as an eval set"; 201 EvalSet (new, or the next membership
-  // version of set_id).
-  casebookToEvalSet: (casebookId: string, body: CasebookToEvalSetRequest) =>
-    request<EvalSet>(`/casebooks/${casebookId}/to-eval-set`, { method: "POST", body }),
-
-  // POST /casebooks/{casebookId}/replay (:1804-1830) — 202
-  // CasebookReplayAccepted, "one evaluation per tree touched, all children of a
-  // single parent task". context_policy is hard-set to the contract default
-  // exactly as api.replay does (widening is future work).
-  replayCasebook: (casebookId: string, body: CasebookReplayRequest) =>
-    request<CasebookReplayAccepted>(`/casebooks/${casebookId}/replay`, {
-      method: "POST",
-      body: { ...body, context_policy: "frozen" as const },
-    }),
 
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
   // (feature-spec.md:118). Fetched once and cached in AppContext.
@@ -601,20 +549,58 @@ export const api = {
   updateEvalCase: (caseId: string, body: EvalCaseUpdate) =>
     request<EvalCase>(`/eval/cases/${caseId}`, { method: "PUT", body }),
 
-  // GET /eval/sets (openapi.yaml:1484-1503) — "Latest version of every set,
-  // membership included".
+  // Eval sets — the noun Casebook merged into. Global, not tree-scoped: no
+  // tree in any of these paths, and one set may reference turns across trees.
+  // GET /eval/sets — "Latest version of every set, items included".
   evalSets: () => request<EvalSet[]>("/eval/sets"),
 
-  // POST /eval/sets (openapi.yaml:1504-1523) — "Create an eval set (version
-  // 1)"; membership changes afterwards go through PUT (:1510-1511).
+  // POST /eval/sets — "Create an eval set (version 1)"; membership changes
+  // afterwards append versions through PUT, …/items or …/freeze.
   createEvalSet: (body: EvalSetCreate) =>
     request<EvalSet>("/eval/sets", { method: "POST", body }),
 
-  // PUT /eval/sets/{setId} (openapi.yaml:1524-1547) — "Save set membership as
-  // a NEW version (append-only) … each save is a new version carrying its full
-  // case_ids list".
+  // GET /eval/sets/{setId} — the set with its items. Reference items are turn
+  // REFERENCES: render their transcripts by following each item's source.
+  evalSet: (setId: string) => request<EvalSet>(`/eval/sets/${setId}`),
+
+  // PATCH /eval/sets/{setId} — "Metadata only, and deliberately NOT versioned:
+  // a set's name and description belong to the set, its items belong to the
+  // version."
+  updateEvalSetMetadata: (setId: string, body: EvalSetMetadataUpdate) =>
+    request<EvalSet>(`/eval/sets/${setId}`, { method: "PATCH", body }),
+
+  // PUT /eval/sets/{setId} — "Save set membership as a NEW version
+  // (append-only) … each save is a new version carrying its FULL item list".
   updateEvalSet: (setId: string, body: EvalSetUpdate) =>
     request<EvalSet>(`/eval/sets/${setId}`, { method: "PUT", body }),
+
+  // DELETE /eval/sets/{setId} — "Deleting a set never deletes evidence": the
+  // referenced turns, the frozen cases and their judgments all survive.
+  deleteEvalSet: (setId: string) =>
+    request<void>(`/eval/sets/${setId}`, { method: "DELETE" }),
+
+  // POST /eval/sets/{setId}/items — the ⊞ action. Appends a membership version,
+  // and is IDEMPOTENT: "adding a referent the latest version already holds
+  // appends nothing and returns that version unchanged", so the UI detects
+  // "already there" by an unchanged version number rather than pre-checking.
+  addEvalSetItem: (setId: string, body: EvalSetItemCreate) =>
+    request<EvalSet>(`/eval/sets/${setId}/items`, { method: "POST", body }),
+
+  // POST /eval/sets/{setId}/freeze — what "turn a casebook into an eval set"
+  // became: reference items flip to frozen in place, keeping their id and
+  // source. Omit item_ids for every reference item.
+  freezeEvalSetItems: (setId: string, body: EvalSetFreezeRequest = {}) =>
+    request<EvalSet>(`/eval/sets/${setId}/freeze`, { method: "POST", body }),
+
+  // POST /eval/sets/{setId}/replay — 202 EvalSetReplayAccepted, "one evaluation
+  // per tree touched, all children of a single parent task"; frozen items are
+  // skipped. context_policy is hard-set to the contract default exactly as
+  // api.replay does (widening is future work).
+  replayEvalSet: (setId: string, body: EvalSetReplayRequest) =>
+    request<EvalSetReplayAccepted>(`/eval/sets/${setId}/replay`, {
+      method: "POST",
+      body: { ...body, context_policy: "frozen" as const },
+    }),
 
   // POST /eval/cases/import (openapi.yaml:1370-1429) — multipart file +
   // mapping (+ set_id | set_name). "Small files: 200 with the per-row report

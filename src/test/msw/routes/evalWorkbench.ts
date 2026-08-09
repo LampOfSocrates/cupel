@@ -10,6 +10,11 @@ import type {
   EvalCaseUpdate,
   EvalSet,
   EvalSetCreate,
+  EvalSetFreezeRequest,
+  EvalSetItem,
+  EvalSetItemCreate,
+  EvalSetMetadataUpdate,
+  EvalSetReplayRequest,
   EvalSetUpdate,
   JudgeRequest,
   Rubric,
@@ -80,6 +85,11 @@ export const evalCaseCreates: unknown[] = [];
 export const evalCasePuts: Array<{ caseId: string; body: unknown }> = [];
 export const evalSetCreates: unknown[] = [];
 export const evalSetPuts: Array<{ setId: string; body: unknown }> = [];
+export const evalSetPatches: Array<{ setId: string; body: EvalSetMetadataUpdate }> = [];
+export const evalSetDeletes: string[] = [];
+export const evalSetItemPosts: Array<{ setId: string; body: EvalSetItemCreate }> = [];
+export const evalSetFreezes: Array<{ setId: string; body: EvalSetFreezeRequest }> = [];
+export const evalSetReplays: Array<{ setId: string; body: EvalSetReplayRequest }> = [];
 export const rubricCreates: unknown[] = [];
 export const rubricPuts: Array<{ rubricId: string; body: unknown }> = [];
 export const importRequests: Array<{
@@ -89,18 +99,68 @@ export const importRequests: Array<{
   set_name: string | null;
 }> = [];
 
+// Two sets, one of each member kind — the merge's whole point is that both
+// live in the same collection: "refund-fails" holds a FROZEN case, "Refund
+// misses" holds a turn REFERENCE (what a casebook used to be).
 function seedEvalSets(): EvalSet[] {
   return [
     {
       id: "set-refunds",
       name: "refund-fails",
+      description: null,
       version: 3,
-      case_ids: ["case-1"],
+      items: [
+        {
+          id: "esi-1",
+          kind: "frozen",
+          source: null,
+          case_id: "case-1",
+          note: null,
+          added_at: "2026-08-03T12:00:00Z",
+        },
+      ],
       created_at: "2026-08-03T12:00:00Z",
+    },
+    {
+      id: "set-misses",
+      name: "Refund misses",
+      description: null,
+      version: 2,
+      items: [
+        {
+          id: "esi-2",
+          kind: "reference",
+          source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+          case_id: null,
+          note: "hedged answer",
+          added_at: "2026-08-04T10:01:00Z",
+        },
+      ],
+      created_at: "2026-08-04T10:01:00Z",
     },
   ];
 }
 export const mockEvalSets: EvalSet[] = seedEvalSets();
+
+// What an item POINTS AT — the key the server carries ids forward on and the
+// one that makes POST …/items idempotent (mock/main.py referent()).
+function referent(item: EvalSetItem | EvalSetItemCreate): string {
+  if ("case_id" in item && item.case_id) return `case:${item.case_id}`;
+  const s = (item as EvalSetItem).source!;
+  return `turn:${s.tree}/${s.conversation_id}/${s.turn_id}`;
+}
+
+function toItem(input: EvalSetItemCreate): EvalSetItem {
+  const frozen = "case_id" in input && Boolean(input.case_id);
+  return {
+    id: `esi-new-${++counters.evalSetItem}`,
+    kind: frozen ? "frozen" : "reference",
+    source: frozen ? null : (input as { source: EvalSetItem["source"] }).source,
+    case_id: frozen ? (input as { case_id: string }).case_id : null,
+    note: input.note ?? null,
+    added_at: "2026-08-06T10:00:00Z",
+  };
+}
 
 // Import knob: `queued` flips the endpoint to the 202 path so tests can drive
 // "Above the server's size threshold: 202 TaskRef" (openapi.yaml:1386-1389)
@@ -226,10 +286,10 @@ export const evalHandlers = [
     return HttpResponse.json(created, { status: 201 });
   }),
 
-  // GET /eval/sets (openapi.yaml:1484-1503) — "Latest version of every set".
+  // GET /eval/sets — "Latest version of every set, items included".
   http.get(`${BASE}/eval/sets`, () => HttpResponse.json(mockEvalSets)),
 
-  // POST /eval/sets (openapi.yaml:1504-1523) — created at version 1.
+  // POST /eval/sets — created at version 1.
   http.post(`${BASE}/eval/sets`, async ({ request }) => {
     const body = (await request.json()) as EvalSetCreate;
     evalSetCreates.push(body);
@@ -239,16 +299,125 @@ export const evalHandlers = [
     const created: EvalSet = {
       id: `set-new-${++counters.evalSet}`,
       name: body.name,
+      description: body.description ?? null,
       version: 1,
-      case_ids: body.case_ids ?? [],
+      items: (body.items ?? []).map(toItem),
       created_at: "2026-08-06T10:00:00Z",
     };
     mockEvalSets.push(created);
     return HttpResponse.json(created, { status: 201 });
   }),
 
-  // PUT /eval/sets/{setId} (openapi.yaml:1524-1547) — "each save is a new
-  // version carrying its full case_ids list"; 201 = the new version.
+  // POST /eval/sets/{setId}/items — the ⊞ action. Appends a membership version,
+  // and is IDEMPOTENT: re-adding a referent the latest version already holds
+  // returns that version UNCHANGED (same rule as mock/main.py add_set_item).
+  http.post(`${BASE}/eval/sets/:setId/items`, async ({ params, request }) => {
+    const setId = params.setId as string;
+    const body = (await request.json()) as EvalSetItemCreate;
+    evalSetItemPosts.push({ setId, body });
+    const existing = mockEvalSets.find((s) => s.id === setId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    const item = toItem(body);
+    if (existing.items.some((i) => referent(i) === referent(item))) {
+      return HttpResponse.json(existing, { status: 201 });
+    }
+    existing.version += 1;
+    existing.items = [...existing.items, item];
+    return HttpResponse.json(existing, { status: 201 });
+  }),
+
+  // POST /eval/sets/{setId}/freeze — reference items flip to frozen in place,
+  // keeping their id and source; omitted item_ids means every reference item.
+  http.post(`${BASE}/eval/sets/:setId/freeze`, async ({ params, request }) => {
+    const setId = params.setId as string;
+    const body = (await request.json()) as EvalSetFreezeRequest;
+    evalSetFreezes.push({ setId, body });
+    const existing = mockEvalSets.find((s) => s.id === setId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    const wanted = body?.item_ids ?? null;
+    const targets = existing.items.filter(
+      (i) => i.kind === "reference" && (wanted === null || wanted.includes(i.id)),
+    );
+    if (targets.length === 0) {
+      return HttpResponse.json(
+        { code: "invalid", message: "No reference items to freeze." },
+        { status: 422 },
+      );
+    }
+    existing.version += 1;
+    existing.items = existing.items.map((i) =>
+      targets.includes(i)
+        ? { ...i, kind: "frozen" as const, case_id: `case-for-${i.source?.turn_id}` }
+        : i,
+    );
+    return HttpResponse.json(existing, { status: 201 });
+  }),
+
+  // POST /eval/sets/{setId}/replay — 202 EvalSetReplayAccepted, "one evaluation
+  // per tree the set's reference items touch … all children of a single parent
+  // task"; frozen items contribute no tree.
+  http.post(`${BASE}/eval/sets/:setId/replay`, async ({ params, request }) => {
+    const setId = params.setId as string;
+    const body = (await request.json()) as EvalSetReplayRequest;
+    evalSetReplays.push({ setId, body });
+    const existing = mockEvalSets.find((s) => s.id === setId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    counters.replay += 1;
+    const trees = [
+      ...new Set(
+        existing.items.filter((i) => i.kind === "reference").map((i) => i.source!.tree),
+      ),
+    ];
+    if (trees.length === 0) {
+      return HttpResponse.json(
+        { code: "invalid", message: "This set has no turn references to replay." },
+        { status: 422 },
+      );
+    }
+    return HttpResponse.json(
+      {
+        task_id: `task-set-${counters.replay}`,
+        evaluations: trees.map((tree_id, i) => ({
+          tree_id,
+          evaluation_id: `evaluation-set-${counters.replay}-${i + 1}`,
+        })),
+      },
+      { status: 202 },
+    );
+  }),
+
+  // GET /eval/sets/{setId} — the set with its items (latest version).
+  http.get(`${BASE}/eval/sets/:setId`, ({ params }) => {
+    const found = mockEvalSets.find((s) => s.id === params.setId);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    return HttpResponse.json(found);
+  }),
+
+  // PATCH /eval/sets/{setId} — metadata only, and NOT a new version.
+  http.patch(`${BASE}/eval/sets/:setId`, async ({ params, request }) => {
+    const setId = params.setId as string;
+    const body = (await request.json()) as EvalSetMetadataUpdate;
+    evalSetPatches.push({ setId, body });
+    const existing = mockEvalSets.find((s) => s.id === setId);
+    if (!existing) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    if (body.name) existing.name = body.name;
+    if (body.description !== undefined) existing.description = body.description;
+    return HttpResponse.json(existing);
+  }),
+
+  // PUT /eval/sets/{setId} — "each save is a new version carrying its FULL item
+  // list"; 201 = the new version. Item ids follow their referent across
+  // versions, as the real mock does.
   http.put(`${BASE}/eval/sets/:setId`, async ({ params, request }) => {
     const setId = params.setId as string;
     const body = (await request.json()) as EvalSetUpdate;
@@ -257,13 +426,28 @@ export const evalHandlers = [
     if (!existing) {
       return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
     }
-    if (!body || body.case_ids == null) {
-      return HttpResponse.json({ code: "invalid", message: "case_ids is required." }, { status: 422 });
+    if (!body || body.items == null) {
+      return HttpResponse.json({ code: "invalid", message: "items is required." }, { status: 422 });
     }
     existing.version += 1;
-    existing.case_ids = body.case_ids;
-    if (body.name) existing.name = body.name;
+    existing.items = body.items.map((input) => {
+      const built = toItem(input);
+      const kept = existing.items.find((i) => referent(i) === referent(built));
+      return kept ? { ...built, id: kept.id, added_at: kept.added_at } : built;
+    });
     return HttpResponse.json(existing, { status: 201 });
+  }),
+
+  // DELETE /eval/sets/{setId} — "Deleting a set never deletes evidence".
+  http.delete(`${BASE}/eval/sets/:setId`, ({ params }) => {
+    const setId = params.setId as string;
+    evalSetDeletes.push(setId);
+    const index = mockEvalSets.findIndex((s) => s.id === setId);
+    if (index < 0) {
+      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+    }
+    mockEvalSets.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // GET /eval/cases/{caseId} (openapi.yaml:907-929) — judgment-drawer case doc.
@@ -383,6 +567,11 @@ export function resetEvalWorkbench() {
   evalCasePuts.length = 0;
   evalSetCreates.length = 0;
   evalSetPuts.length = 0;
+  evalSetPatches.length = 0;
+  evalSetDeletes.length = 0;
+  evalSetItemPosts.length = 0;
+  evalSetFreezes.length = 0;
+  evalSetReplays.length = 0;
   rubricCreates.length = 0;
   rubricPuts.length = 0;
   importRequests.length = 0;

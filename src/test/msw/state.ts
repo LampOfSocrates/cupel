@@ -5,7 +5,7 @@
 // The `counters` object is not a style choice: route modules are ES modules and
 // an imported `let` binding cannot be reassigned across a module boundary. Ids
 // therefore live on one mutable object, which also keeps genuinely shared
-// sequences shared — casebook replay, turn re-fire and replay all draw from
+// sequences shared — eval-set replay, turn re-fire and replay all draw from
 // `counters.replay`, exactly as they drew from one `replayCounter` before.
 import { HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
@@ -32,10 +32,9 @@ export const counters = {
   judge: 0,
   evalCase: 0,
   evalSet: 0,
+  evalSetItem: 0,
   evalImport: 0,
   rubric: 0,
-  casebook: 0,
-  casebookItem: 0,
   attachment: 0,
   replay: 0,
   newConversation: 0,
@@ -100,7 +99,7 @@ export function treeGate(tree: string): Response | null {
 //
 // KNOWN CONTRACT GAP (deliberate divergence): openapi.yaml v0.3.0
 // declares 409 on only five of these — chat, replay, replay/turn, /eval/judge
-// and casebook replay. The other six (POST agents, PUT instructions, POST
+// and eval-set replay. The other six (POST agents, PUT instructions, POST
 // snapshots, PUT last-selection, PATCH/DELETE conversation) emit an
 // UNDECLARED 409 in mock/main.py:784-932. MSW follows the reference
 // implementation rather than the under-declared contract, because the

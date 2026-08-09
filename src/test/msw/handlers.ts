@@ -18,7 +18,7 @@
 // Behavioural rules the handlers mirror from the reference implementation
 // (mock/main.py), because a UI test can lean on any of them: append-only
 // judgments/versions with latest-version-wins reads, newest-first collections,
-// idempotent casebook item add, 404-never-403 for absent or unpermitted trees,
+// idempotent eval-set item add, 404-never-403 for absent or unpermitted trees,
 // and the 409 tree_disabled write set. Deliberate divergences are marked
 // "DELIBERATE DIVERGENCE" (or "Documented divergence") at the handler that
 // makes them — ./routes/judgments.ts (POST /feedback) and ./routes/evaluations.ts
@@ -26,7 +26,6 @@
 import { resetSharedState, taskStreamRig } from "./state";
 import { adminHandlers, resetAdmin } from "./routes/admin";
 import { agentHandlers, resetAgents } from "./routes/agents";
-import { casebookHandlers, resetCasebooks } from "./routes/casebooks";
 import { chatHandlers, resetChat } from "./routes/chat";
 import { conversationHandlers, resetConversations } from "./routes/conversations";
 import { evalHandlers, resetEvalWorkbench } from "./routes/evalWorkbench";
@@ -39,7 +38,6 @@ import { traceHandlers, resetTraces } from "./routes/traces";
 export * from "./state";
 export * from "./routes/admin";
 export * from "./routes/agents";
-export * from "./routes/casebooks";
 export * from "./routes/chat";
 export * from "./routes/conversations";
 export * from "./routes/evalWorkbench";
@@ -56,7 +54,6 @@ export const handlers = [
   ...systemHandlers,
   ...adminHandlers,
   ...agentHandlers,
-  ...casebookHandlers,
   ...conversationHandlers,
   ...chatHandlers,
   ...judgmentHandlers,
@@ -75,7 +72,6 @@ export function resetHandlerState() {
   resetAdmin();
   resetAgents();
   resetChat();
-  resetCasebooks();
   resetJudgments();
   resetEvalWorkbench();
   resetEvaluations();

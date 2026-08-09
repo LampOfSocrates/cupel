@@ -192,73 +192,6 @@ export interface AdminConversationListParams {
   page_size?: number;
 }
 
-// openapi.yaml:3249 CasebookItem — "A REFERENCE to a turn, never a copy …
-// the transcript stays in its conversation; removing the item touches nothing
-// else" (:3252-3255).
-export interface CasebookItem {
-  id: string;
-  tree: string;
-  conversation_id: string;
-  turn_id: string;
-  /** ":3261 Why this turn is noteworthy." */
-  note?: string | null;
-  added_at: string;
-}
-
-// openapi.yaml:3219 Casebook — "A named collection of turn REFERENCES
-// (cupel-phases.md:79) — the raw material for eval sets and replay regression
-// suites" (:3222-3225).
-export interface Casebook {
-  id: string;
-  name: string;
-  description?: string | null;
-  created_at: string;
-  items: CasebookItem[];
-}
-
-// openapi.yaml:3235 CasebookCreate / :3242 CasebookUpdate ("Metadata only;
-// membership changes go through the items endpoints").
-export interface CasebookCreate {
-  name: string;
-  description?: string | null;
-}
-
-export interface CasebookUpdate {
-  name?: string | null;
-  description?: string | null;
-}
-
-// openapi.yaml:3264 CasebookItemCreate — the ⊞ action's body.
-export interface CasebookItemCreate {
-  tree: string;
-  conversation_id: string;
-  turn_id: string;
-  note?: string | null;
-}
-
-// openapi.yaml:3273 CasebookToEvalSetRequest — ":3276-3278 "Exactly one target
-// (oneOf): set_name creates a new set (version 1); set_id appends a new
-// membership version to an existing set"".
-export type CasebookToEvalSetRequest = { set_name: string } | { set_id: string };
-
-// openapi.yaml:3286 CasebookReplayRequest — "Same engine as ReplayRequest
-// applied to the casebook's referenced turns; context fields carry
-// ReplayRequest's enums and defaults". context_policy is pinned to frozen by
-// the client exactly as on ReplayRequest (widening is future work).
-export interface CasebookReplayRequest {
-  configs: Variant[];
-  context_policy?: "frozen";
-}
-
-// openapi.yaml:3320 CasebookReplayAccepted — "One parent task; one evaluation
-// per tree the casebook's items reference (evaluations are tree-scoped … a
-// cross-tree casebook therefore yields several). Fetch each grid via
-// GET /agenttrees/{tree_id}/evaluations/{evaluation_id}" (:3323-3327).
-export interface CasebookReplayAccepted {
-  task_id: string;
-  evaluations: Array<{ tree_id: string; evaluation_id: string }>;
-}
-
 // openapi.yaml:1061 Error — {code, message}; also the SSE `error` event payload
 // (openapi.yaml:476 "event: error — data: Error").
 export interface ErrorBody {
@@ -518,28 +451,83 @@ export interface EvalCaseImportReport {
   errors: EvalImportRowError[];
 }
 
-// openapi.yaml:3400 EvalSet — ":3403-3408 "named collection of cases
-// (versioned, reusable across runs/models)". Membership is versioned …: each
-// PUT appends a new version with its own full case_ids".
+// openapi.yaml EvalSetItem — the merged noun's member. "kind is the whole
+// difference the merge collapsed: `reference` is a REFERENCE to a live turn,
+// never a copy …; `frozen` names an EvalCase". source survives a freeze, so an
+// item frozen from a turn still says where it came from.
+export interface EvalSetItem {
+  /** "Stable across membership versions for as long as the item's referent
+   * stays in the set." */
+  id: string;
+  kind: "reference" | "frozen";
+  source?: EvalCaseSource | null;
+  case_id?: string | null;
+  /** "Why this member is noteworthy." */
+  note?: string | null;
+  added_at: string;
+}
+
+// openapi.yaml EvalSetItemCreate — "Exactly one referent (oneOf): source adds a
+// reference item, case_id adds a frozen one." Also the ⊞ action's body.
+export type EvalSetItemCreate =
+  | { source: EvalCaseSource; note?: string | null }
+  | { case_id: string; note?: string | null };
+
+// openapi.yaml EvalSet — "named collection of cases (versioned, reusable across
+// runs/models)", merged with the Casebook — "a named collection of turn
+// REFERENCES" — into the one noun. "Membership is versioned: every change
+// appends a new version with its own full item list … name and description are
+// NOT versioned."
 export interface EvalSet {
   id: string;
   name: string;
+  description?: string | null;
   version: number;
-  case_ids: string[];
+  items: EvalSetItem[];
   created_at: string;
 }
 
 export interface EvalSetCreate {
   name: string;
-  /** ":3427 Initial membership; empty/omitted = start empty." */
-  case_ids?: string[];
+  description?: string | null;
+  /** "Initial membership (version 1); empty/omitted = start empty." */
+  items?: EvalSetItemCreate[];
 }
 
-// openapi.yaml:3431 EvalSetUpdate — "The full membership for the NEW version";
-// ":3441 Optional name carries a rename into the new version".
+// openapi.yaml EvalSetUpdate — "The full membership for the NEW version …
+// items absent from this list leave the set."
 export interface EvalSetUpdate {
-  case_ids: string[];
+  items: EvalSetItemCreate[];
+}
+
+// openapi.yaml EvalSetMetadataUpdate — "Metadata only; every membership change
+// goes elsewhere." A rename takes no membership version.
+export interface EvalSetMetadataUpdate {
   name?: string | null;
+  description?: string | null;
+}
+
+// openapi.yaml EvalSetFreezeRequest — "Which reference items to freeze into
+// cases; omit item_ids for all of them."
+export interface EvalSetFreezeRequest {
+  item_ids?: string[] | null;
+}
+
+// openapi.yaml EvalSetReplayRequest — "Same engine as ReplayRequest applied to
+// the set's REFERENCE items". context_policy is pinned to frozen by the client
+// exactly as on ReplayRequest (widening is future work).
+export interface EvalSetReplayRequest {
+  configs: Variant[];
+  context_policy?: "frozen";
+}
+
+// openapi.yaml EvalSetReplayAccepted — "One parent task; one evaluation per
+// tree the set's reference items touch (evaluations are tree-scoped … a
+// cross-tree set therefore yields several). Fetch each grid via
+// GET /agenttrees/{tree_id}/evaluations/{evaluation_id}".
+export interface EvalSetReplayAccepted {
+  task_id: string;
+  evaluations: Array<{ tree_id: string; evaluation_id: string }>;
 }
 
 // openapi.yaml:2867 RubricCreate — ":2870 Existing name appends the next

@@ -319,8 +319,7 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "evalSets", run: () => api.evalSets() },
   { apiMethod: "judgments", run: () => api.judgments({ page: 1 }) },
   { apiMethod: "evaluationSummary", run: () => api.evaluationSummary("evaluation-old-1") },
-  { apiMethod: "casebooks", run: () => api.casebooks() },
-  { apiMethod: "casebook", run: () => api.casebook("cb-1") },
+  { apiMethod: "evalSet", run: () => api.evalSet("set-misses") },
 
   // Second reads over the fixtures whose SHAPE differs from the first: forks
   // carry lineage, the re-fire evaluation carries per-endpoint cells, the finished
@@ -461,20 +460,27 @@ const EXERCISES: Exercise[] = [
     run: () => api.updateEvalCase("case-1", { input: { prompt: "Hi" }, output: "Hello again" }),
   },
   { apiMethod: "createEvalSet", run: () => api.createEvalSet({ name: "parity-set" }) },
-  { apiMethod: "updateEvalSet", run: () => api.updateEvalSet("set-refunds", { case_ids: ["case-1"] }) },
-  { apiMethod: "createCasebook", run: () => api.createCasebook({ name: "Parity casebook" }) },
-  { apiMethod: "updateCasebook", run: () => api.updateCasebook("cb-1", { name: "Renamed" }) },
+  { apiMethod: "updateEvalSet", run: () => api.updateEvalSet("set-refunds", { items: [{ case_id: "case-1" }] }) },
   {
-    apiMethod: "addCasebookItem",
-    run: () => api.addCasebookItem("cb-1", { tree: "agent1", conversation_id: "c2", turn_id: "t9" }),
+    apiMethod: "updateEvalSetMetadata",
+    run: () => api.updateEvalSetMetadata("set-misses", { name: "Renamed" }),
   },
   {
-    apiMethod: "casebookToEvalSet",
-    run: () => api.casebookToEvalSet("cb-1", { set_name: "from-casebook" }),
+    apiMethod: "addEvalSetItem",
+    run: () =>
+      api.addEvalSetItem("set-misses", {
+        source: { tree: "agent1", conversation_id: "c2", turn_id: "t9" },
+      }),
+  },
+  // Replay BEFORE freeze: replay re-fires reference items, so it needs one to
+  // still be a reference — freezing is what takes them out of its reach.
+  {
+    apiMethod: "replayEvalSet",
+    run: () => api.replayEvalSet("set-misses", { configs: [{ instruction_version: 3 }] }),
   },
   {
-    apiMethod: "replayCasebook",
-    run: () => api.replayCasebook("cb-1", { configs: [{ instruction_version: 3 }] }),
+    apiMethod: "freezeEvalSetItems",
+    run: () => api.freezeEvalSetItems("set-misses"),
   },
   { apiMethod: "putAdminUsers", run: () => api.putAdminUsers([{ email: "parity@demo" }]) },
   {
@@ -486,8 +492,7 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "cancelTask", run: () => api.cancelTask("task-seed-replay") },
 
   // --- deletes last: they remove the fixtures the reads above needed.
-  { apiMethod: "removeCasebookItem", run: () => api.removeCasebookItem("cb-1", "cbi-1") },
-  { apiMethod: "deleteCasebook", run: () => api.deleteCasebook("cb-1") },
+  { apiMethod: "deleteEvalSet", run: () => api.deleteEvalSet("set-misses") },
   { apiMethod: "deleteConversation", run: () => api.deleteConversation("agent1", "c3") },
 ];
 
@@ -540,7 +545,7 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     label: "updateEvalSet 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateEvalSet("nope", { case_ids: [] }),
+    run: () => api.updateEvalSet("nope", { items: [] }),
   },
   {
     label: "updateRubric 404",
@@ -549,37 +554,34 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     run: () => api.updateRubric("nope", { prompt: "p" }),
   },
   { label: "evaluationSummary 404", status: 404, code: "not_found", run: () => api.evaluationSummary("nope") },
-  { label: "casebook 404", status: 404, code: "not_found", run: () => api.casebook("nope") },
+  { label: "evalSet 404", status: 404, code: "not_found", run: () => api.evalSet("nope") },
   {
-    label: "updateCasebook 404",
+    label: "updateEvalSetMetadata 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateCasebook("nope", { name: "x" }),
+    run: () => api.updateEvalSetMetadata("nope", { name: "x" }),
   },
-  { label: "deleteCasebook 404", status: 404, code: "not_found", run: () => api.deleteCasebook("nope") },
+  { label: "deleteEvalSet 404", status: 404, code: "not_found", run: () => api.deleteEvalSet("nope") },
   {
-    label: "addCasebookItem 404",
+    label: "addEvalSetItem 404",
     status: 404,
     code: "not_found",
-    run: () => api.addCasebookItem("nope", { tree: "agent1", conversation_id: "c1", turn_id: "t2" }),
-  },
-  {
-    label: "removeCasebookItem 404",
-    status: 404,
-    code: "not_found",
-    run: () => api.removeCasebookItem("cb-1", "nope"),
+    run: () =>
+      api.addEvalSetItem("nope", {
+        source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+      }),
   },
   {
-    label: "casebookToEvalSet 404",
+    label: "freezeEvalSetItems 404",
     status: 404,
     code: "not_found",
-    run: () => api.casebookToEvalSet("nope", { set_name: "x" }),
+    run: () => api.freezeEvalSetItems("nope"),
   },
   {
-    label: "replayCasebook 404",
+    label: "replayEvalSet 404",
     status: 404,
     code: "not_found",
-    run: () => api.replayCasebook("nope", { configs: [{}] }),
+    run: () => api.replayEvalSet("nope", { configs: [{}] }),
   },
   {
     label: "userPermissions 404",
@@ -940,7 +942,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(caseAfter.version).toBe((caseBefore.version ?? 1) + 1);
     expect((await api.evalCase("case-1")).output).toBe("o");
 
-    const setAfter = await api.updateEvalSet("set-refunds", { case_ids: [] });
+    const setAfter = await api.updateEvalSet("set-refunds", { items: [] });
     expect(setAfter.version).toBe(4); // fixture is v3
     expect((await api.evalSets()).find((s) => s.id === "set-refunds")?.version).toBe(4);
 
@@ -980,12 +982,35 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(judgment.conversation_id).toBeNull();
   });
 
-  it("adding the same turn to a casebook twice is idempotent", async () => {
-    const item = { tree: "agent1", conversation_id: "c2", turn_id: "t9" } as const;
-    const first = await api.addCasebookItem("cb-1", item);
-    const second = await api.addCasebookItem("cb-1", item);
-    expect(second.id).toBe(first.id);
-    expect((await api.casebook("cb-1")).items.filter((i) => i.turn_id === "t9")).toHaveLength(1);
+  it("adding the same turn to a set twice appends one version, then nothing", async () => {
+    // The merged noun's duplicate rule: "adding a referent the latest version
+    // already holds appends nothing and returns that version unchanged"
+    // (mock/main.py add_set_item), so the caller reads an unchanged version
+    // number as "already there".
+    const item = {
+      source: { tree: "agent1", conversation_id: "c2", turn_id: "t9" },
+    } as const;
+    const before = await api.evalSet("set-misses");
+    const first = await api.addEvalSetItem("set-misses", item);
+    const second = await api.addEvalSetItem("set-misses", item);
+    expect(first.version).toBe(before.version + 1);
+    expect(second.version).toBe(first.version);
+    expect(
+      (await api.evalSet("set-misses")).items.filter((i) => i.source?.turn_id === "t9"),
+    ).toHaveLength(1);
+  });
+
+  it("freezing flips reference items in place, keeping their id", async () => {
+    // "The item keeps its id and its source, so its provenance survives the
+    // freeze" — the merge's replacement for POST /casebooks/{id}/to-eval-set.
+    const before = await api.evalSet("set-misses");
+    const reference = before.items.find((i) => i.kind === "reference")!;
+    const after = await api.freezeEvalSetItems("set-misses");
+    expect(after.version).toBe(before.version + 1);
+    const frozen = after.items.find((i) => i.id === reference.id)!;
+    expect(frozen.kind).toBe("frozen");
+    expect(frozen.case_id).toBeTruthy();
+    expect(frozen.source).toEqual(reference.source);
   });
 
   it("an unpermitted tree answers 404, never 403 (openapi.yaml NotFound)", async () => {
@@ -1016,7 +1041,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
       "POST /agenttrees/{tree}/replay",
       "POST /agenttrees/{tree}/replay/turn",
       "POST /eval/judge",
-      "POST /casebooks/{casebookId}/replay",
+      "POST /eval/sets/{setId}/replay",
     ]) {
       expect(declaredStatuses(op), op).toContain("409");
     }
