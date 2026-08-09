@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Badge,
   Box,
@@ -56,16 +56,6 @@ interface Props {
   showJudge?: boolean;
   /** Display label for value.snapshot_id, e.g. "v15-draft (a3f2)" (feature-spec.md:86). */
   snapshotLabel?: string;
-  /**
-   * Presets (feature-spec.md:102-103): field focused on mount —
-   * Tune → "version", Evaluate → "model". Mount-time only, not controlled.
-   */
-  initialFocus?: "version" | "model";
-  /**
-   * Judge section's initial open state (Evaluate arrives expanded,
-   * awaiting judge_model/rubric). Defaults to open iff value.judge is set.
-   */
-  judgeInitiallyOpen?: boolean;
 }
 
 const sameArray = (a?: string[] | null, b?: string[] | null) => {
@@ -106,24 +96,13 @@ export function RunConfigPanel({
   showEndpoints = false,
   showJudge = true,
   snapshotLabel,
-  initialFocus,
-  judgeInitiallyOpen,
 }: Props) {
   // Judge draft: JudgeConfig requires BOTH judge_model and rubric_id
   // (openapi.yaml:1510) — while the user is mid-selection the draft lives
   // here and value.judge is only emitted once complete (or null on toggle off).
-  // An open-but-empty section (Evaluate preset) emits nothing until complete.
-  const [judgeOpen, setJudgeOpen] = useState(judgeInitiallyOpen ?? value.judge != null);
+  // An open-but-empty section emits nothing until complete.
+  const [judgeOpen, setJudgeOpen] = useState(value.judge != null);
   const [judgeDraft, setJudgeDraft] = useState<Partial<JudgeConfig>>(value.judge ?? {});
-
-  // Preset autofocus — an arrival gesture, applied once on mount.
-  const versionRef = useRef<HTMLInputElement>(null);
-  const modelRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (initialFocus === "version") versionRef.current?.focus();
-    else if (initialFocus === "model") modelRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const set = (patch: Partial<RunConfig>) => onChange({ ...value, ...patch });
 
@@ -173,7 +152,6 @@ export function RunConfigPanel({
       </Field>
       <Field changed={changed.version}>
         <Select
-          ref={versionRef}
           size="xs"
           label="Instruction version"
           // Neither version nor snapshot = the live version (openapi.yaml:1489).
@@ -197,7 +175,6 @@ export function RunConfigPanel({
       </Field>
       <Field changed={changed.model}>
         <Select
-          ref={modelRef}
           size="xs"
           label="Model"
           placeholder="Model"
