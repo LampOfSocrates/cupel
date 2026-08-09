@@ -65,7 +65,7 @@ and **Evaluate**. User decision 2026-08-09.
       The other five unconverted sites are deliberate (see `docs/open-items.md`).
 - [ ] **#9** Make `RunConfigPanel`'s `initialFocus` and `judgeInitiallyOpen` controlled
       (`:119,:125-129`), then the remount-by-key drops to `key={i}`.
-- [ ] **#10** Last render-phase ref write (`InspectorPage.tsx:192`), **and add a lint setup at
+- [x] **#10** Last render-phase ref write (`InspectorPage.tsx:192`), **and add a lint setup at
       all** — `eslint-plugin-react-hooks@7` (`recommended-latest`). There is no eslint config
       in the repo, so five `exhaustive-deps` disables are inert and enforce nothing. Do **not**
       enable the React Compiler (Vite/rolldown, no Babel — 4 deps to reintroduce a Babel pass).

@@ -81,8 +81,14 @@ export function useAsync<T>(fn: (() => Promise<T>) | null, deps: unknown[]): Asy
   useEffect(() => {
     run(true);
     return () => {
+      // The rule's advice (copy the ref into a local first) is exactly wrong
+      // here: the point of the cleanup is to bump the LIVE counter so an
+      // in-flight response from the previous dep set can no longer land.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       seq.current++;
     };
+    // `deps` is the caller's own dependency list, passed through by design, so
+    // the rule can neither verify it nor see that `run` is stable ([] deps).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 

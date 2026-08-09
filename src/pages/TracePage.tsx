@@ -125,6 +125,10 @@ export function TracePage() {
       stopped = true;
       controller.abort();
     };
+    // `mergeTrace` is useAsync's `setData`, memoized with an empty dep list, so
+    // it is stable for the life of the hook; listing it would only make the
+    // subscription key look wider than it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRunning, turnId]);
 
   // Terminal transition (last running span closed) → one refetch for the

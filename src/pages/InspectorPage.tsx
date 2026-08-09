@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import {
   Alert,
@@ -158,29 +158,32 @@ export function InspectorPage() {
     [selected],
   );
 
-  const stateRef = useRef({ rows, selectedIndex, focusedTurnId, collecting: false });
-  stateRef.current = { rows, selectedIndex, focusedTurnId, collecting: collectTarget !== null };
+  // Effect event: the window listener is subscribed ONCE, but each keypress
+  // must see the current rows/selection/focus — re-subscribing per render
+  // would be churn, and a ref written during render is a render-phase side
+  // effect (react-hooks/refs). Everything it reads lives in this component,
+  // so an effect event fits; nothing crosses a component boundary.
+  const onKeyPress = useEffectEvent((e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (isTypingTarget(e.target)) return;
+    if (collectTarget !== null) return;
+    if (e.key === "j" || e.key === "k") {
+      if (rows.length === 0) return;
+      e.preventDefault();
+      const delta = e.key === "j" ? 1 : -1;
+      const next = Math.min(Math.max(selectedIndex + delta, 0), rows.length - 1);
+      setPickedId(rows[next].id);
+    } else if (e.key === "a") {
+      e.preventDefault();
+      collect(focusedTurnId);
+    }
+  });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTypingTarget(e.target)) return;
-      const s = stateRef.current;
-      if (s.collecting) return;
-      if (e.key === "j" || e.key === "k") {
-        if (s.rows.length === 0) return;
-        e.preventDefault();
-        const delta = e.key === "j" ? 1 : -1;
-        const next = Math.min(Math.max(s.selectedIndex + delta, 0), s.rows.length - 1);
-        setPickedId(s.rows[next].id);
-      } else if (e.key === "a") {
-        e.preventDefault();
-        collect(s.focusedTurnId);
-      }
-    };
+    const onKey = (e: KeyboardEvent) => onKeyPress(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [collect]);
+  }, []);
 
   const treeOptions = [
     { value: "", label: `All ${product.tree.many}` },

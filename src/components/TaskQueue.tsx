@@ -76,6 +76,10 @@ export function TaskQueue({
   onRetryFailed,
   onExpand,
   renderResult,
+  // Suppressed, not a defect: elapsed time is wall-clock by definition, every
+  // caller that needs determinism passes `now` (the tests do), and the value is
+  // only ever rendered as "x ago". The default parameter IS that seam.
+  // eslint-disable-next-line react-hooks/purity
   now = Date.now(),
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
