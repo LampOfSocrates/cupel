@@ -25,8 +25,9 @@ import {
 import { agenticConfig } from "../../../agentic.config";
 import { api } from "../../api/client";
 import { getSseEnabled } from "../../api/backendPrefs";
-import type { Attachment, Endpoint, Run, RunCell, Turn } from "../../api/types";
+import type { Attachment, Run, RunCell, Turn } from "../../api/types";
 import { useApp } from "../../AppContext";
+import { useAsync } from "../../hooks/useAsync";
 import { Markdown } from "../../lib/markdown";
 import { Composer } from "./Composer";
 import {
@@ -105,7 +106,11 @@ export function CompareView({
   const { tree } = useApp();
   const navigate = useNavigate();
 
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const { data: endpointData, error: endpointsError } = useAsync(
+    () => api.endpoints(tree),
+    [tree],
+  );
+  const endpoints = useMemo(() => endpointData ?? [], [endpointData]);
   const [selected, setSelected] = useState<string[]>([]);
   const [presetId, setPresetId] = useState<string | null>(null);
   // The shared user turn, rendered above the columns (plan §3).
@@ -128,28 +133,16 @@ export function CompareView({
     [],
   );
 
+  // Arrive configured: the usual A/B is "everything the tree deploys to",
+  // trimmed to the column cap. Ad-hoc selection still overrides it.
   useEffect(() => {
-    let cancelled = false;
-    api
-      .endpoints(tree)
-      .then((data) => {
-        if (cancelled) return;
-        setEndpoints(data);
-        // Arrive configured: the usual A/B is "everything the tree deploys to",
-        // trimmed to the column cap. Ad-hoc selection still overrides it.
-        setSelected((prev) =>
-          prev.length > 0
-            ? prev
-            : data.slice(0, MAX_COMPARE_COLUMNS - 1).map((e) => e.id),
-        );
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tree]);
+    if (!endpointData) return;
+    setSelected((prev) =>
+      prev.length > 0
+        ? prev
+        : endpointData.slice(0, MAX_COMPARE_COLUMNS - 1).map((e) => e.id),
+    );
+  }, [endpointData]);
 
   const loadRun = useCallback(async () => {
     if (!runId) return;
@@ -370,9 +363,11 @@ export function CompareView({
         Compare sends this message to {columnCount} variants — {columnCount}{" "}
         generations, {columnCount} bills.
       </Alert>
-      {error && (
+      {/* A send failure is the fresher news; a failed endpoint list still
+          shows through once nothing newer has gone wrong. */}
+      {(error ?? endpointsError) && (
         <Alert color="red" title="Compare failed">
-          {error}
+          {error ?? endpointsError?.message}
         </Alert>
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>

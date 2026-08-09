@@ -1,8 +1,9 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Badge, Button, Divider, Group, PasswordInput, Select, Text } from "@mantine/core";
 import { api } from "../../api/client";
 import { getLlmKey, getLlmModel, setLlmKey, setLlmModel } from "../../api/llmKey";
 import type { Model } from "../../api/types";
+import { useAsync } from "../../hooks/useAsync";
 
 // "Live LLM (BYOK)". Not a chat setting: chat settings are session values the
 // page spreads into each ChatRequest body, whereas this is a credential that
@@ -55,29 +56,25 @@ export function ByokLiveBadge() {
 export function ByokSection() {
   const { key, model } = useLlmKey();
   const [keyDraft, setKeyDraft] = useState("");
-  const [models, setModels] = useState<Model[] | null>(() =>
-    key && modelCache?.key === key ? modelCache.models : null,
-  );
 
   // GET /models WITH the key header answers the curated live list ("populated
   // from a curated cheap-model list in live mode", docs/deployment.md:22-23);
-  // the client attaches the header once the key is stored.
-  useEffect(() => {
-    if (!key || modelCache?.key === key) return;
-    let cancelled = false;
-    api
-      .models()
-      .then((list) => {
-        modelCache = { key, models: list };
-        if (!cancelled) setModels(list);
-      })
-      .catch(() => {
-        if (!cancelled) setModels(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [key]);
+  // the client attaches the header once the key is stored. No key = nothing to
+  // fetch, and clearing one puts the state back to empty on its own.
+  //
+  // The error is deliberately unread: a failed list leaves the select empty
+  // (provider default) rather than shouting — the key itself still works.
+  const { data: models } = useAsync(
+    key
+      ? async () => {
+          if (modelCache?.key === key) return modelCache.models;
+          const list = await api.models();
+          modelCache = { key, models: list };
+          return list;
+        }
+      : null,
+    [key],
+  );
 
   const saveKey = () => {
     const next = keyDraft.trim();
@@ -91,7 +88,6 @@ export function ByokSection() {
     setLlmKey(null);
     setLlmModel(null);
     modelCache = null;
-    setModels(null);
     publish();
   };
   const pickModel = (value: string | null) => {
