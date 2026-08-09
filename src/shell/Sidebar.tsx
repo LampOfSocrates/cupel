@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { NavLink as RouterNavLink, useNavigate } from "react-router";
 import { AppShell, Badge, Button, Divider, Group, Loader, NavLink, Stack, Text } from "@mantine/core";
 import { api } from "../api/client";
@@ -7,36 +6,40 @@ import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
 import { ConversationList } from "./ConversationList";
 
-// Nav entries: Chat carries the recent list (feature-spec.md:5 "Expanded
-// sidebar shows recent conversations under Chat"); Queue carries the pending
-// badge + running spinner (feature-spec.md:111).
-// Eval — the workbench is described as "a tab inside Runs"
-// (feature-spec.md:63), so it sits directly under Runs and its presets, and
-// carries no tree in its route (eval cases are global, feature-spec.md:115).
-// Casebooks sits next to Eval — a casebook's whole point is becoming
-// an eval set or a replay suite. Inspector is ROLE-gated: it renders
-// only when /me.roles includes `inspect` (openapi.yaml:308 "Requires the
-// inspect role"), never on the auth mode — an off-mode backend simply answers
-// /me with the dev user's roles (feature-spec.md:17 "default admin = all trees,
-// all rights").
-const NAV = [
+// Two doors: Chat (talk to the agent) and Evaluate (the studio loop). Runs,
+// Eval and Casebooks are ONE workflow — what to test, the results, how to
+// score — so they nest under a single Evaluate group instead of sitting as
+// three peers. Their routes are unchanged; only the grouping is. The group
+// starts open: it is the whole point of the second door, not a disclosure.
+// Chat carries the recent list (feature-spec.md:5 "Expanded sidebar shows
+// recent conversations under Chat"); Queue carries the pending badge + running
+// spinner (feature-spec.md:111). Inspector is ROLE-gated: it renders only when
+// /me.roles includes `inspect` (openapi.yaml:308 "Requires the inspect role"),
+// never on the auth mode — an off-mode backend simply answers /me with the dev
+// user's roles (feature-spec.md:17 "default admin = all trees, all rights").
+interface NavLeaf {
+  to: string;
+  label: string;
+  role?: "inspect";
+}
+interface NavGroup {
+  label: string;
+  children: NavLeaf[];
+}
+const NAV: (NavLeaf | NavGroup)[] = [
   { to: "/chat", label: "Chat" },
-  { to: "/runs", label: "Runs" },
-  { to: "/eval", label: "Eval" },
-  { to: "/casebooks", label: "Casebooks" },
-  { to: "/inspector", label: "Inspector", role: "inspect" as const },
+  {
+    label: "Evaluate",
+    children: [
+      { to: "/runs", label: "Runs" },
+      { to: "/eval", label: "Eval" },
+      { to: "/casebooks", label: "Casebooks" },
+    ],
+  },
+  { to: "/inspector", label: "Inspector", role: "inspect" },
   { to: "/queue", label: "Queue" },
   { to: "/agents", label: "Agents" },
 ];
-
-// Presets nest under Runs (feature-spec.md:4 "Menus: Chat, Runs
-// (Tune / Evaluate presets), Settings"; :102-103). They are LINKS into the
-// same Runs page, not routes of their own — the preset travels as router
-// state, the same handoff mechanism as Test-in-Runs.
-const PRESETS = [
-  { preset: "tune", label: "Tune" },
-  { preset: "evaluate", label: "Evaluate" },
-] as const;
 
 // Badge on the Queue entry: "Sidebar badge: pending count; subtle
 // spinner while anything is running" (feature-spec.md:111) — pending =
@@ -87,27 +90,34 @@ export function Sidebar() {
           <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
             + New chat
           </Button>
-          {NAV.filter((item) => !item.role || (me.roles?.includes(item.role) ?? false)).map((item) => (
-            <Fragment key={item.to}>
+          {NAV.map((entry) =>
+            "children" in entry ? (
               <NavLink
-                component={RouterNavLink}
-                to={item.to}
-                label={item.label}
-                rightSection={item.to === "/queue" ? <QueueIndicator /> : undefined}
-              />
-              {item.to === "/runs" &&
-                PRESETS.map((p) => (
+                key={entry.label}
+                component="button"
+                label={entry.label}
+                defaultOpened
+                childrenOffset={28}
+              >
+                {entry.children.map((child) => (
                   <NavLink
-                    key={p.preset}
+                    key={child.to}
                     component={RouterNavLink}
-                    to="/runs"
-                    state={{ preset: p.preset }}
-                    label={p.label}
-                    pl={28}
+                    to={child.to}
+                    label={child.label}
                   />
                 ))}
-            </Fragment>
-          ))}
+              </NavLink>
+            ) : !entry.role || (me.roles?.includes(entry.role) ?? false) ? (
+              <NavLink
+                key={entry.to}
+                component={RouterNavLink}
+                to={entry.to}
+                label={entry.label}
+                rightSection={entry.to === "/queue" ? <QueueIndicator /> : undefined}
+              />
+            ) : null,
+          )}
         </Stack>
         <Divider my="xs" />
         <Text size="xs" c="dimmed" fw={600} tt="uppercase" px={4}>
@@ -117,9 +127,8 @@ export function Sidebar() {
       <AppShell.Section grow style={{ overflowY: "auto" }} mt={4}>
         <ConversationList tree={tree} />
       </AppShell.Section>
-      {/* Settings pinned at the bottom, below the recent list
-          (feature-spec.md:4 "Menus: Chat, Runs (Tune / Evaluate presets),
-          Settings"). First section: Settings → Backend (sketch 09). */}
+      {/* Settings pinned at the bottom, below the recent list.
+          First section: Settings → Backend (sketch 09). */}
       <AppShell.Section>
         <Divider my="xs" />
         <NavLink component={RouterNavLink} to="/settings" label="Settings" />

@@ -38,8 +38,8 @@ export function Shell() {
   // route, the full-width overlay just stayed on top of it. Fixed centrally —
   // one effect, keyed on the location key, rather than a close() sprinkled
   // through every sidebar onClick: it covers everything that can navigate from
-  // the navbar (conversation rows, fork rows, nav links, Tune/Evaluate
-  // presets, Settings, sign-out) plus anything added later, and it cannot
+  // the navbar (conversation rows, fork rows, nav links, Settings,
+  // sign-out) plus anything added later, and it cannot
   // drift out of sync with the router. The KEY, not the pathname: react-router
   // mints a fresh key per history entry (history.js:227), so "New chat" while
   // already on /chat — same pathname — still closes the overlay. Desktop is

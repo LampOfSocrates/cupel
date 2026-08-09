@@ -64,28 +64,15 @@ import { useApp } from "../AppContext";
 //   or user-changed) before POSTing the replay, so the next test remembers it.
 // A fresh "New run" clears the flow — the PUT belongs to Test-in-Runs only.
 
-// Sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
-// Runs with instruction-version field focused, judge off. Sidebar Evaluate →
-// opens Runs with model field + judge section expanded." The preset travels
-// as router state {preset} (same mechanism as the Test-in-Runs handoff above) and is
-// folded into the nav reducer on every arrival, because the sidebar links can
-// fire while this page is already mounted. A preset only shapes the Configure
-// step's INITIAL panel UI (focus + judge open/closed) — the flow is
-// unchanged: the user still picks conversations first unless a selection is
-// already in progress mid-stepper.
-
 interface TestInRunsState {
   agent_id: string;
   snapshot_id: string;
   snapshot_label: string;
 }
 
-type Preset = "tune" | "evaluate";
-
-/** Router state this page can arrive with — editor handoff and sidebar presets. */
+/** Router state this page can arrive with — the editor's Test-in-Runs handoff. */
 interface Handoff {
   testInRuns?: TestInRunsState;
-  preset?: Preset;
 }
 
 const emptyConfig = (): RunConfig => ({});
@@ -103,7 +90,6 @@ interface NavState {
   /** Waiting on GET last-selection before the stepper knows its landing step. */
   prefilling: boolean;
   testFlow: TestInRunsState | null;
-  preset: Preset | null;
   selection: SelectionItem[];
   configs: RunConfig[];
 }
@@ -137,26 +123,17 @@ function navReducer(state: NavState, action: NavAction): NavState {
     case "arrive": {
       if (action.key === state.navKey) return state;
       const next = { ...state, navKey: action.key };
-      const { testInRuns, preset } = action.handoff ?? {};
-      if (testInRuns) {
-        return {
-          ...next,
-          mode: "stepper",
-          step: 0,
-          prefilling: true,
-          testFlow: testInRuns,
-          preset: preset ?? null,
-          selection: [],
-          configs: [{ agent_id: testInRuns.agent_id, snapshot_id: testInRuns.snapshot_id }],
-        };
-      }
-      if (!preset) return next;
-      // From the list a preset is a fresh stepper entry (same reset as "New
-      // run"); mid-stepper it keeps the flow and jumps to Configure only when
-      // a selection is already in progress.
-      return state.mode === "list"
-        ? { ...freshStepper(next), preset }
-        : { ...next, preset, step: state.selection.length > 0 ? 1 : 0 };
+      const { testInRuns } = action.handoff ?? {};
+      if (!testInRuns) return next;
+      return {
+        ...next,
+        mode: "stepper",
+        step: 0,
+        prefilling: true,
+        testFlow: testInRuns,
+        selection: [],
+        configs: [{ agent_id: testInRuns.agent_id, snapshot_id: testInRuns.snapshot_id }],
+      };
     }
     case "prefilled":
       // "empty items = first-time testing" (openapi.yaml:311) → start at Pick.
@@ -169,8 +146,7 @@ function navReducer(state: NavState, action: NavAction): NavState {
     case "prefillFailed":
       return { ...state, prefilling: false };
     case "newRun":
-      // A plain "New run" carries no preset UI either.
-      return { ...freshStepper(state), preset: null };
+      return freshStepper(state);
     case "cancel":
       return { ...state, mode: "list" };
     case "goToStep":
@@ -200,7 +176,6 @@ const initialNav = (handoff: Handoff | null, key: string): NavState =>
       step: 0,
       prefilling: false,
       testFlow: null,
-      preset: null,
       selection: [],
       configs: [emptyConfig()],
     },
@@ -217,7 +192,7 @@ export function RunsPage() {
   const [nav, dispatch] = useReducer(navReducer, null, () =>
     initialNav(location.state as Handoff | null, location.key),
   );
-  const { mode, step, prefilling, preset, testFlow, selection, configs } = nav;
+  const { mode, step, prefilling, testFlow, selection, configs } = nav;
 
   const { data: runs, error: runsError } = useAsync(() => api.runs(tree), [tree]);
   const [error, setError] = useState<string | null>(null);
@@ -284,8 +259,9 @@ export function RunsPage() {
     };
   }, [testFlow, tree, ensureVersions]);
 
-  // Arrivals — fires for every location change so clicking Tune/Evaluate while
-  // already on /runs still applies; the reducer drops a key it already folded in.
+  // Arrivals — fires for every location change, so a Test-in-Runs handoff
+  // reaching a page that is ALREADY mounted still applies; the reducer drops a
+  // key it already folded in.
   useEffect(() => {
     dispatch({
       type: "arrive",
@@ -395,10 +371,7 @@ export function RunsPage() {
             baseline: stored originals · prefilled
           </Text>
           {configs.map((cfg, i) => (
-            // RunConfigPanel treats initialFocus/judgeInitiallyOpen as
-            // mount-time state, so a preset arriving mid-Configure only takes
-            // effect if the panel remounts — hence the preset in the key.
-            <Paper key={`${preset ?? "manual"}-${i}`} withBorder p="sm" data-testid={`config-${i}`}>
+            <Paper key={i} withBorder p="sm" data-testid={`config-${i}`}>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" fw={600}>
                   Config {i + 1}
@@ -431,15 +404,6 @@ export function RunsPage() {
                   cfg.snapshot_id != null && cfg.snapshot_id === testFlow?.snapshot_id
                     ? testFlow.snapshot_label
                     : undefined
-                }
-                // Preset shaping (feature-spec.md:102-103), first config only:
-                // Tune = version focused + judge off; Evaluate = model
-                // focused + judge section expanded.
-                initialFocus={
-                  i === 0 && preset ? (preset === "tune" ? "version" : "model") : undefined
-                }
-                judgeInitiallyOpen={
-                  i === 0 && preset ? preset === "evaluate" : undefined
                 }
               />
             </Paper>

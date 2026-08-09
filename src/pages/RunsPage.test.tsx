@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, Route, Routes } from "react-router";
+import { Route, Routes } from "react-router";
 import { renderApp } from "../test/render";
 import {
   judgeRequests,
@@ -285,96 +285,6 @@ describe("RunsPage — Test in Runs arrival", () => {
       { conversation_id: "c1" },
       { conversation_id: "c2" },
     ]);
-  });
-});
-
-// Sidebar presets (feature-spec.md:102-103): "Sidebar Tune → opens
-// Runs with instruction-version field focused, judge off. Sidebar Evaluate →
-// opens Runs with model field + judge section expanded." The preset arrives
-// as router state {preset} and shapes ONLY the Configure step's initial panel
-// UI — the flow is unchanged: the user still picks conversations first.
-describe("RunsPage — Tune/Evaluate preset arrival", () => {
-  it("Tune: lands on Select, then Configure autofocuses the version field with judge off", async () => {
-    const user = userEvent.setup();
-    renderRuns("/runs", { preset: "tune" });
-
-    // preset does NOT skip the pick — Select gates Configure as usual
-    await user.click(await screen.findByRole("checkbox", { name: "Select Refund escalation" }));
-    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
-
-    await screen.findByTestId("config-0");
-    expect(screen.getByRole("combobox", { name: "Instruction version" })).toHaveFocus();
-    // judge off: toggle unchecked, its fields absent
-    expect(screen.getByRole("switch", { name: "⚖ Judge" })).not.toBeChecked();
-    expect(screen.queryByRole("combobox", { name: "Judge model" })).not.toBeInTheDocument();
-  });
-
-  it("Evaluate: Configure autofocuses the model field with the judge section expanded", async () => {
-    const user = userEvent.setup();
-    renderRuns("/runs", { preset: "evaluate" });
-
-    await user.click(await screen.findByRole("checkbox", { name: "Select Refund escalation" }));
-    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
-
-    await screen.findByTestId("config-0");
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
-    // judge section expanded, awaiting judge_model/rubric — but an empty
-    // section emits nothing: the config would queue without a judge key
-    expect(screen.getByRole("switch", { name: "⚖ Judge" })).toBeChecked();
-    expect(screen.getByRole("combobox", { name: "Judge model" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Rubric" })).toBeInTheDocument();
-  });
-
-  // The sidebar preset links point at /runs, so they can fire while this page
-  // is already mounted — the arrival has to reach the flow without a remount.
-  function renderWithPresetLinks(state?: unknown) {
-    return renderApp(
-      <>
-        <Link to="/runs" state={{ preset: "tune" }}>
-          Tune link
-        </Link>
-        <Link to="/runs" state={{ preset: "evaluate" }}>
-          Evaluate link
-        </Link>
-        <Routes>
-          <Route path="/runs" element={<RunsPage />} />
-        </Routes>
-      </>,
-      { route: "/runs", state },
-    );
-  }
-
-  it("a preset clicked from the runs list opens a fresh stepper at Select", async () => {
-    const user = userEvent.setup();
-    renderWithPresetLinks();
-    await screen.findByRole("button", { name: "New run" });
-
-    await user.click(screen.getByRole("link", { name: "Tune link" }));
-    expect(
-      await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
-    ).not.toBeChecked();
-    expect(screen.queryByTestId("config-0")).not.toBeInTheDocument();
-  });
-
-  it("a preset clicked mid-Configure re-shapes the panel and keeps the selection", async () => {
-    const user = userEvent.setup();
-    renderWithPresetLinks({ preset: "tune" });
-    await user.click(await screen.findByRole("checkbox", { name: "Select Refund escalation" }));
-    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
-    await screen.findByTestId("config-0");
-    expect(screen.getByRole("combobox", { name: "Instruction version" })).toHaveFocus();
-
-    await user.click(screen.getByRole("link", { name: "Evaluate link" }));
-    // stays on Configure (a selection is already in progress) with the
-    // Evaluate shaping applied
-    expect(await screen.findByTestId("config-0")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveFocus();
-    expect(screen.getByRole("switch", { name: "⚖ Judge" })).toBeChecked();
-
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(
-      await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
-    ).toBeChecked();
   });
 });
 

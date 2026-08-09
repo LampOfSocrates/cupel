@@ -12,8 +12,7 @@ import { Shell } from "./Shell";
 // parents; fed by QueueProvider's single app-wide /tasks/stream + GET /tasks
 // (openapi.yaml:747-775 "polling fallback + sidebar badge").
 
-// Probe exposing where a nav click landed — pathname + router state, the
-// preset handoff channel.
+// Probe exposing where a nav click landed — pathname + router state.
 function LocationProbe() {
   const loc = useLocation();
   return (
@@ -68,11 +67,27 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// Presets nested under Runs (feature-spec.md:4 "Runs (Tune /
-// Evaluate presets)"; :102-103). They route to /runs carrying {preset} as
-// router state — the same handoff channel as Test-in-Runs.
-// Settings entry pinned below the recent list (feature-spec.md:4
-// "Menus: Chat, Runs (Tune / Evaluate presets), Settings").
+// Two doors: Chat and Evaluate. Runs / Eval / Casebooks are one workflow, so
+// they nest under the Evaluate group rather than sitting as three peers —
+// their routes are unchanged and the group is open by default.
+describe("Sidebar Evaluate group", () => {
+  it("nests Runs, Eval and Casebooks under Evaluate, each at its own route", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    expect(screen.getByRole("button", { name: "Evaluate" })).toBeInTheDocument();
+    for (const [label, path] of [
+      ["Runs", "/runs"],
+      ["Eval", "/eval"],
+      ["Casebooks", "/casebooks"],
+    ]) {
+      await user.click(screen.getByRole("link", { name: label }));
+      expect(screen.getByTestId("loc")).toHaveTextContent(`${path}|null`);
+    }
+  });
+});
+
+// Settings entry pinned below the recent list.
 describe("Sidebar Settings entry", () => {
   it("routes to /settings", async () => {
     const user = userEvent.setup();
@@ -105,18 +120,5 @@ describe("Sidebar session row (P2-T07)", () => {
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/login"));
     // Token gone → the affordance disappears (token presence is the signal).
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
-  });
-});
-
-describe("Sidebar Tune/Evaluate presets", () => {
-  it("renders both entries and routes to /runs with the preset in router state", async () => {
-    const user = userEvent.setup();
-    renderShell();
-
-    await user.click(screen.getByRole("link", { name: "Tune" }));
-    expect(screen.getByTestId("loc")).toHaveTextContent('/runs|{"preset":"tune"}');
-
-    await user.click(screen.getByRole("link", { name: "Evaluate" }));
-    expect(screen.getByTestId("loc")).toHaveTextContent('/runs|{"preset":"evaluate"}');
   });
 });
