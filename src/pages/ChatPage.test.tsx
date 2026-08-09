@@ -18,9 +18,9 @@ import {
   feedbackRequests,
   judgmentRequests,
   llmHeaderCaptures,
-  mockJudgments,
   modelsRequests,
   pushHumanJudgment,
+  pushLlmJudgment,
   replayTurnRequests,
   uploadConfig,
   uploadRequests,
@@ -431,17 +431,14 @@ describe("Turn actions", () => {
   it("reload derives thumbs from judgment history — latest human judgment wins, llm ignored", async () => {
     pushHumanJudgment("t2", "c1", "down", "2026-08-03T10:00:00Z");
     pushHumanJudgment("t2", "c1", "up", "2026-08-04T10:00:00Z"); // newest
-    // llm judgments share the store but never drive thumbs (openapi.yaml:1899)
-    mockJudgments.unshift({
-      id: "j-llm-1",
+    // LLM judgments share the store but never drive thumbs — this one is
+    // scoped to the same conversation AND newer than both thumbs, so only its
+    // subject kind (case, not turn) keeps it out of deriveThumbs.
+    pushLlmJudgment({
       case_id: "case1",
       evaluation_id: "evaluation1",
-      turn_id: "t2",
       conversation_id: "c1",
-      type: "llm",
-      judge_model: "gpt-judge",
-      rubric_id: "r1",
-      rubric_version: 1,
+      scorer: { model: "gpt-judge", ref: "r1", version: 1 },
       score: 0,
       reasoning: "meh",
       created_at: "2026-08-04T11:00:00Z",

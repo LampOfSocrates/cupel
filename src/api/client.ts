@@ -436,9 +436,10 @@ export const api = {
   retryFailedTask: (taskId: string) =>
     request<Task>(`/tasks/${taskId}/retry-failed`, { method: "POST" }),
 
-  // POST /feedback — "👍/👎 on an assistant message ... writes a type: human
-  // judgment — single store with /eval/judgments" (openapi.yaml:556-583).
-  // Returns "The appended human judgment" (openapi.yaml:579).
+  // POST /feedback (postFeedback) — "👍/👎 on an assistant message ... writes
+  // a scorer: human judgment — single store with /eval/judgments". Returns
+  // "The appended human judgment": subject {kind: turn, id: message_id},
+  // scorer {kind: human} with ref/version/model null.
   postFeedback: (body: FeedbackRequest) =>
     request<Judgment>("/feedback", { method: "POST", body }),
 
@@ -643,9 +644,9 @@ export const api = {
   evaluationSummary: (evaluationId: string) =>
     request<EvaluationScoreSummary>(`/eval/evaluations/${evaluationId}/summary`),
 
-  // GET /eval/judgments — "Judgment history (append-only) ... filter by
-  // turn_id or conversation_id to re-render 👍/👎 ... on reload. ...
-  // Matching judgments, newest first" (openapi.yaml:956-994).
+  // GET /eval/judgments (listJudgments) — "Judgment history (append-only) ...
+  // filter by subject or by conversation_id to re-render 👍/👎 ... on reload.
+  // ... Matching judgments, newest first".
   judgments: (params: JudgmentListParams = {}) =>
     request<Judgment[]>("/eval/judgments", { query: params as Query }),
 };

@@ -10,7 +10,8 @@ import { ScoreChip } from "./ScoreChip";
 // Contents per feature-spec.md:64: "Tap a badge → judgment drawer: score,
 // judge reasoning, rubric+version, judge model, input/output/reference side by
 // side, and append-only history below", wired to the drawer's endpoints
-// (feature-spec.md:229): "GET /eval/judgments?case_id=, GET /eval/cases/{id}".
+// (feature-spec.md:229): "GET /eval/judgments?subject_kind=case&subject_id=,
+// GET /eval/cases/{id}".
 //
 // History is APPEND-ONLY and rendered as such — feature-spec.md:59: "Judgment
 // (persisted forever, never overwritten) … Re-judging appends a new judgment;
@@ -28,17 +29,22 @@ interface Props {
 
 export function JudgmentDrawer({ caseId, opened, onClose, rubrics = [] }: Props) {
   const { data, error } = useAsync(
-    () => Promise.all([api.evalCase(caseId), api.judgments({ case_id: caseId })]),
+    () =>
+      Promise.all([
+        api.evalCase(caseId),
+        api.judgments({ subject_kind: "case", subject_id: caseId }),
+      ]),
     [caseId],
   );
   const evalCase = data?.[0] ?? null;
   const history = data?.[1] ?? null;
 
-  const judgeLabel = (j: Judgment) => {
-    // type human = thumbs; no rubric or judge model (openapi.yaml:1886-1889).
-    if (j.type === "human") return "human 👍/👎";
-    const name = rubrics.find((r) => r.id === j.rubric_id)?.name ?? j.rubric_id;
-    return `${j.judge_model} · ${name} v${j.rubric_version}`;
+  // The scorer names itself: kind human = a thumb, which runs no rubric and
+  // no model (openapi.yaml Scorer), so there is nothing further to label.
+  const judgeLabel = ({ scorer }: Judgment) => {
+    if (scorer.kind === "human") return "human 👍/👎";
+    const name = rubrics.find((r) => r.id === scorer.ref)?.name ?? scorer.ref;
+    return `${scorer.model} · ${name} v${scorer.version}`;
   };
 
   return (

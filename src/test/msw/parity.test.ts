@@ -679,14 +679,19 @@ const HANDLER_DRIFT_ALLOWLIST: Record<string, string> = {};
 // than as an unexplained hook error.
 beforeAll(async () => {
   // Depth, not just presence: several stores start EMPTY, and validating `[]`
-  // or `{rubrics: []}` would prove nothing about the item shape. Seed the
+  // or `{scorers: []}` would prove nothing about the item shape. Seed the
   // thin ones so every collection the exercises read has at least one row.
   pushHumanJudgment("t2", "c1", "up", "2026-08-04T09:59:00Z", "clear answer");
   pushLlmJudgment({ case_id: "case-1", evaluation_id: "evaluation-old-1", score: 0.92 });
   mockEvaluationSummaries["evaluation-old-1"] = {
     evaluation_id: "evaluation-old-1",
-    rubrics: [
-      { rubric_id: "rub-help", rubric_version: 2, mean: 0.86, count: 4, distribution: [0, 1, 3] },
+    scorers: [
+      {
+        scorer: { kind: "llm", ref: "rub-help", version: 2, model: null },
+        mean: 0.86,
+        count: 4,
+        distribution: [0, 1, 3],
+      },
     ],
   };
   mockLastSelections.ag_concierge = [{ conversation_id: "c1", turn_ids: ["t2"] }];
@@ -918,7 +923,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     const first = await api.postFeedback({ message_id: "t2", rating: "up" });
     const second = await api.postFeedback({ message_id: "t2", rating: "down" });
     expect(second.id).not.toBe(first.id);
-    const history = await api.judgments({ turn_id: "t2" });
+    const history = await api.judgments({ subject_kind: "turn", subject_id: "t2" });
     expect(history.map((j) => j.score)).toEqual([0, 1]); // newest first
   });
 
@@ -951,10 +956,10 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
   });
 
   it("collections come back in the order the server would sort them", async () => {
-    // Judgments (openapi.yaml:994) + tasks + evaluations: newest first.
+    // Judgments (listJudgments) + tasks + evaluations: newest first.
     await api.postFeedback({ message_id: "t2", rating: "up" });
     await api.postFeedback({ message_id: "t9", rating: "down" });
-    expect((await api.judgments({}))[0].turn_id).toBe("t9");
+    expect((await api.judgments({}))[0].subject).toEqual({ kind: "turn", id: "t9" });
 
     const evaluations = await api.evaluations("agent1");
     expect(evaluations.map((r) => r.created_at)).toEqual(
@@ -972,14 +977,15 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
   });
 
   it("POST /feedback accepts a just-streamed turn id — a documented divergence", async () => {
-    // mock/main.py:1089 404s an unknown message_id. MSW accepts it (see the
+    // The real mock 404s an unknown message_id. MSW accepts it (see the
     // comment on the /feedback handler): a streamed assistant turn exists only
     // in the SSE frames, never in the conversation fixtures, and thumbing it is
     // the most-exercised chat interaction. Pinned so the divergence stays
     // deliberate rather than becoming a surprise.
     const judgment = await api.postFeedback({ message_id: "t-never-seeded", rating: "up" });
-    expect(judgment.turn_id).toBe("t-never-seeded");
-    expect(judgment.conversation_id).toBeNull();
+    expect(judgment.subject).toEqual({ kind: "turn", id: "t-never-seeded" });
+    // No conversation scope, so ?conversation_id= never returns it.
+    expect(await api.judgments({ conversation_id: "c1" })).not.toContainEqual(judgment);
   });
 
   it("adding the same turn to a set twice appends one version, then nothing", async () => {

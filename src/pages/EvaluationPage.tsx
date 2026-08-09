@@ -179,13 +179,12 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   //      the FIRST config that has one, one judging pass per evaluation (per-config
   //      judges would need per-column case partitioning the contract doesn't
   //      model).
-  //   3. GET /eval/judgments?evaluation_id&rubric_id is EMPTY — "already judged" is
+  //   3. GET /eval/judgments?evaluation_id&scorer_ref is EMPTY — "already judged" is
   //      read from the append-only store, not from client state, so it
   //      survives reload/remount/another tab. Scope: this evaluation × this rubric,
   //      ANY version and ANY judge_model (JudgeConfig pins neither, and a
-  //      rubric that has since versioned is still "this rubric"). Thumbs
-  //      can't collide: type human judgments carry evaluation_id null
-  //      (openapi.yaml:1886-1887).
+  //      rubric that has since versioned is still "this rubric"; scorer.ref IS
+  //      the rubric id). Thumbs can't collide: they carry evaluation_id null.
   //   4. no judge task for this evaluation is queued/running — closes the window
   //      between POST /eval/judge and the first judgment landing (a reload
   //      mid-judging). The in-flight task is ADOPTED instead: the judging…
@@ -210,7 +209,7 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
       try {
         const prior = await api.judgments({
           evaluation_id: evaluationId,
-          rubric_id: autoRubricId,
+          scorer_ref: autoRubricId,
           page_size: 1,
         });
         if (!alive.current || prior.length > 0) return;
@@ -509,27 +508,26 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
       )}
 
       {/* Summary header — "summary header (mean, distribution sparkline)"
-          (feature-spec.md:49), per rubric (EvaluationScoreSummary.rubrics,
-          openapi.yaml:1915-1928). Distribution = tiny inline CSS bars over the
-          bucketed counts — deliberately no chart lib. */}
-      {summary != null && summary.rubrics.length > 0 && (
+          (feature-spec.md:49), one group per SCORER IDENTITY
+          (EvaluationScoreSummary.scorers). A rubric labels itself by name; any
+          other scorer kind falls back to its ref, so a future deterministic
+          check renders here without a code change. Distribution = tiny inline
+          CSS bars over the bucketed counts — deliberately no chart lib. */}
+      {summary != null && summary.scorers.length > 0 && (
         <Group gap="xl" data-testid="evaluation-summary">
-          {summary.rubrics.map((r) => {
+          {summary.scorers.map((r) => {
             const max = Math.max(...r.distribution, 1);
+            const key = `${r.scorer.kind}-${r.scorer.ref ?? "none"}-v${r.scorer.version ?? 0}`;
             return (
-              <Group key={`${r.rubric_id}-v${r.rubric_version}`} gap={8} wrap="nowrap">
+              <Group key={key} gap={8} wrap="nowrap">
                 <Text size="xs" fw={600}>
-                  {rubricName(r.rubric_id)} v{r.rubric_version}
+                  {r.scorer.kind === "llm" ? rubricName(r.scorer.ref ?? "") : r.scorer.kind} v
+                  {r.scorer.version}
                 </Text>
                 <Text size="xs" c="dimmed">
                   mean {r.mean.toFixed(2)} · n={r.count}
                 </Text>
-                <Group
-                  gap={2}
-                  align="flex-end"
-                  h={16}
-                  data-testid={`dist-${r.rubric_id}-v${r.rubric_version}`}
-                >
+                <Group gap={2} align="flex-end" h={16} data-testid={`dist-${key}`}>
                   {r.distribution.map((n, i) => (
                     <Box
                       key={i}

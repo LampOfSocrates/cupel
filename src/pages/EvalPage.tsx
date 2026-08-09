@@ -56,7 +56,7 @@ import type {
 //    and no endpoint returns earlier ones. The editor therefore shows the
 //    CURRENT version number and states that prior versions are not retrievable
 //    through this API — no fabricated history list. What IS real history is
-//    the judgment trail (GET /eval/judgments?case_id=, append-only,
+//    the judgment trail (GET /eval/judgments?subject_kind=case, append-only,
 //    feature-spec.md:59), so that is what the case panel renders.
 //    (Contract gap logged as review bucket C5 — not fixed here.)
 //
@@ -182,7 +182,7 @@ export function EvalPage() {
     setNotice(null);
     setJudgments(null);
     api
-      .judgments({ case_id: c.id })
+      .judgments({ subject_kind: "case", subject_id: c.id })
       .then(setJudgments)
       .catch(() => setJudgments([]));
   }, []);
@@ -486,8 +486,8 @@ export function EvalPage() {
                             {j.score}
                           </Badge>
                           <Text size="xs" c="dimmed">
-                            {j.judge_model ?? "human"} · rubric {j.rubric_id ?? "—"} v
-                            {j.rubric_version ?? "—"}
+                            {j.scorer.model ?? j.scorer.kind} · rubric {j.scorer.ref ?? "—"} v
+                            {j.scorer.version ?? "—"}
                           </Text>
                         </Group>
                       ))}

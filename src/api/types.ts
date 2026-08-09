@@ -257,30 +257,49 @@ export interface FeedbackRequest {
   comment?: string;
 }
 
-// openapi.yaml:1881 Judgment — "Append-only, never overwritten"; "type human =
-// thumbs via POST /feedback ... keyed by turn_id/conversation_id instead — a
-// thumb has no rubric or case"; ":1905 For type human, 1 = 👍 and 0 = 👎."
+// openapi.yaml JudgmentSubject — "WHAT was judged, named by a discriminator
+// instead of by whichever of several nullable id columns happened to be set".
+// Only the kinds something produces today are declared; `evaluation` (pairwise
+// preference) is an added enum value later, not a reshape.
+export interface JudgmentSubject {
+  kind: "case" | "turn";
+  id: string;
+}
+
+// openapi.yaml Scorer — "WHO or WHAT produced the score". kind llm: ref =
+// rubric id, version = rubric version, model = judge model. kind human: all
+// three null, because "a thumb runs no rubric and no model". `check` is the
+// motivating future kind and needs no reshape.
+export interface Scorer {
+  kind: "llm" | "human";
+  ref?: string | null;
+  version?: number | null;
+  model?: string | null;
+}
+
+// openapi.yaml Judgment — "Append-only, never overwritten … addressed by a
+// subject (what was judged) and a scorer (what produced the score)".
+// evaluation_id is a SCOPE, not the subject: an LLM judgment of a grid cell
+// judges the CASE, and the evaluation is the batch it was produced in.
+// "For scorer kind human, 1 = 👍 and 0 = 👎."
 export interface Judgment {
   id: string;
-  case_id?: string | null;
+  subject: JudgmentSubject;
+  scorer: Scorer;
   evaluation_id?: string | null;
-  turn_id?: string | null;
-  conversation_id?: string | null;
-  type: "llm" | "human";
-  judge_model?: string | null;
-  rubric_id?: string | null;
-  rubric_version?: number | null;
   score: number;
   reasoning?: string | null;
   created_at: string;
 }
 
-// openapi.yaml:970-991 listJudgments query params.
+// openapi.yaml listJudgments query params. Equality filters, AND-ed.
+// conversation_id has no matching Judgment field — it is a scope filter the
+// chat view uses to re-render a whole conversation's 👍/👎 in one request.
 export interface JudgmentListParams {
-  case_id?: string;
+  subject_kind?: "case" | "turn";
+  subject_id?: string;
   evaluation_id?: string;
-  rubric_id?: string;
-  turn_id?: string;
+  scorer_ref?: string;
   conversation_id?: string;
   page?: number;
   page_size?: number;
@@ -563,19 +582,19 @@ export interface TaskRef {
   task_id: string;
 }
 
-// openapi.yaml:1796 JudgmentEvent — "A judgment appended by a finished judging
-// task — 'scores stream into the grid live' (feature-spec.md:64). Join keys
-// (case_id/evaluation_id/turn_id) are on the judgment itself."
+// openapi.yaml JudgmentEvent — "A judgment appended by a finished judging
+// task — 'scores stream into the grid live' (feature-spec.md:64). The join
+// keys are on the judgment itself: subject and evaluation_id."
 export interface JudgmentEvent {
   judgment: Judgment;
 }
 
-// openapi.yaml:1909 EvaluationScoreSummary — "Feeds 'summary header (mean,
-// distribution sparkline)' (feature-spec.md:49)"; distribution ":1925-1928
-// Bucketed score counts for the sparkline".
-export interface RubricScoreSummary {
-  rubric_id: string;
-  rubric_version: number;
+// openapi.yaml EvaluationScoreSummary — "Feeds 'summary header (mean,
+// distribution sparkline)' (feature-spec.md:49)". One group per SCORER
+// IDENTITY (kind + ref + version); the judge model is not part of the key, so
+// the group's scorer carries model: null.
+export interface ScorerScoreSummary {
+  scorer: Scorer;
   mean: number;
   count: number;
   distribution: number[];
@@ -583,7 +602,7 @@ export interface RubricScoreSummary {
 
 export interface EvaluationScoreSummary {
   evaluation_id: string;
-  rubrics: RubricScoreSummary[];
+  scorers: ScorerScoreSummary[];
 }
 
 // openapi.yaml:1483 Variant — ":1488-1489 instruction_version XOR

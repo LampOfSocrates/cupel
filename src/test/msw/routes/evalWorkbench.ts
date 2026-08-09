@@ -179,7 +179,7 @@ export const importConfig: {
   },
 };
 
-// GET /eval/evaluations/{evaluationId}/summary (openapi.yaml:1001-1022) — mutable per-evaluation
+// GET /eval/evaluations/{evaluationId}/summary (getEvaluationScoreSummary) — mutable per-evaluation
 // summaries; unset evaluations answer the empty aggregate (no judgments yet).
 export const mockEvaluationSummaries: Record<string, EvaluationScoreSummary> = {};
 export const summaryRequests: string[] = [];
@@ -541,15 +541,15 @@ export const evalHandlers = [
     return HttpResponse.json({ task_id: taskId }, { status: 202 });
   }),
 
-  // GET /eval/evaluations/{evaluationId}/summary (openapi.yaml:1001-1022) — per-rubric
-  // aggregates; an evaluation with no judgments answers empty rubrics.
+  // GET /eval/evaluations/{evaluationId}/summary (getEvaluationScoreSummary) —
+  // aggregates per scorer identity; an unjudged evaluation answers no scorers.
   http.get(`${BASE}/eval/evaluations/:evaluationId/summary`, ({ params }) => {
     const id = params.evaluationId as string;
     summaryRequests.push(id);
     if (!mockEvaluations.some((r) => r.id === id)) {
       return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
     }
-    return HttpResponse.json(mockEvaluationSummaries[id] ?? { evaluation_id: id, rubrics: [] });
+    return HttpResponse.json(mockEvaluationSummaries[id] ?? { evaluation_id: id, scorers: [] });
   }),
 ];
 

@@ -34,17 +34,19 @@ import type { ChatSettings, Rating, StreamState, ThumbState } from "./chat/types
 // responses (markdown + code blocks)" ... "Auto-scroll on stream;
 // stop-generation button while streaming."
 
-// Per-turn thumb state from judgment history. Judgments arrive "newest first"
-// (openapi.yaml:994) and are append-only, so the current thumb is the FIRST
-// type:human judgment per turn_id; "For type human, 1 = 👍 and 0 = 👎"
-// (openapi.yaml:1905). That judgment's reasoning comes along under the same
-// newest-wins rule — a later bare thumb supersedes an earlier comment, because
-// it IS the newer judgment.
+// Per-turn thumb state from judgment history. Judgments arrive newest first
+// (listJudgments) and are append-only, so the current thumb is the FIRST
+// judgment per turn whose scorer is human; "For scorer kind human, 1 = 👍 and
+// 0 = 👎" (openapi.yaml Judgment.score). That judgment's reasoning comes along
+// under the same newest-wins rule — a later bare thumb supersedes an earlier
+// comment, because it IS the newer judgment. The conversation's LLM judgments
+// are subject kind case and simply never match.
 function deriveThumbs(judgments: Judgment[]): Record<string, ThumbState> {
   const thumbs: Record<string, ThumbState> = {};
   for (const j of judgments) {
-    if (j.type !== "human" || !j.turn_id || j.turn_id in thumbs) continue;
-    thumbs[j.turn_id] = {
+    if (j.scorer.kind !== "human" || j.subject.kind !== "turn") continue;
+    if (j.subject.id in thumbs) continue;
+    thumbs[j.subject.id] = {
       rating: j.score === 1 ? "up" : "down",
       comment: j.reasoning ?? null,
     };
