@@ -270,7 +270,7 @@ footer p { max-width:60ch; }
   <p class="prose">Build the agent however you like — ADK, LangGraph, Mastra, PydanticAI, your own. Point Cupel at it, and check what is missing before you start:</p>
 <pre class="mono"><span class="c"># see how much of the contract your backend already speaks</span>
 npx <span class="a">cupel-ready</span> https://api.example.com/openapi.json
-<span class="c">→ 44/69 operations · missing: eval workbench, memory, casebooks</span>
+<span class="c">→ 44/66 operations · missing: eval workbench, memory, settings</span>
 
 <span class="c"># generate the config for it — base URL, route prefix, auth scheme</span>
 npx <span class="a">cupel-ready</span> https://api.example.com/openapi.json --init</pre>

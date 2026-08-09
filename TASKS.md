@@ -62,6 +62,22 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    the old endpoint tags, and the sketches are the source the e2e tags mirror. **(iii)**
    `Task.result` carries an undeclared `evaluations` key (pre-existing) — bucket C.
    **(iv)** e2e encodes the mock's id prefix as if it were contract (`waitForURL(/eval_/)`).
+   Stage B DONE 2026-08-09 — **Casebook and EvalSet are one noun, `EvalSet`.** A member is a
+   reference to a live turn or a frozen case (`EvalSetItem.kind`); membership is versioned for
+   both kinds; `POST /casebooks/{id}/to-eval-set` is deleted and materialising is
+   `POST /eval/sets/{id}/freeze` flipping items in place. Nine `/casebooks` operations plus
+   three `/eval/sets` ones became nine on the merged noun, so the contract went 69 → 66
+   operations and ten families → nine (the `casebooks` tag is gone). The Casebooks page and
+   `/casebooks` route are deleted; the Eval workbench's Sets tab is the one surface, and ⊞
+   collect posts into a set. SQLite migrated: `eval_sets` splits into mutable metadata plus
+   append-only `eval_set_versions`, and each old casebook becomes a set whose v1 holds its
+   turn references. Found during stage B, **not fixed**: **(v)** the `openapi.yaml:NNN`
+   citations in `src/` and `mock/` are ALREADY stale independent of this stage — e.g.
+   `mock/engine.py:387` cites `openapi.yaml:1540-1546` for frozen context, which at the
+   previous HEAD was the eval-set PUT body. Only the `feature-spec.md:NNN` citations inside
+   `openapi.yaml` are maintained (item 4, stage A). Re-pointing the other direction is its own
+   task. **(vi)** `docs/plan-adopter-onboarding.md:26` still lists `casebooks` as a family;
+   stage E owns the family list.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

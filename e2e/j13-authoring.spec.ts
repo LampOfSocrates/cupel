@@ -8,13 +8,15 @@ import { filmed } from "./helpers/hud";
 // P4-REPO). NOT APPLICABLE as written.
 //
 // Its free-tier equivalent — the authoring loop this build actually ships — is
-// the eval workbench plus Inspector → casebook → eval set → replay:
-// notice something in real traffic, turn it into cases, and make it
-// a regression suite. Endpoint tags (feature-spec.md:231, 241-242, sketch 10):
+// the eval workbench plus Inspector → eval set → replay: notice something in
+// real traffic, collect it, and make it a regression suite. Since Casebook and
+// EvalSet merged there is one noun for that, so the middle hop is gone: no
+// casebook to convert, just a set whose items start as live turn references.
+// Endpoint tags (feature-spec.md:231, 241-242, sketch 10):
 //   POST/PUT /eval/rubrics · POST/PUT /eval/cases · POST/PUT /eval/sets
 //   POST /eval/cases/import · POST /eval/judge
-//   GET /admin/conversations · POST /casebooks · POST /casebooks/{id}/items
-//   POST /casebooks/{id}/to-eval-set · POST /casebooks/{id}/replay
+//   GET /admin/conversations · POST /eval/sets/{id}/items
+//   POST /eval/sets/{id}/replay · POST /eval/sets/{id}/freeze
 
 const CSV = [
   "prompt,answer,expected",
@@ -125,8 +127,12 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
   });
 });
 
-test("inspector → casebook → eval set + replay suite", async ({ page, request, api }) => {
-  const step = filmed(page, "Journey 13", 4);
+test("inspector → eval set + replay suite", async ({ page, request, api }) => {
+  // Three steps, not four: "the casebook becomes an eval set" was a step about
+  // POST /casebooks/{id}/to-eval-set, and that endpoint no longer exists —
+  // materializing is now freezing items in place, inside the set they are
+  // already in.
+  const step = filmed(page, "Journey 13", 3);
   // Real traffic to notice: a machine-origin conversation, exactly what the
   // generator drips in (mock/generator.py).
   const noticed = await seedChat(request, "Inspector journey: refund denied", {
@@ -142,7 +148,7 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     await expect(page.getByTestId("inspector-count")).toContainText("conversations");
   });
 
-  await step("read a conversation and collect a turn into a new casebook", async () => {
+  await step("read a conversation and collect a turn into a new eval set", async () => {
     await page
       .getByTestId("inspector-row")
       .filter({ hasText: "Inspector journey" })
@@ -150,34 +156,41 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
       .click();
     await expect(page.getByTestId("inspector-reader")).toBeVisible();
     await page.getByTestId("reader-collect").click();
-    await page.getByLabel("New casebook name").fill("Journey casebook");
+    await page.getByLabel("New eval set name").fill("Journey set");
     await page.getByRole("button", { name: "Create + add" }).click();
-    await api.expectCalled("POST /casebooks");
-    await api.expectCalled("POST /casebooks/{casebook}/items");
-    await expect(page.getByTestId("collect-done")).toBeVisible();
+    await api.expectCalled("POST /eval/sets");
+    await api.expectCalled("POST /eval/sets/{set}/items");
+    // Versioned membership, surfaced: collecting appended a version.
+    await expect(page.getByTestId("collect-done")).toContainText("v2");
   });
 
-  await step("the casebook becomes an eval set", async () => {
-    await page.goto("/casebooks");
-    await api.expectCalled("GET /casebooks");
-    await page.getByTestId("casebook-row").filter({ hasText: "Journey casebook" }).click();
-    await expect(page.getByTestId("casebook-item")).toHaveCount(1);
-    await page.getByLabel("Eval set name").fill("Journey regression set");
-    await page.getByRole("button", { name: "Create eval set" }).click();
-    await api.expectCalled("POST /casebooks/{casebook}/to-eval-set");
-    await expect(page.getByTestId("casebook-set-created")).toBeVisible();
-  });
+  await step(
+    "the set is a regression suite: replay its references, then freeze them",
+    async () => {
+      await page.goto("/eval");
+      await page.getByRole("tab", { name: "Sets" }).click();
+      await api.expectCalled("GET /eval/sets");
+      await page.locator('[data-testid^="set-row-"]', { hasText: "Journey set" }).click();
+      await expect(page.getByTestId("set-item")).toHaveCount(1);
 
-  await step("and a replay suite: the same turns re-fired as an evaluation", async () => {
-    await page.getByRole("button", { name: "Replay", exact: true }).click();
-    await api.expectCalled("POST /casebooks/{casebook}/replay");
-    const accepted = page.getByTestId("casebook-replay-accepted");
-    await expect(accepted).toBeVisible();
-    await accepted.getByRole("link").last().click();
-    await page.waitForURL(/\/evaluations\/eval_/);
-    await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
-      timeout: 120_000,
-    });
-    expect(noticed.conversationId).toBeTruthy();
-  });
+      await page.getByRole("button", { name: "Replay", exact: true }).click();
+      await api.expectCalled("POST /eval/sets/{set}/replay");
+      const accepted = page.getByTestId("set-replay-accepted");
+      await expect(accepted).toBeVisible();
+
+      // Freezing is what "turn a casebook into an eval set" became: the same
+      // item, flipped in place, appending a membership version.
+      await page.getByRole("button", { name: /Freeze 1 reference/ }).click();
+      await api.expectCalled("POST /eval/sets/{set}/freeze");
+      await expect(page.getByTestId("set-notice")).toContainText("version");
+      await expect(page.getByTestId("set-item")).toContainText("frozen case");
+
+      await accepted.getByRole("link").last().click();
+      await page.waitForURL(/\/evaluations\/eval_/);
+      await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
+        timeout: 120_000,
+      });
+      expect(noticed.conversationId).toBeTruthy();
+    },
+  );
 });

@@ -55,8 +55,9 @@ test(
       await page.goto("/settings");
       await expect(page.getByText("Members", { exact: true })).toBeVisible();
       await expect(page.getByText("Agent trees", { exact: true })).toBeVisible();
-      // The `inspect` role gates the Inspector; Casebooks is open to everyone.
-      await expect(page.getByRole("link", { name: "Casebooks" })).toBeVisible();
+      // The `inspect` role gates the Inspector; the Eval workbench is open to
+      // everyone.
+      await expect(page.getByRole("link", { name: "Eval", exact: true })).toBeVisible();
       await page.getByRole("link", { name: "Inspector" }).click();
       await page.waitForURL(/\/inspector/);
       await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();

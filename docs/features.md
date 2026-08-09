@@ -35,7 +35,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Re-fire one turn at several deployments at once; each result becomes a real conversation you can continue |
 | ✅ | **Score with an LLM judge and read its reasoning.** Every past score is kept |
 | ✅ | Hand-craft expected answers, or import a spreadsheet of them, and score against those |
-| ✅ | Collect noteworthy turns into casebooks that become eval sets or regression suites |
+| ✅ | Collect noteworthy turns into eval sets — freeze them into cases or replay them as regression suites |
 | 🗓️ | Choose the context a replay runs under — original, today, or one you specify — and replay recorded tool results so only your change varies |
 | 🗓️ | Manage what the app remembers per agent tree — view it, edit it, clear it |
 
