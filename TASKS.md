@@ -154,17 +154,31 @@ and **Evaluate**. User decision 2026-08-09.
       written into the config. **All that survives is the "served by mock" badge** — keep it,
       it is cheap and without it an adopter cannot tell which half of the screen is real.
       Do not build the per-request routing layer.  [folded into #21]
-- [ ] **#40** **Port the mock to Node — decide before #21 ships.** #21's flow says the generated
-      app carries a Node mock, which is right for the persona (a JS/TS agent developer should not
-      need Python 3.11 + pip to see the product) but forces a choice. **Two mocks is the wrong
-      answer** — two implementations of one contract drift immediately and every contract change
-      becomes two changes plus a conformance diff, which is the exact duplication #14 exists to
-      delete. So: port `mock/` to Node and DELETE the Python one, or keep Python and say so
-      loudly at #21's tech-check step. Never both. Cost is real — SSE chat, the task queue with
-      parent/child cancellation, append-only versions/judgments/snapshots, the deterministic
-      seed-42 generator, both auth modes, s3/Litestream — but **our own suite is the acceptance
-      test**: 13 e2e journeys × both auth modes + 160 pytest cases all boot against it.
-      Multi-week; its own task, not a sub-task of #21.
+- [ ] **#40** **Port the mock to Node and DELETE the Python one. DECIDED 2026-08-09 — the
+      question is closed, only the execution remains.** Two mocks was never an option: two
+      implementations of one contract drift immediately and every contract change becomes two
+      changes plus a conformance diff — the duplication #14 exists to delete.
+      **Do this BEFORE #14, not after.** The port carries the OLD names so every step stays
+      green; #14 then renames a TypeScript mock instead of a Python one, which makes its 151
+      wire occurrences type-checked end to end rather than string-replaced. Porting first makes
+      the rename cheaper AND safer. Do not try to land the new names during the port — that
+      couples two large changes with no green state in between.
+      Scope: `mock/main.py` (69 operations) · `engine.py` (task queue: parent/child, cancel
+      cascade, retry-failed, SSE fan-out) · `db.py` (SQLite + migrations) · `generator.py`
+      (deterministic seed-42 dataset) · `agui.py` seam · both AUTH_MODEs · BYOK passthrough ·
+      `CUPEL_STORAGE=local|s3` (**Litestream is a separate binary watching the SQLite file, so
+      s3 mode should survive the port unchanged — verify, do not assume**).
+      Also moves: `requirements.txt` deleted · `npm run test:mock` (160 pytest cases) ported to
+      vitest/node:test · `Dockerfile` (FastAPI currently serves the built frontend AND the API)
+      · `render.yaml` · `playwright.config.ts` webServer command · README quickstart.
+      **SQLite driver is a real decision:** `better-sqlite3` is a native module needing a build
+      toolchain — a Windows adoption tax that undercuts the whole point — while `node:sqlite` is
+      built in but flagged on Node 22 and only unflagged/stable on newer majors. Verify current
+      status at implementation time; **consider raising the engine floor from `>=22.18` to a
+      major where `node:sqlite` is unflagged**, so the adopter tech check becomes "do you have
+      Node?" and there is no native build step anywhere.
+      **The payoff is the README's first line:** Python 3.11+ and a pip install disappear from
+      the quickstart entirely.  [before #14 and #21]
 - [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.
       **The last contracted-but-unbuilt family; leaving it stubbed makes the contract a lie
       to anyone who runs `cupel-ready`.**  [after #14]

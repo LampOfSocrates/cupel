@@ -17,7 +17,8 @@ backend fill (#25). Written 2026-08-09 from the user's description of the intend
 
 ## The one structural correction
 
-**Ask per family, not per operation.** A stranger's backend will match almost nothing —
+**Ask per family, not per operation. APPROVED by the user 2026-08-09**, along with the
+three-answer shape **mine / mock / hide**. A stranger's backend will match almost nothing —
 the contract is ~69 operations across ~10 families, and the worked `cupel-ready --init`
 example only reaches 37/69 because its remap was contrived for a backend already built to
 this shape. A real first run is closer to 0–5 matched operations, which means 60+ questions
@@ -61,10 +62,18 @@ and getting it wrong is expensive:
 - **Ship the Python mock in the generated app** — free, and contradicts the flow's own
   tech-stack check by making Python a hard requirement for step 2.
 
-**Recommendation:** port to Node, as its own task, sequenced *before* #21 ships. Our e2e suite
-makes it verifiable in a way most rewrites are not. If that is too much, the honest fallback
-is to ship the Python mock and say so loudly at the tech-check step — not to grow a second
-implementation.
+**DECIDED 2026-08-09 (user): port to Node, delete the Python mock.** Tracked as #40. Two
+consequences worth stating up front:
+
+- **Sequence #40 before #14.** The port carries the OLD names so every step stays green, and
+  #14 then renames a TypeScript mock rather than a Python one — its 151 wire occurrences
+  become a type-checked rename instead of a string replacement across two languages. Porting
+  first makes the contract bump both cheaper and safer. Do **not** try to adopt the new names
+  during the port; that couples two large changes with no green state between them.
+- **The tech check gets shorter, which is the point.** Python 3.11+ and a pip install leave
+  the quickstart entirely. Keep it that way: pick a SQLite binding with **no native build
+  step** (`node:sqlite` if the engine floor can be raised to a major where it is unflagged;
+  `better-sqlite3` needs a toolchain and reintroduces exactly the friction being removed).
 
 ## Personas
 
@@ -99,8 +108,8 @@ the gap; it should also **name which stage the adopter is on** and what the next
 
 | | question | recommendation |
 |---|---|---|
-| 1 | Is `<name>-ui/` a **copy** of the source (fork, editable, never updates) or a thin shell depending on a published package (updates flow, less editable)? | Copy — the package is unpublished and `private: true`, so it is the only thing that works today. But say so explicitly in the generated README, because "you will not get our updates" is a real cost the adopter must consent to. |
-| 2 | Node mock: port and delete Python, or keep Python? | Port, as its own task before #21. Never both. |
+| **1** | Is `<name>-ui/` a **copy** of the source (fork, editable, never updates) or a thin shell depending on a published package (updates flow, less editable)? | Copy — the package is unpublished and `private: true`, so it is the only thing that works today. But say so explicitly in the generated README, because "you will not get our updates" is a real cost the adopter must consent to. |
+| ~~2~~ | Node mock: port and delete Python? | **DECIDED 2026-08-09: port and delete.** #40, sequenced before #14 and #21. |
 | 3 | Does the command accept a bare endpoint (persona B) as well as an OpenAPI document? | Yes — B is the wedge. Without it this flow only serves C. |
 | 4 | Is `hide` per family only, or also per feature within a family? | Per family for v1. Per feature is a settings surface, not a generator flag. |
 | 5 | Name: `<name>-ui` says UI, but the folder contains the mock too. | `<name>-studio` or just `<name>`. Minor, decide before the first README says it. |
