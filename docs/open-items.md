@@ -1,4 +1,26 @@
-# Open items — single source of truth
+# Open items — evidence and detail
+
+> **Ids changed 2026-08-09.** `TASKS.md` is now a flat numbered list — `#1`, `#2`, … — and the
+> old prefixes (`PH-`, `PB-`, `PW-`, `PAB-`, `P3-`, `P4-`, `C`, `D`) are retired. **`TASKS.md`
+> is the queue; this file is the evidence behind it.** Old ids below survive as the trail back
+> to commit messages. Mapping of everything still open:
+>
+> | old | new | | old | new | | old | new |
+> |---|---|---|---|---|---|---|---|
+> | R-1…R-5 | #1–#5 | | PB-2 leftovers | #7, #8 | | P3-T00 | **#14** |
+> | PB-3 residual | #9 | | PB-8 residual + D-9 | #10 | | P3-DOCS + D-10 | #15 |
+> | PW-1 follow-up | #11 | | P3-CTX | #16 | | P3-GEN | #17 |
+> | P3-MEM | #18 | | P3-K8S | #19 | | P3-CLI2 | #20 |
+> | P3-CLI | #21 | | P4-REPO | #22 | | P4-SHARE | #23 |
+> | P4-AGUI | #24 | | P4-HYBRID | #25 | | PAB-2 | #26 |
+> | PAB-4 | #27 | | PH-5 | #28 | | PH-2 | #29 |
+> | PH-3 | #30 | | D-1 | #31 | | D-3 | #32 |
+> | D-6 | #33 | | D-7 | #34 | | D-5 | #35 |
+> | D-2 | #36 | | D-12 | #37 | | D-11 | #38 |
+>
+> `D-4` and `D-8` folded into #5. Bucket C's `C1`–`C15` are no longer ids — they are the
+> checklist inside #14(a). `Q1`–`Q11` are unchanged. Closed: `PH-1`, `PH-4`, `PB-1`…`PB-8`,
+> `PW-1`, `PAB-1`, `PAB-3`, and all of Phase 1 and Phase 2.
 
 Compiled 2026-08-08 from a full sweep of TASKS.md, docs/review-2026-08-05.md, the four
 plan docs, docs/spike-agui.md, the product docs, and code-level markers. **Do not re-scan
@@ -33,7 +55,7 @@ Baseline at compile time: `master`, 542 vitest tests green across 46 files, tree
 |---|---|---|
 | PH-2 | Render hostname is `skein.onrender.com`, not `cupel-demo.onrender.com`. `render.yaml:11` already says `name: cupel-demo`; Render pins the hostname minted at creation. Fixing it means deleting the service and re-applying the blueprint. **Carry over `DEMO_TOKEN` first** (`generateValue: true`, so a new service mints a different one and shared demo links die), and note the old hostname dies instantly with no redirect. | dashboard-only, user |
 | PH-3 | Turn on demo persistence. Code shipped in P2-PERSIST but the hosted demo still runs `CUPEL_STORAGE=local`, so a restart wipes it. Needs an R2/S3 bucket + scoped token, then `CUPEL_STORAGE=s3` + `CUPEL_S3_BUCKET` / `_ENDPOINT` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` (+ optional `_PATH`, `_REGION=auto`). **The s3 path has never once executed** — the first real deploy IS the test; `/healthz` `storage.mode` reports whether it degraded to local. | deferred, needs user credentials |
-| PH-4 | Delete the `SKEIN_*` → `CUPEL_*` env alias shim in `mock/__init__.py:3`. Render dashboard is already on `CUPEL_*`, so it is dead weight carrying a delete-me note. | ready, safe |
+| PH-4 | **Done 2026-08-09**: shim deleted — `mock/__init__.py` is now a one-line docstring module. Nothing depended on it (no caller, no test; `render.yaml` was already all `CUPEL_*`; no `.env*` in the repo). Verified: `import mock` OK, `npm run test:mock` 160 passed. Remaining `SKEIN_` hits are doc prose only. | done |
 | PH-5 | Decide repo visibility. Both repos private; going public is the point of the stars/community strategy, but README + site should be launch-ready first. | deferred, user decision |
 
 ---
@@ -52,7 +74,7 @@ The `[Bn]` tags are the corresponding review-bucket-B item — **same item, not 
 | PB-2 | **Mostly done 2026-08-08** (`77f7ad2`): `src/hooks/useAsync.ts`, 13 of 20 candidate sites converted, ~158 lines removed at call sites. **7 sites deliberately skipped** — see the list below; only two are quick wins. `[B2, B7]` |
 | PB-3 | **Mostly done 2026-08-08** (`271cad7`): one `useReducer`, both `eslint-disable` exhaustive-deps removed by making deps genuinely complete. **The remount-by-key stays** — `RunConfigPanel` treats `initialFocus` and `judgeInitiallyOpen` as mount-time-only state (`:119`, `:125-129`), so a preset arriving mid-Configure would not re-focus or reset the judge section without it; verified load-bearing by switching to `key={i}`, which fails. Residual fix: make those two props controlled in `RunConfigPanel`, then the key drops to `i`. `[B3]` |
 | PB-4 | **Mostly done 2026-08-08** (`57bfd95`): rows memoised, `activeId` threaded, `useDeferredValue` on both searches. **Virtualisation deliberately skipped** — rows are variable height, the sidebar does not own its scroll container, and `page_size` caps at 100 (`openapi.yaml:681-683`) behind an explicit "Load more", so row count is user-bounded; same call `InspectorPage.tsx:57-60` already documents. If it is ever wanted, the dependency-free route is `content-visibility: auto` + `contain-intrinsic-size` per row, which keeps nodes in the DOM so tests and Ctrl-F still work. `[B4]` |
-| PB-5 | Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this with a Map in `useMemo` — copy it. `[B5]` |
+| PB-5 | **Done 2026-08-08** (`b682195`) — this row was never backfilled, the task itself was complete. Both halves fixed in `TracePage.tsx`: child grouping is a `{roots, childrenOf}` Map in `useMemo` (`:159-173`, consumed O(1) at `:189`), and the timeline domain is one memoised pass (`:143-154`), which also killed a `Math.min(...spread)` that could blow the stack on a large live trace. A literal transliteration of `AgentsPage.tsx:46-61`, as the task asked. **Residual:** coverage is behavioural only (`TracePage.test.tsx:53,:76` pin the output, so a regression to the O(n²) form would still pass); and `TracePage.tsx:186` still does `spans.find(...)` per render — O(n) once per render, not the O(n²) this task was about. `[B5]` |
 | PB-6 | **Done 2026-08-08** (`d5f0dd7`): task-ID refs 441 → 43 across 137 files (37 of the 43 survivors are test titles/string literals, i.e. code). Fixed **23 stale "not built" comments** that were outright false — the queue panel, instruction editor, turn re-fire, fork pivot, judge layer and trace view all shipped. **Finding contra B6's premise:** comment ratio only moved 13.42% → 13.38%. The volume is spec citations and WHY notes, not archaeology; the archaeology was inline ID tags inside otherwise-valuable prose. Reducing comment *volume* would be a different and riskier task. `[B6]` |
 | PB-7 | **Done 2026-08-08** (`704188e`): 2557 lines → an 85-line barrel + `state.ts` + 11 `routes/*.ts`. Zero importing files changed (26 of them, not the 45 TASKS.md estimated). The 14 `let` counters became one object because an imported `let` cannot be reassigned across a module boundary — each module would otherwise have got its own silent copy. `[B8]` |
 | PB-8 | **Done 2026-08-08** (`38840fc`): all three render-phase ref writes gone (React 19.2's stable `useEffectEvent` in App.tsx; an effect in QueueContext, since effect events must not cross component boundaries). **Recommendation: adopt the lint half, decline the compiler.** `eslint-plugin-react-hooks@7` (`recommended-latest`) carries the `react-hooks/refs` rule that catches this class, costs 3 dev deps and never touches the bundle. Do NOT enable the compiler: this is a Vite 8 / rolldown pipeline with **no Babel at all**, so it means 4 new deps to reintroduce a per-file Babel pass, plus a mandatory mirror into `vitest.config.ts` or you ship compiled code while testing uncompiled. Note `eslint-plugin-react-compiler` is dead at `19.1.0-rc.2`; the rules moved into `eslint-plugin-react-hooks` v6+. `react-compiler-healthcheck` is a free manual gate but proves compilability, not correctness — it reported 59/59 *while all three ref writes were still present*. **Residual:** one more render-phase ref write at `InspectorPage.tsx:192`. `[B9]` |
@@ -92,6 +114,38 @@ backends. Sequenced after PB-1 deliberately.
 | PAB-2 | Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire, then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper. The contract half is an additive clarification that **must fold into P3-T00, not be smuggled in separately**. **deps: P3-T00** |
 | PAB-3 | **Done 2026-08-08** (`b9c8d70`): `compareSets: {id, label, trees?, variants}` + picker. Key is `variants` not `endpoints`, so `configs[]` needs no breaking config rename later. A set carrying per-column `config` is **refused with a reason, not run** — warn-and-run would let a preset labelled "current vs previous version" silently compare prod vs staging. Validator flips reject→apply when `configs[]` lands. **Open question:** the plan's `endpoints: ["staging","prod"]` was read as deploy-endpoint *names*; PAB-4 will want *target* ids in the same structure and needs a distinct key (`target`). Also `versions: "last-2"` needs relative-version expansion, which the contract fix does not provide. |
 | PAB-4 | Cross-backend compare — per-request target override in `src/api/client.ts`, N unrelated conversations in N databases. No shared `run_id` means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). **Deferred; blocked on decision Q1.** |
+
+---
+
+## Stage R — domain tighten: kill the "Runs" concept
+
+**User decision 2026-08-09.** Runs / Eval / Casebooks are three peer menu entries for one
+loop; Tune and Evaluate are the same page differing by which field gets focus and whether the
+judge panel starts open (`RunsPage.tsx:439-442`); and `POST /eval/judge` with a `run_id`
+auto-creates eval cases from the run's turns (`openapi.yaml:1556`) — a run *is* an evaluation.
+Target: two doors, **Chat** and **Evaluate**.
+
+**No backward compatibility** (same decision): unlaunched, both repos private, package
+`private: true` and unpublished, zero adopters. No shims, no aliases, no deprecation window.
+**That window closes at PH-5** — so Tranche 2 lands before PH-5 and before P3-CLI/P3-CLI2.
+
+**Revisit after both tranches**, before planning Stage B.
+
+| id | item |
+|---|---|
+| R-1 | Two doors — merge the three sidebar peers into one Evaluate section; **delete** the Tune/Evaluate presets and their reducer branches. Obsoletes `feature-spec.md:101-103,:294` rather than renaming them. |
+| R-2 | Routes `/runs` → `/evaluations` (+ detail), **with redirects** — P2-SHARE deep links and `CompareView.tsx:416` build shareable run URLs. |
+| R-3 | Copy + component renames, incl. "Test in Runs ▸". Careful: `docs/features.md:55` "Runs with no backend" is the verb. |
+| R-4 | E2E — ~84 sites across 10 files; `j03-runs` → `j03-evaluations`; only 2 endpoint tags change in Tranche 1. |
+| R-5 | Docs for Tranche 1 — `feature-spec.md` is the heaviest hit (40+ lines); fix D-4 in the same pass. |
+
+Tranche 2 (the wire rename, the Casebook/EvalSet merge, `Judgment.subject`/`scorer`, derived
+`Evaluation.status`) is **folded into P3-T00** — see `TASKS.md`. It is not a separate task and
+must not be a separate contract bump.
+
+**Blast radius, measured 2026-08-09:** `run_id` — 151 in `openapi.yaml` + `mock/`, 142 in
+`src/`, 28 in `e2e/`; 48 files total. But only ~5 user-visible strings and 2 routes. That
+asymmetry is why the concept is nearly free to kill today and the identifier is not.
 
 ---
 
@@ -221,6 +275,7 @@ Found by the 2026-08-08 sweep. None of it is in any task above.
 | D-8 | `README.md:116` cites "13 journeys (`feature-spec.md:205-218`)" but that checklist is numbered 1–12; journey 13 lives at `feature-spec.md:99`, outside the cited range. |
 | D-9 | **No lint setup at all.** Five `eslint-disable-next-line react-hooks/exhaustive-deps` comments exist (`RunConfigPanel.tsx:128`, `CasebooksPage.tsx:262`, `EditorPage.tsx:139`, `RunsPage.tsx:200,:221`) but there is no eslint config at the repo root, so they are inert and nothing enforces the rule they suppress. Resolve alongside PB-8, which depends on those same rules. |
 | D-10 | `mock/db.py` has no indexes and only the ADK-shape note. Folded into D2 above but worth doing whenever `mock/db.py` is next touched. |
+| D-12 | **The "69 operations" count is copy-pasted into three docs with no source of truth** (found by the 2026-08-09 sweep): `docs/spike-agui.md:495` is the authoritative breakdown ("chat 3, runs 4, trace 2, tasks 5, eval 13, casebooks 9, settings 2 = 69"), and `docs/readiness.md:108` ("5/69 → 37/69") and `docs/index.html:273` ("44/69") both restate it. Any contract change moves all three, and nothing enforces it. Same family: `scripts/conformance.mjs:47,48,59` and `tests/openapi-contract.test.js` hold parallel path lists that `docs/readiness.md:44-46` documents as needing to move together. Cheapest fix: derive the count from `openapi.yaml` in the readiness script and stop hardcoding it in prose. |
 | D-11 | The suite is not clean under **full** shuffle (files *and* tests within files). Two failures, both pre-existing and both reproducing with their own unmodified file in isolation, so neither came from the PB-7 split: (i) `parity.test.ts` registers a `response:mocked` listener in `beforeAll` that stays attached for the whole file and attributes every later request to whatever `currentApiMethod` last held, so disabled-tree tests pollute the last exercise's exchange list; (ii) `ChatPage.test.tsx > renders tokens incrementally`. File-order shuffle alone is green — vitest isolates each file's module registry, so handler state cannot leak between files. Worth fixing only if you want the suite shuffle-clean. |
 
 ### Known-good, do not "fix"

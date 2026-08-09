@@ -1,165 +1,246 @@
-# Cupel TASKS — worked by the auto-runner, one task per fresh session
-# OPEN WORK LIVES IN docs/open-items.md — the deduped index of everything not yet done,
-# incl. items this file does not track (doc debt, the 11 open decisions, bucket C/D contents).
-# Read that instead of re-scanning the review/plan docs. This file stays the runner's queue.
-# Protocol per task (enforced by hooks + runner): implement → tests green → commit "P{phase}-T{id}: <summary>" → stop.
-# Runner picks the first unchecked box. Do not start a task whose deps are unchecked.
+# Cupel — the todo list
 
-## Phase 1 — serial spine
-- [x] P1-T00 OpenAPI contract draft (all Phase-1 endpoints, /agenttrees/{tree}, envelope on turns, chat stream true/false)
-- [x] P1-T18b Mock server core (FastAPI, SSE chat+tasks, SQLite, task lifecycle, both chat modes)  [deps: T00]
-- [x] P1-T01 App shell + sidebar conversation list  [deps: T18b]
+**One id scheme: a number.** `#1`, `#2`, … assigned once, never reused, never renumbered.
+No phase/stage/bucket prefixes. Group headings say *when*; they are not part of the id.
 
-## Phase 1 — track A (chat)
-- [x] P1-T02 Chat page SSE streaming  [deps: T01]
-- [x] P1-T03 Turn actions (feedback/copy)  [deps: T02]
-- [x] P1-T04 Composer + uploads  [deps: T02]
-- [x] P1-T05 Chat settings submenu  [deps: T02]
+- Runner picks the first unchecked box in **Now**, top to bottom.
+- Protocol per task: implement → tests green → commit `#<id>: <summary>` → stop.
+- Detail and evidence for most items: `docs/open-items.md`. This file is the queue.
+- Open questions are `Q1`–`Q11` (see bottom). They are not tasks; they block tasks.
+- Completed work (Phase 1, Phase 2, Stage A) is in git and summarised in
+  `docs/open-items.md` "Closed — do not re-investigate". Old ids (`P2-T17`, `PB-4`, …)
+  survive in commit messages only.
 
-## Phase 1 — track B (runs/agents)
-- [x] P1-T09 Shared components (Picker/RunConfig/Comparison/Queue-panel/RunsList)  [deps: T01]
-- [x] P1-T10 Agent tree view  [deps: T09]
-- [x] P1-T10b Instruction editor (versions/diff/snapshots)  [deps: T09]
-- [x] P1-T11a Context envelope capture + frozen replay default  [deps: T18b]
-- [x] P1-T11 Runs 3-step flow  [deps: T09, T11a]
-- [x] P1-T13 Turn forks + Open in Chat  [deps: T11, T02]
-- [x] P1-T14 Fork comparison pivot  [deps: T13]
-- [x] P1-T12b Basic eval (judge toggle, judgments, drawer)  [deps: T11]
-- [x] P1-T20b Test in Runs (snapshot, last-selection)  [deps: T10b, T11]
+Invariants (never break): versions/judgments/snapshots append-only · generator writes only
+via public API · /me always called · no AUTH_MODE branches · one config artifact.
 
-## Phase 1 — track C (platform)
-- [x] P1-T08 Task queue (SSE progress, cancel, retry)  [deps: T18b, T01]
-- [x] P1-T18 Generator seed + basic drip  [deps: T18b]
-- [x] P1-T16 Trace view  [deps: T18b, T02]
-- [x] P1-T18c Live-LLM BYOK mode (OpenRouter passthrough in mock; X-LLM-Key/X-LLM-Model headers; key never persisted or logged; max_tokens cap + rate limit; see docs/deployment.md)  [deps: T18b]
-- [x] P1-TRENAME Rename Loom → Skein (user decision; landing page updated separately)
+---
 
-## Phase 1 — close
-- [x] P1-T15 Tune/Evaluate presets  [deps: T11]
-- [x] P1-TEXPORT Editor: download version history to file (free-tier export; no contract change)  [deps: T10b]
-- [x] P1-TDEPLOY Render demo deploy (Dockerfile: FastAPI serves built frontend + API; deterministic re-seed on boot; shared-token gate; see docs/deployment.md) (live Render service created from main session)  [deps: T18b, T01, T02]
-- [x] P1-TE2E Smoke e2e + walk the Phase-1 DoD  [deps: all above]
+## Now — kill the "Runs" concept (UI only, no contract change)
 
-## Phase 2 (expanded 2026-08-05, Phase 1 green; order per cupel-phases.md build order)
-- [x] P2-CONFIG agentic.config.ts (one config artifact) + API client refactor onto it  [deps: Phase 1]
-- [x] P2-T17 Backend switcher UI — Settings → Backend, sketch 09 (targets, healthz check, mock options)  [deps: CONFIG]
-- [x] P2-T00 Contract v0.3.0 — extend openapi.yaml: auth, admin users/permissions/tree-toggle, eval workbench CRUD+import, generator control, memory (NO repo endpoints — pro tier); update contract tests  [deps: CONFIG]
-- [x] P2-READY cupel-ready readiness script (validate a backend OpenAPI against the contract; mock's own OpenAPI = first conformance test)  [deps: T00]
-- [x] P2-INIT cupel-ready --init — read a backend's OpenAPI, auto-detect base URL + prefix remap + auth scheme (requiresToken), emit ready-to-paste agentic.config.ts target block (user feature 2026-08-05)  [deps: READY]
-- [x] P2-T07 Auth both AUTH_MODEs — mock JWT endpoints + seeded users, login screen, token handling/401s, /me both modes, no AUTH_MODE branches in components  [deps: T00]
-- [x] P2-T07b/07c Admin — members permission matrix (view/tune/evaluate) + tree enable/disable (read-only history)  [deps: T07]
-- [x] P2-SHARE Copy-link sharing — conversation ⋯ menu + turn action links (/chat/{id}?turn=), scroll+highlight on open, no-access state; works in both AUTH_MODEs via T07's return_to redirect (user feature 2026-08-05)  [deps: T07]
-- [x] P2-T12 Eval workbench — cases/sets/rubrics CRUD, hand-crafted references, CSV/XLSX import (sketch 10)  [deps: T00]
-- [x] P2-T12a Inspector + Casebooks (inspect role, audit-logged; casebook → eval set / replay suite)  [deps: T07, T12]
-- [x] P2-MOBILE-SHELL Portrait shell fix — burger toggle, sidebar overlay closes on navigation, chat usable on phone; studio pages stay desktop-only (document in features.md)  [deps: none]
-- [x] P2-FIXA Review bucket A — run-scoped latest_score bug, /tasks/stream tenant filtering, span-payload ownership check, markdown memo, chatSettings out of AppContext, grid cell memo, object-URL leak, streaming-draft isolation (see docs/review-2026-08-05.md)  [deps: none]
-- [x] P2-DEVSTART One-command start + explicit local-mock flag — agentic.config.ts `localMock {enabled, port, dbPath}`; `npm start` boots UI + mock per the flag with a startup banner naming the backend AND its storage mode/location; adopters flip enabled:false and their own backend holds persistence (user decision 2026-08-06)  [deps: none]
-- [x] P2-PERSIST Mock storage modes — CUPEL_STORAGE=local|s3; local = plain SQLite file (dev machine); s3 = Litestream continuous replication to an S3-compatible bucket (Cloudflare R2 or AWS) with restore-on-boot, for the hosted demo where the mock IS the whole backend on ephemeral disk. Seed-on-boot becomes seed-only-if-empty; document the single-writer constraint loudly; banner + /healthz report the active mode (user decision 2026-08-06)  [deps: none]
-- [x] P2-CHATUX Chat feedback comment + clipboard paste — (a) 👍/👎 opens an optional comment box; the comment stores as Judgment.reasoning on the type:human judgment (additive contract change: FeedbackRequest.comment) and renders beneath that assistant turn, surviving reload; NOT a Turn (turns are what gets replayed/judged/traced — user agreed 2026-08-06). (b) paste images/files from the clipboard into the composer, reusing the existing /upload + chip flow (no onPaste handler exists today)  [deps: none]
-- [x] P2-MSW Full MSW parity for unit tests
-- [x] P2-E2E Full Playwright suite — 13 journeys × both auth modes, endpoint-tag interception  [deps: T07, T12, T17]
-- [x] P2-RECORD Minimal e2e recording — Playwright `record` project (video:on, slowMo) + npm run e2e:record + ~30-line step-HUD banner helper; built-in HTML report = the review gallery. NO gif tooling/cursor/manifest/gallery (those are PRO-3 Reels)  [deps: none; richest after P2-E2E]
-- ~~P2-T20 repo/PR~~ — PRO TIER, excluded from free build (user decision 2026-08-05); design stays in feature-spec only
+Why: Runs / Eval / Casebooks are three peer menu entries for one loop; Tune and Evaluate are
+the same page differing by which field gets focus and whether the judge panel starts open
+(`RunsPage.tsx:439-442`); and `POST /eval/judge` with a `run_id` auto-creates eval cases from
+the run's turns (`openapi.yaml:1556`) — a run *is* an evaluation. Target: two doors, **Chat**
+and **Evaluate**. User decision 2026-08-09.
 
-## ══ Phase 2 is CLOSED. Next up, in this order (user decision 2026-08-07) ══
+- [ ] **#1** Two doors — merge the sidebar's three peers (`Sidebar.tsx:23-28`) into one
+      Evaluate section. **Delete** the Tune/Evaluate presets (`:36-39,:98-106`) and everything
+      downstream: RunsPage's preset reducer branches (`:140-159,:172,:203,:220,:399-401,
+      :439-442`), `Sidebar.test.tsx:112-120`, `RunsPage.test.tsx:299,:314,:333,:336`.
+      Obsoletes `feature-spec.md:101-103,:294` — they are deleted, not renamed.
+- [ ] **#2** Routes — `/runs` → `/evaluations`, `/runs/:runId` → `/evaluations/:id`
+      (`App.tsx:196-198`) **with redirects**: share deep links are in the wild and
+      `CompareView.tsx:416` mints run URLs. Update route pins: `returnTo.test.ts:35` (add a
+      redirect case), `App.test.tsx:152`, `QueuePage.test.tsx:37,:104`, `ForkModal.test.tsx:64`,
+      `CompareView.test.tsx:23`, `EditorPage.test.tsx:209`.  [after #1]
+- [ ] **#3** Copy + component names — `RunsPage`→`EvaluationsPage`,
+      `RunDetailPage`→`EvaluationPage`; "Runs"→"Evaluations" (`RunsPage.tsx:323`), "New run"→
+      "New evaluation" (`:325`), "Test in Runs ▸"→"Test as evaluation", the compareSets
+      rejection string (`compareSets.test.ts:75`), `agentic.config.ts:131,:164`.
+      **`docs/features.md:55` "Runs with no backend" is the verb — do not replace it.**  [after #2]
+- [ ] **#4** E2E — ~84 sites across 10 files. Rename `j03-runs.spec.ts`→`j03-evaluations.spec.ts`;
+      update j05 (13), j07 (10), dod (9), smoke (5), j01 (5 — the preset assertions at
+      `:51,:56` die with #1), j12 (`:59`), j13 (27, mostly the contract tranche),
+      `helpers/seed.ts`, `j11:72`. Only 2 endpoint tags change here (`j03:85`, `j05:60`).
+      Untouched: j02, j04, j06, j08, j09, j10, mobile.  [after #3]
+- [ ] **#5** Docs for this tranche — `feature-spec.md` is heaviest (`:4,:6,:26,:39,:61,:63,:66,
+      :84-89,:96,:99,:101-103,:117,:126,:206,:208,:212,:229-232,:274,:285-288,:294,:302`);
+      plus `README.md:54,:68,:115-116,:122,:126,:132`; `CLAUDE.md:19`;
+      `docs/features.md:70,:79`; `cupel-phases.md:18,:19,:26,:32-34,:61,:65,:138`;
+      `docs/plan-ab-compare.md:17,:73-74,:107,:123,:132`; `docs/plan-cupel-cli.md:49-50,:105`
+      (`run <id>` → `evaluation <id>` is a **naming decision**, not a replace).
+      Fold in: fix `docs/index.html:296` (says 19 journeys, there are 13) and
+      `README.md:116`'s wrong line citation.  [after #4]
+- [ ] **#6** **GATE — revisit with the user.** #1–#5 shipped; re-examine whether the contract
+      tranche (#14) still looks right before spending it. User asked for this checkpoint.
 
-## Stage 0 — housekeeping. Small, mostly outside the code; do whenever convenient.
-- [x] PH-1 DONE 2026-08-08 — repo is LampOfSocrates/cupel, local remote re-pointed, GitHub
-      redirect from the old URL active. Rename the GitHub repo skein -> cupel. One command (`gh repo rename cupel`), but it
-      moves the remote URL: re-point the local remote, and BOTH Render services (cupel-demo,
-      cupel-site) clone from it — verify each still deploys afterwards. docs/index.html's
-      quickstart already says github.com/LampOfSocrates/cupel, so today it is wrong
-- [ ] PH-2 Sort out the Render URLs. The app service was renamed cupel-demo but its hostname is
-      still skein.onrender.com (Render keeps the original); cupel-site.onrender.com is correct.
-      Decide: live with the mismatch, recreate the service to get cupel-demo.onrender.com
-      (loses the current URL), or put a real domain in front. cupel.io and cupel.sh are
-      available; .dev/.app/.com are registered (.com is parked at a reseller)
-- [ ] PH-3 Turn on demo persistence — the code shipped in P2-PERSIST but the hosted demo still
-      runs CUPEL_STORAGE=local, so a restart wipes it. Needs an R2 (or S3) bucket + scoped
-      token, then set CUPEL_STORAGE=s3 + CUPEL_S3_BUCKET / _ENDPOINT / _ACCESS_KEY_ID /
-      _SECRET_ACCESS_KEY (+ optional _PATH, _REGION=auto) in the Render dashboard. NOTE the s3
-      path has never actually executed (no Docker locally, binary blocked) — the first real
-      deploy IS the test; /healthz storage.mode reports whether it degraded to local
-- [ ] PH-4 Delete the SKEIN_* -> CUPEL_* env alias shim in mock/__init__.py. The Render
-      dashboard is already updated, so it is dead weight carrying a delete-me note
-- [ ] PH-5 Decide repo visibility. Both repos are private; going public is the whole point of
-      the stars/community strategy, but the README and site should be launch-ready first
+## Ready and small — bugs and residuals
 
-## Stage A — code quality + make-it-yours. Runs BEFORE the UX phase, no planning session
-## needed: every item is already specified. Bucket B is docs/review-2026-08-05.md.
-- [x] PB-1 Split ChatPage.tsx (~1.1k lines, 20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting  [bucket B1]
-- [x] PB-2 Extract useAsync(fn, deps) and apply at the ~12 hand-rolled useState(null)+useEffect+cancelled fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines and forces ONE loading/error contract  [bucket B2, B7]
-- [x] PB-3 Untangle RunsPage navigation state — mode/step/prefilling/preset/testFlow has two sources of truth held together by two eslint-disable exhaustive-deps, plus a remount-by-key trick  [bucket B3]
-- [x] PB-4 Memoise list rows — memo(ConversationRow), pass activeId down instead of useParams() per row, same for ConversationPicker; useDeferredValue on both search inputs; virtualise past ~200 rows  [bucket B4]
-- [x] PB-5 Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this correctly with a Map in useMemo — copy it  [bucket B5]
-- [x] PB-6 Strip task-ID archaeology from comments (files are 13-24% comments, mostly P1-T13 / not-built-here / T08's-job — history, not WHY, and already going stale). Keep every WHY comment  [bucket B6]
-- [x] PB-7 Split src/test/msw/handlers.ts (~2.5k lines, imported by 45 test files) — needs a shared state module + counters object first  [bucket B8]
-- [x] PB-8 Consider enabling the React Compiler — FIRST fix the three render-phase ref writes (App.tsx:35, App.tsx:112, QueueContext.tsx:83) that its lint rules reject  [bucket B9]
-- [x] PW-1 Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes agentic.config.ts; wire product.label through every UI string so an adopter's name actually renders (user-approved 2026-08-05)
+- [ ] **#7** **Latent data-loss bug**: `EditorPage.tsx:99-128` tears the response into six form
+      buffers and `save()` mutates them locally; the seed-on-data effect re-fires after a save
+      and can clobber a draft the user is still typing (the Textarea is not disabled while
+      saving). Needs the editor body extracted into a keyed child first.
+- [ ] **#8** `useAsync` — two clean converts left: `ByokSection.tsx:67`, `CompareView.tsx:132`.
+      The other five unconverted sites are deliberate (see `docs/open-items.md`).
+- [ ] **#9** Make `RunConfigPanel`'s `initialFocus` and `judgeInitiallyOpen` controlled
+      (`:119,:125-129`), then the remount-by-key drops to `key={i}`.
+- [ ] **#10** Last render-phase ref write (`InspectorPage.tsx:192`), **and add a lint setup at
+      all** — `eslint-plugin-react-hooks@7` (`recommended-latest`). There is no eslint config
+      in the repo, so five `exhaustive-deps` disables are inert and enforce nothing. Do **not**
+      enable the React Compiler (Vite/rolldown, no Babel — 4 deps to reintroduce a Babel pass).
+- [ ] **#11** `docs/features.md:65` still marks whitelabel as planned (🗓️). It shipped.
 
-## Stage A+ — A/B compare (user idea 2026-08-07). PLAN: docs/plan-ab-compare.md.
-## Most of the machinery exists (turn re-fire already fans one turn to N endpoints under one
-## run_id); what is missing is doing it LIVE in chat, and doing it ACROSS backends.
-## Sequence deliberately AFTER PB-1: compare mode adds a second layout to ChatPage, which is
-## 1.1k lines and four concerns until that split lands. Dev-only gating is free — require the
-## existing `tune` permission, do NOT invent a role.
-- [x] PAB-1 Chat compare mode, within one backend — `tune`-gated toggle picking 2-3 variants (endpoint / instruction version / model), server-side fan-out on send, N-column transcript each streaming its own reply, and the result IS a run so the existing grid + judge + summary work unchanged. Warn about N generations = N bills before sending; cap columns at 3 and send people to Runs beyond that  [deps: PB-1]
-- [ ] PAB-2 Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire (an additive contract clarification; FOLD INTO P3-T00, do not smuggle it in separately), then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper  [deps: P3-T00]
-- [x] PAB-3 `compareSets` presets in agentic.config.ts + picker UI, so a team's usual A/B is one click  [deps: PAB-1]
-- [ ] PAB-4 Cross-backend compare (LATER, separate) — per-request target override in src/api/client.ts, N unrelated conversations in N databases, and a DECIDED answer to who judges them and how that is labelled. No shared run_id means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). Do not start until the judging question is answered  [deps: PAB-1, a decision]
+## Before the UX phase
 
-## Stage B — UX polish phase, desktop-first. PLANNED WITH THE USER before any task runs.
-## Organising principle (strategy 2026-08-07): the wedge persona's first ten minutes,
-## ending with THEIR agent answering in a real UI — not our demo with fake data.
-## Known inputs:
-##  - README/first-run must lead with "bring your own agent"; cupel-ready --init is the on-ramp
-##  - NO tree switcher exists (raised by P2-T12a): the app has one active tree from config, so
-##    cross-tree results (e.g. a casebook replay spanning trees) cannot be linked
-##  - Auto-judge fragility raised by P2-RECORD — FIXED 2026-08-07, do not re-plan it.
-##    RunDetailPage used to auto-judge only on a live non-terminal -> done transition, so
-##    opening a finished run's link gave no scores and no explanation. The rule is now
-##    "done + a judge in the config + not already judged", read from the append-only store
-##    (GET /eval/judgments?run_id=&rubric_id=) plus any queued/running judge task for the run
-##    (adopted, never re-fired): reload, remount and a second tab cannot append duplicate
-##    judgments. failed/cancelled runs never auto-judge; a partially-failed run does (the
-##    server judges its finished cells only). Residual, not closable client-side: two tabs
-##    that both probe before either POST lands still double-judge — that needs an
-##    Idempotency-Key on the 202, which is P3-T00 (bucket C). Journey 5 no longer depends on
-##    the record-mode mock slowdown; that slowdown is film pacing only now
-##  - Coverage gaps (P2-RECORD): no visual-regression/snapshot testing at all; e2e films run
-##    against the Vite dev server, never the built bundle Render serves; chromium only;
-##    portrait filmed nowhere; BYOK live mode, CUPEL_STORAGE=s3 restore, a11y/keyboard paths
-##    and SSE-drop/5xx surfaces untested
-## Phase 3 begins only after Stage B closes and the user says so.
+- [ ] **#12** **Test the studio-only hypothesis** (user, 2026-08-09): the wedge persona may
+      never use the chat half — they have their own UI and want only the studio. If true, the
+      first ten minutes end at "my agent's real traffic is being evaluated", not "my agent
+      answered in a real UI", and the README leads with the other door. **Decides #13's shape.**
+- [ ] **#13** **UX phase planning session — with the user.** Known inputs: lead with "bring
+      your own agent" (`cupel-ready --init` is the on-ramp); no tree switcher exists, so
+      cross-tree results cannot be linked; coverage gaps — no visual-regression testing at all,
+      e2e runs against the Vite dev server and never the built bundle Render serves, chromium
+      only, portrait filmed nowhere, and BYOK live mode / s3 restore / a11y+keyboard /
+      SSE-drop / 5xx all untested.  [after #12]
 
-## Phase 3 — deferred features + ops (AFTER the full stop and the UX phase; user decision 2026-08-06).
-## NOTE: this is NOT the original "Phase 3 = create-agentic-app scaffolder", which stays parked (see below).
-## Contract support for CTX/GEN/MEM already shipped in v0.3.0 — those are implementation only.
-- [ ] P3-T00 Contract v0.4.0 — review bucket C (15 items) PLUS two gaps found later: (i) the mock correctly returns 409 tree_disabled from six ops whose contract entries declare only 2xx/404 (POST agents, PUT instructions, POST snapshots, PUT last-selection, PATCH+DELETE conversation) — the contract under-declares; (ii) 422 is undeclared everywhere except /eval/cases/import while both implementations return it freely. Bucket C list (docs/review-2026-08-05.md): uniform cursor-paginated Page<T> collections, conversations without inlined turns, run-grid pagination+ETag, POST …/versions replacing non-idempotent PUTs, READABLE version history (GET + ?version= + …/versions for rubrics/sets/cases/snapshots — this is why the workbench can't show history today), GET /eval/cases, Idempotency-Key on 202s, SSE event ids + Last-Event-ID, /tasks/stream subscription filters, per-operation permission semantics + 403s, Error.details[]/request_id + 422/429/503, batch turn fetch, Health.contract_version + capabilities, visible soft-delete, search semantics, span retention. RUNS FIRST IN PHASE 3 — the CLIs generate/consume from the contract, so bump it before they ship (user agreed 2026-08-06)  [deps: Phase 2 complete]
-- [ ] P3-DOCS Persistence guidance — review bucket D: write docs/persistence.md (Postgres spine w/ partitioning+indexes, object storage for span payloads & attachments, ClickHouse/OTLP for span metadata, durable workflow engine for the task queue, Redis for SSE fan-out + idempotency), add the "good shape, do NOT copy the physical layer" header to mock/db.py, and add a tenant/owner column to the reference schema. Pairs with the backend scaffolder, which must point at it (user agreed 2026-08-06)  [deps: none; before P3-CLI]
-- [ ] P3-CTX Context policy widening — frozen/today/custom + fallback for envelope-less turns + recorded-tools playback. PLAN: docs/plan-context-policy.md. Contract is ALREADY done (v0.3.0) — implementation only, in 6 steps: (0) implement the fallback_envelope slice of /settings, which fallback_policy:settings depends on and which the mock does not have; (1) lift the three 422 frozen guards at mock/main.py:1127,:1205,:2128 and resolve the envelope per row incl. RunCell.envelope_source; (2) tools_mode replay_recorded re-emits the source turn's tool spans instead of inventing new ones; (3) unpin frozen in src/api/client.ts:503,:512 and :335-340; (4) add the context section to RunConfigPanel (none exists) + cell markers + a run header that states the policy in words; (5) docs. KEY RISK: frozen must stay the default when the field is omitted — assert it in all three test layers, and update the Phase-1 tests that encode always-frozen deliberately  [deps: P2-T00]
-- [ ] P3-GEN Generator control API + Settings drip-rate controls (un-greys the mock-options placeholders from P2-T17)  [deps: P2-T00, P2-T17]
-- [ ] P3-MEM Memory panel — view/edit/clear per tree, compaction as a visible queued task  [deps: P2-T00]
-- [ ] P3-K8S k8s manifests + Helm post-upgrade Playwright job that gates the release (artifacts + local validation; no live cluster)  [deps: P2-E2E] (moved from Phase 2 by user decision 2026-08-06)
-- [ ] P3-CLI2 cupel-cli — terminal client to ANY conformant backend: `cupel-cli --mybackend XXXX <cmd>`; chat with live token streaming, conversations/agents/instructions/replay/run --watch/judge/trace/tasks --watch, `--json` for scripts, delegates `ready` to the existing comparator. In cli/cupel-cli/. PLAN: docs/plan-cupel-cli.md (4 sub-tasks A-D; 3 open questions). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
-- [ ] P3-CLI agentic-app-maker — `cupel create-agentic-app|ui|backend --name X --same-repo --gap-as-mock server --mybackend <openapi>` in cli/agentic-app-maker/; generates a runnable project + prints test/run/change-my-backend next steps; no backend given = mock does everything. PLAN: docs/plan-agentic-app-maker.md (5 sub-tasks A-E; 5 open questions need answers BEFORE building). Un-parks the original scaffolder; may absorb P4-HYBRID (see plan §1, Q1). (user decision 2026-08-06)  [deps: all Phase 2, after the UX phase]
+## Contract and the phase after
 
-## ══ THERE IS NO PAID TIER (user decision 2026-08-07 — supersedes all earlier tiering) ══
-## Goal is not revenue: brand, GitHub stars, getting hired, a community project, and
-## out-competing funded startups with free open source. Nothing is held back, ever.
-## The old "Phase 4 pro shelf" is dissolved — its items are ordinary free roadmap work below.
+- [ ] **#14** **Contract v0.4.0 — the big one. Runs before the CLIs, which generate from it.**
+      Two halves in one bump:
+      (a) *Review bucket C, 15 items*: uniform cursor-paginated `Page<T>` · conversations
+      without inlined turns · run-grid pagination + ETag · `POST …/versions` replacing
+      non-idempotent PUTs · readable version history (this is why the workbench cannot show
+      history) · `GET /eval/cases` · `Idempotency-Key` on 202s · SSE event ids + `Last-Event-ID`
+      · `/tasks/stream` subscription filters · per-operation permission semantics + 403s ·
+      `Error.details[]`/`request_id` + 422/429/503 · batch turn fetch · `Health.contract_version`
+      + capabilities · visible soft-delete · search semantics · span retention · close the
+      mock's implementation gap. Plus two later gaps: six ops return 409 `tree_disabled`
+      undeclared, and 422 is undeclared almost everywhere.
+      (b) *The domain tighten, tranche 2* — **no backward compat** (unlaunched, private,
+      unpublished, zero adopters; no shims, no aliases, no deprecation window):
+        1. Rename `Run`→`Evaluation`, `run_id`→`evaluation_id`, `RunConfig`→`Variant`,
+           `RunCell`→`Result`. 151 wire occurrences, 142 in `src/`, 28 in `e2e/`, 48 files.
+           `scripts/conformance.mjs:47,48,59` and `tests/openapi-contract.test.js` move together.
+        2. Merge `Casebook` and `EvalSet` into one noun (reference-vs-frozen becomes a field);
+           **deletes `POST /casebooks/{id}/to-eval-set`**. Leave `Selection` alone.
+        3. `Judgment` gains `subject{kind,id}` + `scorer{kind,ref,version}`; the four nullable
+           keys go. Enables `scorer.kind=check` and pairwise preference later, without a bump.
+        4. `Evaluation.status` becomes derived from its Task. Task owns lifecycle alone —
+           precondition for the Idempotency-Key item and closes the two-tab double-judge residual.
+        5. Fold in `ReplayTurnRequest.configs[]` (a config per endpoint) so one turn re-fire
+           varies endpoint + version + model per column, and widen `endpoint_ids` beyond turn
+           re-fire so an evaluation can vary the deploy target.
+      **Collision to resolve first:** the `variants[]` key vs the new `Variant` type.
+      **Do not rename** `docs/spike-agui.md:226-227,:401` — that is AG-UI's own `run_id`.
+      **Artefacts this forces:** `docs/readiness.md:5` (version) and `:100-113` (the x/69 block);
+      `docs/index.html:273`; `docs/spike-agui.md:495,:506`; `sketches/03,04,10*.svg` endpoint
+      tags; `e2e/j13:160-168` (the "casebook becomes an eval set" step is deleted).
+      **Must land before #28 (going public).**  [after #6]
+- [ ] **#15** Persistence guidance — write `docs/persistence.md` (Postgres spine with
+      partitioning + indexes, object storage for span payloads and attachments, ClickHouse/OTLP
+      for span metadata, a durable workflow engine for the task queue, Redis for SSE fan-out and
+      idempotency); add the "good shape, do NOT copy the physical layer" header to `mock/db.py`
+      (which also has no indexes); add a schema-wide tenant/owner column (`conversations.user_id`
+      exists but was added for the Inspector, not as that). Pairs with #21.
+- [ ] **#16** Context policy widening — frozen/today/custom + fallback for envelope-less turns +
+      recorded-tool playback. Contract already shipped; **implementation only**, 6 steps
+      (`docs/plan-context-policy.md`). Key risk: frozen must stay the default when the field is
+      omitted — assert in all three test layers.  [blocked: Q2]
+- [ ] **#17** Generator control API + drip-rate settings (un-greys `SettingsPage.tsx:253,258,264`,
+      which a test pins).  [after #14]
+- [ ] **#18** Memory panel — view/edit/clear per tree, compaction as a visible queued task.  [after #14]
+- [ ] **#19** k8s manifests + a Helm post-upgrade Playwright job that gates the release
+      (artifacts + local validation, no live cluster).
+- [ ] **#20** `cupel-cli` — terminal client to any conformant backend; chat with live token
+      streaming, conversations/agents/instructions/replay/evaluations/judge/trace/tasks,
+      `--json`. `docs/plan-cupel-cli.md`, 4 sub-tasks.  [blocked: Q9, Q10, Q11 · after #14]
+- [ ] **#21** `agentic-app-maker` — project scaffolder; generates a runnable project and prints
+      next steps; no backend given = the mock does everything. `docs/plan-agentic-app-maker.md`,
+      5 sub-tasks.  [blocked: Q4, Q5, Q6, Q7, Q8 · after #14]
 
-## Phase 4 — the rest of the roadmap (free, like everything else)
-- [ ] P4-REPO Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes the version live; mock git server. No free tool does this; it is a headline differentiator, not a paywall (former P2-T20)
-- [ ] P4-SHARE Public sharing — anonymous tokenised share links for conversations/turns, with expiry and revocation. A growth mechanism: every shared conversation is a billboard (extends the in-app deep links from P2-SHARE)
-- [ ] P4-AGUI AG-UI bridge — DECISION REQUIRED BEFORE BUILDING. Spike done (docs/spike-agui.md, commit ee9538f): recommends adopt-partially via mock/agui.py on the existing `adapter?:` seam (~400-600 LOC, 1-2 weeks) — a server implementing our contract that proxies generation to any AG-UI endpoint. NOT a client transport, NOT a contract change. Open question the spike could not settle: also ship a thin client-side adapter behind a loud "nothing is persisted" banner, to avoid reading as "does not support AG-UI"? Re-read the spike's "what would change my mind" issue list (persistence #2159/#2186/#1160, resumability #2105/#2106, token usage w/ spend #2188, foundation donation + 1.0) before deciding — the answer may have changed by then  [deps: P3-T00 contract v0.4.0]
-- [ ] P4-HYBRID Hybrid backend fill — per-feature-family routing: implemented endpoints → the user's backend, missing families → the bundled mock, table derived from the cupel-ready gap report; visible "served by mock" badges; demo-quality only (no cross-store data joins). Lowers adoption cost for the wedge persona
-- ~~P4-REELS~~ — MOVED OUT 2026-08-07 to its own project: C:\Users\soura\Code\2026\journey-replayer (spec committed there). This repo stays a clean agentic chat + studio app. What remains here is P2-RECORD's minimal recording rig, which is enough for our own suite.
+## The rest of the roadmap (free, like everything else — there is no paid tier)
 
-## Parked indefinitely: a hosted multi-tenant platform. Not on any roadmap.
-## Review buckets: B = the UX phase · C = a future contract v0.4.0 · D = persistence docs.
-## Strategy (2026-08-07): wedge persona = the framework builder with an agent and no UI;
-## positioning = "the console for agents you already built"; AG-UI stance pending a spike;
-## product name settled 2026-08-07: Skein → Cupel (second and final rename; the repo,
-## the mock, the contract metadata and the docs all say Cupel. The local directory and
-## the GitHub remote are renamed separately by the user).
+- [ ] **#22** Agents as Code — GitHub connect, instruction changes as PR diffs, merge promotes
+      the version live; mock git server. No free tool does this.
+- [ ] **#23** Public sharing — anonymous tokenised links for conversations/turns, with expiry
+      and revocation. Extends the in-app deep links; every shared conversation is a billboard.
+- [ ] **#24** AG-UI bridge — spike done (`docs/spike-agui.md`), recommends adopt-partially via
+      `mock/agui.py` on the existing `adapter?:` seam, ~400–600 LOC. Not a client transport, not
+      a contract change.  [blocked: Q3 · after #14]
+- [ ] **#25** Hybrid backend fill — implemented endpoints go to the adopter's backend, missing
+      families to the bundled mock, table derived from the `cupel-ready` gap report, visible
+      "served by mock" badges.  [blocked: Q4 — #21's `--gap-as-mock` may delete this]
+- [ ] **#26** Studio: vary the deploy target in an evaluation — flip `RunConfigPanel`'s existing
+      `showEndpoints` flag on for the stepper. UI half only; the contract half is in #14.  [after #14]
+- [ ] **#27** Cross-backend compare — per-request target override in `src/api/client.ts`, N
+      unrelated conversations in N databases. No shared evaluation id means the grid and judging
+      do not apply for free. Overlaps #25 (same client refactor).  [blocked: Q1]
+
+## Ops and housekeeping — user-owned, dashboard-side
+
+- [ ] **#28** Decide repo visibility. Both repos private; going public is the point of the
+      stars/community strategy. **This closes the no-back-compat window — do #14 first**, and
+      the README/site should be launch-ready.
+- [ ] **#29** Render hostname: the service was renamed `cupel-demo` but its hostname is still
+      `skein.onrender.com` (Render pins the one minted at creation). Options: live with it,
+      recreate the service (**carry `DEMO_TOKEN` over first** — it is `generateValue: true`, so
+      a new service mints a different one and shared demo links die; the old hostname dies
+      instantly with no redirect), or put a real domain in front. `cupel.io`/`cupel.sh` are free.
+- [ ] **#30** Turn on demo persistence — the code shipped but the hosted demo still runs
+      `CUPEL_STORAGE=local`, so a restart wipes it. Needs an R2/S3 bucket + scoped token, then
+      the `CUPEL_S3_*` env vars. **The s3 path has never once executed** — the first real deploy
+      is the test; `/healthz` `storage.mode` reports whether it degraded to local.
+
+## Doc and code debt
+
+- [ ] **#31** `react-migration.md` is dead weight — a Streamlit→React migration guide requiring
+      an `INVENTORY.md` that does not exist, for a codebase with no Streamlit in it — and
+      **`CLAUDE.md:3` still names it as the mandatory first read**, so it misleads every new
+      session. Delete it and fix CLAUDE.md, or replace it with the evidence rules it was cited for.
+- [ ] **#32** `cupel-phases.md` is stale in five places: `helm install cupel ./chart` (no
+      `chart/` exists); a PR round-trip in the Phase-2 DoD (cancelled); `npm run dev` as the
+      front door (it is `npm start`); `npx cupel-ready`/`npx create-agentic-app`/`cupel chat`
+      (unpublished); and "Phase 4 = hosted multi-tenant platform", contradicted by
+      `docs/features.md:86` "Not planned".
+- [ ] **#33** Stale paid-tier language, contradicting the no-paid-tier decision:
+      `src/lib/shareLink.ts:8`, `src/pages/ChatPage.test.tsx:985` ("PRO-2"),
+      `docs/plan-agentic-app-maker.md:28,:171`. (`docs/deployment.md`'s "free tier" means
+      Render's hosting plan — correct, leave it.)
+- [ ] **#34** `feature-spec.md` has two wrong routes: `:32,:282` say `/agent-trees` (contract
+      says `/agenttrees`); `:127,:151` say unscoped `/turns/{id}/trace` (actual route is
+      tree-scoped).
+- [ ] **#35** `docs/index.html:271-276` shows `npx cupel-ready …` as installable. The package is
+      `private: true` and unpublished — only `npm run ready` and the local bin work.
+- [ ] **#36** `docs/deployment.md:88,111-115,139-146` describes the R2 bucket and the s3
+      boot/restore/`/healthz` behaviour as if configured and observed. None of it has ever run
+      (see #30). Mark untested until it lands.
+- [ ] **#37** The "69 operations" count is copy-pasted into three docs with no source of truth:
+      `docs/spike-agui.md:495` is the authoritative breakdown, restated at
+      `docs/readiness.md:108` and the public `docs/index.html:273`. Any contract change moves
+      all three and nothing enforces it. Fix: derive it from `openapi.yaml` in the readiness
+      script and stop hardcoding it in prose.
+- [ ] **#38** The suite is not clean under **full** shuffle (files *and* tests within files).
+      Two pre-existing failures, both reproducing in isolation: `parity.test.ts` registers a
+      `response:mocked` listener in `beforeAll` that attributes every later request to whatever
+      `currentApiMethod` last held; and `ChatPage.test.tsx > renders tokens incrementally`.
+      File-order shuffle alone is green. Only worth fixing if you want the suite shuffle-clean.
+
+## Ideas — not approved, not queued
+
+- **Evaluation `intent` + `promoted_by_evaluation_id`** — two additive fields that would give
+  the version history *evidence*: why each version exists and what score movement justified
+  keeping it. The column-relabel hack (`types.ts:673-675`) already fakes half of this link.
+  Additive, so unlike the renames it need not wait for #14.
+- **A first-class "Change"/assay object** — intent, base, draft, cohort, evaluations, verdict,
+  delta. Would make #22 a rendering of the core loop rather than a new subsystem, and give
+  regression suites, thresholds and pairwise preference an owner. Only works if it is *inferred*,
+  never ceremony.
+- **Scorer kinds beyond the LLM judge** — deterministic checks (regex, JSON-schema,
+  tool-was-called, latency/cost budget), pairwise preference, N-repetitions for variance,
+  a human annotation queue. All are homeless today because `Rubric` *is* the scorer model.
+  #14(b)3 is the precondition for all of them.
+
+## Open questions — block the tasks named
+
+| # | blocks | question |
+|---|---|---|
+| Q1 | #27 | Who judges a cross-backend compare, and how is that labelled? Nominate one backend as scorer, or judge client-side? |
+| Q2 | #16 | `tools_mode: replay_recorded` on a turn whose trace has no tool spans — silent no-op or cell error? |
+| Q3 | #24 | Also ship a thin client-side AG-UI adapter behind a "nothing is persisted" banner? Spike says no in the first pass. Re-read its five watch items before deciding. |
+| Q4 | #21, #25 | Does `--gap-as-mock` make the hybrid fill redundant? Recommendation: yes — delete #25. |
+| Q5 | #21 | What language is `create-backend`? Recommendation: FastAPI/Python first. |
+| Q6 | #21 | Feature trimming (`--features no-evaluate`) — in or out? Recommendation: out. |
+| Q7 | #21 | Does `--same-repo` touch git state? Recommendation: no, print a suggestion. |
+| Q8 | #21 | Should the generated backend implement chat + conversations for real, not stubs? Recommendation: yes for those two. |
+| Q9 | #20 | A `~/.cupel/config.json` for defaults? Recommendation: credentials only. |
+| Q10 | #20 | Ship on npm as `npx cupel-cli`, or checkout-only? Recommendation: checkout-only first. |
+| Q11 | #20 | `fav`/aliases? Recommendation: defer — needs Q9. |
+
+---
+
+Parked indefinitely: a hosted multi-tenant platform. Not on any roadmap.
+Deliberately skipped, do not "fix": sidebar row virtualisation (rows are user-bounded behind
+an explicit Load more); the three `test.skip` calls in j10/j11/j12 (they are `AUTH_E2E` gates);
+`scripts/cupel-ready.mjs:203`'s literal `"TODO:"` string (intended output for the adopter);
+`src/test/msw/parity.test.ts:655-665` (a deliberate registry of unimplemented operations).
