@@ -70,6 +70,17 @@ and **Evaluate**. User decision 2026-08-09.
       in the repo, so five `exhaustive-deps` disables are inert and enforce nothing. Do **not**
       enable the React Compiler (Vite/rolldown, no Babel — 4 deps to reintroduce a Babel pass).
 - [x] **#11** `docs/features.md:65` still marks whitelabel as planned (🗓️). It shipped.
+- [ ] **#41** **`react-hooks/set-state-in-effect` is turned OFF — 20 sites across 18 files.**
+      Deferred by #10 so the lint could reach a green baseline; the rule is disabled in
+      `eslint.config.js` with the file list inline. Every one is a "you-might-not-need-an-effect"
+      reshape, not a caught defect, but 18 files is its own task. Sites: `App.tsx:126` ·
+      `CollectModal.tsx:61` · `ConversationPicker.tsx:112` · `EvalImportModal.tsx:140` ·
+      `ForkModal.tsx:89` · `useAsync.ts:82` · `CasebooksPage.tsx:238` · `ChatPage.tsx:155,:227` ·
+      `EditorPage.tsx:72` · `EvalPage.tsx:134,:579` · `EvaluationPage.tsx:117` ·
+      `InspectorPage.tsx:99,:144` · `SettingsPage.tsx:110` · `TracePage.tsx:91` ·
+      `CompareView.tsx:165` · `Composer.tsx:134` · `ConversationList.tsx:78`.
+      Turn the rule back on when the list is empty — leaving it off indefinitely means the lint
+      #10 installed is enforcing less than it looks like it is.
 - [ ] **#39** **Citation drift from #5.** Deleting the dead preset passages shortened
       `feature-spec.md` by 5 lines, so **206 `feature-spec.md:NNN` citations are now wrong**:
       `src/` 136, `e2e/` 33, `tests/` 17, `mock/` 16, `docs/` 1, root docs 3. The shift is exact
