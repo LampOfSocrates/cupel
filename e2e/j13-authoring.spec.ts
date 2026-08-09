@@ -174,7 +174,7 @@ test("inspector → casebook → eval set + replay suite", async ({ page, reques
     const accepted = page.getByTestId("casebook-replay-accepted");
     await expect(accepted).toBeVisible();
     await accepted.getByRole("link").last().click();
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,
     });

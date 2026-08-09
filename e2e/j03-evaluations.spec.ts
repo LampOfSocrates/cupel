@@ -81,7 +81,7 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
     api.clear();
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     await api.expectCalled("GET /agenttrees/{tree}/evaluations/{evaluation}");
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
 

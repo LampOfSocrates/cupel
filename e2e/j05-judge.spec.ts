@@ -46,7 +46,7 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
     api.clear();
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     // 2 rows × (baseline + 1 config).
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(4, {

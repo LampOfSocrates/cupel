@@ -89,7 +89,7 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
 
   await test.step("compare: fork pivot grid — column per endpoint, cells fill", async () => {
     await page.getByText("View evaluation").click();
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     const grid = page.getByTestId("comparison-grid");
     await expect(grid).toBeVisible();
     await expect(grid.getByText("prod")).toBeVisible();
@@ -156,7 +156,7 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
     // Config prefilled with the snapshot ("v#-draft (hash)" badge).
     await expect(page.getByTestId("snapshot-badge")).toBeVisible();
     await page.getByRole("button", { name: "Queue" }).click();
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     // 1 row × (baseline + snapshot config).
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,

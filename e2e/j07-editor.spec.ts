@@ -99,7 +99,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test as
     await page.getByRole("button", { name: "Queue" }).click();
     await api.expectCalled("PUT /agenttrees/{tree}/agents/{agent}/last-selection");
     await api.expectCalled("POST /agenttrees/{tree}/replay");
-    await page.waitForURL(/\/evaluations\/run_/);
+    await page.waitForURL(/\/evaluations\/eval_/);
     await expect(page.locator('[data-testid^="cell-"][data-status="done"]')).toHaveCount(2, {
       timeout: 120_000,
     });
