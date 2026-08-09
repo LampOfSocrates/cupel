@@ -127,32 +127,27 @@ CREATE TABLE IF NOT EXISTS eval_cases (
   output TEXT NOT NULL, reference TEXT, source TEXT, created_at TEXT NOT NULL,
   PRIMARY KEY (id, version));
 
--- Append-only versioned MEMBERSHIP (openapi.yaml:1533-1536: "each save is a
--- new version carrying its full case_ids list"); case_ids is a JSON array.
+-- Eval sets, the noun Casebook merged into (openapi.yaml EvalSet). TWO tables,
+-- because the resource has two lifetimes and saying so here is cheaper than a
+-- comment: the SET is mutable metadata (a rename is not a membership change,
+-- openapi.yaml PATCH /eval/sets/{setId}), the MEMBERSHIP is append-only
+-- ("each save is a new version carrying its FULL item list"). Splitting them
+-- is what lets a rename leave every recorded version untouched, so the
+-- append-only invariant (cupel-phases.md:160) needs no exception for metadata.
+--
+-- A set is GLOBAL, not tree-scoped: its reference items may point at turns
+-- across trees, and per-item visibility follows the viewer's permissions.
+-- items is a JSON array of {id, kind, source?, case_id?, note, added_at} —
+-- reference items are turn REFERENCES, never copies, so nothing here holds a
+-- turn's text. Deleting a set touches no turn, conversation, case, judgment or
+-- evaluation.
 CREATE TABLE IF NOT EXISTS eval_sets (
-  id TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
-  case_ids TEXT NOT NULL, created_at TEXT NOT NULL,
-  PRIMARY KEY (id, version));
-
--- Casebooks (openapi.yaml:3219-3262). A casebook is GLOBAL, not
--- tree-scoped (openapi.yaml:1654-1656), and its items are turn REFERENCES,
--- never copies (openapi.yaml:3252-3255) — hence a row of ids and nothing
--- else. Deleting a casebook or an item touches no turn, conversation, eval
--- set or evaluation (openapi.yaml:1722-1726, :1764-1769).
-CREATE TABLE IF NOT EXISTS casebooks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
   created_by TEXT, created_at TEXT NOT NULL);
 
-CREATE TABLE IF NOT EXISTS casebook_items (
-  id TEXT PRIMARY KEY, casebook_id TEXT NOT NULL, tree TEXT NOT NULL,
-  conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL, note TEXT,
-  added_at TEXT NOT NULL);
-
--- "Re-adding the same turn is idempotent (returns the existing item)"
--- (openapi.yaml:1744) — the rule is enforced at the storage layer so no
--- caller can create a second reference to the same turn.
-CREATE UNIQUE INDEX IF NOT EXISTS casebook_items_ref
-  ON casebook_items (casebook_id, tree, conversation_id, turn_id);
+CREATE TABLE IF NOT EXISTS eval_set_versions (
+  set_id TEXT NOT NULL, version INTEGER NOT NULL, items TEXT NOT NULL,
+  created_at TEXT NOT NULL, PRIMARY KEY (set_id, version));
 
 -- Audit trail. "EVERY access is audit-logged server-side"
 -- (openapi.yaml:308-309) for GET /admin/conversations. The contract declares
@@ -196,6 +191,7 @@ class Db:
             self._migrate_eval_cases()
             self._migrate_conversation_owner()
             self._migrate_run_to_evaluation()
+            self._migrate_casebooks_into_eval_sets()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -268,6 +264,84 @@ class Db:
             if "run_id" in cols and "evaluation_id" not in cols:
                 self.conn.execute(
                     f"ALTER TABLE {table} RENAME COLUMN run_id TO evaluation_id")
+
+    def _migrate_casebooks_into_eval_sets(self):
+        """Casebook and EvalSet merged into one noun, so their two physical
+        shapes merge too. Older databases carry
+        eval_sets(id, name, version, case_ids, created_at) plus casebooks /
+        casebook_items; the new shape is eval_sets(id, name, description,
+        created_by, created_at) + eval_set_versions(set_id, version, items).
+
+        Two independent, presence-guarded halves, in the style of the three
+        migrations above:
+          1. eval_sets still has a case_ids column -> rebuild it and turn each
+             old version row into an eval_set_versions row whose items are
+             FROZEN (they were case ids, and a case id is exactly a frozen
+             item's referent). CREATE TABLE IF NOT EXISTS at the top of this
+             file is a no-op against the old table, which is what leaves the
+             marker column visible here.
+          2. a casebooks table exists -> each casebook becomes a set whose
+             version 1 holds its items as REFERENCES, keeping their ids,
+             notes and added_at. The casebook keeps its own id: ids are
+             opaque, and rewriting them would break every judgment, link and
+             bookmark that already names one.
+        Nothing here runs on a database created after the merge."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(eval_sets)")}
+        if "case_ids" in cols:
+            self.conn.execute("ALTER TABLE eval_sets RENAME TO eval_sets_pre_t7b")
+            self.conn.execute(
+                "CREATE TABLE eval_sets ("
+                " id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,"
+                " created_by TEXT, created_at TEXT NOT NULL)")
+            rows = self.conn.execute(
+                "SELECT id, name, version, case_ids, created_at"
+                " FROM eval_sets_pre_t7b ORDER BY id, version").fetchall()
+            first: dict[str, tuple] = {}
+            latest_name: dict[str, str] = {}
+            for row in rows:
+                first.setdefault(row["id"], (row["created_at"],))
+                latest_name[row["id"]] = row["name"]
+                items = [{"id": f"esi_{row['id']}_{i}", "kind": "frozen",
+                          "source": None, "case_id": case_id, "note": None,
+                          "added_at": row["created_at"]}
+                         for i, case_id in enumerate(json.loads(row["case_ids"] or "[]"))]
+                self.conn.execute(
+                    "INSERT INTO eval_set_versions (set_id, version, items, created_at)"
+                    " VALUES (?, ?, ?, ?)",
+                    (row["id"], row["version"], json.dumps(items), row["created_at"]))
+            for set_id, (created_at,) in first.items():
+                self.conn.execute(
+                    "INSERT INTO eval_sets (id, name, description, created_by, created_at)"
+                    " VALUES (?, ?, NULL, NULL, ?)",
+                    (set_id, latest_name[set_id], created_at))
+            self.conn.execute("DROP TABLE eval_sets_pre_t7b")
+
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "casebooks" not in tables:
+            return
+        for book in self.conn.execute(
+                "SELECT * FROM casebooks ORDER BY rowid").fetchall():
+            items = [{"id": i["id"], "kind": "reference",
+                      "source": {"tree": i["tree"],
+                                 "conversation_id": i["conversation_id"],
+                                 "turn_id": i["turn_id"]},
+                      "case_id": None, "note": i["note"],
+                      "added_at": i["added_at"]}
+                     for i in self.conn.execute(
+                         "SELECT * FROM casebook_items WHERE casebook_id = ?"
+                         " ORDER BY rowid", (book["id"],)).fetchall()]
+            self.conn.execute(
+                "INSERT OR REPLACE INTO eval_sets"
+                " (id, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                (book["id"], book["name"], book["description"],
+                 book["created_by"], book["created_at"]))
+            self.conn.execute(
+                "INSERT OR REPLACE INTO eval_set_versions"
+                " (set_id, version, items, created_at) VALUES (?, 1, ?, ?)",
+                (book["id"], json.dumps(items), book["created_at"]))
+        self.conn.executescript(
+            "DROP TABLE IF EXISTS casebook_items; DROP TABLE IF EXISTS casebooks;")
 
     def run(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock:

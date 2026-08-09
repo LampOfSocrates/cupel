@@ -1,4 +1,4 @@
-"""Inspector + Casebooks tests. Run: npm run test:mock.
+"""Inspector + eval-set tests. Run: npm run test:mock.
 
 Contract under test (openapi.yaml v0.3.0):
 - :298-348 GET /admin/conversations ("Inspector — every conversation,
@@ -7,13 +7,14 @@ Contract under test (openapi.yaml v0.3.0):
   audit-logged server-side")
 - :3129-3155 AdminConversationItem (user_id, user_email, latest_score) +
   AdminConversationPage (items/page/page_size/total)
-- :1643-1730 GET/POST /casebooks, GET/PATCH/DELETE /casebooks/{casebookId}
-- :1732-1775 POST /casebooks/{id}/items ("Re-adding the same turn is
-  idempotent (returns the existing item)"), DELETE …/items/{itemId}
-- :1777-1802 POST /casebooks/{id}/to-eval-set ("reuses the existing eval case
-  for that turn or creates one sourced from it … then creates a new set")
-- :1804-1830 POST /casebooks/{id}/replay ("one evaluation per tree touched, all
-  children of a single parent task", CasebookReplayAccepted :3320-3338)
+- GET/POST /eval/sets, GET/PATCH/PUT/DELETE /eval/sets/{setId} — the noun
+  Casebook merged into ("A member is either kind, so the collection is both")
+- POST /eval/sets/{setId}/items ("IDEMPOTENT: adding a referent the latest
+  version already holds appends nothing and returns that version unchanged")
+- POST /eval/sets/{setId}/freeze ("reuses the existing eval case for that turn
+  or creates one sourced from it … The item keeps its id and its source")
+- POST /eval/sets/{setId}/replay ("one evaluation per tree touched, all
+  children of a single parent task", EvalSetReplayAccepted)
 """
 
 import asyncio
@@ -340,100 +341,129 @@ def test_a_403_writes_no_audit_record(monkeypatch):
     run(case())
 
 
-# ================================================================= casebooks
-async def seed_casebook(c, name="Noteworthy"):
-    r = await c.post("/casebooks", json={"name": name})
+
+# ================================================================= eval sets
+# The merged noun: Casebook folded into EvalSet, so what used to be nine
+# /casebooks routes plus three /eval/sets ones is one resource whose members
+# carry a kind (reference | frozen). "Materialize the casebook" became
+# POST /eval/sets/{id}/freeze flipping items in place.
+async def seed_set(c, name="Noteworthy", **kwargs):
+    r = await c.post("/eval/sets", json={"name": name}, **kwargs)
     assert r.status_code == 201, r.text
     return r.json()
 
 
-def test_casebook_crud():
+def ref(conv, tree="agent1", **extra):
+    return {"source": {"tree": tree, "conversation_id": conv["conversation_id"],
+                       "turn_id": conv["turn"]["id"]}, **extra}
+
+
+def test_eval_set_crud():
     async def case():
         async with make_client() as c:
-            assert (await c.get("/casebooks")).json() == []
-            book = await seed_casebook(c, "Refund failures")
-            assert book["name"] == "Refund failures"
-            assert book["items"] == [] and book["description"] is None
-            assert book["created_at"]
+            assert (await c.get("/eval/sets")).json() == []
+            s = await seed_set(c, "Refund failures")
+            assert s["name"] == "Refund failures"
+            assert s["items"] == [] and s["description"] is None
+            assert s["version"] == 1 and s["created_at"]
 
-            assert [b["id"] for b in (await c.get("/casebooks")).json()] == [book["id"]]
-            assert (await c.get(f"/casebooks/{book['id']}")).json()["id"] == book["id"]
+            assert [x["id"] for x in (await c.get("/eval/sets")).json()] == [s["id"]]
+            assert (await c.get(f"/eval/sets/{s['id']}")).json()["id"] == s["id"]
 
-            r = await c.patch(f"/casebooks/{book['id']}",
+            r = await c.patch(f"/eval/sets/{s['id']}",
                               json={"name": "Refunds", "description": "worst first"})
             assert r.status_code == 200, r.text
             assert r.json()["name"] == "Refunds"
             assert r.json()["description"] == "worst first"
-            # PATCH is metadata only — membership is untouched.
+            # PATCH is metadata only — membership is untouched AND unversioned.
             assert r.json()["items"] == []
+            assert r.json()["version"] == 1
 
-            assert (await c.delete(f"/casebooks/{book['id']}")).status_code == 204
-            assert (await c.get(f"/casebooks/{book['id']}")).status_code == 404
-            assert (await c.delete(f"/casebooks/{book['id']}")).status_code == 404
-            assert (await c.get("/casebooks")).json() == []
+            assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 204
+            assert (await c.get(f"/eval/sets/{s['id']}")).status_code == 404
+            assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 404
+            assert (await c.get("/eval/sets")).json() == []
     run(case())
 
 
 def test_create_requires_a_name():
     async def case():
         async with make_client() as c:
-            assert (await c.post("/casebooks", json={})).status_code == 422
+            assert (await c.post("/eval/sets", json={})).status_code == 422
     run(case())
 
 
-def test_add_and_remove_items_are_references_only():
-    """"An item is a REFERENCE to a turn, never a copy" (openapi.yaml:1739);
-    removing it "touches nothing else" (:1766-1769)."""
+def test_reference_items_are_references_only_and_removal_appends_a_version():
+    """A reference item is a REFERENCE to a turn, never a copy; removing it
+    (PUT with the item left out) touches nothing else."""
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "keep this one")
-            book = await seed_casebook(c)
-            r = await c.post(f"/casebooks/{book['id']}/items", json={
-                "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": conv["turn"]["id"], "note": "great answer",
-            })
+            s = await seed_set(c)
+            r = await c.post(f"/eval/sets/{s['id']}/items",
+                             json=ref(conv, note="great answer"))
             assert r.status_code == 201, r.text
-            item = r.json()
-            assert item["tree"] == "agent1"
-            assert item["conversation_id"] == conv["conversation_id"]
-            assert item["turn_id"] == conv["turn"]["id"]
+            # Adding appends a MEMBERSHIP VERSION — the casebook's free
+            # mutation is gone.
+            assert r.json()["version"] == 2
+            item = r.json()["items"][0]
+            assert item["kind"] == "reference"
+            assert item["source"] == {"tree": "agent1",
+                                      "conversation_id": conv["conversation_id"],
+                                      "turn_id": conv["turn"]["id"]}
+            assert item["case_id"] is None
             assert item["note"] == "great answer" and item["added_at"]
             # No transcript copy travels with the item.
-            assert set(item) == {"id", "tree", "conversation_id", "turn_id",
-                                 "note", "added_at"}
+            assert set(item) == {"id", "kind", "source", "case_id", "note", "added_at"}
 
-            fetched = (await c.get(f"/casebooks/{book['id']}")).json()
+            fetched = (await c.get(f"/eval/sets/{s['id']}")).json()
             assert [i["id"] for i in fetched["items"]] == [item["id"]]
 
-            r = await c.delete(f"/casebooks/{book['id']}/items/{item['id']}")
-            assert r.status_code == 204
-            assert (await c.get(f"/casebooks/{book['id']}")).json()["items"] == []
+            r = await c.put(f"/eval/sets/{s['id']}", json={"items": []})
+            assert r.status_code == 201, r.text
+            assert r.json()["items"] == [] and r.json()["version"] == 3
             # The turn and its conversation survived the removal.
             got = await c.get(
                 f"/agenttrees/agent1/conversations/{conv['conversation_id']}")
             assert got.status_code == 200
             assert any(t["id"] == conv["turn"]["id"] for t in got.json()["turns"])
-            # Removing twice is a 404.
-            assert (await c.delete(
-                f"/casebooks/{book['id']}/items/{item['id']}")).status_code == 404
     run(case())
 
 
-def test_adding_the_same_turn_twice_is_idempotent():
-    """THE DUPLICATE RULE — "Re-adding the same turn is idempotent (returns
-    the existing item)" (openapi.yaml:1744): same id, original note kept."""
+def test_item_ids_are_stable_across_membership_versions():
+    """"the server carries an item's id forward when the new version still
+    holds the same referent" — what makes .../freeze able to name an item."""
+    async def case():
+        async with make_client() as c:
+            a = await chat(c, "agent1", "first")
+            b = await chat(c, "agent1", "second")
+            s = await seed_set(c)
+            first = (await c.post(f"/eval/sets/{s['id']}/items", json=ref(a))).json()
+            item_id = first["items"][0]["id"]
+            after = (await c.put(f"/eval/sets/{s['id']}",
+                                 json={"items": [ref(b), ref(a)]})).json()
+            assert after["version"] == 3
+            assert [i["id"] for i in after["items"]][1] == item_id
+            # ...and a referent the previous version did not hold gets a new id.
+            assert after["items"][0]["id"] != item_id
+    run(case())
+
+
+def test_adding_the_same_turn_twice_appends_nothing():
+    """THE DUPLICATE RULE, restated for versioned membership: "adding a
+    referent the latest version already holds appends nothing and returns
+    that version unchanged"."""
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "collect me twice")
-            book = await seed_casebook(c)
-            body = {"tree": "agent1", "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"], "note": "first note"}
-            first = (await c.post(f"/casebooks/{book['id']}/items", json=body)).json()
-            r = await c.post(f"/casebooks/{book['id']}/items",
+            s = await seed_set(c)
+            body = ref(conv, note="first note")
+            first = (await c.post(f"/eval/sets/{s['id']}/items", json=body)).json()
+            r = await c.post(f"/eval/sets/{s['id']}/items",
                              json={**body, "note": "second note"})
             assert r.status_code == 201, r.text
-            assert r.json() == first  # id, added_at and note all unchanged
-            assert len((await c.get(f"/casebooks/{book['id']}")).json()["items"]) == 1
+            assert r.json() == first  # same version, same id, original note
+            assert len((await c.get(f"/eval/sets/{s['id']}")).json()["items"]) == 1
     run(case())
 
 
@@ -441,22 +471,46 @@ def test_item_endpoints_404_on_unknown_references():
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "real turn")
-            book = await seed_casebook(c)
-            assert (await c.post("/casebooks/cb_nope/items", json={
+            s = await seed_set(c)
+            assert (await c.post("/eval/sets/set_nope/items",
+                                 json=ref(conv))).status_code == 404
+            assert (await c.post(f"/eval/sets/{s['id']}/items", json={"source": {
                 "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": conv["turn"]["id"]})).status_code == 404
-            assert (await c.post(f"/casebooks/{book['id']}/items", json={
-                "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": "turn_nope"})).status_code == 404
-            assert (await c.post(f"/casebooks/{book['id']}/items",
-                                 json={"tree": "agent1"})).status_code == 422
+                "turn_id": "turn_nope"}})).status_code == 404
+            assert (await c.post(f"/eval/sets/{s['id']}/items",
+                                 json={"source": {"tree": "agent1"}})).status_code == 422
+            # oneOf: a member points at a turn or at a case, never both/neither.
+            assert (await c.post(f"/eval/sets/{s['id']}/items",
+                                 json={})).status_code == 422
+            assert (await c.post(f"/eval/sets/{s['id']}/items",
+                                 json={**ref(conv), "case_id": "case_x"})).status_code == 422
+            assert (await c.post(f"/eval/sets/{s['id']}/items",
+                                 json={"case_id": "case_nope"})).status_code == 404
+    run(case())
+
+
+def test_a_set_holds_references_and_frozen_cases_side_by_side():
+    """The whole point of the merge: one collection, two kinds of member."""
+    async def case():
+        async with make_client() as c:
+            conv = await chat(c, "agent1", "live turn")
+            handmade = (await c.post("/eval/cases", json={
+                "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
+            r = await c.post(f"/eval/sets/{s['id']}/items",
+                             json={"case_id": handmade["id"]})
+            assert r.status_code == 201, r.text
+            assert [i["kind"] for i in r.json()["items"]] == ["reference", "frozen"]
+            assert r.json()["items"][1]["case_id"] == handmade["id"]
+            assert r.json()["items"][1]["source"] is None
     run(case())
 
 
 def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
-    """"a casebook may reference turns across trees; per-item visibility still
-    follows the viewer's tree permissions" (openapi.yaml:1654-1656). Decision:
-    OMIT rather than leak — restricted@demo has no agent2 view."""
+    """A set may reference turns across trees; per-item visibility still
+    follows the viewer's tree permissions. Decision: OMIT rather than leak —
+    restricted@demo has no agent2 view."""
     monkeypatch.setenv("AUTH_MODE", "on")
 
     async def case():
@@ -464,61 +518,62 @@ def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
             admin = await login(c)
             one = await chat(c, "agent1", "visible everywhere", **admin)
             two = await chat(c, "agent2", "admin only", **admin)
-            r = await c.post("/casebooks", json={"name": "Mixed"}, headers=admin)
-            book = r.json()
+            s = await seed_set(c, "Mixed", headers=admin)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                r = await c.post(f"/casebooks/{book['id']}/items", headers=admin, json={
-                    "tree": tree, "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"]})
+                r = await c.post(f"/eval/sets/{s['id']}/items", headers=admin,
+                                 json=ref(conv, tree))
                 assert r.status_code == 201, r.text
-            assert len((await c.get(f"/casebooks/{book['id']}",
+            assert len((await c.get(f"/eval/sets/{s['id']}",
                                     headers=admin)).json()["items"]) == 2
 
             limited = await login(c, "restricted@demo")
-            seen = (await c.get(f"/casebooks/{book['id']}", headers=limited)).json()
-            assert [i["tree"] for i in seen["items"]] == ["agent1"]
-            assert [i["tree"] for i in
-                    (await c.get("/casebooks", headers=limited)).json()[0]["items"]] == ["agent1"]
+            seen = (await c.get(f"/eval/sets/{s['id']}", headers=limited)).json()
+            assert [i["source"]["tree"] for i in seen["items"]] == ["agent1"]
+            assert [i["source"]["tree"] for i in
+                    (await c.get("/eval/sets", headers=limited)).json()[0]["items"]] == ["agent1"]
 
-            # …and the hidden item cannot be added, removed or acted on.
-            hidden = [i for i in (await c.get(f"/casebooks/{book['id']}",
-                                              headers=admin)).json()["items"]
-                      if i["tree"] == "agent2"][0]
-            assert (await c.delete(f"/casebooks/{book['id']}/items/{hidden['id']}",
-                                   headers=limited)).status_code == 404
-            assert (await c.post(f"/casebooks/{book['id']}/items", headers=limited, json={
-                "tree": "agent2", "conversation_id": two["conversation_id"],
-                "turn_id": two["turn"]["id"]})).status_code == 404
+            # ...and the hidden item cannot be added or acted on.
+            assert (await c.post(f"/eval/sets/{s['id']}/items", headers=limited,
+                                 json=ref(two, "agent2"))).status_code == 404
+
+            # Omitting must not become DELETING: a PUT from the partially
+            # permitted viewer preserves what they were never shown.
+            r = await c.put(f"/eval/sets/{s['id']}", headers=limited,
+                            json={"items": [ref(one)]})
+            assert r.status_code == 201, r.text
+            assert [i["source"]["tree"] for i in r.json()["items"]] == ["agent1"]
+            full = (await c.get(f"/eval/sets/{s['id']}", headers=admin)).json()
+            assert sorted(i["source"]["tree"] for i in full["items"]) == ["agent1", "agent2"]
     run(case())
 
 
-# ------------------------------------------------------------- to-eval-set
-def test_to_eval_set_creates_a_set_matching_the_casebook():
-    """"For each item the server reuses the existing eval case for that turn
-    or creates one sourced from it … then creates a new set (set_name)"
-    (openapi.yaml:1784-1789)."""
+# ----------------------------------------------------------------- freeze
+def test_freeze_turns_references_into_cases_in_place():
+    """"the server reuses the existing eval case for that turn or creates one
+    sourced from it ... The item keeps its id and its source"."""
     async def case():
         async with make_client() as c:
             a = await chat(c, "agent1", "first prompt")
             b = await chat(c, "agent1", "second prompt")
-            book = await seed_casebook(c)
+            s = await seed_set(c)
             for conv in (a, b):
-                await c.post(f"/casebooks/{book['id']}/items", json={
-                    "tree": "agent1", "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"]})
+                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
+            before = (await c.get(f"/eval/sets/{s['id']}")).json()
 
-            r = await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                             json={"set_name": "casebook regression"})
+            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={})
             assert r.status_code == 201, r.text
-            eval_set = r.json()
-            assert eval_set["name"] == "casebook regression"
-            assert eval_set["version"] == 1
-            assert len(eval_set["case_ids"]) == 2
+            frozen = r.json()
+            assert frozen["id"] == s["id"]
+            assert frozen["version"] == before["version"] + 1
+            assert [i["kind"] for i in frozen["items"]] == ["frozen", "frozen"]
+            # Ids and provenance survive the freeze.
+            assert [i["id"] for i in frozen["items"]] == [i["id"] for i in before["items"]]
+            assert [i["source"] for i in frozen["items"]] == [i["source"] for i in before["items"]]
 
-            # Membership matches the referenced turns, case by case.
+            # Each case matches the turn it froze from.
             sources = []
-            for cid in eval_set["case_ids"]:
-                got = (await c.get(f"/eval/cases/{cid}")).json()
+            for item in frozen["items"]:
+                got = (await c.get(f"/eval/cases/{item['case_id']}")).json()
                 sources.append(got["source"])
                 assert got["input"]["prompt"]
                 assert got["output"]
@@ -528,77 +583,63 @@ def test_to_eval_set_creates_a_set_matching_the_casebook():
                 {"tree": "agent1", "conversation_id": b["conversation_id"],
                  "turn_id": b["turn"]["id"]},
             ]
-            assert eval_set["id"] in [s["id"] for s in (await c.get("/eval/sets")).json()]
+            # The earlier version still reads as references — append-only.
+            assert [i["kind"] for i in before["items"]] == ["reference", "reference"]
     run(case())
 
 
-def test_to_eval_set_reuses_an_existing_case_for_the_same_turn():
+def test_freeze_reuses_an_existing_case_for_the_same_turn():
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "already a case")
             source = {"tree": "agent1", "conversation_id": conv["conversation_id"],
                       "turn_id": conv["turn"]["id"]}
             existing = (await c.post("/eval/cases", json={"source": source})).json()
-            book = await seed_casebook(c)
-            await c.post(f"/casebooks/{book['id']}/items", json=source)
-            r = await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                             json={"set_name": "reuse"})
-            assert r.json()["case_ids"] == [existing["id"]]
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json={"source": source})
+            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={})
+            assert [i["case_id"] for i in r.json()["items"]] == [existing["id"]]
     run(case())
 
 
-def test_to_eval_set_appends_a_membership_version_to_an_existing_set():
-    """"appends a new membership version to an existing one (set_id —
-    versioned membership)" (openapi.yaml:1787-1789); a version carries its
-    FULL membership, so the earlier cases stay in."""
+def test_freeze_can_name_a_subset_and_leaves_the_rest_alone():
     async def case():
         async with make_client() as c:
-            conv = await chat(c, "agent1", "new case")
+            a = await chat(c, "agent1", "freeze me")
+            b = await chat(c, "agent1", "leave me live")
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json=ref(a))
+            latest = (await c.post(f"/eval/sets/{s['id']}/items", json=ref(b))).json()
+            target = latest["items"][0]["id"]
+            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={"item_ids": [target]})
+            assert r.status_code == 201, r.text
+            assert [i["kind"] for i in r.json()["items"]] == ["frozen", "reference"]
+    run(case())
+
+
+def test_freeze_validation():
+    async def case():
+        async with make_client() as c:
+            s = await seed_set(c)
+            # Empty set — nothing to freeze.
+            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
+                                 json={})).status_code == 422
             handmade = (await c.post("/eval/cases", json={
                 "input": {"prompt": "p"}, "output": "o"})).json()
-            base = (await c.post("/eval/sets", json={
-                "name": "regression", "case_ids": [handmade["id"]]})).json()
-            book = await seed_casebook(c)
-            await c.post(f"/casebooks/{book['id']}/items", json={
-                "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": conv["turn"]["id"]})
-
-            r = await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                             json={"set_id": base["id"]})
-            assert r.status_code == 201, r.text
-            updated = r.json()
-            assert updated["id"] == base["id"]
-            assert updated["version"] == 2
-            assert updated["name"] == "regression"
-            assert updated["case_ids"][0] == handmade["id"]
-            assert len(updated["case_ids"]) == 2
-    run(case())
-
-
-def test_to_eval_set_validation():
-    async def case():
-        async with make_client() as c:
-            book = await seed_casebook(c)
-            # Empty casebook — nothing to materialize.
-            assert (await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                                 json={"set_name": "x"})).status_code == 422
-            conv = await chat(c, "agent1", "one")
-            await c.post(f"/casebooks/{book['id']}/items", json={
-                "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": conv["turn"]["id"]})
-            # oneOf: exactly one target (openapi.yaml:3279-3281).
-            assert (await c.post(f"/casebooks/{book['id']}/to-eval-set",
+            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
+            # Every item already frozen — still nothing to do, and no empty
+            # version is appended for it.
+            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
                                  json={})).status_code == 422
-            assert (await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                                 json={"set_name": "a", "set_id": "b"})).status_code == 422
-            assert (await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                                 json={"set_id": "set_nope"})).status_code == 404
-            assert (await c.post("/casebooks/cb_nope/to-eval-set",
-                                 json={"set_name": "x"})).status_code == 404
+            assert (await c.get(f"/eval/sets/{s['id']}")).json()["version"] == 2
+            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
+                                 json={"item_ids": ["esi_nope"]})).status_code == 404
+            assert (await c.post("/eval/sets/set_nope/freeze",
+                                 json={})).status_code == 404
     run(case())
 
 
-def test_to_eval_set_uses_only_the_items_the_viewer_can_see(monkeypatch):
+def test_freeze_uses_only_the_items_the_viewer_can_see(monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "on")
 
     async def case():
@@ -606,24 +647,80 @@ def test_to_eval_set_uses_only_the_items_the_viewer_can_see(monkeypatch):
             admin = await login(c)
             one = await chat(c, "agent1", "visible", **admin)
             two = await chat(c, "agent2", "hidden", **admin)
-            book = (await c.post("/casebooks", json={"name": "Mixed"},
-                                 headers=admin)).json()
+            s = await seed_set(c, "Mixed", headers=admin)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                await c.post(f"/casebooks/{book['id']}/items", headers=admin, json={
-                    "tree": tree, "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"]})
+                await c.post(f"/eval/sets/{s['id']}/items", headers=admin,
+                             json=ref(conv, tree))
             limited = await login(c, "restricted@demo")
-            r = await c.post(f"/casebooks/{book['id']}/to-eval-set",
-                             headers=limited, json={"set_name": "partial"})
+            r = await c.post(f"/eval/sets/{s['id']}/freeze", headers=limited, json={})
             assert r.status_code == 201, r.text
-            assert len(r.json()["case_ids"]) == 1
+            assert [i["kind"] for i in r.json()["items"]] == ["frozen"]
+            # The hidden item is still there, still a reference.
+            full = (await c.get(f"/eval/sets/{s['id']}", headers=admin)).json()
+            assert sorted(i["kind"] for i in full["items"]) == ["frozen", "reference"]
+    run(case())
+
+
+# --------------------------------------------------------- judging a set
+def test_judging_a_set_resolves_reference_items_to_cases():
+    """"judging resolves each item to a case ... but it does NOT alter
+    membership: the item stays a reference until someone freezes it"."""
+    app = make_app()
+
+    async def case():
+        async with client_for(app) as c:
+            conv = await chat(c, "agent1", "judge my reference")
+            rubric = (await c.post("/eval/rubrics", json={
+                "name": "helpful", "prompt": "score it"})).json()
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
+            r = await c.post("/eval/judge", json={
+                "set_id": s["id"], "judge_model": "claude-sonnet-5",
+                "rubric_id": rubric["id"]})
+            assert r.status_code == 202, r.text
+            for _ in range(300):
+                task = (await c.get(f"/tasks/{r.json()['task_id']}")).json()
+                if task["status"] in ("done", "failed", "cancelled"):
+                    break
+                await asyncio.sleep(0.01)
+            assert task["status"] == "done", task
+            judged = (await c.get("/eval/judgments")).json()
+            assert len(judged) == 1
+            case_row = (await c.get(f"/eval/cases/{judged[0]['case_id']}")).json()
+            assert case_row["source"]["turn_id"] == conv["turn"]["id"]
+            # Membership is untouched: still one REFERENCE item, still v2.
+            after = (await c.get(f"/eval/sets/{s['id']}")).json()
+            assert after["version"] == 2
+            assert [i["kind"] for i in after["items"]] == ["reference"]
+    run(case())
+
+
+def test_judging_pins_a_membership_version():
+    async def case():
+        async with make_client() as c:
+            rubric = (await c.post("/eval/rubrics", json={
+                "name": "r", "prompt": "p"})).json()
+            handmade = (await c.post("/eval/cases", json={
+                "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
+            # v1 was empty, so pinning it has nothing to judge; v2 has the case.
+            assert (await c.post("/eval/judge", json={
+                "set_id": s["id"], "set_version": 1, "judge_model": "m",
+                "rubric_id": rubric["id"]})).status_code == 422
+            assert (await c.post("/eval/judge", json={
+                "set_id": s["id"], "set_version": 2, "judge_model": "m",
+                "rubric_id": rubric["id"]})).status_code == 202
+            assert (await c.post("/eval/judge", json={
+                "set_id": s["id"], "set_version": 9, "judge_model": "m",
+                "rubric_id": rubric["id"]})).status_code == 404
     run(case())
 
 
 # ----------------------------------------------------------------- replay
 def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
-    """CasebookReplayAccepted — "One parent task; one evaluation per tree the
-    casebook's items reference" (openapi.yaml:3320-3327)."""
+    """EvalSetReplayAccepted — "One parent task; one evaluation per tree the
+    set's reference items touch"."""
     app = make_app()
 
     async def case():
@@ -631,13 +728,11 @@ def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
             one = await chat(c, "agent1", "support question")
             two = await chat(c, "agent1", "second support question")
             three = await chat(c, "agent2", "ops question")
-            book = await seed_casebook(c)
+            s = await seed_set(c)
             for conv, tree in ((one, "agent1"), (two, "agent1"), (three, "agent2")):
-                await c.post(f"/casebooks/{book['id']}/items", json={
-                    "tree": tree, "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"]})
+                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, tree))
 
-            r = await c.post(f"/casebooks/{book['id']}/replay",
+            r = await c.post(f"/eval/sets/{s['id']}/replay",
                              json={"configs": [{"model": "deepseek-v3"}]})
             assert r.status_code == 202, r.text
             accepted = r.json()
@@ -678,12 +773,10 @@ def test_replay_finishes_and_fills_both_evaluations():
         async with client_for(app) as c:
             one = await chat(c, "agent1", "a question")
             two = await chat(c, "agent2", "another question")
-            book = await seed_casebook(c)
+            s = await seed_set(c)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                await c.post(f"/casebooks/{book['id']}/items", json={
-                    "tree": tree, "conversation_id": conv["conversation_id"],
-                    "turn_id": conv["turn"]["id"]})
-            accepted = (await c.post(f"/casebooks/{book['id']}/replay",
+                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, tree))
+            accepted = (await c.post(f"/eval/sets/{s['id']}/replay",
                                      json={"configs": [{}]})).json()
             for _ in range(200):
                 task = (await c.get(f"/tasks/{accepted['task_id']}")).json()
@@ -702,35 +795,54 @@ def test_replay_finishes_and_fills_both_evaluations():
     run(case())
 
 
+def test_replay_skips_frozen_items():
+    """"Frozen items are skipped: a frozen case is content, not a turn in a
+    conversation, so there is nothing to re-fire"."""
+    async def case():
+        async with make_client() as c:
+            handmade = (await c.post("/eval/cases", json={
+                "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
+            assert (await c.post(f"/eval/sets/{s['id']}/replay",
+                                 json={"configs": [{}]})).status_code == 422
+            conv = await chat(c, "agent1", "replayable")
+            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
+            r = await c.post(f"/eval/sets/{s['id']}/replay", json={"configs": [{}]})
+            assert r.status_code == 202, r.text
+            grid = (await c.get(
+                f"/agenttrees/agent1/evaluations/{r.json()['evaluations'][0]['evaluation_id']}")).json()
+            assert len(grid["rows"]) == 1  # the frozen case contributed no row
+    run(case())
+
+
 def test_replay_validation_and_disabled_trees():
     async def case():
         async with make_client() as c:
-            book = await seed_casebook(c)
-            assert (await c.post(f"/casebooks/{book['id']}/replay",
+            s = await seed_set(c)
+            assert (await c.post(f"/eval/sets/{s['id']}/replay",
                                  json={"configs": [{}]})).status_code == 422
             conv = await chat(c, "agent2", "ops")
-            await c.post(f"/casebooks/{book['id']}/items", json={
-                "tree": "agent2", "conversation_id": conv["conversation_id"],
-                "turn_id": conv["turn"]["id"]})
-            assert (await c.post(f"/casebooks/{book['id']}/replay",
+            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, "agent2"))
+            assert (await c.post(f"/eval/sets/{s['id']}/replay",
                                  json={"configs": []})).status_code == 422
             # Context widening is Phase 3; frozen is pinned like tree replay.
-            assert (await c.post(f"/casebooks/{book['id']}/replay",
+            assert (await c.post(f"/eval/sets/{s['id']}/replay",
                                  json={"configs": [{}],
                                        "context_policy": "current"})).status_code == 422
-            assert (await c.post("/casebooks/cb_nope/replay",
+            assert (await c.post("/eval/sets/set_nope/replay",
                                  json={"configs": [{}]})).status_code == 404
 
             await c.patch("/admin/agenttrees/agent2", json={"enabled": False})
-            r = await c.post(f"/casebooks/{book['id']}/replay", json={"configs": [{}]})
+            r = await c.post(f"/eval/sets/{s['id']}/replay", json={"configs": [{}]})
             assert r.status_code == 409, r.text
             assert r.json()["code"] == "tree_disabled"
     run(case())
 
 
 def test_replay_accepts_a_user_turn_reference_by_replaying_its_answer():
-    """Items may reference either half of an invocation (a ⊞ on the prompt);
-    replay regenerates the ASSISTANT turn either way."""
+    """Items may reference either half of an invocation (a collect on the
+    prompt); replay regenerates the ASSISTANT turn either way."""
     app = make_app()
 
     async def case():
@@ -739,11 +851,11 @@ def test_replay_accepts_a_user_turn_reference_by_replaying_its_answer():
             user_turn = app.state.db.one(
                 "SELECT * FROM turns WHERE conversation_id = ? AND role = 'user'",
                 (conv["conversation_id"],))
-            book = await seed_casebook(c)
-            await c.post(f"/casebooks/{book['id']}/items", json={
+            s = await seed_set(c)
+            await c.post(f"/eval/sets/{s['id']}/items", json={"source": {
                 "tree": "agent1", "conversation_id": conv["conversation_id"],
-                "turn_id": user_turn["id"]})
-            accepted = (await c.post(f"/casebooks/{book['id']}/replay",
+                "turn_id": user_turn["id"]}})
+            accepted = (await c.post(f"/eval/sets/{s['id']}/replay",
                                      json={"configs": [{}]})).json()
             grid = (await c.get(
                 f"/agenttrees/agent1/evaluations/{accepted['evaluations'][0]['evaluation_id']}")).json()

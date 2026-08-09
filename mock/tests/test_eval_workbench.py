@@ -9,7 +9,7 @@ The append-only rules under test (invariant cupel-phases.md:160):
 - "each save appends the next version, never overwrites. Prior versions stay
   readable and existing judgments keep pointing at the content they actually
   judged" (openapi.yaml:1459-1466)
-- "each save is a new version carrying its full case_ids list; earlier
+- "each save is a new version carrying its FULL item list; earlier
   versions remain queryable" (openapi.yaml:1533-1536)
 - "Failed rows never abort the import; valid rows land" (openapi.yaml:1391)
 """
@@ -190,29 +190,112 @@ def test_versioned_case_keeps_phase1_rows_valid(tmp_path):
         again.conn.close()
 
 
+def test_casebooks_migrate_into_eval_sets(tmp_path):
+    """The merge migration (db.py Db._migrate_casebooks_into_eval_sets): a
+    database written before it opens fine, its eval sets keep their versions
+    with their cases as FROZEN items, and each casebook becomes a set whose
+    version 1 holds its turn REFERENCES — ids, notes and added_at intact."""
+    path = str(tmp_path / "pre-merge.sqlite")
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "CREATE TABLE eval_sets (id TEXT NOT NULL, name TEXT NOT NULL,"
+        " version INTEGER NOT NULL, case_ids TEXT NOT NULL,"
+        " created_at TEXT NOT NULL, PRIMARY KEY (id, version));"
+        " INSERT INTO eval_sets VALUES ('set_old', 'refunds', 1,"
+        " '[\"case_a\"]', '2026-01-01T00:00:00Z');"
+        " INSERT INTO eval_sets VALUES ('set_old', 'refunds v2', 2,"
+        " '[\"case_a\",\"case_b\"]', '2026-01-02T00:00:00Z');"
+        " CREATE TABLE casebooks (id TEXT PRIMARY KEY, name TEXT NOT NULL,"
+        " description TEXT, created_by TEXT, created_at TEXT NOT NULL);"
+        " INSERT INTO casebooks VALUES ('cb_old', 'Noteworthy', 'worst first',"
+        " 'u1', '2026-01-03T00:00:00Z');"
+        " CREATE TABLE casebook_items (id TEXT PRIMARY KEY,"
+        " casebook_id TEXT NOT NULL, tree TEXT NOT NULL,"
+        " conversation_id TEXT NOT NULL, turn_id TEXT NOT NULL, note TEXT,"
+        " added_at TEXT NOT NULL);"
+        " INSERT INTO casebook_items VALUES ('cbi_1', 'cb_old', 'agent1',"
+        " 'conv_1', 'turn_1', 'hedged', '2026-01-04T00:00:00Z');")
+    conn.commit()
+    conn.close()
+
+    db = Db(path)
+    try:
+        cols = {r[1] for r in db.conn.execute("PRAGMA table_info(eval_sets)")}
+        assert "case_ids" not in cols and "description" in cols
+        tables = {r[0] for r in db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "casebooks" not in tables and "casebook_items" not in tables
+
+        # The eval set kept both versions; its cases are frozen items.
+        versions = db.all("SELECT * FROM eval_set_versions WHERE set_id = 'set_old'"
+                          " ORDER BY version")
+        assert [v["version"] for v in versions] == [1, 2]
+        v2 = json.loads(versions[1]["items"])
+        assert [i["kind"] for i in v2] == ["frozen", "frozen"]
+        assert [i["case_id"] for i in v2] == ["case_a", "case_b"]
+        # Metadata moved out of the version rows; the latest name won.
+        assert db.one("SELECT * FROM eval_sets WHERE id = 'set_old'")["name"] == "refunds v2"
+
+        # The casebook is a set now, references and all.
+        book = db.one("SELECT * FROM eval_sets WHERE id = 'cb_old'")
+        assert book["name"] == "Noteworthy" and book["description"] == "worst first"
+        items = json.loads(db.one(
+            "SELECT * FROM eval_set_versions WHERE set_id = 'cb_old'")["items"])
+        assert items == [{"id": "cbi_1", "kind": "reference",
+                          "source": {"tree": "agent1", "conversation_id": "conv_1",
+                                     "turn_id": "turn_1"},
+                          "case_id": None, "note": "hedged",
+                          "added_at": "2026-01-04T00:00:00Z"}]
+    finally:
+        db.conn.close()
+    # Idempotent: reopening the same file changes nothing.
+    again = Db(path)
+    try:
+        assert len(again.all("SELECT * FROM eval_sets")) == 2
+        assert len(again.all("SELECT * FROM eval_set_versions")) == 3
+    finally:
+        again.conn.close()
+
+
 # -------------------------------------------------------------------- sets
+# Since the Casebook merge a set's membership is a list of ITEMS, and a case in
+# a set is a FROZEN item ({"case_id": ...}). Reference items — the other kind —
+# live in mock/tests/test_inspector_eval_sets.py, next to the ⊞ action that
+# creates them.
+def frozen(case) -> dict:
+    return {"case_id": case["id"]}
+
+
+def case_ids(eval_set) -> list:
+    return [i["case_id"] for i in eval_set["items"]]
+
+
 def test_set_create_list_and_versioned_membership():
     async def case():
         async with client_pair() as c:
             a, b, d = [await make_case(c, prompt=f"q{i}") for i in range(3)]
             created = await c.post("/eval/sets", json={"name": "refund-fails",
-                                                       "case_ids": [a["id"], b["id"]]})
+                                                       "items": [frozen(a), frozen(b)]})
             assert created.status_code == 201, created.text
             s1 = created.json()
-            assert s1["version"] == 1 and s1["case_ids"] == [a["id"], b["id"]]
+            assert s1["version"] == 1 and case_ids(s1) == [a["id"], b["id"]]
+            assert [i["kind"] for i in s1["items"]] == ["frozen", "frozen"]
 
             s2 = await c.put(f"/eval/sets/{s1['id']}",
-                             json={"case_ids": [a["id"], b["id"], d["id"]]})
+                             json={"items": [frozen(a), frozen(b), frozen(d)]})
             assert s2.status_code == 201, s2.text
-            assert s2.json()["version"] == 2 and len(s2.json()["case_ids"]) == 3
-            # Rename travels into the new version (openapi.yaml:3438-3442).
+            assert s2.json()["version"] == 2 and len(s2.json()["items"]) == 3
             s3 = (await c.put(f"/eval/sets/{s1['id']}",
-                              json={"case_ids": [d["id"]], "name": "refund-fails-lite"})).json()
-            assert s3["version"] == 3 and s3["name"] == "refund-fails-lite"
+                              json={"items": [frozen(d)]})).json()
+            assert s3["version"] == 3
+            # A rename is NOT a membership change, so it takes no version.
+            named = (await c.patch(f"/eval/sets/{s1['id']}",
+                                   json={"name": "refund-fails-lite"})).json()
+            assert named["version"] == 3 and named["name"] == "refund-fails-lite"
 
             listed = (await c.get("/eval/sets")).json()
             assert [s["id"] for s in listed] == [s1["id"]]  # latest version each
-            assert listed[0]["version"] == 3 and listed[0]["case_ids"] == [d["id"]]
+            assert listed[0]["version"] == 3 and case_ids(listed[0]) == [d["id"]]
     run(case())
 
 
@@ -222,12 +305,12 @@ def test_set_validation():
             a = await make_case(c)
             assert (await c.post("/eval/sets", json={})).status_code == 422
             assert (await c.post("/eval/sets",
-                                 json={"name": "s", "case_ids": ["ghost"]})).status_code == 404
+                                 json={"name": "s", "items": [{"case_id": "ghost"}]})).status_code == 404
             s = (await c.post("/eval/sets", json={"name": "s"})).json()
-            assert s["case_ids"] == []  # "empty/omitted = start empty"
+            assert s["items"] == []  # "empty/omitted = start empty"
             assert (await c.put(f"/eval/sets/{s['id']}", json={})).status_code == 422
             assert (await c.put("/eval/sets/ghost",
-                                json={"case_ids": [a["id"]]})).status_code == 404
+                                json={"items": [frozen(a)]})).status_code == 404
     run(case())
 
 
@@ -257,10 +340,10 @@ def test_judge_by_set_id_fans_out_over_membership():
             cases = [await make_case(c, prompt=f"q{i}", output=f"a{i}") for i in range(3)]
             rubric = await make_rubric(c)
             s1 = (await c.post("/eval/sets", json={
-                "name": "set-a", "case_ids": [c_["id"] for c_ in cases[:2]]})).json()
+                "name": "set-a", "items": [frozen(c_) for c_ in cases[:2]]})).json()
             # v2 adds the third case; judging without set_version uses LATEST.
             (await c.put(f"/eval/sets/{s1['id']}",
-                         json={"case_ids": [c_["id"] for c_ in cases]}))
+                         json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
                 "set_id": s1["id"], "judge_model": "claude-haiku-4-5",
@@ -287,9 +370,9 @@ def test_judge_by_set_version_pins_the_older_membership():
             cases = [await make_case(c, prompt=f"q{i}") for i in range(3)]
             rubric = await make_rubric(c)
             s1 = (await c.post("/eval/sets", json={
-                "name": "pinned", "case_ids": [cases[0]["id"]]})).json()
+                "name": "pinned", "items": [frozen(cases[0])]})).json()
             (await c.put(f"/eval/sets/{s1['id']}",
-                         json={"case_ids": [c_["id"] for c_ in cases]}))
+                         json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
                 "set_id": s1["id"], "set_version": 1,
@@ -347,7 +430,7 @@ def test_import_csv_creates_cases_and_a_named_set():
             sets = (await c.get("/eval/sets")).json()
             assert [s["id"] for s in sets] == [report["set_id"]]
             assert sets[0]["name"] == "imported"
-            assert sets[0]["case_ids"] == report["created_case_ids"]
+            assert case_ids(sets[0]) == report["created_case_ids"]
     run(case())
 
 
@@ -378,7 +461,7 @@ def test_import_honours_column_mapping_and_extends_an_existing_set():
         async with client_pair() as c:
             seed = await make_case(c)
             target = (await c.post("/eval/sets", json={"name": "growing",
-                                                       "case_ids": [seed["id"]]})).json()
+                                                       "items": [frozen(seed)]})).json()
             # Deliberately mapped in a different order than the header.
             mapping = json.dumps({"input": "expected", "output": "question"})
             data = csv_bytes("used-as-output,ignored,used-as-input\n")
@@ -394,7 +477,7 @@ def test_import_honours_column_mapping_and_extends_an_existing_set():
 
             sets = (await c.get("/eval/sets")).json()
             assert sets[0]["version"] == 2  # membership appended, not overwritten
-            assert sets[0]["case_ids"] == [seed["id"], report["created_case_ids"][0]]
+            assert case_ids(sets[0]) == [seed["id"], report["created_case_ids"][0]]
     run(case())
 
 
@@ -445,7 +528,7 @@ def test_import_large_file_returns_202_with_the_same_report_on_the_task():
             assert report["set_id"]
             sets = (await c.get("/eval/sets")).json()
             assert sets[0]["id"] == report["set_id"]
-            assert len(sets[0]["case_ids"]) == IMPORT_SYNC_MAX_ROWS
+            assert len(sets[0]["items"]) == IMPORT_SYNC_MAX_ROWS
     run(case())
 
 
@@ -517,13 +600,13 @@ def test_eval_cases_are_global_not_tree_scoped():
         async with client_pair() as c:
             a = await make_case(c)
             rubric = await make_rubric(c)
-            s = (await c.post("/eval/sets", json={"name": "s", "case_ids": [a["id"]]})).json()
+            s = (await c.post("/eval/sets", json={"name": "s", "items": [frozen(a)]})).json()
             assert (await c.patch("/admin/agenttrees/agent1",
                                   json={"enabled": False})).status_code == 200
             assert (await c.post("/eval/cases", json={"input": {"prompt": "p"},
                                                       "output": "o"})).status_code == 201
             assert (await c.put(f"/eval/sets/{s['id']}",
-                                json={"case_ids": [a["id"]]})).status_code == 201
+                                json={"items": [frozen(a)]})).status_code == 201
             judged = await c.post("/eval/judge", json={
                 "set_id": s["id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})

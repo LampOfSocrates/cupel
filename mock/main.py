@@ -126,7 +126,7 @@ class AuthGate:
 
     OPEN_PATHS = {"/healthz", "/auth/token"}
     API_ROOTS = {"me", "auth", "models", "agenttrees", "upload", "feedback",
-                 "tasks", "eval", "spans", "admin", "settings", "casebooks"}
+                 "tasks", "eval", "spans", "admin", "settings"}
 
     def __init__(self, app, db: Db):
         self.app = app
@@ -702,7 +702,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
            A caller still sees only trees their permission matrix grants
            (permitted_trees) — the same "omitting beats leaking" rule the
            /tasks/stream filter follows (Broker docstring) and the same rule
-           casebook items follow below. In off mode the dev user holds every
+           eval-set reference items follow below. In off mode the dev user holds every
            tree, so the demo shows everything.
         2. Rows are ALL conversations, forks included (unlike the sidebar
            listing, which is roots-only, openapi.yaml:346-349) — "Inspect
@@ -1632,17 +1632,25 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         target_set = None
         if set_id or set_name:
+            # Imported cases join a set as FROZEN items: they were never turns
+            # in a conversation, so a reference to one could not exist.
+            new_items = [{"id": new_id("esi"), "kind": "frozen", "source": None,
+                          "case_id": cid, "note": None, "added_at": now_iso()}
+                         for cid in created]
             if set_id:
-                latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC"
-                                " LIMIT 1", (set_id,))
-                if latest:
-                    # "extend an existing set — new membership version"
-                    # (openapi.yaml:1415-1416).
-                    target_set = insert_set(set_id, latest["version"] + 1, latest["name"],
-                                            unj(latest["case_ids"], []) + created)
+                if db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
+                    # "extend an existing set — new membership version".
+                    version = latest_version(set_id)
+                    insert_version(set_id, version + 1,
+                                   set_items(set_id, version) + new_items)
+                    target_set = set_id
             else:
-                target_set = insert_set(new_id("set"), 1, set_name, created)
-        return {"set_id": target_set["id"] if target_set else None,
+                target_set = new_id("set")
+                db.run("INSERT INTO eval_sets (id, name, description, created_by,"
+                       " created_at) VALUES (?, ?, NULL, 'dev', ?)",
+                       (target_set, set_name, now_iso()))
+                insert_version(target_set, 1, new_items)
+        return {"set_id": target_set,
                 "rows_total": len(rows), "rows_imported": len(created),
                 "created_case_ids": created, "errors": errors}
 
@@ -1690,61 +1698,383 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                            latest["source"])
 
     # --------------------------------------------------------- eval sets
-    def set_dict(s: dict) -> dict:
-        return {"id": s["id"], "name": s["name"], "version": s["version"],
-                "case_ids": unj(s["case_ids"], []), "created_at": s["created_at"]}
+    # THE MERGED NOUN. Casebook and EvalSet were one concept modelled twice;
+    # the only real difference — reference vs frozen — is now EvalSetItem.kind,
+    # and POST /casebooks/{id}/to-eval-set is gone because there is nothing to
+    # convert between. Metadata is mutable, membership is append-only, which is
+    # why db.py stores them in two tables.
+    #
+    # CROSS-TREE VISIBILITY (a set may reference turns across trees; per-item
+    # visibility follows the viewer's tree permissions — the contract notes
+    # this is under-specified). Decision, carried over from the casebooks it
+    # replaces: REFERENCE items in trees the viewer cannot view are OMITTED
+    # from every response, and every derived action (freeze, replay) operates
+    # on the visible subset only. Omitting beats leaking — the same rule the
+    # SSE broker follows (mock/engine.py Broker docstring). Frozen items are
+    # never gated: they name an eval case, and cases are global
+    # (feature-spec.md:111).
+    #
+    # The one place omission would be destructive is PUT, which carries the
+    # FULL membership: a partially-permitted caller cannot send back what they
+    # were never shown. So PUT PRESERVES the items it hid — omitting must not
+    # become deleting.
+    def visible_trees(request: Request) -> set[str] | None:
+        return permitted_trees(request)
 
-    def insert_set(set_id: str, version: int, name: str, case_ids: list) -> dict:
-        db.run("INSERT INTO eval_sets (id, name, version, case_ids, created_at)"
-               " VALUES (?, ?, ?, ?, ?)",
-               (set_id, name, version, j(case_ids), now_iso()))
-        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ? AND version = ?",
-                               (set_id, version)))
+    def item_visible(item: dict, allowed: set[str] | None) -> bool:
+        if allowed is None or item["kind"] != "reference":
+            return True
+        return (item.get("source") or {}).get("tree") in allowed
 
-    def need_cases(case_ids) -> list:
-        if case_ids is None:
-            return []
-        if not isinstance(case_ids, list) or any(not isinstance(c, str) for c in case_ids):
-            err(422, "invalid", "case_ids must be an array of case ids.")
-        for cid in case_ids:
-            if not latest_case(cid):
-                err(404, "not_found", f"Eval case '{cid}' not found.")
-        return case_ids
+    def need_visible_turn(request: Request, tree: str, conversation_id: str,
+                          turn_id: str) -> dict:
+        """The referenced turn, or 404 — including when the viewer may not view
+        the tree (unpermitted = indistinguishable from absent, the NotFound
+        response's "or tree not permitted")."""
+        allowed = visible_trees(request)
+        if allowed is not None and tree not in allowed:
+            err(404, "not_found", f"Turn '{turn_id}' not found.")
+        need_tree(tree)
+        turn = db.one(
+            "SELECT * FROM turns WHERE id = ? AND tree_id = ? AND conversation_id = ?",
+            (turn_id, tree, conversation_id))
+        if not turn:
+            err(404, "not_found",
+                f"Turn '{turn_id}' not found in conversation '{conversation_id}'.")
+        return turn
+
+    def referent(item: dict) -> tuple:
+        """What an item POINTS AT, which is what its id follows across
+        membership versions (openapi.yaml EvalSetItem.id "Stable across
+        membership versions for as long as the item's referent stays in the
+        set") and what makes POST …/items idempotent."""
+        if item["kind"] == "frozen":
+            return ("case", item["case_id"])
+        s = item["source"]
+        return ("turn", s["tree"], s["conversation_id"], s["turn_id"])
+
+    def set_items(set_id: str, version: int) -> list[dict]:
+        row = db.one("SELECT items FROM eval_set_versions WHERE set_id = ? AND version = ?",
+                     (set_id, version))
+        return unj(row["items"], []) if row else []
+
+    def set_dict(s: dict, version: int, request: Request | None = None) -> dict:
+        row = db.one("SELECT * FROM eval_set_versions WHERE set_id = ? AND version = ?",
+                     (s["id"], version))
+        items = unj(row["items"], []) if row else []
+        allowed = visible_trees(request) if request is not None else None
+        return {"id": s["id"], "name": s["name"], "description": s["description"],
+                "version": version,
+                "items": [i for i in items if item_visible(i, allowed)],
+                "created_at": row["created_at"] if row else s["created_at"]}
+
+    def latest_version(set_id: str) -> int:
+        row = db.one("SELECT MAX(version) AS v FROM eval_set_versions WHERE set_id = ?",
+                     (set_id,))
+        return (row or {}).get("v") or 0
+
+    def need_set(set_id: str) -> dict:
+        row = db.one("SELECT * FROM eval_sets WHERE id = ?", (set_id,))
+        if not row:
+            err(404, "not_found", f"Eval set '{set_id}' not found.")
+        return row
+
+    def insert_version(set_id: str, version: int, items: list) -> None:
+        db.run("INSERT INTO eval_set_versions (set_id, version, items, created_at)"
+               " VALUES (?, ?, ?, ?)", (set_id, version, j(items), now_iso()))
+
+    def build_items(inputs, previous: list[dict], request: Request) -> list[dict]:
+        """Membership inputs -> stored items, carrying an id forward whenever
+        the previous version already held the same referent."""
+        if not isinstance(inputs, list):
+            err(422, "invalid", "items must be an array (openapi.yaml EvalSetUpdate).")
+        by_referent = {referent(i): i for i in previous}
+        built, seen = [], set()
+        for raw in inputs:
+            if not isinstance(raw, dict):
+                err(422, "invalid", "each item must be an object.")
+            source, case_id = raw.get("source"), raw.get("case_id")
+            if bool(source) == bool(case_id):
+                err(422, "invalid",
+                    "Exactly one of source / case_id is required per item "
+                    "(openapi.yaml EvalSetItemCreate).")
+            if case_id:
+                if not isinstance(case_id, str) or not latest_case(case_id):
+                    err(404, "not_found", f"Eval case '{case_id}' not found.")
+                item = {"kind": "frozen", "source": None, "case_id": case_id}
+            else:
+                if not isinstance(source, dict) or not all(
+                        source.get(f) for f in ("tree", "conversation_id", "turn_id")):
+                    err(422, "invalid",
+                        "source requires tree, conversation_id and turn_id.")
+                need_visible_turn(request, source["tree"], source["conversation_id"],
+                                  source["turn_id"])
+                item = {"kind": "reference", "case_id": None,
+                        "source": {"tree": source["tree"],
+                                   "conversation_id": source["conversation_id"],
+                                   "turn_id": source["turn_id"]}}
+            key = referent(item)
+            if key in seen:  # a set is a SET; re-listing a member is not two members
+                continue
+            seen.add(key)
+            kept = by_referent.get(key)
+            item["id"] = kept["id"] if kept else new_id("esi")
+            item["note"] = raw.get("note") if raw.get("note") is not None else (
+                kept["note"] if kept else None)
+            item["added_at"] = kept["added_at"] if kept else now_iso()
+            built.append(item)
+        return built
 
     @app.get("/eval/sets")
-    async def list_sets():
-        """"Returns the latest version of each set, membership included"
-        (openapi.yaml:1493-1495)."""
-        rows = db.all("SELECT s.* FROM eval_sets s WHERE s.version ="
-                      " (SELECT MAX(version) FROM eval_sets WHERE id = s.id)"
-                      " ORDER BY s.rowid")
-        return [set_dict(r) for r in rows]
+    async def list_sets(request: Request):
+        """"Returns the latest version of each set, membership included"."""
+        out = []
+        for s in db.all("SELECT * FROM eval_sets ORDER BY rowid DESC"):
+            out.append(set_dict(s, latest_version(s["id"]), request))
+        return out
 
     @app.post("/eval/sets", status_code=201)
     async def create_set(request: Request):
         body = await body_json(request)
         name = body.get("name")
         if not isinstance(name, str) or not name.strip():
-            err(422, "invalid", "name is required (openapi.yaml:3421-3424).")
-        return insert_set(new_id("set"), 1, name, need_cases(body.get("case_ids")))
+            err(422, "invalid", "name is required (openapi.yaml EvalSetCreate).")
+        sid, user = new_id("set"), request_user(request)
+        items = build_items(body.get("items") or [], [], request)
+        db.run("INSERT INTO eval_sets (id, name, description, created_by, created_at)"
+               " VALUES (?, ?, ?, ?, ?)",
+               (sid, name.strip(), body.get("description"),
+                user["id"] if user else "dev", now_iso()))
+        insert_version(sid, 1, items)
+        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (sid,)), 1, request)
 
-    @app.put("/eval/sets/{setId}", status_code=201)
-    async def update_set(setId: str, request: Request):
-        """"each save is a new version carrying its full case_ids list; earlier
-        versions remain queryable" (openapi.yaml:1533-1536)."""
+    @app.get("/eval/sets/{setId}")
+    async def get_set(setId: str, request: Request):
+        return set_dict(need_set(setId), latest_version(setId), request)
+
+    @app.patch("/eval/sets/{setId}")
+    async def update_set_metadata(setId: str, request: Request):
+        """"Metadata only, and deliberately NOT versioned" — a rename leaves
+        every recorded membership version untouched. Null/absent fields leave
+        the value unchanged."""
+        row = need_set(setId)
         body = await body_json(request)
-        latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
-                        (setId,))
-        if not latest:
-            err(404, "not_found", f"Eval set '{setId}' not found.")
-        if body.get("case_ids") is None:
-            err(422, "invalid", "case_ids is required — a set version carries its FULL"
-                                " membership (openapi.yaml:3431-3437).")
         name = body.get("name")
         if name is not None and (not isinstance(name, str) or not name.strip()):
             err(422, "invalid", "name must be a non-empty string when supplied.")
-        return insert_set(setId, latest["version"] + 1, name or latest["name"],
-                          need_cases(body["case_ids"]))
+        description = body.get("description") if "description" in body else row["description"]
+        db.run("UPDATE eval_sets SET name = ?, description = ? WHERE id = ?",
+               (name.strip() if name else row["name"], description, setId))
+        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                        latest_version(setId), request)
+
+    @app.put("/eval/sets/{setId}", status_code=201)
+    async def update_set(setId: str, request: Request):
+        """"each save is a new version carrying its FULL item list; earlier
+        versions remain queryable"."""
+        need_set(setId)
+        body = await body_json(request)
+        if body.get("items") is None:
+            err(422, "invalid", "items is required — a set version carries its FULL"
+                                " membership (openapi.yaml EvalSetUpdate).")
+        version = latest_version(setId)
+        previous = set_items(setId, version)
+        allowed = visible_trees(request)
+        hidden = [i for i in previous if not item_visible(i, allowed)]
+        items = hidden + build_items(body["items"], previous, request)
+        insert_version(setId, version + 1, items)
+        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                        version + 1, request)
+
+    @app.delete("/eval/sets/{setId}", status_code=204)
+    async def delete_set(setId: str):
+        """"Deleting a set never deletes evidence": the referenced turns, the
+        frozen cases, their judgments and any evaluation replayed from the set
+        all survive."""
+        need_set(setId)
+        db.run("DELETE FROM eval_set_versions WHERE set_id = ?", (setId,))
+        db.run("DELETE FROM eval_sets WHERE id = ?", (setId,))
+        return Response(status_code=204)
+
+    @app.post("/eval/sets/{setId}/items", status_code=201)
+    async def add_set_item(setId: str, request: Request):
+        """The ⊞ action. "IDEMPOTENT: adding a referent the latest version
+        already holds appends nothing and returns that version unchanged" —
+        implemented literally, so two concurrent ⊞ presses cannot produce two
+        members or two versions."""
+        need_set(setId)
+        body = await body_json(request)
+        version = latest_version(setId)
+        previous = set_items(setId, version)
+        added = build_items([body], previous, request)
+        if added and referent(added[0]) in {referent(i) for i in previous}:
+            return JSONResponse(
+                set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                         version, request), status_code=201)
+        insert_version(setId, version + 1, previous + added)
+        return JSONResponse(
+            set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                     version + 1, request), status_code=201)
+
+    def case_for_turn(source: dict) -> str:
+        """"the server reuses the existing eval case for that turn or creates
+        one sourced from it (same semantics as POST /eval/cases with source)".
+        Lookup is on the stored source triple, so a case created by freezing,
+        by POST /eval/cases, or by evaluation judging all count as the same
+        case — freezing never duplicates one."""
+        found = db.one(
+            "SELECT id FROM eval_cases WHERE json_extract(source, '$.tree') = ?"
+            " AND json_extract(source, '$.conversation_id') = ?"
+            " AND json_extract(source, '$.turn_id') = ? ORDER BY rowid DESC LIMIT 1",
+            (source["tree"], source["conversation_id"], source["turn_id"]))
+        if found:
+            return found["id"]
+        prompt, envelope, output = case_from_source(source)
+        return insert_case(new_id("case"), 1, prompt, envelope, output, None,
+                           j(source))["id"]
+
+    @app.post("/eval/sets/{setId}/freeze", status_code=201)
+    async def freeze_set_items(setId: str, request: Request):
+        """What "turn a casebook into an eval set" became: the item keeps its
+        id and its source and gains a case_id, so provenance survives the
+        freeze and nothing had to be converted into a second resource."""
+        need_set(setId)
+        body = await body_json(request)
+        wanted = body.get("item_ids")
+        if wanted is not None and (not isinstance(wanted, list)
+                                   or any(not isinstance(i, str) for i in wanted)):
+            err(422, "invalid", "item_ids must be an array of item ids when supplied.")
+        version = latest_version(setId)
+        previous = set_items(setId, version)
+        allowed = visible_trees(request)
+        targets = [i for i in previous
+                   if i["kind"] == "reference" and item_visible(i, allowed)
+                   and (wanted is None or i["id"] in wanted)]
+        if wanted is not None:
+            known = {i["id"] for i in previous if item_visible(i, allowed)}
+            for item_id in wanted:
+                if item_id not in known:
+                    err(404, "not_found", f"Item '{item_id}' is not in this set.")
+        if not targets:
+            err(422, "invalid",
+                "No reference items to freeze — every item you can see is already frozen.")
+        frozen_ids = {i["id"] for i in targets}
+        items = []
+        for item in previous:
+            if item["id"] not in frozen_ids:
+                items.append(item)
+                continue
+            source = item["source"]
+            need_visible_turn(request, source["tree"], source["conversation_id"],
+                              source["turn_id"])
+            items.append({**item, "kind": "frozen",
+                          "case_id": case_for_turn(source)})
+        insert_version(setId, version + 1, items)
+        return JSONResponse(
+            set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                     version + 1, request), status_code=201)
+
+    @app.post("/eval/sets/{setId}/replay", status_code=202)
+    async def replay_set(setId: str, request: Request):
+        """"Replays every REFERENCE item's turn under the given configs — same
+        engine as POST /agenttrees/{tree}/replay … A set may reference several
+        trees, so the response carries one evaluation per tree touched, all
+        children of a single parent task".
+
+        Frozen items are skipped: a frozen case is content, not a turn in a
+        conversation, so there is nothing to re-fire.
+
+        Fan-out shape: ONE parent task; per tree one evaluation whose columns are
+        baseline + one per config, and one replay_unit child per (tree,
+        config) — the same children mock/engine.py already drives for
+        /agenttrees/{tree}/replay, so there is no second replay path."""
+        need_set(setId)
+        body = await body_json(request)
+        configs = body.get("configs")
+        if not configs or not isinstance(configs, list):
+            err(422, "invalid", "configs must be a non-empty array.")
+        if body.get("context_policy", "frozen") != "frozen":
+            # Widening the policy is Phase 3; the tree-scoped replay pins the
+            # same way (see /agenttrees/{tree}/replay above).
+            err(422, "invalid", "Replays currently run frozen (openapi.yaml EvalSetReplayRequest).")
+
+        allowed = visible_trees(request)
+        items = [i for i in set_items(setId, latest_version(setId))
+                 if i["kind"] == "reference" and item_visible(i, allowed)]
+        if not items:
+            err(422, "invalid",
+                "This set has no turn references you can see — nothing to replay.")
+
+        # Group into per-tree units, preserving item order. Each item resolves
+        # to the ASSISTANT turn of its invocation plus the prompt that produced
+        # it — exactly the rows a tree-scoped replay builds (assistant_rows).
+        by_tree: dict[str, list[dict]] = {}
+        for item in items:
+            source = item["source"]
+            turn = need_visible_turn(request, source["tree"], source["conversation_id"],
+                                     source["turn_id"])
+            conv = need_conversation(source["tree"], source["conversation_id"])
+            target = turn["id"]
+            if turn["role"] != "assistant":
+                sibling = db.one(
+                    "SELECT id FROM turns WHERE invocation_id = ? AND role = 'assistant'"
+                    " ORDER BY rowid LIMIT 1", (turn["invocation_id"],))
+                if not sibling:
+                    continue  # a prompt with no answer has nothing to replay
+                target = sibling["id"]
+            rows = assistant_rows(conv, [target])
+            if rows:
+                by_tree.setdefault(source["tree"], []).extend(rows)
+        if not by_tree:
+            err(422, "invalid", "Set references resolve to no assistant turns to replay.")
+        for tree in by_tree:
+            need_enabled_tree(tree)  # 409 tree_disabled
+
+        trees = list(by_tree)
+        columns = [{"label": "baseline", "config": {}}] + [
+            {"label": config_label(cfg, i), "config": cfg} for i, cfg in enumerate(configs)]
+        # A cross-tree parent belongs to no single tree, so its /tasks/stream
+        # events are withheld from partially-permitted callers (Broker
+        # docstring); a single-tree set keeps its tree and streams normally.
+        # Children always carry their own tree in the payload.
+        parent = engine.create_task("replay", total=len(trees) * len(configs),
+                                    payload={"result": None},
+                                    tree_id=trees[0] if len(trees) == 1 else None)
+        register_live(parent["id"], request)
+
+        evaluations = []
+        for ti, tree in enumerate(trees, start=1):
+            rows = by_tree[tree]
+            for idx, row in enumerate(rows):
+                row["row_idx"] = idx
+            evaluation_id = build_evaluation(tree, parent["id"],
+                               f"Eval set · {len(configs)} config(s)", columns, rows)
+            for row in rows:
+                db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
+                       " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
+                       (evaluation_id, row["row_idx"], row["content"], row["conversation_id"],
+                        row["turn_id"]))
+                for col_idx in range(1, len(columns)):
+                    db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status)"
+                           " VALUES (?, ?, ?, 'pending')", (evaluation_id, row["row_idx"], col_idx))
+            agent_row = root_agent(tree)
+            for col_idx, cfg in enumerate(configs, start=1):
+                cfg_agent = (db.one("SELECT * FROM agents WHERE id = ?", (cfg.get("agent_id"),))
+                             if cfg.get("agent_id") else None) or agent_row
+                engine.create_task("replay", parent_id=parent["id"], payload={
+                    "kind": "replay_unit", "evaluation_id": evaluation_id, "tree_id": tree,
+                    "col_idx": col_idx, "config": cfg,
+                    "agent": cfg_agent["name"] if cfg_agent else "assistant",
+                    "conv_index": ti, "conv_total": len(trees),
+                    "rows": [{"row_idx": r["row_idx"], "prompt": r["prompt"],
+                              "envelope": r.get("envelope")} for r in rows],
+                })
+            evaluations.append({"tree_id": tree, "evaluation_id": evaluation_id})
+
+        db.run("UPDATE tasks SET payload = ? WHERE id = ?",
+               (j({"result": {"evaluations": evaluations}}), parent["id"]))
+        engine.spawn(engine.run_batch(parent["id"]))
+        return JSONResponse({"task_id": parent["id"], "evaluations": evaluations}, status_code=202)
 
     @app.post("/eval/judge", status_code=202)
     async def judge(request: Request):
@@ -1760,24 +2090,32 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 "(openapi.yaml:2926-2929).")
         if set_id:
             # "set_id … judges the set's latest membership version unless
-            # set_version pins one" (openapi.yaml:2921-2923).
+            # set_version pins one". Since the merge a version holds reference
+            # items too, so judging RESOLVES each item to a case: frozen items
+            # give their case_id, references reuse-or-create the case for their
+            # turn (identical to …/freeze). Turns are immutable, so the
+            # resolution is deterministic — but membership is NOT rewritten
+            # here: the item stays a reference until someone freezes it.
+            need_set(set_id)
+            version = latest_version(set_id)
             if body.get("set_version") is not None:
-                pinned = db.one("SELECT * FROM eval_sets WHERE id = ? AND version = ?",
-                                (set_id, body["set_version"]))
-                if not pinned and db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
+                version = body["set_version"]
+                if not db.one("SELECT 1 AS x FROM eval_set_versions WHERE set_id = ?"
+                              " AND version = ?", (set_id, version)):
                     err(404, "not_found",
-                        f"Eval set '{set_id}' has no version {body['set_version']}.")
-                eval_set = pinned
-            else:
-                eval_set = db.one(
-                    "SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
-                    (set_id,))
-            if not eval_set:
-                err(404, "not_found", f"Eval set '{set_id}' not found.")
-            case_ids = unj(eval_set["case_ids"], [])
+                        f"Eval set '{set_id}' has no version {version}.")
+            allowed = visible_trees(request)
+            case_ids = []
+            for item in set_items(set_id, version):
+                if not item_visible(item, allowed):
+                    continue
+                cid = (item["case_id"] if item["kind"] == "frozen"
+                       else case_for_turn(item["source"]))
+                if cid not in case_ids:
+                    case_ids.append(cid)
             if not case_ids:
                 err(422, "invalid",
-                    f"Eval set '{set_id}' v{eval_set['version']} has no cases to judge.")
+                    f"Eval set '{set_id}' v{version} has no cases to judge.")
         versions = db.all("SELECT * FROM rubrics WHERE id = ? ORDER BY version", (body["rubric_id"],))
         if not versions:
             err(404, "not_found", f"Rubric '{body['rubric_id']}' not found.")
@@ -1889,321 +2227,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                             "mean": round(g["mean"], 4), "count": g["count"],
                             "distribution": distribution})
         return {"evaluation_id": evaluationId, "rubrics": rubrics}
-
-    # ----------------------------------------------------------- casebooks
-    # openapi.yaml:1643-1830. "Collect noteworthy turns into Casebooks with one
-    # keystroke, then turn a casebook into an eval set, a replay regression
-    # suite, or few-shot examples for an agent" (cupel-phases.md:79).
-    #
-    # Items are turn REFERENCES, never copies (openapi.yaml:1739-1741, 3252-
-    # 3255): {tree, conversation_id, turn_id} + an optional note. Nothing here
-    # ever writes a turn's content anywhere.
-    #
-    # CROSS-TREE VISIBILITY (openapi.yaml:1654-1656 "a casebook may reference
-    # turns across trees; per-item visibility still follows the viewer's tree
-    # permissions" — the contract notes this is under-specified). Decision,
-    # documented: items in trees the viewer cannot view are OMITTED from every
-    # response, and every derived action (to-eval-set, replay) operates on the
-    # visible subset only. Omitting beats leaking — the same rule the SSE
-    # broker follows (mock/engine.py Broker docstring). A viewer therefore
-    # never learns that a turn they may not read exists; the casebook simply
-    # looks shorter to them.
-    def visible_trees(request: Request) -> set[str] | None:
-        return permitted_trees(request)
-
-    def item_dict(i: dict) -> dict:
-        return {"id": i["id"], "tree": i["tree"],
-                "conversation_id": i["conversation_id"], "turn_id": i["turn_id"],
-                "note": i["note"], "added_at": i["added_at"]}
-
-    def casebook_items(casebook_id: str, request: Request) -> list[dict]:
-        rows = db.all(
-            "SELECT * FROM casebook_items WHERE casebook_id = ? ORDER BY rowid",
-            (casebook_id,))
-        allowed = visible_trees(request)
-        if allowed is not None:
-            rows = [r for r in rows if r["tree"] in allowed]
-        return rows
-
-    def casebook_dict(c: dict, request: Request) -> dict:
-        return {"id": c["id"], "name": c["name"], "description": c["description"],
-                "created_at": c["created_at"],
-                "items": [item_dict(i) for i in casebook_items(c["id"], request)]}
-
-    def need_casebook(casebook_id: str) -> dict:
-        row = db.one("SELECT * FROM casebooks WHERE id = ?", (casebook_id,))
-        if not row:
-            err(404, "not_found", f"Casebook '{casebook_id}' not found.")
-        return row
-
-    @app.get("/casebooks")
-    async def list_casebooks(request: Request):
-        """"All casebooks visible to the user, items included"
-        (openapi.yaml:1659)."""
-        return [casebook_dict(c, request)
-                for c in db.all("SELECT * FROM casebooks ORDER BY rowid DESC")]
-
-    @app.post("/casebooks", status_code=201)
-    async def create_casebook(request: Request):
-        """"Starts empty; add items via POST /casebooks/{id}/items"
-        (openapi.yaml:1669)."""
-        body = await body_json(request)
-        name = body.get("name")
-        if not isinstance(name, str) or not name.strip():
-            err(422, "invalid", "name is required (openapi.yaml:3237).")
-        cid = new_id("cb")
-        user = request_user(request)
-        db.run("INSERT INTO casebooks (id, name, description, created_by, created_at)"
-               " VALUES (?, ?, ?, ?, ?)",
-               (cid, name.strip(), body.get("description"),
-                user["id"] if user else "dev", now_iso()))
-        return casebook_dict(db.one("SELECT * FROM casebooks WHERE id = ?", (cid,)), request)
-
-    @app.get("/casebooks/{casebookId}")
-    async def get_casebook(casebookId: str, request: Request):
-        return casebook_dict(need_casebook(casebookId), request)
-
-    @app.patch("/casebooks/{casebookId}")
-    async def update_casebook(casebookId: str, request: Request):
-        """"metadata only; membership changes go through the items endpoints"
-        (openapi.yaml:1704). Null/absent fields leave the value unchanged."""
-        row = need_casebook(casebookId)
-        body = await body_json(request)
-        name = body.get("name")
-        if name is not None and (not isinstance(name, str) or not name.strip()):
-            err(422, "invalid", "name must be a non-empty string when supplied.")
-        description = body.get("description") if "description" in body else row["description"]
-        db.run("UPDATE casebooks SET name = ?, description = ? WHERE id = ?",
-               (name.strip() if name else row["name"], description, casebookId))
-        return casebook_dict(db.one("SELECT * FROM casebooks WHERE id = ?", (casebookId,)),
-                             request)
-
-    @app.delete("/casebooks/{casebookId}", status_code=204)
-    async def delete_casebook(casebookId: str):
-        """"Removes the casebook and its item REFERENCES only: the referenced
-        turns/conversations, and any eval sets or evaluations already materialized
-        from this casebook, are untouched" (openapi.yaml:1723-1726)."""
-        need_casebook(casebookId)
-        db.run("DELETE FROM casebook_items WHERE casebook_id = ?", (casebookId,))
-        db.run("DELETE FROM casebooks WHERE id = ?", (casebookId,))
-        return Response(status_code=204)
-
-    def need_visible_turn(request: Request, tree: str, conversation_id: str,
-                          turn_id: str) -> dict:
-        """The referenced turn, or 404 — including when the viewer may not view
-        the tree (unpermitted = indistinguishable from absent,
-        openapi.yaml:1948)."""
-        allowed = visible_trees(request)
-        if allowed is not None and tree not in allowed:
-            err(404, "not_found", f"Turn '{turn_id}' not found.")
-        need_tree(tree)
-        turn = db.one(
-            "SELECT * FROM turns WHERE id = ? AND tree_id = ? AND conversation_id = ?",
-            (turn_id, tree, conversation_id))
-        if not turn:
-            err(404, "not_found",
-                f"Turn '{turn_id}' not found in conversation '{conversation_id}'.")
-        return turn
-
-    @app.post("/casebooks/{casebookId}/items", status_code=201)
-    async def add_casebook_item(casebookId: str, request: Request):
-        """The ⊞ action (openapi.yaml:1732-1757). "Re-adding the same turn is
-        idempotent (returns the existing item)" (:1744) — the DUPLICATE RULE,
-        implemented literally: a second POST for the same
-        {tree, conversation_id, turn_id} returns the FIRST item unchanged
-        (same id, same added_at, original note kept) with the contract's 201.
-        A UNIQUE index backs it (mock/db.py casebook_items_ref), so two
-        concurrent ⊞ presses cannot create a pair."""
-        need_casebook(casebookId)
-        body = await body_json(request)
-        for field in ("tree", "conversation_id", "turn_id"):
-            if not body.get(field):
-                err(422, "invalid",
-                    "tree, conversation_id and turn_id are required "
-                    "(openapi.yaml:3266).")
-        need_visible_turn(request, body["tree"], body["conversation_id"], body["turn_id"])
-        existing = db.one(
-            "SELECT * FROM casebook_items WHERE casebook_id = ? AND tree = ?"
-            " AND conversation_id = ? AND turn_id = ?",
-            (casebookId, body["tree"], body["conversation_id"], body["turn_id"]))
-        if existing:
-            return JSONResponse(item_dict(existing), status_code=201)
-        iid = new_id("cbi")
-        db.run("INSERT INTO casebook_items (id, casebook_id, tree, conversation_id,"
-               " turn_id, note, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-               (iid, casebookId, body["tree"], body["conversation_id"],
-                body["turn_id"], body.get("note"), now_iso()))
-        return item_dict(db.one("SELECT * FROM casebook_items WHERE id = ?", (iid,)))
-
-    @app.delete("/casebooks/{casebookId}/items/{itemId}", status_code=204)
-    async def remove_casebook_item(casebookId: str, itemId: str, request: Request):
-        """"Removes only the reference; the turn, its conversation, and
-        anything already materialized from the casebook are untouched"
-        (openapi.yaml:1766-1769)."""
-        need_casebook(casebookId)
-        row = db.one("SELECT * FROM casebook_items WHERE id = ? AND casebook_id = ?",
-                     (itemId, casebookId))
-        allowed = visible_trees(request)
-        if not row or (allowed is not None and row["tree"] not in allowed):
-            err(404, "not_found", f"Casebook item '{itemId}' not found.")
-        db.run("DELETE FROM casebook_items WHERE id = ?", (itemId,))
-        return Response(status_code=204)
-
-    def case_for_turn(item: dict) -> str:
-        """"the server reuses the existing eval case for that turn or creates
-        one sourced from it (same semantics as POST /eval/cases with source)"
-        (openapi.yaml:1785-1787). Lookup is on the stored source triple, so a
-        case created here, by POST /eval/cases, or by evaluation judging all count as
-        the same case — a casebook never duplicates one."""
-        source = {"tree": item["tree"], "conversation_id": item["conversation_id"],
-                  "turn_id": item["turn_id"]}
-        found = db.one(
-            "SELECT id FROM eval_cases WHERE json_extract(source, '$.tree') = ?"
-            " AND json_extract(source, '$.conversation_id') = ?"
-            " AND json_extract(source, '$.turn_id') = ? ORDER BY rowid DESC LIMIT 1",
-            (source["tree"], source["conversation_id"], source["turn_id"]))
-        if found:
-            return found["id"]
-        prompt, envelope, output = case_from_source(source)
-        return insert_case(new_id("case"), 1, prompt, envelope, output, None,
-                           j(source))["id"]
-
-    @app.post("/casebooks/{casebookId}/to-eval-set", status_code=201)
-    async def casebook_to_eval_set(casebookId: str, request: Request):
-        """openapi.yaml:1777-1802 — "For each item the server reuses the
-        existing eval case for that turn or creates one sourced from it …
-        then creates a new set (set_name) or appends a new membership version
-        to an existing one (set_id — versioned membership)".
-
-        set_id path (documented): the new version carries the existing
-        membership UNION the casebook's cases, in that order. A set version
-        carries its FULL membership (openapi.yaml:1533-1536), so "append"
-        cannot mean "replace" without silently dropping cases."""
-        need_casebook(casebookId)
-        body = await body_json(request)
-        set_name, set_id = body.get("set_name"), body.get("set_id")
-        if bool(set_name) == bool(set_id):
-            err(422, "invalid",
-                "Exactly one of set_name / set_id is required "
-                "(openapi.yaml:3279-3281).")
-        items = casebook_items(casebookId, request)
-        if not items:
-            err(422, "invalid",
-                "This casebook has no items you can see — nothing to materialize.")
-        case_ids = []
-        for item in items:
-            need_visible_turn(request, item["tree"], item["conversation_id"],
-                              item["turn_id"])
-            cid = case_for_turn(item)
-            if cid not in case_ids:
-                case_ids.append(cid)
-        if set_name:
-            if not isinstance(set_name, str) or not set_name.strip():
-                err(422, "invalid", "set_name must be a non-empty string.")
-            return insert_set(new_id("set"), 1, set_name.strip(), case_ids)
-        latest = db.one("SELECT * FROM eval_sets WHERE id = ? ORDER BY version DESC LIMIT 1",
-                        (set_id,))
-        if not latest:
-            err(404, "not_found", f"Eval set '{set_id}' not found.")
-        merged = list(unj(latest["case_ids"], []))
-        merged += [c for c in case_ids if c not in merged]
-        return insert_set(set_id, latest["version"] + 1, latest["name"], merged)
-
-    @app.post("/casebooks/{casebookId}/replay", status_code=202)
-    async def replay_casebook(casebookId: str, request: Request):
-        """openapi.yaml:1804-1830 — "Replays every referenced turn under the
-        given configs — same engine as POST /agenttrees/{tree}/replay … A
-        casebook may reference several trees, so the response carries one
-        per tree touched, all children of a single parent task".
-
-        Fan-out shape: ONE parent task; per tree one evaluation whose columns are
-        baseline + one per config, and one replay_unit child per (tree,
-        config) — the same children mock/engine.py already drives for
-        /agenttrees/{tree}/replay, so there is no second replay path."""
-        need_casebook(casebookId)
-        body = await body_json(request)
-        configs = body.get("configs")
-        if not configs or not isinstance(configs, list):
-            err(422, "invalid", "configs must be a non-empty array.")
-        if body.get("context_policy", "frozen") != "frozen":
-            # Widening the policy is Phase 3; the tree-scoped replay pins the
-            # same way (see /agenttrees/{tree}/replay above).
-            err(422, "invalid", "Replays currently run frozen (openapi.yaml:3300-3304).")
-
-        items = casebook_items(casebookId, request)
-        if not items:
-            err(422, "invalid",
-                "This casebook has no items you can see — nothing to replay.")
-
-        # Group into per-tree units, preserving item order. Each item resolves
-        # to the ASSISTANT turn of its invocation plus the prompt that produced
-        # it — exactly the rows a tree-scoped replay builds (assistant_rows).
-        by_tree: dict[str, list[dict]] = {}
-        for item in items:
-            turn = need_visible_turn(request, item["tree"], item["conversation_id"],
-                                     item["turn_id"])
-            conv = need_conversation(item["tree"], item["conversation_id"])
-            target = turn["id"]
-            if turn["role"] != "assistant":
-                sibling = db.one(
-                    "SELECT id FROM turns WHERE invocation_id = ? AND role = 'assistant'"
-                    " ORDER BY rowid LIMIT 1", (turn["invocation_id"],))
-                if not sibling:
-                    continue  # a prompt with no answer has nothing to replay
-                target = sibling["id"]
-            rows = assistant_rows(conv, [target])
-            if rows:
-                by_tree.setdefault(item["tree"], []).extend(rows)
-        if not by_tree:
-            err(422, "invalid", "Casebook items resolve to no assistant turns to replay.")
-        for tree in by_tree:
-            need_enabled_tree(tree)  # 409 tree_disabled (openapi.yaml:1830)
-
-        trees = list(by_tree)
-        columns = [{"label": "baseline", "config": {}}] + [
-            {"label": config_label(cfg, i), "config": cfg} for i, cfg in enumerate(configs)]
-        # A cross-tree parent belongs to no single tree, so its /tasks/stream
-        # events are withheld from partially-permitted callers (Broker
-        # docstring); a single-tree casebook keeps its tree and streams
-        # normally. Children always carry their own tree in the payload.
-        parent = engine.create_task("replay", total=len(trees) * len(configs),
-                                    payload={"result": None},
-                                    tree_id=trees[0] if len(trees) == 1 else None)
-        register_live(parent["id"], request)
-
-        evaluations = []
-        for ti, tree in enumerate(trees, start=1):
-            rows = by_tree[tree]
-            for idx, row in enumerate(rows):
-                row["row_idx"] = idx
-            evaluation_id = build_evaluation(tree, parent["id"],
-                               f"Casebook · {len(configs)} config(s)", columns, rows)
-            for row in rows:
-                db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
-                       " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
-                       (evaluation_id, row["row_idx"], row["content"], row["conversation_id"],
-                        row["turn_id"]))
-                for col_idx in range(1, len(columns)):
-                    db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status)"
-                           " VALUES (?, ?, ?, 'pending')", (evaluation_id, row["row_idx"], col_idx))
-            agent_row = root_agent(tree)
-            for col_idx, cfg in enumerate(configs, start=1):
-                cfg_agent = (db.one("SELECT * FROM agents WHERE id = ?", (cfg.get("agent_id"),))
-                             if cfg.get("agent_id") else None) or agent_row
-                engine.create_task("replay", parent_id=parent["id"], payload={
-                    "kind": "replay_unit", "evaluation_id": evaluation_id, "tree_id": tree,
-                    "col_idx": col_idx, "config": cfg,
-                    "agent": cfg_agent["name"] if cfg_agent else "assistant",
-                    "conv_index": ti, "conv_total": len(trees),
-                    "rows": [{"row_idx": r["row_idx"], "prompt": r["prompt"],
-                              "envelope": r.get("envelope")} for r in rows],
-                })
-            evaluations.append({"tree_id": tree, "evaluation_id": evaluation_id})
-
-        db.run("UPDATE tasks SET payload = ? WHERE id = ?",
-               (j({"result": {"evaluations": evaluations}}), parent["id"]))
-        engine.spawn(engine.run_batch(parent["id"]))
-        return JSONResponse({"task_id": parent["id"], "evaluations": evaluations}, status_code=202)
 
     # ------------------------------------------------- static SPA (last!)
     # The built Vite bundle, when present, mounts AFTER every API

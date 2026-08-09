@@ -132,27 +132,23 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     for sentinel in ("/settings",
                      "/agenttrees/{tree}/memory", "/admin/generator"):
         assert sentinel in missing_paths, f"{sentinel} should be missing today"
-    # And the auth + admin + eval-workbench + inspector/casebook endpoints are
+    # And the auth + admin + eval-workbench + inspector endpoints are
     # conformant, not missing.
     for implemented in ("/auth/token", "/auth/logout", "/admin/users",
                         "/admin/users/{userId}/permissions",
                         "/admin/agenttrees/{treeId}",
                         "/eval/cases", "/eval/cases/import", "/eval/cases/{caseId}",
-                        "/eval/sets", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}",
-                        "/admin/conversations", "/casebooks", "/casebooks/{casebookId}",
-                        "/casebooks/{casebookId}/items",
-                        "/casebooks/{casebookId}/items/{itemId}",
-                        "/casebooks/{casebookId}/to-eval-set",
-                        "/casebooks/{casebookId}/replay"):
+                        "/eval/sets", "/eval/sets/{setId}",
+                        "/eval/sets/{setId}/items", "/eval/sets/{setId}/freeze",
+                        "/eval/sets/{setId}/replay", "/eval/rubrics/{rubricId}",
+                        "/admin/conversations"):
         assert implemented not in missing_paths
-    # Shrink recorded so a regression is loud: 51 -> 61 conformant
-    # operations of the same 69 checked (10 new: GET /admin/conversations,
-    # GET + POST /casebooks, GET + PATCH + DELETE /casebooks/{casebookId},
-    # POST /casebooks/{casebookId}/items,
-    # DELETE /casebooks/{casebookId}/items/{itemId},
-    # POST …/to-eval-set, POST …/replay).
+    # Shrink recorded so a regression is loud: 51 -> 61 -> 58 conformant.
+    # The DROP is the Casebook+EvalSet merge, not a regression: nine
+    # /casebooks operations plus three /eval/sets ones became nine on the one
+    # merged noun, so the whole contract went 69 -> 66 operations checked.
     # >= not ==, keeping this test's tolerant design: later tasks only add.
-    assert report["conformant"] >= 61
+    assert report["conformant"] >= 58
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
