@@ -67,7 +67,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | 🗓️ | Keep a hosted instance's data across restarts — the code is written, it needs an object-storage bucket |
 | 🗓️ | Work with **any AG-UI agent** through a bridge, so an agent that already speaks that protocol needs no new endpoints for chat |
 | 🗓️ | Adopt it with a **half-built backend** — implemented endpoints go to yours, the rest are served by the bundled one |
-| 🗓️ | **Drive it from the terminal** — chat, replay, watch runs and tasks, `--json` for scripts |
+| 🗓️ | **Drive it from the terminal** — chat, replay, watch evaluations and tasks, `--json` for scripts |
 | 🗓️ | **Generate your own project** from this repo, pointed at your backend |
 | 🗓️ | Manage agents like code — instruction changes become GitHub pull requests; merging promotes the version live |
 | 🗓️ | Deploy to Kubernetes with a test job that blocks a bad release |

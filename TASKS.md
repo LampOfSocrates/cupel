@@ -44,7 +44,7 @@ and **Evaluate**. User decision 2026-08-09.
       `:51,:56` die with #1), j12 (`:59`), j13 (27, mostly the contract tranche),
       `helpers/seed.ts`, `j11:72`. Only 2 endpoint tags change here (`j03:85`, `j05:60`).
       Untouched: j02, j04, j06, j08, j09, j10, mobile.  [after #3]
-- [ ] **#5** Docs for this tranche — `feature-spec.md` is heaviest (`:4,:6,:26,:39,:61,:63,:66,
+- [x] **#5** Docs for this tranche — `feature-spec.md` is heaviest (`:4,:6,:26,:39,:61,:63,:66,
       :84-89,:96,:99,:101-103,:117,:126,:206,:208,:212,:229-232,:274,:285-288,:294,:302`);
       plus `README.md:54,:68,:115-116,:122,:126,:132`; `CLAUDE.md:19`;
       `docs/features.md:70,:79`; `cupel-phases.md:18,:19,:26,:32-34,:61,:65,:138`;

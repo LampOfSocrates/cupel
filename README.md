@@ -51,7 +51,7 @@ Cupel
 ```
 
 That backend is the demo mock in `mock/` (FastAPI). It is a real, stateful
-backend — chat with SSE streaming, runs, versions, judgments, task queue — and
+backend — chat with SSE streaming, evaluations, versions, judgments, task queue — and
 it keeps **everything in one SQLite file on your machine** (`mock/cupel-mock.sqlite`,
 git-ignored). Nothing leaves the machine; delete the file and you are back to
 the seed. Requirements: Node >= 22.18 (`npm start` reads the TypeScript config
@@ -65,7 +65,7 @@ disk and replicates its SQLite file to object storage instead
 Fill the app with data while it runs: `npm run simulate`.
 
 The chat half works on a phone in portrait (the sidebar becomes a burger menu);
-the studio half — runs, comparison grids, traces, the instruction editor — is
+the studio half — evaluations, comparison grids, traces, the instruction editor — is
 desktop-first by design.
 
 ## Using your own backend
@@ -112,18 +112,19 @@ You can also switch targets live in Settings → Backend without restarting.
 
 ## End-to-end suite
 
-`npm run e2e` walks the 13 user journeys of the coverage checklist
-(`feature-spec.md:205-218`), one spec file per journey, in `e2e/`:
+`npm run e2e` walks the 13 user journeys of the coverage checklist —
+journeys 1–12 at `feature-spec.md:202-213`, journey 13 (authoring) at
+`feature-spec.md:99` — one spec file per journey, in `e2e/`:
 
 | | journey | spec |
 |---|---|---|
-| 1 | Shell — nav, presets, search, fork nesting | `j01-shell.spec.ts` |
+| 1 | Shell — nav, search, fork nesting | `j01-shell.spec.ts` |
 | 2 | Chat — SSE, feedback, copy, upload, stop | `j02-chat.spec.ts` |
-| 3 | Runs — select, configure, queue, grid fills | `j03-runs.spec.ts` |
+| 3 | Evaluations — select, configure, queue, grid fills | `j03-evaluations.spec.ts` |
 | 4 | Forks — re-fire at 2 endpoints, continue one | `j04-forks.spec.ts` |
 | 5 | Judge — scores stream in, drawer, re-score | `j05-judge.spec.ts` |
 | 6 | Queue — progress, cancel cascade, retry-failed | `j06-queue.spec.ts` |
-| 7 | Editor — draft, snapshot, new version, Test in Runs | `j07-editor.spec.ts` |
+| 7 | Editor — draft, snapshot, new version, Test as evaluation | `j07-editor.spec.ts` |
 | 8 | Trace — call tree, waterfall, lazy span payload | `j08-trace.spec.ts` |
 | 9 | Backend switcher — targets, healthz, banners | `j09-backend.spec.ts` |
 | 10 | Permissions — hidden tree, matrix edit takes effect | `j10-permissions.spec.ts` |

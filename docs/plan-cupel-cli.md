@@ -46,13 +46,21 @@ Three distinct users, one tool:
 | `conversations [list\|show <id>\|rm <id>]` | conversations endpoints, `--search`, `--forks-of` |
 | `agents [list\|show <id>]` | agent hierarchy |
 | `instructions [get\|save] <agent>` | versioned instructions; `save` reads a file or stdin (append-only, prints the new version) |
-| `replay` | `POST …/replay` with a selection + config; prints the run id |
-| `run <id>` | run detail; `--watch` re-renders the grid as cells fill |
-| `judge --run <id> --rubric <id>` | `POST /eval/judge` |
-| `judgments --run\|--case\|--turn` | judgment history |
+| `replay` | `POST …/replay` with a selection + config; prints the evaluation id |
+| `evaluation <id>` | evaluation detail; `--watch` re-renders the grid as cells fill |
+| `judge --evaluation <id> --rubric <id>` | `POST /eval/judge` |
+| `judgments --evaluation\|--case\|--turn` | judgment history |
 | `tasks [--watch]` | `GET /tasks`, and `--watch` tails `GET /tasks/stream` |
 | `trace <turn-id>` | span tree, `--span <id>` for the payload |
 | `ready` | delegates to the existing `cupel-ready` comparator (one implementation, two front doors) |
+
+**Naming, decided (#5, 2026-08-09) — do not re-litigate in #20**: the command is
+`evaluation <id>`, not `run <id>`, and the flag is `--evaluation`, not `--run`. The UI killed
+the "Runs" noun in #1–#4 and the CLI is a second front door onto the same product, so it uses
+the product's word. The *wire* is unchanged: the path is still `GET /agenttrees/{tree}/runs/{id}`
+and the field is still `run_id` until the contract bump (#14(b)1) renames them. If #14 lands
+first the CLI needs no rename; if it lands after, the CLI simply reads `run_id` and prints it
+under the evaluation label. `--json` output keys mirror the contract, never the CLI's labels.
 
 Global flags: `--json` (machine output on every command, no decoration), `--tree <id>`,
 `--quiet`, `--verbose` (prints the request line and status of every call — the debugging
@@ -102,7 +110,7 @@ feature that makes this worth building).
   `--json`/`--verbose`/exit codes, `health`/`me`/`trees`.
 - **P3-CLI2-B** — shared SSE module extraction (UI + CLI import one implementation), then
   `chat` with live streaming and Ctrl+C cancellation.
-- **P3-CLI2-C** — studio commands: conversations, agents, instructions, replay, run
+- **P3-CLI2-C** — studio commands: conversations, agents, instructions, replay, evaluation
   `--watch`, judge, judgments, trace.
 - **P3-CLI2-D** — `tasks --watch`, `ready` delegation, auth flows against `AUTH_MODE=on`,
   and the acceptance walk.

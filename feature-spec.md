@@ -1,9 +1,9 @@
 # Chat App — Feature Spec (brief)
 
 ## Layout
-- Collapsible left sidebar. Menus: **Chat, Runs (Tune / Evaluate presets), Settings**. Task-queue badge in sidebar.
+- Collapsible left sidebar. Two doors: **Chat** and **Evaluate** (a group holding Evaluations / Eval workbench / Casebooks), plus **Settings**. Task-queue badge in sidebar.
 - **Expanded sidebar shows recent conversations** under Chat: title + relative time, search, infinite scroll. Forked conversations nest under their parent as a collapsed "N forks" chip (expand to list; lineage badge on each). New chat button at top. Collapsed sidebar = icons only.
-- Conversation actions (long-press/⋯): rename, delete, open parent (if fork), send to Runs.
+- Conversation actions (long-press/⋯): rename, delete, open parent (if fork), send to Evaluations.
 - Chat has its own **Settings submenu** (model, temperature, system prompt — session-scoped).
 
 ## Chat window
@@ -23,7 +23,7 @@
 ## Agent tree view (structure visualization)
 - Each tree's **home view is a static node-and-edge diagram** of the agent hierarchy (root → sub-agents), reusing the trace view's node components (same colors/shapes; no timings — this is structure, not execution).
 - Node shows: agent name, live instruction version, tools attached (icons), enabled state. Disabled/unpermitted styling per tree rules.
-- **Node click → instruction editor** for that agent (breadcrumb stays in sync). Node context (⋯): Test in Runs, view recent conversations for this agent, add sub-agent (opens New-agent wizard pre-placed).
+- **Node click → instruction editor** for that agent (breadcrumb stays in sync). Node context (⋯): Test as evaluation, view recent conversations for this agent, add sub-agent (opens New-agent wizard pre-placed).
 - Layout: auto (top-down dagre-style), pan/zoom for large trees; collapsible subtrees.
 - Data: `GET /agenttrees/{tree}/agents` (returns hierarchy + version + tools per agent).
 
@@ -36,9 +36,9 @@
 
 ---
 
-## Runs workspace (replaces separate Tune/Evaluate pages)
+## Evaluations workspace
 
-One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* Tune and Evaluate are sidebar **presets** over this page, not separate implementations.
+One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* One page, one flow — there is no second, differently-configured entry into it.
 
 ### Flow — 3-step stepper
 1. **Select** — ConversationPicker: search/filter/multi-select conversations, **expandable to pick individual turns** within a conversation (checkbox per turn). Scoped by permissions.
@@ -58,12 +58,12 @@ Evaluation is its own domain, not a bolt-on to runs:
 - **EvalSet**: named collection of cases (versioned, reusable across runs/models).
 - **Judgment** (persisted forever, never overwritten): `{case_id, run_id?, judge_model, rubric_id+version, score, reasoning, created_at}`. Re-judging appends a new judgment; history per case is queryable, so scores are comparable across time/judges/rubrics.
 - Judge off: pure replay, manual eyeball + thumbs (thumbs also persist as lightweight judgments, `type: human`).
-- **"Score this run"** on any finished run: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
+- **"Judge this evaluation"** on any finished run: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
 - Results grid: score column reads latest judgment per (case, rubric); history popover shows prior judgments.
-- **Eval workbench** (tab inside Runs): manage the eval domain directly — case editor (input / output / reference fields; "reference from turn" picker), set manager (create/name/version sets, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference → creates/extends a set in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
+- **Eval workbench** (its own entry under **Evaluate** in the sidebar): manage the eval domain directly — case editor (input / output / reference fields; "reference from turn" picker), set manager (create/name/version sets, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference → creates/extends a set in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
 - **Seeing results**: scores stream into the grid live as judging tasks finish (SSE), color-banded badges; summary header (mean + distribution) updates live. Tap a badge → **judgment drawer**: score, judge reasoning, rubric+version, judge model, input/output/reference side by side, and append-only history below. Conversation drill-in shows per-turn score chips with inline reasoning. Grid sortable/filterable by score (triage worst-first → re-run from the cell). Finished judging task in queue panel links "View results" to the sorted grid.
 
-### Turn-level runs → forked conversations
+### Turn-level re-fire → forked conversations
 - Re-firing a turn targets **one or many endpoints** (endpoint = an agent deployment/backend target; multi-select in Run Config alongside model/instructions).
 - Each (turn × endpoint × config) **forks a new conversation**: original history up to that turn is copied, the turn is re-generated by the chosen endpoint, and the result is stored as a normal conversation.
 - Forks carry **lineage metadata**: parent conversation id, fork turn, endpoint + config used. Shown as a badge/breadcrumb.
@@ -81,10 +81,10 @@ Evaluation is its own domain, not a bolt-on to runs:
 - API: envelope on turn objects in `GET …/conversations`; `POST …/replay(/turn)` accepts `{context_policy, context_override?, tools_mode}`; fallback envelope in `GET/PUT /settings`.
 - Phasing: envelope capture + frozen default = **Phase 1** (data gap is unfixable later); policy UI, fallback setting, tool playback = **Phase 2**.
 
-### Test in Runs (from the instruction editor)
-- Opens Runs at Step 2 with config prefilled: edited agent + open version, baseline = live version.
-- **Draft snapshot rule (decided)**: drafts are testable without saving. On "Test in Runs" the draft text is **snapshotted immutably** into the run config (`snapshot_id`), so the tested text is exactly what ran even if editing continues. On save, the snapshot is promoted to the next version (e.g. v16) and all runs referencing that `snapshot_id` **relabel** to v16. Unsaved snapshots display as "v15-draft (a3f2)".
-- **Last-used selection (decided)**: the previous conversation set is remembered **per agent** (`GET/PUT /agents/{id}/last-selection`). Repeat testing = Test in Runs → Queue, two taps. First-time testing drops into Select, pre-filtered to conversations that used this agent (toggle to widen).
+### Test as evaluation (from the instruction editor)
+- Opens Evaluations at Step 2 with config prefilled: edited agent + open version, baseline = live version.
+- **Draft snapshot rule (decided)**: drafts are testable without saving. On "Test as evaluation" the draft text is **snapshotted immutably** into the run config (`snapshot_id`), so the tested text is exactly what ran even if editing continues. On save, the snapshot is promoted to the next version (e.g. v16) and all runs referencing that `snapshot_id` **relabel** to v16. Unsaved snapshots display as "v15-draft (a3f2)".
+- **Last-used selection (decided)**: the previous conversation set is remembered **per agent** (`GET/PUT /agents/{id}/last-selection`). Repeat testing = Test as evaluation → Queue, two taps. First-time testing drops into Select, pre-filtered to conversations that used this agent (toggle to widen).
 - Results include "Back to editor" breadcrumb: edit → test → tweak → save loop. Traces (⌁) on replayed turns let you compare where the draft changed behaviour.
 - API: `POST /agents/{id}/snapshots` (immutable draft snapshot → `snapshot_id`), snapshot promotion on `PUT /agents/{id}/instructions`, `GET/PUT /agents/{id}/last-selection`.
 
@@ -93,14 +93,10 @@ The shortest path from intent to shipped agent: **describe → AI drafts → tes
 
 - **"New agent" from anywhere** (sidebar +, tree view): plain-language prompt ("a refunds agent that escalates over £250") → AI backend drafts the instructions, suggests placement in the tree and tools to attach → lands in the editor as a v1 draft. One screen, no blank page.
 - **AI assist inside the editor**: a copilot panel wired to the configured LLM. Actions: draft, refine ("stricter on disputes"), critique against best practices, and **generate eval cases + a rubric from the instructions themselves** — so a new agent is born with its test set. Suggestions arrive as diff hunks (accept/reject per hunk), reusing the editor's diff view; accepted hunks are just edits to the draft (normal snapshot/version rules apply).
-- **Test**: Test in Runs as specced; if the agent has no conversation history yet, the generator synthesizes seed conversations for it (drip scoped to one agent), and the AI-generated eval set gives the judge something to score. New agents are testable at minute one.
+- **Test**: Test as evaluation as specced; if the agent has no conversation history yet, the generator synthesizes seed conversations for it (drip scoped to one agent), and the AI-generated eval set gives the judge something to score. New agents are testable at minute one.
 - **Check into repo (agents-as-code)**: instructions live as files (`agents/{tree}/{agent}/instructions.md` + `meta.yaml`). Settings → Repo connects GitHub (App or token: repo, path, base branch). Editor gains **"Open PR"**: pushes the version as a branch + PR with the instruction diff as the PR diff; PR link shown on the version. **Merge = promote**: webhook receives the merge and marks that version live in the app; editing in the app and editing in the repo converge on the same files. Config chooses source of truth: `repo` (app is a UI over git) or `app` (git is export + review trail).
 - API: `POST /assist` (`{action: draft|refine|critique|gen_evals, agent?, prompt}` → queued task, streams), `POST /agenttrees/{tree}/agents/{id}/pr` (`{version}` → PR url), `GET/PUT /settings/repo`, `POST /webhooks/git` (merge events).
-- E2E: 13. Authoring: new agent from prompt → draft appears → accept a refine hunk → gen evals → Test in Runs → Open PR (against mock git) → merge webhook promotes.
-
-### Presets
-- Sidebar **Tune** → opens Runs with instruction-version field focused, judge off.
-- Sidebar **Evaluate** → opens Runs with model field + judge section expanded.
+- E2E: 13. Authoring: new agent from prompt → draft appears → accept a refine hunk → gen evals → Test as evaluation → Open PR (against mock git) → merge webhook promotes.
 
 ### Task queue (global, live progress)
 - All backend work enqueued; every request returns `task_id`.
@@ -203,13 +199,13 @@ The app should never look empty — a generator produces realistic synthetic dat
 - Mock determinism: e2e runs with failure-injection ON at fixed seed, so retry-failed and error states are exercised reproducibly.
 
 **E2E coverage checklist** (one spec file per numbered dev prompt; each asserts against the endpoint tags in the sketches):
-1. Shell: sidebar collapse, presets route to Runs, conversation list loads/searches, fork nesting expands
+1. Shell: sidebar collapse, conversation list loads/searches, fork nesting expands
 2. Chat: send → SSE tokens render; 👍/👎 posts feedback; copy; attach + upload; stop generation
-3. Runs: select conversations + single turns → configure (endpoints multi-select, version change highlighted) → queue → results fill incrementally
+3. Evaluations: select conversations + single turns → configure (endpoints multi-select, version change highlighted) → queue → results fill incrementally
 4. Forks: 🔀 a turn against 2 endpoints → 2 new conversations with lineage → Open in Chat → continue
-5. Judge: enable judge → scores stream in → judgment drawer shows reasoning + history; retroactive "Score this run"
+5. Judge: enable judge → scores stream in → judgment drawer shows reasoning + history; retroactive "Judge this evaluation"
 6. Queue: parent/child progress via SSE, cancel cascades, injected failure → retry-failed succeeds
-7. Editor: edit draft → Test in Runs (snapshot) → back → save v16 → run relabels
+7. Editor: edit draft → Test as evaluation (snapshot) → back → save v16 → run relabels
 8. Trace: ⌁ opens tree + waterfall, span drawer lazy-loads payload, totals match seed
 9. Backend switcher: swap target, healthz reflects, non-prod banner shows
 10. Permissions: second seeded tree hidden for restricted test user
@@ -226,10 +222,10 @@ The app should never look empty — a generator produces realistic synthetic dat
 | Sidebar conversation list | `GET /agenttrees/{tree}/conversations` (`?search`, `?page`, `?forks_of`), `PATCH`/`DELETE …/conversations/{id}` |
 | Chat window | `POST /agenttrees/{tree}/chat` (SSE, → task_id), stop = `DELETE /tasks/{id}`, `POST /upload`, `POST /feedback`, `GET /models` |
 | Chat turn actions | `POST /feedback`, `POST /agenttrees/{tree}/replay/turn` (fork), `GET /agenttrees/{tree}/turns/{id}/trace` |
-| Runs · 1 Select | `GET /agenttrees/{tree}/conversations` |
-| Runs · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics`, `GET …/runs/{baseline}` |
-| Runs · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
-| Runs · 3 Results grid | `GET /agenttrees/{tree}/runs/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/runs/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
+| Evaluations · 1 Select | `GET /agenttrees/{tree}/conversations` |
+| Evaluations · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics`, `GET …/runs/{baseline}` |
+| Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
+| Evaluations · 3 Results grid | `GET /agenttrees/{tree}/runs/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/runs/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
 | Judgment drawer | `GET /eval/judgments?case_id=`, `GET /eval/cases/{id}` |
 | Eval workbench | `POST /eval/cases/import`, `POST/PUT /eval/cases`, `POST/GET/PUT /eval/sets`, `GET/POST/PUT /eval/rubrics`, `POST /eval/judge` |
 | Agent tree view | `GET /agenttrees/{tree}/agents` |
@@ -271,7 +267,7 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 
 ## Development prompts (one per task)
 
-1. **Shell**: "Build the app shell: collapsible sidebar with Chat/Runs/Settings routes, Tune & Evaluate as preset links into Runs; expanded sidebar shows searchable recent-conversations list (paginated `GET /conversations`), forks nested under parents as expandable 'N forks' chips, new-chat button, ⋯ actions (rename/delete/open parent/send to Runs). Cite the component tree before coding."
+1. **Shell**: "Build the app shell: collapsible sidebar with Chat/Evaluate/Settings routes, Evaluations + Eval workbench + Casebooks grouped under the one Evaluate door; expanded sidebar shows searchable recent-conversations list (paginated `GET /conversations`), forks nested under parents as expandable 'N forks' chips, new-chat button, ⋯ actions (rename/delete/open parent/send to Evaluations). Cite the component tree before coding."
 2. **Chat UI**: "Build the Chat page: message list, SSE streaming from `POST /chat`, markdown rendering. Quote the API contract from the spec first."
 3. **Turn actions**: "Add 👍/👎/copy per assistant message; POST `{message_id, rating}` to `/feedback`; copy copies raw markdown."
 4. **Composer**: "Build the composer: textarea, + button for file/image picker, removable attachment chips, multipart upload to `/upload` before send. Enforce type/size limits from settings."
@@ -282,16 +278,15 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 7c. **Permissions**: "Wire agent-tree permissions: `GET /agent-trees`, scope all pickers, never render unpermitted trees. Cite the permission rules."
 8. **Task queue**: "Global task queue with live progress: parent/child task model, SSE via `GET /tasks/stream` (polling fallback), per-task progress bar + stage text, expandable children, cancel cascades, retry-failed for partial failures, sidebar badge. Comparison grid cells populate incrementally as child tasks finish. Quote the task model and queue API from the spec first."
 9. **Shared components**: "Build ConversationPicker (turn-expandable), RunConfigPanel (diff-from-baseline, collapsed judge section), ComparisonView (pluggable annotations), RunsList. No page-specific logic inside."
-10. **Agent tree view**: "Build the tree home view: static dagre-layout node diagram from GET /agenttrees/{tree}/agents, reusing trace-view node components (structure only, no timings); node shows name/live version/tools; click opens the instruction editor; ⋯ menu (Test in Runs, recent conversations, add sub-agent); pan/zoom + collapsible subtrees. Quote the reuse rule — same node components as trace."
+10. **Agent tree view**: "Build the tree home view: static dagre-layout node diagram from GET /agenttrees/{tree}/agents, reusing trace-view node components (structure only, no timings); node shows name/live version/tools; click opens the instruction editor; ⋯ menu (Test as evaluation, recent conversations, add sub-agent); pan/zoom + collapsible subtrees. Quote the reuse rule — same node components as trace."
 10b. **Agent editor**: "Agent-tree picker + versioned instruction editor: save = new version, diff, rollback; format text|yaml per agent, YAML = highlighting + ADK schema validation blocking save with inline errors (schema layer pluggable, but ONLY ADK in Phase 2 — other frameworks are Phase 4); model precedence: Run Config override is per-run only, YAML model: rules live traffic. Never overwrite — cite the rule and the precedence rule."
 11a. **Context envelope**: "Capture the envelope on every generated turn (mock+generator produce varied ones), show it in trace header/Inspector, replay frozen-by-default. Phase 2 adds: context policy control in Run Config with grid labels + mixed-policy warning, fallback envelope setting with env:fallback cell marks, tools playback from trace spans with per-call live/mock fallback logged. Quote the capture-at-generation rule first — envelopes are never reconstructed."
-11. **Runs page**: "Wire the 3-step Runs flow with shared components; `POST /replay` for conversations, `POST /replay/turn` for single turns; results in ComparisonView with thumbs."
+11. **Evaluations page**: "Wire the 3-step Evaluations flow with shared components; `POST /replay` for conversations, `POST /replay/turn` for single turns; results in ComparisonView with thumbs."
 12a. **Inspector & Casebooks**: "Build the Inspector (virtualized cross-user table + filters as URL params, transcript reader, keyboard nav j/k/a) gated on the inspect role with audit logging, Casebooks as turn-reference collections with ⊞ everywhere, and the three casebook actions (to-eval-set, replay, examples block in editor). Quote the reference-not-copy rule and the keyboard map first."
 12. **Eval workbench**: "Build the eval workbench tab (sketch 10): case editor (handcrafted input/output/reference + reference-from-turn picker), set manager (versioned membership), rubric editor (save = new version, test-against-one-case). 'Add as eval case' action on turns; CSV/XLSX/paste bulk import with column mapping and per-row errors via POST /eval/cases/import. Quote the EvalCase model first."
 12b. **Evaluation domain**: "Build the eval domain: EvalCase (input/output/reference — handcrafted editor or sourced from a conversation turn), versioned EvalSets and rubrics, append-only Judgments with full history. Wire 'Score this run' (auto-create cases from turns), score column = latest judgment, history popover. Quote the domain model and API from the spec first — judgments are never overwritten."
 13. **Turn forks**: "Implement turn re-fire as forks: `POST /replay/turn` with `endpoints[]` creates one new conversation per endpoint (history copied to fork point, lineage metadata). Entry points: Select-step turn checkboxes, results-cell 're-run with…', and 🔀 on any Chat turn. 'Open in Chat' on every fork. Cite the fork semantics from the spec."
 14. **Fork comparison**: "Add the fork pivot to ComparisonView: compare forks of one turn across endpoints, column per endpoint, baseline = original turn."
-15. **Presets**: "Implement Tune/Evaluate sidebar presets: same Runs page, Tune focuses instruction version (judge off), Evaluate expands model + judge."
 16. **Turn trace**: "Build the trace view: ⌁ icon per turn opens call tree + waterfall from `GET /turns/{id}/trace`; nodes/bars badged with time and tokens in→out; span drawer lazy-loads payloads via `GET /spans/{id}/payload`; error spans red; spans stream live during generation. Quote the span model from the spec first."
 17. **Backend switcher**: "Build Settings → Backend: target presets + custom base URL through a single API client, `GET {base}/healthz` check with status/latency/seed display, mock options panel (latency, failure %, SSE, seed), non-prod chrome banner, device-local persistence. Quote the backend section of the spec first."
 18. **Data generator**: "Build the generator per the Data generator section: writes only through the public API, SQLite persistence in mock / Postgres in backend, deterministic seed mode, drip mode with configurable rates driving real tasks/SSE, POST /admin/generator control, Settings surfacing (mock: seed+drip controls; staging admin only). Quote the write-through-API rule first — no direct DB writes."
@@ -299,6 +294,6 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 19. **Config & adoption layers**: "Implement agentic.config.ts as the single source: app branding, backend targets, api.mode contract/remap/adapter with per-operation mock fallback, feature flags dropping routes+bundles, tree relabeling throughout the UI. Then the create-agentic-app CLI (flags mirror config keys) and the hosted 'Make it yours' flow (live preview, zip / GitHub push / deploy button) — all three must emit byte-identical config for identical choices. Quote the one-artifact rule first."
 19b. **K8s e2e harness**: "Write the deployment verification: pod with app + mock-server sidecar (BACKEND_TARGET env), Helm post-upgrade hook Job running the Playwright suite against the Service with fixed mock seed and failure injection on, failing Job fails the release, report uploaded. Then write /e2e specs 1–10 from the coverage checklist, one file each, asserting the endpoint calls shown in the sketches (use Playwright request interception). Quote each checklist item before writing its spec."
 20. **Agent authoring**: "Build the authoring fast path: New-agent wizard (prompt → POST /assist draft → editor v1), copilot panel with diff-hunk suggestions reusing the diff view (accepted hunks = normal edits under snapshot rules), gen_evals producing cases+rubric linked to the agent, Open PR flow (branch+PR, merge webhook promotes version), Settings → Repo. Mock git server included for dev/e2e. Quote the merge=promote rule and the source-of-truth config first."
-20b. **Test in Runs**: "Wire the editor's 'Test in Runs': immutable draft snapshot via `POST /agents/{id}/snapshots`, run config prefilled (snapshot vs live baseline), last-used selection per agent for two-tap re-test, snapshot→version relabel on save, 'Back to editor' breadcrumb. Quote the draft snapshot rule from the spec — snapshots are immutable."
+20b. **Test as evaluation**: "Wire the editor's 'Test as evaluation': immutable draft snapshot via `POST /agents/{id}/snapshots`, run config prefilled (snapshot vs live baseline), last-used selection per agent for two-tap re-test, snapshot→version relabel on save, 'Back to editor' breadcrumb. Quote the draft snapshot rule from the spec — snapshots are immutable."
 
 Rule for every prompt: read the spec first, cite which spec lines you're implementing, don't add features not listed.

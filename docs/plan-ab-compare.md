@@ -14,7 +14,7 @@ doing it **across backends** rather than across deploy targets within one backen
 |---|---|---|
 | Turn re-fire (`P1-T13`) | `POST /replay/turn` with `endpoints[]` → a real conversation per endpoint, all under one `run_id` | Only on a turn that already exists |
 | Fork pivot (`P1-T14`) | Renders those results as a grid, column per endpoint | — |
-| Runs (`P1-T11`) | `configs[]` A/Bs instruction versions and models across many conversations | Cannot vary the endpoint |
+| Evaluations (`P1-T11`) | `configs[]` A/Bs instruction versions and models across many conversations | Cannot vary the endpoint |
 | Judging (`P1-T12b`) | Scores a whole run, per cell, with a summary header | Works only on a run |
 | Backend switcher (`P2-T17`) | Switch the active target live | Exactly one active target at a time |
 
@@ -71,7 +71,7 @@ gap-filling rather than comparison) and would pay for the same client refactor.
   documented restriction), not a new endpoint — but it *is* a contract change, so it belongs
   with `P3-T00` (contract v0.4.0) rather than being smuggled in.
 - `RunConfigPanel` already renders an endpoints multi-select behind a `showEndpoints` flag
-  (built in `P1-T09`, currently passed `false` by the Runs stepper). Turning it on is close to
+  (built in `P1-T09`, currently passed `false` by the Evaluations stepper). Turning it on is close to
   a one-line change once the contract allows it.
 
 ### Configuration
@@ -104,7 +104,7 @@ toggle. `Me.permissions` is already fetched on boot.
 | `src/pages/ChatPage.tsx` | One conversation, one stream, one draft store today (`:193`). Compare mode = N parallel streams and N draft stores in columns. **The `StreamingBubble` extraction from review bucket A makes this far cheaper than it would have been** — the per-token state is already isolated | large |
 | `src/api/client.ts` | A fan-out call for compare-send; no base-URL change needed for 2a | small |
 | `agentic.config.ts` | `compareSets` presets | small |
-| `src/components/RunConfigPanel.tsx` | Flip `showEndpoints` on for the Runs stepper (after the contract widens) | trivial |
+| `src/components/RunConfigPanel.tsx` | Flip `showEndpoints` on for the Evaluations stepper (after the contract widens) | trivial |
 | `openapi.yaml` | Widen `endpoint_ids` beyond turn re-fire — **fold into `P3-T00`** | small |
 | `src/api/target.ts` | Only for 2b: per-request target override | medium |
 
@@ -120,7 +120,7 @@ concerns. Building it before the split would make both jobs worse.
 2. **N streams, N costs.** Sending one message to three variants is three generations, three
    bills. Say so in the UI before the send, not after.
 3. **Column count.** Three is readable on a desktop; beyond that it is a grid, and the grid
-   already exists — cap the chat view and send people to Runs.
+   already exists — cap the chat view and send people to Evaluations.
 4. **2b's judging story is unresolved.** Do not start cross-backend compare until "who scores
    it, and is that labelled" has an answer.
 
@@ -129,7 +129,7 @@ concerns. Building it before the split would make both jobs worse.
 - **PAB-1** — chat compare mode within one backend: `tune`-gated toggle, N-column transcript,
   server-side fan-out, result opens the existing grid. *(deps: PB-1 ChatPage split)*
 - **PAB-2** — studio: widen `endpoint_ids` in the contract (fold into `P3-T00`), turn on the
-  endpoints multi-select in the Runs stepper.
+  endpoints multi-select in the Evaluations stepper.
 - **PAB-3** — `compareSets` presets in `agentic.config.ts` + the picker UI.
 - **PAB-4** *(later, separate)* — cross-backend compare: per-request target override in the
   client, N unrelated conversations, and a decided answer on where judging happens. Overlaps

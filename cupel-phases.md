@@ -15,23 +15,23 @@
 - **Find any past conversation** by search or recency, and see forked conversations nested under their parent — using the sidebar list (sketch 07)
 - **See your agent tree as a diagram** — every agent, its live version and tools — and click any node to edit it or add a sub-agent under it — using the Agent tree view (no sketch; reuses trace nodes)
 - **Edit an agent's instructions safely**: every save is a new version, with diff view and rollback, never an overwrite — using the Instruction editor (sketch 06)
-- **Test an instruction change in one click**: "Test in Runs" snapshots your draft and replays your usual conversations against it — using the editor → Runs flow (sketches 06 → 03)
-- **Replay stored conversations — or a single turn — under a different instruction version, model, or endpoint** — using the Runs stepper: pick (sketch 02), configure (sketch 03), compare (sketch 04)
+- **Test an instruction change in one click**: "Test as evaluation" snapshots your draft and replays your usual conversations against it — using the editor → Evaluations flow (sketches 06 → 03)
+- **Replay stored conversations — or a single turn — under a different instruction version, model, or endpoint** — using the Evaluations stepper: pick (sketch 02), configure (sketch 03), compare (sketch 04)
 - **Re-fire one turn against several endpoints at once**, each becoming a real new conversation you can open and continue in Chat — from any results cell or any chat turn (sketches 04, 01)
 - **Compare outputs side by side** — baseline vs each config, cells filling in live as tasks finish — using the comparison grid (sketch 04)
-- **Optionally score runs with an LLM judge** and read its reasoning per turn, with every past score kept forever — using the judge toggle (sketch 03) and judgment drawer (unsketched)
+- **Optionally score evaluations with an LLM judge** and read its reasoning per turn, with every past score kept forever — using the judge toggle (sketch 03) and judgment drawer (unsketched)
 - **Watch every background job's live progress** — per-conversation, per-turn — cancel batches, retry just the failures — using the task queue panel (sketch 05)
 - **Debug any turn**: see the full agent → tool → LLM call flow with time, tokens in/out, and cost per step, and open any step's actual prompt/response — using the Trace view (sketch 08)
 - **Trust that replays mean what they say**: every turn records its context (date, timezone, region) at generation, and replays run under that original context by default — using the envelope shown in the trace header
-- **Run the whole app with no backend**: the bundled Python mock serves everything (chat in both streaming and non-streaming modes), and **`npm run simulate` makes the app fill itself** with realistic conversations, runs, and scores
+- **Run the whole app with no backend**: the bundled Python mock serves everything (chat in both streaming and non-streaming modes), and **`npm run simulate` makes the app fill itself** with realistic conversations, evaluations, and scores
 
 ### UI sketches to build against (`sketches/` = annotated with endpoint tags for wiring; `sketches/clean/` = dense annotation-free versions — **match the clean set's density**)
 | Sketch | Screen |
 |---|---|
 | 01-chat.svg | Chat window, turn actions, composer |
-| 02-select-turns.svg | Runs step 1 — picker with turn checkboxes |
-| 03-config.svg | Runs step 2 — Run Config drawer, judge collapsed |
-| 04-results.svg | Runs step 3 — comparison grid, incremental fill |
+| 02-select-turns.svg | Evaluations step 1 — picker with turn checkboxes |
+| 03-config.svg | Evaluations step 2 — Run Config drawer, judge collapsed |
+| 04-results.svg | Evaluations step 3 — comparison grid, incremental fill |
 | 05-queue.svg | Task queue panel, parent/child progress |
 | 06-editor.svg | Instruction editor, versions + diff |
 | 07-conversations.svg | Sidebar recent list, fork nesting |
@@ -58,11 +58,11 @@ npm run e2e:smoke
 
 ### Build order (from feature-spec dev prompts)
 Serial: API contract draft → mock server core (#18b minimal) → shell (#1)
-Then parallel tracks: A) Chat #2–5 · B) shared components #9 → tree view #10 → editor #10b → Runs #11 → forks #13/#14 → eval basics #12b · C) queue #8, generator #18 (seed+basic drip), trace #16
-Last: presets #15, smoke e2e.
+Then parallel tracks: A) Chat #2–5 · B) shared components #9 → tree view #10 → editor #10b → Evaluations #11 → forks #13/#14 → eval basics #12b · C) queue #8, generator #18 (seed+basic drip), trace #16
+Last: smoke e2e.
 
 ### Definition of done
-Clone → `npm run dev` → app boots on mock with seeded data → simulate (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2 endpoints → compare → judge → read reasoning → edit agent → Test in Runs → see trace with costs.
+Clone → `npm run dev` → app boots on mock with seeded data → simulate (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2 endpoints → compare → judge → read reasoning → edit agent → Test as evaluation → see trace with costs.
 
 ---
 
@@ -98,7 +98,7 @@ Plus new-in-Phase-2 screens with no sketch yet (derive from spec + existing visu
 Mock extends to FULL contract: auth endpoints in both `AUTH_MODE`s (seeded `admin@demo`/`restricted@demo`, real-shaped JWTs), admin users/permissions/tree-toggle, eval workbench CRUD, repo endpoints backed by a **mock git server** (branch/PR/merge webhook), generator control API, failure/latency injection env vars. Ships its own OpenAPI file — which the readiness script validates against Cupel's contract as the first conformance test.
 
 ### Test deliverables (Phase 2)
-Full Playwright suite: checklist items 1–13 (shell, chat, runs, forks, judge, queue, editor, trace, backend switcher, permissions, tree disable, auth suite ×2 modes, authoring/PR loop), request-interception asserting the endpoint tags from the sketches; full MSW parity for unit tests; k8s manifests (pod: app + mock sidecar) + Helm post-upgrade Playwright Job (fail = block release, report artifact); `npx cupel-ready` in CI.
+Full Playwright suite: checklist items 1–13 (shell, chat, evaluations, forks, judge, queue, editor, trace, backend switcher, permissions, tree disable, auth suite ×2 modes, authoring/PR loop), request-interception asserting the endpoint tags from the sketches; full MSW parity for unit tests; k8s manifests (pod: app + mock sidecar) + Helm post-upgrade Playwright Job (fail = block release, report artifact); `npx cupel-ready` in CI.
 
 ### Runnable at end of Phase 2
 ```
@@ -135,7 +135,7 @@ Readiness script passes against the mock's own OpenAPI; a remapped backend (`/na
 - Template repo hygiene: no monorepo internals, clean README quickstart (4 steps), CI template included
 
 ### Definition of done
-Scaffold a project with 2 flags changed → boots on mock → author a new agent via wizard → gen_evals → Test in Runs → all without touching a config file by hand.
+Scaffold a project with 2 flags changed → boots on mock → author a new agent via wizard → gen_evals → Test as evaluation → all without touching a config file by hand.
 
 ---
 
