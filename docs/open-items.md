@@ -46,7 +46,7 @@ The `[Bn]` tags are the corresponding review-bucket-B item — **same item, not 
 | id | item |
 |---|---|
 | PB-1 | **Done 2026-08-08** (`dc3bef7`): 1390 → 522 lines + seven files under `src/pages/chat/`; test file byte-identical. **Residual:** ByokSection owns its own state and ChatSettingsMenu knows nothing about it, but it is still *rendered* inside the settings popover. Moving it visually (e.g. into the Settings page's Backend section) is a UX change needing a new affordance to open it, so it belongs to Stage B, not here. `[B1]` |
-| PB-2 | Extract `useAsync(fn, deps)` and apply at the ~12 hand-rolled `useState(null)`+`useEffect`+cancelled-fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines, forces one loading/error contract. `[B2, B7]` |
+| PB-2 | **Mostly done 2026-08-08** (`77f7ad2`): `src/hooks/useAsync.ts`, 13 of 20 candidate sites converted, ~158 lines removed at call sites. **7 sites deliberately skipped** — see the list below; only two are quick wins. `[B2, B7]` |
 | PB-3 | **Mostly done 2026-08-08** (`271cad7`): one `useReducer`, both `eslint-disable` exhaustive-deps removed by making deps genuinely complete. **The remount-by-key stays** — `RunConfigPanel` treats `initialFocus` and `judgeInitiallyOpen` as mount-time-only state (`:119`, `:125-129`), so a preset arriving mid-Configure would not re-focus or reset the judge section without it; verified load-bearing by switching to `key={i}`, which fails. Residual fix: make those two props controlled in `RunConfigPanel`, then the key drops to `i`. `[B3]` |
 | PB-4 | **Mostly done 2026-08-08** (`57bfd95`): rows memoised, `activeId` threaded, `useDeferredValue` on both searches. **Virtualisation deliberately skipped** — rows are variable height, the sidebar does not own its scroll container, and `page_size` caps at 100 (`openapi.yaml:681-683`) behind an explicit "Load more", so row count is user-bounded; same call `InspectorPage.tsx:57-60` already documents. If it is ever wanted, the dependency-free route is `content-visibility: auto` + `contain-intrinsic-size` per row, which keeps nodes in the DOM so tests and Ctrl-F still work. `[B4]` |
 | PB-5 | Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this with a Map in `useMemo` — copy it. `[B5]` |
@@ -56,6 +56,26 @@ The `[Bn]` tags are the corresponding review-bucket-B item — **same item, not 
 | PW-1 | Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes `agentic.config.ts`; wire `product.label` through every UI string so an adopter's name renders. |
 
 ---
+
+### PB-2 leftovers — the 7 unconverted fetch sites
+
+Quick wins, blocked only by concurrency at the time:
+- `src/pages/chat/ByokSection.tsx:67` and `src/pages/chat/CompareView.tsx:132` — both clean converts.
+
+Genuinely need work first, do not just force the hook in:
+- `EditorPage.tsx:99-128` — the response is torn into six form buffers *and* locally mutated by
+  `save()`. Any seed-on-data effect re-fires after a save and can clobber a draft the user is
+  still typing (the Textarea is not disabled while saving). Needs the editor body extracted into
+  a keyed child, PB-1-shaped, first. **This is a latent data-loss bug independent of PB-2.**
+- `SettingsAdmin.tsx:53` (MembersSection) and `EvalPage.tsx:106` — one fetch feeds two
+  independently-mutated states; conversion adds lines rather than removing them.
+- `EvalPage.tsx:129`, `CasebooksPage.tsx:237` — incremental cache-fill loops, not a
+  data/loading/error read.
+- `SettingsPage.tsx:87` — the model the union shape came from, but its `fail` branch carries
+  `latencyMs`, which the generic error state cannot hold. Left alone deliberately.
+
+Also unconverted by design: `ChatPage.tsx:184` (turns are stream-mutated), `ChatPage.tsx:229`
+(no loading state), `RunsPage.tsx:271` (dispatches into PB-3's reducer).
 
 ## Stage A+ — A/B compare
 
@@ -67,7 +87,7 @@ backends. Sequenced after PB-1 deliberately.
 |---|---|
 | PAB-1 | **Partly done 2026-08-08** (`d884eb5`): `tune`-gated toggle, fan-out on send, N-column transcript, result is a real run, cost warning, 3-column cap. **Only the endpoint axis varies.** `ReplayTurnRequest` carries `endpoints[]` but a *single* shared `config`, so per-column instruction version / model is not expressible under contract v0.3.0. Remaining work is the contract change below, then widening the picker. |
 | PAB-2 | Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire, then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper. The contract half is an additive clarification that **must fold into P3-T00, not be smuggled in separately**. **deps: P3-T00** |
-| PAB-3 | `compareSets` presets in `agentic.config.ts` + picker UI, so a team's usual A/B is one click. **deps: PAB-1** |
+| PAB-3 | **Done 2026-08-08** (`b9c8d70`): `compareSets: {id, label, trees?, variants}` + picker. Key is `variants` not `endpoints`, so `configs[]` needs no breaking config rename later. A set carrying per-column `config` is **refused with a reason, not run** — warn-and-run would let a preset labelled "current vs previous version" silently compare prod vs staging. Validator flips reject→apply when `configs[]` lands. **Open question:** the plan's `endpoints: ["staging","prod"]` was read as deploy-endpoint *names*; PAB-4 will want *target* ids in the same structure and needs a distinct key (`target`). Also `versions: "last-2"` needs relative-version expansion, which the contract fix does not provide. |
 | PAB-4 | Cross-backend compare — per-request target override in `src/api/client.ts`, N unrelated conversations in N databases. No shared `run_id` means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). **Deferred; blocked on decision Q1.** |
 
 ---
