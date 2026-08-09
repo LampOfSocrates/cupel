@@ -13,6 +13,7 @@ import {
   Textarea,
 } from "@mantine/core";
 import { api } from "../api/client";
+import { useAsync } from "../hooks/useAsync";
 import type { Casebook, CasebookItemCreate } from "../api/types";
 
 // P2-T12a ⊞ collect — "Collect noteworthy turns into Casebooks with one
@@ -42,31 +43,25 @@ interface Props {
 }
 
 export function CollectModal({ opened, target, onClose, onCollected }: Props) {
-  const [casebooks, setCasebooks] = useState<Casebook[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
+  const {
+    data: casebooks,
+    error: loadError,
+    setData: setCasebooks,
+  } = useAsync(opened ? () => api.casebooks() : null, [opened]);
+
+  // Fresh form per open.
   useEffect(() => {
     if (!opened) return;
     setError(null);
     setDone(null);
     setNote("");
     setNewName("");
-    let cancelled = false;
-    api
-      .casebooks()
-      .then((list) => {
-        if (!cancelled) setCasebooks(list);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [opened]);
 
   const add = async (casebook: Casebook) => {
@@ -85,9 +80,7 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
           : `Added to ${casebook.name}.`,
       );
       const refreshed = await api.casebook(casebook.id).catch(() => casebook);
-      setCasebooks((list) =>
-        (list ?? []).map((c) => (c.id === refreshed.id ? refreshed : c)),
-      );
+      setCasebooks((list) => list.map((c) => (c.id === refreshed.id ? refreshed : c)));
       onCollected?.(refreshed);
     } catch (e) {
       setError((e as Error).message);
@@ -103,7 +96,7 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
     setError(null);
     try {
       const created = await api.createCasebook({ name });
-      setCasebooks((list) => [created, ...(list ?? [])]);
+      setCasebooks((list) => [created, ...list]);
       setNewName("");
       await add(created);
     } catch (e) {
@@ -133,9 +126,9 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
           value={note}
           onChange={(e) => setNote(e.currentTarget.value)}
         />
-        {error && (
+        {(error ?? loadError) && (
           <Alert color="red" data-testid="collect-error">
-            {error}
+            {error ?? loadError?.message}
           </Alert>
         )}
         {done && (
@@ -144,7 +137,7 @@ export function CollectModal({ opened, target, onClose, onCollected }: Props) {
           </Alert>
         )}
         <Divider label="Add to" labelPosition="left" />
-        {!casebooks && !error && <Loader size="sm" />}
+        {!casebooks && !error && !loadError && <Loader size="sm" />}
         {casebooks?.length === 0 && (
           <Text size="xs" c="dimmed" data-testid="collect-empty">
             No casebooks yet — name one below and this turn becomes its first entry.

@@ -12,7 +12,8 @@ import {
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Agent, Rubric, RunConfig, RunSummaryItem, SelectionItem } from "../api/types";
+import type { Agent, Rubric, RunConfig, SelectionItem } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useApp } from "../AppContext";
@@ -219,28 +220,13 @@ export function RunsPage() {
   );
   const { mode, step, prefilling, preset, testFlow, selection, configs } = nav;
 
-  const [runs, setRuns] = useState<RunSummaryItem[] | null>(null);
+  const { data: runs, error: runsError } = useAsync(() => api.runs(tree), [tree]);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
   const versionsRequested = useRef(new Set<string>());
   const [queueing, setQueueing] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .runs(tree)
-      .then((data) => {
-        if (!cancelled) setRuns(data);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tree]);
 
   // Configure-step dropdown data (feature-spec.md:230 "Runs · 2 Configure |
   // GET …/agents/{id}/instructions, GET /models, GET /eval/rubrics"): agents +
@@ -343,9 +329,9 @@ export function RunsPage() {
         {/* P2-T07c: a disabled tree keeps its runs readable while queueing new
             work 409s (feature-spec.md:20 "read-only banner"). */}
         <ReadOnlyTreeBanner />
-        {error && (
+        {(runsError ?? error) && (
           <Alert color="red" title="Error">
-            {error}
+            {runsError?.message ?? error}
           </Alert>
         )}
         {runs == null ? (

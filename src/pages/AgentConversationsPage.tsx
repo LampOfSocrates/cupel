@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Group, Loader, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import { api } from "../api/client";
-import type { Conversation } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { relativeTime } from "../lib/relativeTime";
 import { useApp } from "../AppContext";
 
@@ -15,31 +14,17 @@ export function AgentConversationsPage() {
   const { agentId } = useParams();
   const { tree } = useApp();
   const navigate = useNavigate();
-  const [items, setItems] = useState<Conversation[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setItems(null);
-    api
-      .conversations(tree, { agent_id: agentId })
-      .then((page) => {
-        if (!cancelled) setItems(page.items);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tree, agentId]);
+  const { data: items, error } = useAsync(
+    () => api.conversations(tree, { agent_id: agentId }).then((page) => page.items),
+    [tree, agentId],
+  );
 
   return (
     <Stack gap="sm">
       <Title order={3}>Recent conversations — {agentId}</Title>
       {error && (
         <Text size="sm" c="red">
-          {error}
+          {error.message}
         </Text>
       )}
       {!error && items === null && <Loader size="sm" />}

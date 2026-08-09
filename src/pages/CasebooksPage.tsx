@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import {
   Alert,
@@ -17,6 +17,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { api } from "../api/client";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { relativeTime } from "../lib/relativeTime";
 import type {
@@ -64,9 +65,8 @@ function refKey(item: { tree: string; conversation_id: string }) {
 
 export function CasebooksPage() {
   const { tree: activeTree, models, ensureModels } = useApp();
-  const [casebooks, setCasebooks] = useState<Casebook[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -74,17 +74,19 @@ export function CasebooksPage() {
     ensureModels();
   }, [ensureModels]);
 
-  const load = useCallback(async () => {
-    const list = await api.casebooks();
-    setCasebooks(list);
-    setSelectedId((id) => (id && list.some((c) => c.id === id) ? id : (list[0]?.id ?? null)));
-    return list;
-  }, []);
+  const {
+    data: casebooks,
+    error: loadError,
+    reload,
+    setData: setCasebooks,
+  } = useAsync(() => api.casebooks(), []);
 
-  useEffect(() => {
-    load().catch((e: Error) => setError(e.message));
-  }, [load]);
-
+  // Derived, not stored: a pick survives list changes only while it still
+  // exists — deleting the open casebook falls back to the first row.
+  const selectedId =
+    pickedId && casebooks?.some((c) => c.id === pickedId)
+      ? pickedId
+      : (casebooks?.[0]?.id ?? null);
   const selected = casebooks?.find((c) => c.id === selectedId) ?? null;
 
   const create = async () => {
@@ -94,8 +96,8 @@ export function CasebooksPage() {
     setError(null);
     try {
       const created = await api.createCasebook({ name });
-      setCasebooks((list) => [created, ...(list ?? [])]);
-      setSelectedId(created.id);
+      setCasebooks((list) => [created, ...list]);
+      setPickedId(created.id);
       setNewName("");
     } catch (e) {
       setError((e as Error).message);
@@ -108,7 +110,7 @@ export function CasebooksPage() {
     setError(null);
     try {
       await api.deleteCasebook(casebook.id);
-      await load();
+      reload();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -124,9 +126,9 @@ export function CasebooksPage() {
         </Text>
       </div>
 
-      {error && (
+      {(error ?? loadError) && (
         <Alert color="red" data-testid="casebooks-error">
-          {error}
+          {error ?? loadError?.message}
         </Alert>
       )}
 
@@ -160,7 +162,7 @@ export function CasebooksPage() {
                 key={cb.id}
                 data-testid="casebook-row"
                 data-selected={cb.id === selectedId ? "true" : undefined}
-                onClick={() => setSelectedId(cb.id)}
+                onClick={() => setPickedId(cb.id)}
                 style={{ width: "100%", padding: "4px 6px", borderRadius: 4 }}
                 bg={cb.id === selectedId ? "var(--mantine-color-default-hover)" : undefined}
               >
@@ -189,7 +191,7 @@ export function CasebooksPage() {
               casebook={selected}
               activeTree={activeTree}
               models={models}
-              onChanged={load}
+              onChanged={reload}
               onDelete={() => remove(selected)}
             />
           )}
@@ -203,7 +205,7 @@ interface DetailProps {
   casebook: Casebook;
   activeTree: string;
   models: Model[] | null;
-  onChanged: () => Promise<unknown>;
+  onChanged: () => void;
   onDelete: () => void;
 }
 
@@ -269,7 +271,7 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
     setError(null);
     try {
       await api.removeCasebookItem(casebook.id, item.id);
-      await onChanged();
+      onChanged();
     } catch (e) {
       setError((e as Error).message);
     }

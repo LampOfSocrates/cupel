@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Alert,
@@ -13,7 +12,8 @@ import {
   Title,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
-import type { Conversation, Endpoint } from "../api/types";
+import type { Endpoint } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { Markdown } from "../lib/markdown";
 
@@ -44,54 +44,35 @@ export function ForkComparePage() {
   const { parentId = "", turnId = "" } = useParams();
   const navigate = useNavigate();
 
-  const [parent, setParent] = useState<Conversation | "deleted" | null>(null);
-  const [siblings, setSiblings] = useState<Conversation[] | null>(null);
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // Parent tombstone (openapi.yaml:438-443): a 404 renders "parent deleted"
+  // while the sibling cards still load — lineage survives deletion.
+  const { data: parent, error: parentError } = useAsync(
+    () =>
+      api.conversation(tree, parentId).catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 404) return "deleted" as const;
+        throw e;
+      }),
+    [tree, parentId],
+  );
+  const { data: siblings, error: siblingsError } = useAsync(
+    () =>
+      api
+        .conversations(tree, { forks_of: parentId })
+        .then((page) => page.items.filter((c) => c.lineage?.fork_turn_id === turnId)),
+    [tree, parentId, turnId],
+  );
+  // Label columns with endpoint NAMES like the re-fire run grid does;
+  // non-critical — ids render verbatim if this fails.
+  const { data: endpoints } = useAsync(
+    () => api.endpoints(tree).catch(() => [] as Endpoint[]),
+    [tree],
+  );
 
-  useEffect(() => {
-    setParent(null);
-    setSiblings(null);
-    setError(null);
-    let cancelled = false;
-    // Parent tombstone (openapi.yaml:438-443): a 404 renders "parent deleted"
-    // while the sibling cards still load — lineage survives deletion.
-    api
-      .conversation(tree, parentId)
-      .then((data) => {
-        if (!cancelled) setParent(data);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        if (e instanceof ApiError && e.status === 404) setParent("deleted");
-        else setError((e as Error).message);
-      });
-    api
-      .conversations(tree, { forks_of: parentId })
-      .then((page) => {
-        if (cancelled) return;
-        setSiblings(page.items.filter((c) => c.lineage?.fork_turn_id === turnId));
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    // Label columns with endpoint NAMES like the re-fire run grid does;
-    // non-critical — ids render verbatim if this fails.
-    api
-      .endpoints(tree)
-      .then((data) => {
-        if (!cancelled) setEndpoints(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [tree, parentId, turnId]);
-
+  const error = parentError ?? siblingsError;
   if (error) {
     return (
       <Alert color="red" title="Error" m="md" maw={640}>
-        {error}
+        {error.message}
       </Alert>
     );
   }
@@ -100,7 +81,7 @@ export function ForkComparePage() {
   }
 
   const endpointName = (id: string | null | undefined) =>
-    id ? (endpoints.find((e) => e.id === id)?.name ?? id) : "unknown endpoint";
+    id ? (endpoints?.find((e) => e.id === id)?.name ?? id) : "unknown endpoint";
   const originalTurn =
     parent !== "deleted" && parent != null
       ? (parent.turns ?? []).find((t) => t.id === turnId)

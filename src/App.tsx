@@ -6,7 +6,8 @@ import { agenticConfig } from "../agentic.config";
 import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api/target";
 import { onAuthRequired, useAuthToken } from "./api/auth";
 import { loginPath, RETURN_TO_PARAM, sanitizeReturnTo } from "./lib/returnTo";
-import type { AgentTree, Me, Model } from "./api/types";
+import type { Model } from "./api/types";
+import { useAsync } from "./hooks/useAsync";
 import { AppContext } from "./AppContext";
 import { QueueProvider } from "./QueueContext";
 import { Shell } from "./shell/Shell";
@@ -62,9 +63,6 @@ function LoginBounce() {
 export function App() {
   // Boot: GET /me is always called (invariant, cupel-phases.md:160) alongside
   // GET /agenttrees (feature-spec.md:225 "App shell / sidebar | GET /me, GET /agenttrees").
-  const [me, setMe] = useState<Me | null>(null);
-  const [trees, setTrees] = useState<AgentTree[] | null>(null);
-  const [error, setError] = useState<Error | null>(null);
   const [conversationsVersion, setConversationsVersion] = useState(0);
   const refreshConversations = useCallback(() => {
     setConversationsVersion((v) => v + 1);
@@ -103,31 +101,21 @@ export function App() {
   // booted": during boot the 401 lands in the catch below, and an unguarded
   // bump would loop boot → 401 → bump → boot forever.
   const [bootNonce, setBootNonce] = useState(0);
+  const { data: boot, error } = useAsync(
+    () => Promise.all([api.me(), api.agentTrees()]),
+    [target, authToken, bootNonce],
+  );
+  const me = boot?.[0] ?? null;
+  const trees = boot?.[1] ?? null;
   const rebootIfBooted = useEffectEvent(() => {
     if (me !== null) setBootNonce((n) => n + 1);
   });
   useEffect(() => onAuthRequired(rebootIfBooted), []);
   useEffect(() => {
-    let cancelled = false;
-    setMe(null);
-    setTrees(null);
-    setError(null);
     // Models are per-backend (GET {base}/models) — drop the session cache so
     // the next settings-menu open refetches against the new target.
     setModels(null);
     modelsRequested.current = false;
-    Promise.all([api.me(), api.agentTrees()])
-      .then(([meData, treeData]) => {
-        if (cancelled) return;
-        setMe(meData);
-        setTrees(treeData);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [target, authToken, bootNonce]);
 
   if (error instanceof ApiError && error.status === 401) {

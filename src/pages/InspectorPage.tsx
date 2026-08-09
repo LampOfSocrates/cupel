@@ -18,13 +18,14 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { api } from "../api/client";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { CollectModal } from "../components/CollectModal";
 import { EnvelopeChip } from "../components/EnvelopeChip";
 import { ScoreChip } from "../components/ScoreChip";
 import { relativeTime } from "../lib/relativeTime";
 import { Markdown } from "../lib/markdown";
-import type { AdminConversationItem, CasebookItemCreate, Conversation } from "../api/types";
+import type { CasebookItemCreate } from "../api/types";
 
 // P2-T12a Inspector (UNSKETCHED — derived from the app's existing dense visual
 // language per cupel-phases.md:95: the Settings → Members table and the runs
@@ -96,19 +97,10 @@ export function InspectorPage() {
   const [draft, setDraft] = useState<Filters>(applied);
   useEffect(() => setDraft(applied), [applied]);
 
-  const [pageData, setPageData] = useState<{
-    items: AdminConversationItem[];
-    total: number;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setPageData(null);
-    setError(null);
-    api
-      .adminConversations({
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const { data: pageData, error } = useAsync(
+    () =>
+      api.adminConversations({
         user_id: applied.user_id || undefined,
         tree: applied.tree || undefined,
         date_from: applied.date_from || undefined,
@@ -117,19 +109,9 @@ export function InspectorPage() {
         score_max: applied.score_max === "" ? undefined : Number(applied.score_max),
         page,
         page_size: PAGE_SIZE,
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setPageData({ items: data.items, total: data.total });
-        setSelectedId(data.items[0]?.id ?? null);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [applied, page]);
+      }),
+    [applied, page],
+  );
 
   const commit = (next: Filters, nextPage = 1) => {
     const search = new URLSearchParams();
@@ -139,40 +121,27 @@ export function InspectorPage() {
   };
 
   const rows = pageData?.items ?? [];
+  // Derived, not stored: a new page (or one the picked row fell out of) opens
+  // on its first row.
+  const selectedId =
+    pickedId && rows.some((r) => r.id === pickedId) ? pickedId : (rows[0]?.id ?? null);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const selectedIndex = rows.findIndex((r) => r.id === selectedId);
   const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1;
 
   // ------------------------------------------------------- inline reader
-  const [transcript, setTranscript] = useState<Conversation | null>(null);
-  const [readerError, setReaderError] = useState<string | null>(null);
   const [focusedTurnId, setFocusedTurnId] = useState<string | null>(null);
+  const { data: transcript, error: readerError } = useAsync(
+    selected ? () => api.conversation(selected.tree_id, selected.id) : null,
+    [selected],
+  );
 
+  // Open on the newest answer; the reader's keyboard nav moves it from there.
   useEffect(() => {
-    if (!selected) {
-      setTranscript(null);
-      return;
-    }
-    let cancelled = false;
-    setTranscript(null);
-    setReaderError(null);
-    setFocusedTurnId(null);
-    api
-      .conversation(selected.tree_id, selected.id)
-      .then((conv) => {
-        if (cancelled) return;
-        setTranscript(conv);
-        const turns = conv.turns ?? [];
-        const lastAssistant = [...turns].reverse().find((t) => t.role === "assistant");
-        setFocusedTurnId(lastAssistant?.id ?? turns[turns.length - 1]?.id ?? null);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setReaderError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
+    const turns = transcript?.turns ?? [];
+    const lastAssistant = [...turns].reverse().find((t) => t.role === "assistant");
+    setFocusedTurnId(lastAssistant?.id ?? turns[turns.length - 1]?.id ?? null);
+  }, [transcript]);
 
   // ------------------------------------------------------- ⊞ collect + keys
   const [collectTarget, setCollectTarget] = useState<CasebookItemCreate | null>(null);
@@ -202,7 +171,7 @@ export function InspectorPage() {
         e.preventDefault();
         const delta = e.key === "j" ? 1 : -1;
         const next = Math.min(Math.max(s.selectedIndex + delta, 0), s.rows.length - 1);
-        setSelectedId(s.rows[next].id);
+        setPickedId(s.rows[next].id);
       } else if (e.key === "a") {
         e.preventDefault();
         collect(s.focusedTurnId);
@@ -298,7 +267,7 @@ export function InspectorPage() {
 
       {error && (
         <Alert color="red" title="Inspector unavailable" data-testid="inspector-error">
-          {error}
+          {error.message}
         </Alert>
       )}
 
@@ -339,7 +308,7 @@ export function InspectorPage() {
                     data-selected={row.id === selectedId ? "true" : undefined}
                     bg={row.id === selectedId ? "var(--mantine-color-default-hover)" : undefined}
                     style={{ cursor: "pointer" }}
-                    onClick={() => setSelectedId(row.id)}
+                    onClick={() => setPickedId(row.id)}
                   >
                     <Table.Td>
                       <Text size="xs" title={row.user_email ?? undefined}>
@@ -447,7 +416,7 @@ export function InspectorPage() {
               </Button>
             </Group>
           </Group>
-          {readerError && <Alert color="red">{readerError}</Alert>}
+          {readerError && <Alert color="red">{readerError.message}</Alert>}
           {!transcript && !readerError && <Loader size="xs" />}
           {transcript && (
             <ScrollArea.Autosize mah={340}>

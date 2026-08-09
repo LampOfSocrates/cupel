@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import {
   Alert,
@@ -14,7 +14,8 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Span, SpanPayload, Trace } from "../api/types";
+import type { Span } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { EnvelopeChip, TreeBranch, TreeNode, type TreeNodeKind } from "../components";
 import { useApp } from "../AppContext";
 
@@ -77,24 +78,18 @@ export function TracePage() {
   const { tree } = useApp();
   const { turnId = "" } = useParams();
 
-  const [trace, setTrace] = useState<Trace | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const {
+    data: trace,
+    error,
+    reload,
+    setData: mergeTrace,
+  } = useAsync(() => api.trace(tree, turnId), [tree, turnId]);
 
-  const load = useCallback(async () => {
-    try {
-      setTrace(await api.trace(tree, turnId));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, [tree, turnId]);
-
+  // A selection belongs to the trace it was made in.
   useEffect(() => {
-    setTrace(null);
-    setError(null);
     setSelectedId(null);
-    void load();
-  }, [load]);
+  }, [tree, turnId]);
 
   const hasRunning = trace?.spans.some((s) => s.status === "running") ?? false;
 
@@ -114,15 +109,12 @@ export function TracePage() {
           if (stopped) break;
           if (ev.event !== "span" || ev.data.turn_id !== turnId) continue;
           const span = ev.data.span;
-          setTrace(
-            (t) =>
-              t && {
-                ...t,
-                spans: t.spans.some((s) => s.id === span.id)
-                  ? t.spans.map((s) => (s.id === span.id ? span : s))
-                  : [...t.spans, span],
-              },
-          );
+          mergeTrace((t) => ({
+            ...t,
+            spans: t.spans.some((s) => s.id === span.id)
+              ? t.spans.map((s) => (s.id === span.id ? span : s))
+              : [...t.spans, span],
+          }));
         }
       } catch {
         // aborted on unmount/terminal, or stream dropped — the stored trace
@@ -140,9 +132,9 @@ export function TracePage() {
   // — the client never derives them).
   const prevRunning = useRef(false);
   useEffect(() => {
-    if (prevRunning.current && !hasRunning) void load();
+    if (prevRunning.current && !hasRunning) reload();
     prevRunning.current = hasRunning;
-  }, [hasRunning, load]);
+  }, [hasRunning, reload]);
 
   const spans = useMemo(() => trace?.spans ?? [], [trace]);
 
@@ -183,7 +175,7 @@ export function TracePage() {
   if (error) {
     return (
       <Alert color="red" title="Could not load trace" m="md" maw={640}>
-        {error}
+        {error.message}
       </Alert>
     );
   }
@@ -350,25 +342,10 @@ function SpanDrawer({
   opened: boolean;
   onClose: () => void;
 }) {
-  const [payload, setPayload] = useState<SpanPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPayload(null);
-    setError(null);
-    let cancelled = false;
-    api
-      .spanPayload(span.payload_ref)
-      .then((data) => {
-        if (!cancelled) setPayload(data);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [span.payload_ref]);
+  const { data: payload, error } = useAsync(
+    () => api.spanPayload(span.payload_ref),
+    [span.payload_ref],
+  );
 
   const duration =
     span.end == null ? "running…" : fmtDuration(ms(span.end) - ms(span.start));
@@ -410,7 +387,7 @@ function SpanDrawer({
             status: {span.status}
           </Text>
         )}
-        {error && <Alert color="red">{error}</Alert>}
+        {error && <Alert color="red">{error.message}</Alert>}
         {!payload && !error && <Loader size="xs" />}
         {payload && (
           <>

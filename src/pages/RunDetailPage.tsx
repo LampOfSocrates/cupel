@@ -16,7 +16,8 @@ import {
   Title,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { JudgeConfig, Rubric, Run, RunCell, RunScoreSummary } from "../api/types";
+import type { JudgeConfig, Rubric, Run, RunCell } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import {
   type CellContext,
   ComparisonView,
@@ -62,8 +63,6 @@ export function RunDetailPage() {
   const { runId = "" } = useParams();
   const navigate = useNavigate();
 
-  const [run, setRun] = useState<Run | null>(null);
-  const [summary, setSummary] = useState<RunScoreSummary | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Latest progress stage text off the stream ("Conversation 3/10 · turn 2/6",
@@ -97,40 +96,31 @@ export function RunDetailPage() {
     };
   }, []);
 
-  // Out-of-order guard (found by the P1-TE2E DoD walk): loads overlap (mount
-  // double-fetch, debounced refetches, judge handler) and a SLOW stale
-  // response resolving after a newer one would overwrite terminal state with
-  // "still running" — with no further frames due, the grid froze there. Only
-  // the latest load may apply.
-  const loadSeq = useRef(0);
-  const load = useCallback(async () => {
-    const seq = ++loadSeq.current;
-    try {
-      // Summary rides the same (debounced) tick — "summary header … updates
-      // live" (feature-spec.md:64).
-      const [runData, summaryData] = await Promise.all([
-        api.run(tree, runId),
-        api.runSummary(runId),
-      ]);
-      if (seq !== loadSeq.current) return; // superseded by a newer load
-      setRun(runData);
-      setSummary(summaryData);
-    } catch (e) {
-      if (seq === loadSeq.current) setError((e as Error).message);
-    }
-  }, [tree, runId]);
+  // Loads overlap (mount double-fetch, debounced refetches, judge handler) and
+  // a SLOW stale response resolving after a newer one would overwrite terminal
+  // state with "still running" — with no further frames due, the grid froze
+  // there (found by the P1-TE2E DoD walk). useAsync's seq guard is what keeps
+  // only the latest load applying. Summary rides the same (debounced) tick —
+  // "summary header … updates live" (feature-spec.md:64).
+  const {
+    data: loaded,
+    error: loadError,
+    reload,
+  } = useAsync(
+    () => Promise.all([api.run(tree, runId), api.runSummary(runId)]),
+    [tree, runId],
+  );
+  const run = loaded?.[0] ?? null;
+  const summary = loaded?.[1] ?? null;
 
   useEffect(() => {
-    setRun(null);
-    setSummary(null);
     setError(null);
     setStage(null);
     setJudgeTaskId(null);
     setJudgeFormOpen(false);
     setDrawerCaseId(null);
     judgeFired.current = false;
-    void load();
-  }, [load]);
+  }, [tree, runId]);
 
   // Rubrics label the summary header + feed the manual judge form; models feed
   // its judge-model select (feature-spec.md:122 "chat/run/judge model
@@ -254,7 +244,7 @@ export function RunDetailPage() {
     let stopped = false;
     const refetch = () => {
       timer = null;
-      void load();
+      reload();
     };
     void (async () => {
       // Reconnect loop (found by the P1-TE2E DoD walk): the page-scoped
@@ -276,14 +266,14 @@ export function RunDetailPage() {
             // further frame, so its status is re-read once per connect rather
             // than leaving "judging…" stuck forever.
             onOpen: () => {
-              void load();
+              reload();
               if (judgeTaskId != null) {
                 void api
                   .task(judgeTaskId)
                   .then((t) => {
                     if (!TASK_IN_FLIGHT.has(t.status)) {
                       setJudgeTaskId(null);
-                      void load();
+                      reload();
                     }
                   })
                   .catch(() => {});
@@ -308,7 +298,7 @@ export function RunDetailPage() {
                 // (not debounced: this effect is about to unsubscribe, which
                 // would drop a pending timer).
                 setJudgeTaskId(null);
-                void load();
+                reload();
               }
             } else if (ev.event === "progress") {
               belongs = ev.data.task_id === taskId || ev.data.task_id === judgeTaskId;
@@ -328,7 +318,7 @@ export function RunDetailPage() {
           // below decides between exit and reconnect.
         }
         if (stopped || controller.signal.aborted) return;
-        void load();
+        reload();
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     })();
@@ -337,14 +327,14 @@ export function RunDetailPage() {
       controller.abort();
       if (timer != null) clearTimeout(timer);
     };
-  }, [taskId, terminal, judging, judgeTaskId, runId, load]);
+  }, [taskId, terminal, judging, judgeTaskId, runId, reload]);
 
   const cancel = async () => {
     if (!run) return;
     setCancelling(true);
     try {
       await api.cancelTask(run.task_id);
-      await load();
+      reload();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -416,10 +406,10 @@ export function RunDetailPage() {
     [navigate],
   );
 
-  if (error) {
+  if (error ?? loadError) {
     return (
       <Alert color="red" title="Error" m="md" maw={640}>
-        {error}
+        {error ?? loadError?.message}
       </Alert>
     );
   }

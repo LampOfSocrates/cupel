@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
 import { Alert, Divider, Drawer, Group, Loader, Stack, Text } from "@mantine/core";
 import { api } from "../api/client";
-import type { EvalCase, Judgment, Rubric } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
+import type { Judgment, Rubric } from "../api/types";
 import { EnvelopeChip } from "./EnvelopeChip";
 import { ScoreChip } from "./ScoreChip";
 
@@ -27,21 +27,12 @@ interface Props {
 }
 
 export function JudgmentDrawer({ caseId, opened, onClose, rubrics = [] }: Props) {
-  const [evalCase, setEvalCase] = useState<EvalCase | null>(null);
-  const [history, setHistory] = useState<Judgment[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setEvalCase(null);
-    setHistory(null);
-    setError(null);
-    Promise.all([api.evalCase(caseId), api.judgments({ case_id: caseId })])
-      .then(([c, js]) => {
-        setEvalCase(c);
-        setHistory(js);
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [caseId]);
+  const { data, error } = useAsync(
+    () => Promise.all([api.evalCase(caseId), api.judgments({ case_id: caseId })]),
+    [caseId],
+  );
+  const evalCase = data?.[0] ?? null;
+  const history = data?.[1] ?? null;
 
   const judgeLabel = (j: Judgment) => {
     // type human = thumbs; no rubric or judge model (openapi.yaml:1886-1889).
@@ -60,7 +51,7 @@ export function JudgmentDrawer({ caseId, opened, onClose, rubrics = [] }: Props)
     >
       {error && (
         <Alert color="red" title="Error">
-          {error}
+          {error.message}
         </Alert>
       )}
       {!error && (evalCase == null || history == null) && <Loader size="sm" />}

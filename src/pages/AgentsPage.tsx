@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   ActionIcon,
@@ -17,6 +17,7 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import type { Agent, AgentCreate } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { TreeBranch, TreeNode } from "../components";
 
@@ -35,24 +36,11 @@ import { TreeBranch, TreeNode } from "../components";
 export function AgentsPage() {
   const { tree } = useApp();
   const navigate = useNavigate();
-  const [agents, setAgents] = useState<Agent[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // Add-agent modal target: null = closed; parent null = new root
   // (openapi.yaml:1169 "null parent_id = new root").
   const [adding, setAdding] = useState<{ parent: Agent | null } | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      setAgents(await api.agents(tree));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, [tree]);
-
-  useEffect(() => {
-    setAgents(null);
-    void load();
-  }, [load]);
+  const { data: agents, error, reload } = useAsync(() => api.agents(tree), [tree]);
 
   // Hierarchy from parent_id links; agents whose parent is missing render as
   // roots rather than vanishing.
@@ -76,13 +64,13 @@ export function AgentsPage() {
   const create = async (body: AgentCreate) => {
     await api.createAgent(tree, body);
     setAdding(null);
-    await load();
+    reload();
   };
 
   if (error) {
     return (
       <Alert color="red" title="Failed to load agents">
-        {error}
+        {error.message}
       </Alert>
     );
   }

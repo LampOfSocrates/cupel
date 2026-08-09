@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Badge,
   Button,
@@ -13,7 +13,8 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
-import type { Conversation, Turn } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
+import type { Turn } from "../api/types";
 
 // P2-T12 — "pull them from real turns or forks" (cupel-phases.md:80). Two jobs
 // in one picker, chosen by `mode`:
@@ -45,27 +46,17 @@ interface Props {
 export function TurnSourceModal({ opened, tree, mode, onClose, onPick }: Props) {
   const [search, setSearch] = useState("");
   const [debounced] = useDebouncedValue(search, 250);
-  const [conversations, setConversations] = useState<Conversation[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!opened) return;
-    let cancelled = false;
-    setConversations(null);
-    setError(null);
-    api
-      .conversations(tree, { search: debounced || undefined, page_size: 20 })
-      .then((page) => {
-        if (!cancelled) setConversations(page.items);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [opened, tree, debounced]);
+  const { data: conversations, error } = useAsync(
+    opened
+      ? () =>
+          api
+            .conversations(tree, { search: debounced || undefined, page_size: 20 })
+            .then((page) => page.items)
+      : null,
+    [opened, tree, debounced],
+  );
 
   const title = mode === "case" ? "Add a turn as an eval case" : "Reference from a turn";
 
@@ -86,7 +77,7 @@ export function TurnSourceModal({ opened, tree, mode, onClose, onPick }: Props) 
         />
         {error && (
           <Text size="xs" c="red">
-            {error}
+            {error.message}
           </Text>
         )}
         {!conversations && !error && <Loader size="sm" />}

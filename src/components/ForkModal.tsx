@@ -14,7 +14,8 @@ import {
   Text,
 } from "@mantine/core";
 import { api } from "../api/client";
-import type { Endpoint, ReplayTurnAccepted, RunConfig } from "../api/types";
+import type { ReplayTurnAccepted, RunConfig } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 
 // P1-T13 — turn re-fire as forks (cupel-phases.md:20): "Re-fire one turn
@@ -59,8 +60,22 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
   const { tree, models, ensureModels, refreshConversations } = useApp();
   const navigate = useNavigate();
 
-  const [endpoints, setEndpoints] = useState<Endpoint[] | null>(null);
-  const [versions, setVersions] = useState<number[]>([]);
+  const { data: endpoints, error: endpointsError } = useAsync(
+    opened ? () => api.endpoints(tree) : null,
+    [opened, tree],
+  );
+  // Optional axis — endpoints alone still fire, so a failure yields no versions
+  // rather than an error.
+  const { data: versions } = useAsync(
+    opened && agentId
+      ? () =>
+          api
+            .instructions(tree, agentId)
+            .then((h) => h.versions.map((v) => v.version))
+            .catch(() => [] as number[])
+      : null,
+    [opened, tree, agentId],
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [model, setModel] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
@@ -68,8 +83,8 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
   const [firing, setFiring] = useState(false);
   const [accepted, setAccepted] = useState<ReplayTurnAccepted | null>(null);
 
-  // Fresh form per open: fetch GET /agenttrees/{tree}/endpoints ("Deploy
-  // targets for replay", openapi.yaml:158) + model list; clear prior results.
+  // Fresh form per open (the fetches above key on `opened` for the same
+  // reason); model list comes from the session cache.
   useEffect(() => {
     if (!opened) return;
     setSelected([]);
@@ -77,28 +92,7 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
     setVersion(null);
     setError(null);
     setAccepted(null);
-    setEndpoints(null);
     ensureModels();
-    let cancelled = false;
-    api
-      .endpoints(tree)
-      .then((data) => {
-        if (!cancelled) setEndpoints(data);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
-    if (agentId) {
-      api
-        .instructions(tree, agentId)
-        .then((h) => {
-          if (!cancelled) setVersions(h.versions.map((v) => v.version));
-        })
-        .catch(() => {}); // optional axis — endpoints alone still fire
-    }
-    return () => {
-      cancelled = true;
-    };
   }, [opened, tree, agentId, ensureModels]);
 
   const endpointName = (id: string) => endpoints?.find((e) => e.id === id)?.name ?? id;
@@ -183,7 +177,7 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
         </Stack>
       ) : (
         <Stack gap="sm">
-          {endpoints == null && !error && <Loader size="xs" mx="auto" />}
+          {endpoints == null && !endpointsError && <Loader size="xs" mx="auto" />}
           {endpoints != null && (
             <MultiSelect
               size="xs"
@@ -206,7 +200,7 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
             clearable
             comboboxProps={{ withinPortal: false }}
           />
-          {agentId != null && versions.length > 0 && (
+          {agentId != null && versions != null && versions.length > 0 && (
             <Select
               size="xs"
               label="Instruction version (optional)"
@@ -218,9 +212,9 @@ export function ForkModal({ conversationId, turnId, agentId, opened, onClose }: 
               comboboxProps={{ withinPortal: false }}
             />
           )}
-          {error && (
+          {(error ?? endpointsError) && (
             <Alert color="red" title="Fork failed">
-              {error}
+              {error ?? endpointsError?.message}
             </Alert>
           )}
           <Group justify="flex-end">
