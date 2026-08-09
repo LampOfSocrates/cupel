@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -35,7 +36,7 @@ function renderModal(
   props: Partial<Parameters<typeof ForkModal>[0]> = {},
   refreshSpy = vi.fn(),
 ) {
-  render(
+  const view = render(
     <MantineProvider env="test">
       <AppContext.Provider
         value={{
@@ -67,7 +68,7 @@ function renderModal(
       </AppContext.Provider>
     </MantineProvider>,
   );
-  return refreshSpy;
+  return { refreshSpy, ...view };
 }
 
 async function pickEndpoints(user: ReturnType<typeof userEvent.setup>, names: string[]) {
@@ -136,7 +137,7 @@ describe("ForkModal", () => {
 
   it("202 renders one row per endpoint; Open in Chat routes to the fork; sidebar refresh fires", async () => {
     const user = userEvent.setup();
-    const refreshSpy = renderModal();
+    const { refreshSpy } = renderModal();
 
     await pickEndpoints(user, ["prod", "staging"]);
     await user.click(screen.getByRole("button", { name: "Fork ⑂" }));
@@ -154,6 +155,56 @@ describe("ForkModal", () => {
     // (Anchor has no href → no implicit link role; query by text.)
     await user.click(screen.getAllByText("Open in Chat ↗")[0]);
     await screen.findByText("chat-probe c-fork-1-1");
+  });
+
+  // The form resets per open by MOUNTING per open — Mantine's Modal does not
+  // render its children while closed, so the body's useState initialisers run
+  // again. This is load-bearing: it replaced an explicit reset effect.
+  it("reopening starts from a fresh form, not the previous open's selection", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [opened, setOpened] = useState(true);
+      return (
+        <>
+          <button onClick={() => setOpened((o) => !o)}>toggle</button>
+          <ForkModal
+            conversationId="c1"
+            turnId="t2"
+            opened={opened}
+            onClose={() => setOpened(false)}
+          />
+        </>
+      );
+    }
+    render(
+      <MantineProvider env="test">
+        <AppContext.Provider
+          value={{
+            ...testAppState,
+            conversationsVersion: 0,
+            refreshConversations: vi.fn(),
+            models: mockModels,
+            ensureModels: () => {},
+          }}
+        >
+          <MemoryRouter>
+            <Harness />
+          </MemoryRouter>
+        </AppContext.Provider>
+      </MantineProvider>,
+    );
+
+    await pickEndpoints(user, ["prod"]);
+    expect(screen.getByRole("button", { name: "Fork ⑂" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "toggle" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Fork ⑂" })).toBeNull(),
+    );
+    await user.click(screen.getByRole("button", { name: "toggle" }));
+
+    // endpoints[] is empty again → Fork disabled, exactly as on a first open.
+    expect(await screen.findByRole("button", { name: "Fork ⑂" })).toBeDisabled();
   });
 
   it("View evaluation routes to the evaluation backing the fork pivot", async () => {
