@@ -64,7 +64,8 @@
 ## ══ Phase 2 is CLOSED. Next up, in this order (user decision 2026-08-07) ══
 
 ## Stage 0 — housekeeping. Small, mostly outside the code; do whenever convenient.
-- [ ] PH-1 Rename the GitHub repo skein -> cupel. One command (`gh repo rename cupel`), but it
+- [x] PH-1 DONE 2026-08-08 — repo is LampOfSocrates/cupel, local remote re-pointed, GitHub
+      redirect from the old URL active. Rename the GitHub repo skein -> cupel. One command (`gh repo rename cupel`), but it
       moves the remote URL: re-point the local remote, and BOTH Render services (cupel-demo,
       cupel-site) clone from it — verify each still deploys afterwards. docs/index.html's
       quickstart already says github.com/LampOfSocrates/cupel, so today it is wrong
@@ -86,15 +87,15 @@
 
 ## Stage A — code quality + make-it-yours. Runs BEFORE the UX phase, no planning session
 ## needed: every item is already specified. Bucket B is docs/review-2026-08-05.md.
-- [ ] PB-1 Split ChatPage.tsx (~1.1k lines, 20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting  [bucket B1]
-- [ ] PB-2 Extract useAsync(fn, deps) and apply at the ~12 hand-rolled useState(null)+useEffect+cancelled fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines and forces ONE loading/error contract  [bucket B2, B7]
-- [ ] PB-3 Untangle RunsPage navigation state — mode/step/prefilling/preset/testFlow has two sources of truth held together by two eslint-disable exhaustive-deps, plus a remount-by-key trick  [bucket B3]
-- [ ] PB-4 Memoise list rows — memo(ConversationRow), pass activeId down instead of useParams() per row, same for ConversationPicker; useDeferredValue on both search inputs; virtualise past ~200 rows  [bucket B4]
-- [ ] PB-5 Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this correctly with a Map in useMemo — copy it  [bucket B5]
-- [ ] PB-6 Strip task-ID archaeology from comments (files are 13-24% comments, mostly P1-T13 / not-built-here / T08's-job — history, not WHY, and already going stale). Keep every WHY comment  [bucket B6]
-- [ ] PB-7 Split src/test/msw/handlers.ts (~2.5k lines, imported by 45 test files) — needs a shared state module + counters object first  [bucket B8]
-- [ ] PB-8 Consider enabling the React Compiler — FIRST fix the three render-phase ref writes (App.tsx:35, App.tsx:112, QueueContext.tsx:83) that its lint rules reject  [bucket B9]
-- [ ] PW-1 Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes agentic.config.ts; wire product.label through every UI string so an adopter's name actually renders (user-approved 2026-08-05)
+- [x] PB-1 Split ChatPage.tsx (~1.1k lines, 20 hooks, four concerns) into ChatPage / Transcript+TurnBubble / Composer / ChatSettingsMenu / ByokSection. The OpenRouter key UI is not a chat setting  [bucket B1]
+- [x] PB-2 Extract useAsync(fn, deps) and apply at the ~12 hand-rolled useState(null)+useEffect+cancelled fetch sites; adopt SettingsPage's discriminated-union state shape. Deletes ~150 lines and forces ONE loading/error contract  [bucket B2, B7]
+- [x] PB-3 Untangle RunsPage navigation state — mode/step/prefilling/preset/testFlow has two sources of truth held together by two eslint-disable exhaustive-deps, plus a remount-by-key trick  [bucket B3]
+- [x] PB-4 Memoise list rows — memo(ConversationRow), pass activeId down instead of useParams() per row, same for ConversationPicker; useDeferredValue on both search inputs; virtualise past ~200 rows  [bucket B4]
+- [x] PB-5 Trace tree is O(n²) (TracePage filters all spans per node; min/max recomputed per render). AgentsPage already solves this correctly with a Map in useMemo — copy it  [bucket B5]
+- [x] PB-6 Strip task-ID archaeology from comments (files are 13-24% comments, mostly P1-T13 / not-built-here / T08's-job — history, not WHY, and already going stale). Keep every WHY comment  [bucket B6]
+- [x] PB-7 Split src/test/msw/handlers.ts (~2.5k lines, imported by 45 test files) — needs a shared state module + counters object first  [bucket B8]
+- [x] PB-8 Consider enabling the React Compiler — FIRST fix the three render-phase ref writes (App.tsx:35, App.tsx:112, QueueContext.tsx:83) that its lint rules reject  [bucket B9]
+- [x] PW-1 Whitelabel-lite — `npm run init` asks name / trees-label / backend URL and writes agentic.config.ts; wire product.label through every UI string so an adopter's name actually renders (user-approved 2026-08-05)
 
 ## Stage A+ — A/B compare (user idea 2026-08-07). PLAN: docs/plan-ab-compare.md.
 ## Most of the machinery exists (turn re-fire already fans one turn to N endpoints under one
@@ -102,9 +103,9 @@
 ## Sequence deliberately AFTER PB-1: compare mode adds a second layout to ChatPage, which is
 ## 1.1k lines and four concerns until that split lands. Dev-only gating is free — require the
 ## existing `tune` permission, do NOT invent a role.
-- [ ] PAB-1 Chat compare mode, within one backend — `tune`-gated toggle picking 2-3 variants (endpoint / instruction version / model), server-side fan-out on send, N-column transcript each streaming its own reply, and the result IS a run so the existing grid + judge + summary work unchanged. Warn about N generations = N bills before sending; cap columns at 3 and send people to Runs beyond that  [deps: PB-1]
+- [x] PAB-1 Chat compare mode, within one backend — `tune`-gated toggle picking 2-3 variants (endpoint / instruction version / model), server-side fan-out on send, N-column transcript each streaming its own reply, and the result IS a run so the existing grid + judge + summary work unchanged. Warn about N generations = N bills before sending; cap columns at 3 and send people to Runs beyond that  [deps: PB-1]
 - [ ] PAB-2 Studio: vary the deploy target in a run — widen `endpoint_ids` beyond turn re-fire (an additive contract clarification; FOLD INTO P3-T00, do not smuggle it in separately), then flip RunConfigPanel's existing `showEndpoints` flag on for the Runs stepper  [deps: P3-T00]
-- [ ] PAB-3 `compareSets` presets in agentic.config.ts + picker UI, so a team's usual A/B is one click  [deps: PAB-1]
+- [x] PAB-3 `compareSets` presets in agentic.config.ts + picker UI, so a team's usual A/B is one click  [deps: PAB-1]
 - [ ] PAB-4 Cross-backend compare (LATER, separate) — per-request target override in src/api/client.ts, N unrelated conversations in N databases, and a DECIDED answer to who judges them and how that is labelled. No shared run_id means the grid and judging do not apply for free. Overlaps P4-HYBRID (same client refactor). Do not start until the judging question is answered  [deps: PAB-1, a decision]
 
 ## Stage B — UX polish phase, desktop-first. PLANNED WITH THE USER before any task runs.
