@@ -302,7 +302,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return f"config {index + 1}"
 
     def evaluation_dict(r: dict) -> dict:
-        task = engine.get_task(r["task_id"])
         rows = db.all("SELECT * FROM evaluation_rows WHERE evaluation_id = ? ORDER BY row_idx", (r["id"],))
         out_rows = []
         for row in rows:
@@ -319,7 +318,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 } for c in cells],
             })
         return {
-            "id": r["id"], "tree_id": r["tree_id"], "status": task["status"],
+            # status is DERIVED from the owning task, never stored
+            # (engine.evaluation_status; openapi.yaml Evaluation.status is
+            # readOnly). Task is the single writer of execution state.
+            "id": r["id"], "tree_id": r["tree_id"],
+            "status": engine.evaluation_status(r["id"], r["task_id"]),
             "created_at": r["created_at"], "task_id": r["task_id"],
             "columns": unj(r["columns"], []), "rows": out_rows,
         }
@@ -1295,8 +1298,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         need_tree(tree)
         out = []
         for r in db.all("SELECT * FROM evaluations WHERE tree_id = ? ORDER BY rowid DESC", (tree,)):
-            task = engine.get_task(r["task_id"])
-            out.append({"id": r["id"], "tree_id": r["tree_id"], "status": task["status"],
+            out.append({"id": r["id"], "tree_id": r["tree_id"],
+                        "status": engine.evaluation_status(r["id"], r["task_id"]),
                         "created_at": r["created_at"], "task_id": r["task_id"],
                         "label": r["label"]})
         return out

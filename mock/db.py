@@ -71,6 +71,14 @@ CREATE TABLE IF NOT EXISTS tasks (
   stage TEXT, parent_id TEXT, result TEXT, error TEXT, payload TEXT,
   created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT);
 
+-- NOTE THE ABSENT COLUMN: there is no `status` here and there never has been
+-- (checked across this file's whole history, including its pre-rename `runs`
+-- shape). openapi.yaml Evaluation.status is DERIVED from the owning task —
+-- see mock/engine.py evaluation_status for the resolution, including how a
+-- partially-failed batch and a pruned task read. tasks.status is the single
+-- writer of execution state; storing a second copy here is what would let the
+-- two disagree, so the column stays absent deliberately rather than by
+-- oversight.
 CREATE TABLE IF NOT EXISTS evaluations (
   id TEXT PRIMARY KEY, tree_id TEXT NOT NULL, task_id TEXT NOT NULL,
   label TEXT, created_at TEXT NOT NULL, columns TEXT NOT NULL);

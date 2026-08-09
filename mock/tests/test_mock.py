@@ -829,6 +829,67 @@ def test_fail_marker_injects_one_failure_then_retry_succeeds(monkeypatch):
     run(case())
 
 
+def test_evaluation_status_is_derived_from_its_task(monkeypatch):
+    """openapi.yaml Evaluation.status (engine.evaluation_status): the field is
+    a VIEW of the owning task, so the two can never disagree.
+
+    The partial-failure read is the interesting one — the batch Task stays
+    `done` ("failed children don't kill the batch", feature-spec.md:106) while
+    the EVALUATION reads `failed`, because a cell it promised was never
+    produced. Retrying the failure flips it back to `done` with no other
+    write, which is only possible because nothing stores it."""
+    monkeypatch.setenv("MOCK_FAIL_MARKER", "BOOM-MARKER")
+
+    async def case():
+        async with client_pair() as c:
+            r = (await c.post("/agenttrees/agent1/chat", json={
+                "message": "BOOM-MARKER derived status", "stream": False,
+            })).json()
+            await wait_task(c, r["task_id"])
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": r["conversation_id"]}],
+                "configs": [{"model": "deepseek-v3"}],
+            })).json()
+            assert (await wait_task(c, acc["task_id"]))["status"] == "done"
+
+            url = f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}"
+            assert (await c.get(url)).json()["status"] == "failed"
+            # The summary list derives it through the same function.
+            listed = (await c.get("/agenttrees/agent1/evaluations")).json()
+            assert listed[0]["status"] == "failed"
+
+            await c.post(f"/tasks/{acc['task_id']}/retry-failed")
+            assert (await wait_task(c, acc["task_id"]))["status"] == "done"
+            assert (await c.get(url)).json()["status"] == "done"
+    run(case())
+
+
+def test_evaluation_status_falls_back_to_cells_without_its_task():
+    """Case 4 of the derivation: task history pruned out from under an
+    evaluation. This mock never deletes a task, so the row is removed by hand
+    here — a real backend with a retention policy reaches this state on its
+    own, and the contract must not leave it undefined. Cells outlive the task,
+    so they answer: all `done` -> done, anything else -> failed."""
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=1)
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "deepseek-v3"}],
+            })).json()
+            await wait_task(c, acc["task_id"])
+            url = f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}"
+            db = c._transport.app.state.db
+            db.run("DELETE FROM tasks WHERE id = ? OR parent_id = ?",
+                   (acc["task_id"], acc["task_id"]))
+            assert (await c.get(url)).json()["status"] == "done"
+
+            db.run("UPDATE evaluation_cells SET status = 'pending'"
+                   " WHERE evaluation_id = ? AND col_idx = 1", (acc["evaluation_id"],))
+            assert (await c.get(url)).json()["status"] == "failed"
+    run(case())
+
+
 def test_fail_marker_is_inert_when_unset(monkeypatch):
     monkeypatch.delenv("MOCK_FAIL_MARKER", raising=False)
 

@@ -231,6 +231,52 @@ class Engine:
             "progress": {"done": task["done"], "total": task["total"], "stage": task["stage"]},
         }, task_id)
 
+    # ---------------------------------------------- derived evaluation state
+    def evaluation_status(self, evaluation_id: str, task_id: str) -> str:
+        """openapi.yaml Evaluation.status / EvaluationSummaryItem.status —
+        DERIVED from the owning Task, never stored.
+
+        Task owns execution state; an evaluation is a VIEW of the task that
+        produced it, so there is one state machine and one writer, not two
+        that can drift. Resolution order:
+
+          1. the task is not `done` -> its status verbatim
+             (queued | running | failed | cancelled);
+          2. the task finished but a child unit OF THIS EVALUATION failed ->
+             `failed`. This is the partial-failure read, and it is the one
+             place Evaluation and Task legitimately differ: the batch really
+             did finish, so the Task stays `done` (e2e/j06-queue.spec.ts pins
+             that — "partial failure, not a dead batch"), but the grid is
+             missing a cell, and calling that `done` hides the gap. The next
+             action is POST /tasks/{id}/retry-failed;
+          3. otherwise -> `done`;
+          4. the task row is GONE — pruned task history; this mock never
+             deletes one, a real backend may — the evaluation's own cells
+             answer instead, because they outlive the task: every cell `done`
+             -> `done`, anything else -> `failed`. It never reads queued or
+             running, since nothing can be executing for a task that does not
+             exist, and it never claims a success it cannot see.
+
+        A cross-tree eval-set replay gives SEVERAL evaluations one parent task
+        (mock/main.py replay_set), so step 2 filters children by their
+        payload's evaluation_id: a failure in one tree's column must not fail
+        another tree's grid.
+        """
+        task = self.get_task(task_id)
+        if task is None:
+            cells = self.db.all(
+                "SELECT status FROM evaluation_cells WHERE evaluation_id = ?",
+                (evaluation_id,))
+            return "done" if cells and all(c["status"] == "done" for c in cells) else "failed"
+        if task["status"] != "done":
+            return task["status"]
+        for child in self.db.all(
+                "SELECT payload FROM tasks WHERE parent_id = ? AND status = 'failed'",
+                (task_id,)):
+            if (unj(child["payload"], {}) or {}).get("evaluation_id") == evaluation_id:
+                return "failed"
+        return "done"
+
     def is_cancelled(self, task_id: str) -> bool:
         task = self.get_task(task_id)
         return task is None or task["status"] == "cancelled"
@@ -633,10 +679,15 @@ class Engine:
             self.tick(parent_id)
         parent = self.get_task(parent_id)
         if parent["status"] == "running":
-            still_failed = self.db.one(
-                "SELECT COUNT(*) AS n FROM tasks WHERE parent_id = ? AND status = 'failed'",
-                (parent_id,))["n"]
-            self.set_status(parent_id, "failed" if still_failed else "done")
+            # A batch parent is `done` once its pass completes, whether or not
+            # a unit failed — the same rule run_batch uses. This path used to
+            # write `failed` instead, so ONE batch read `done` on the first
+            # pass and `failed` after a retry that changed nothing: two
+            # aggregate answers to one question. Per-unit failure is carried
+            # by the children (TaskQueue reads them for its Retry-failed
+            # affordance) and by the derived Evaluation.status
+            # (evaluation_status above), never by a second status here.
+            self.set_status(parent_id, "done")
 
 
 def judgment_dict(row: dict) -> dict:

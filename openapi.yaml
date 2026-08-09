@@ -2661,7 +2661,13 @@ components:
       properties:
         id: { type: string }
         tree_id: { type: string }
-        status: { type: string, enum: [queued, running, done, failed, cancelled] }
+        status:
+          type: string
+          readOnly: true
+          enum: [queued, running, done, failed, cancelled]
+          description: >
+            DERIVED from the Task named by task_id — see Evaluation.status for
+            the full rule. Never accepted on write.
         created_at: { type: string, format: date-time }
         task_id: { type: string }
         label: { type: string, nullable: true }
@@ -2675,7 +2681,28 @@ components:
       properties:
         id: { type: string }
         tree_id: { type: string }
-        status: { type: string, enum: [queued, running, done, failed, cancelled] }
+        status:
+          type: string
+          readOnly: true
+          enum: [queued, running, done, failed, cancelled]
+          description: >
+            DERIVED from the Task named by task_id, never stored on the
+            evaluation and never accepted on write: Task is the single writer
+            of execution state, and an evaluation is a view of the task that
+            produced it. Implementors resolve it in this order — (1) the task
+            is not `done` → its status verbatim; (2) the task finished but a
+            unit of THIS evaluation failed → `failed`, the partial-failure
+            read, and the one place this field legitimately differs from
+            Task.status, which stays `done` because the batch really did
+            finish ("partial failure, not a dead batch") — the caller's next
+            move is POST /tasks/{taskId}/retry-failed; (3) otherwise `done`;
+            (4) the task is unknown, e.g. pruned task history, → the
+            evaluation's own cells answer: every cell `done` → `done`,
+            anything else → `failed`. Case 4 never reads `queued`/`running`
+            (nothing executes for a task that does not exist) and never claims
+            a success it cannot see. A cross-tree eval-set replay shares ONE
+            task across several evaluations, so (2) counts only the failed
+            units belonging to this evaluation.
         created_at: { type: string, format: date-time }
         task_id: { type: string }
         columns:

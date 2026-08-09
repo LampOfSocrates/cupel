@@ -99,6 +99,23 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    items without rewriting membership. Nothing about the reshape makes it better or worse;
    the fix is a `set_id`/`set_version` scope pair beside `evaluation_id`, and it needs
    eval-set design, not judgment design.
+   Stage D DONE 2026-08-09 — **`Evaluation.status` is derived; Task is the single writer.**
+   The field STAYS on the wire (`readOnly: true` now) — removing it would push a join onto
+   every caller. **There was no column to drop:** `evaluations` has never carried `status`,
+   in this schema or its pre-rename `runs` shape (whole git history checked), so the promised
+   sixth migration has no referent and was not written; `mock/db.py` says so at the table
+   instead. What changed is the read: `engine.evaluation_status()` resolves it, and a
+   **partially-failed evaluation now reads `failed`** — the batch Task stays `done` ("failed
+   children don't kill the batch", pinned by `e2e/j06-queue.spec.ts:87`), but a grid missing
+   a cell is not `done`, and the next move is retry-failed. A **pruned/unknown task** falls
+   back to the evaluation's own cells: all `done` → `done`, anything else → `failed`; never
+   `queued`/`running`. Cross-tree set replays share one task, so the partial-failure check
+   counts only failed units carrying this evaluation's id. `retry_failed` no longer writes
+   `failed` on the parent — that was the second aggregate, and it made one batch read `done`
+   on the first pass and `failed` after a retry that changed nothing. Consequence to watch:
+   `EvaluationPage.tsx:200,:452` gate auto-judge and the Judge button on `status === "done"`,
+   so a partial failure must be retried before it can be judged — the right default, but a
+   behaviour change, not just a serialiser change.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

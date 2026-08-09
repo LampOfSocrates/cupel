@@ -143,6 +143,16 @@ Tranche 2 (the wire rename, the Casebook/EvalSet merge, `Judgment.subject`/`scor
 `Evaluation.status`) is **folded into P3-T00** — see `TASKS.md`. It is not a separate task and
 must not be a separate contract bump.
 
+Derived `Evaluation.status` **landed 2026-08-09** (item 7 stage D). Two findings worth keeping:
+(a) **nothing was duplicated in the store** — `evaluations` never had a `status` column in any
+revision of `mock/db.py`, so the drift was never storage, it was two *aggregates*: `run_batch`
+finished a partly-failed batch as `done` while `retry_failed` finished the same batch as
+`failed`. Only one survives — a batch parent is `done` when its pass completes, and per-unit
+failure surfaces on the children and on the derived evaluation. (b) The partial-failure read
+is deliberately `failed`, not `done`: `Task.status` answers "did the batch finish", which the
+queue journey pins as `done`, and `Evaluation.status` answers "is the grid complete", which it
+is not. A task that no longer exists falls back to the cells, which outlive it.
+
 `Judgment.subject`/`scorer` **landed 2026-08-09** (item 7 stage C). Three decisions recorded
 so they are not re-litigated: (a) **`evaluation_id` stays a top-level scope field**, not a
 subject — an LLM judgment of a grid cell judges the CASE, and folding the evaluation into

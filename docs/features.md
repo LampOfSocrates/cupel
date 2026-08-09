@@ -32,6 +32,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | **Test a draft in one click** — it replays your usual conversations against it; repeating a test is two taps |
 | ✅ | Replay real conversations — or a single turn — under a different version or model |
 | ✅ | **Compare side by side**, cells filling in live as each result lands |
+| ✅ | A comparison that lost a cell says so — it reads *failed* until you retry the failures, so a half-filled grid is never mistaken for a finished one |
 | ✅ | Re-fire one turn at several deployments at once; each result becomes a real conversation you can continue |
 | ✅ | **Score with an LLM judge and read its reasoning.** Every past score is kept |
 | ✅ | Hand-craft expected answers, or import a spreadsheet of them, and score against those |
