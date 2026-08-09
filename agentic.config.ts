@@ -92,6 +92,69 @@ export interface LocalMockConfig {
   dbPath: string;
 }
 
+/**
+ * Per-column overrides for a comparison variant.
+ *
+ * NOT APPLIED TODAY — AND NOT SILENTLY IGNORED. The turn re-fire that powers
+ * chat compare carries `endpoints[]` (one column each) but a SINGLE shared
+ * `config` (openapi.yaml ReplayTurnRequest, contract v0.3.0), so a column
+ * cannot carry its own instruction version or model. A set that declares one
+ * is REJECTED by the picker, with the reason shown in the UI: a preset must
+ * never run a comparison that quietly differs from what it says it runs.
+ *
+ * It is declared here so the config you write today is the config that works
+ * unchanged once `ReplayTurnRequest.configs[]` lands (queued with the contract
+ * bump, docs/open-items.md) — at that point the picker applies these instead
+ * of rejecting them, and no existing `compareSets` entry has to be rewritten.
+ * Vary version/model across many conversations in Runs meanwhile.
+ */
+export interface CompareVariantConfig {
+  instruction_version?: number;
+  snapshot_id?: string;
+  model?: string;
+  temperature?: number;
+}
+
+/** One column of a comparison preset. */
+export interface CompareVariantSpec {
+  /**
+   * The deploy endpoint this column runs against — its id
+   * ("ep_agent1_prod") or its name ("prod", case-insensitive) as listed by
+   * GET /agenttrees/{tree}/endpoints. Prefer the NAME: endpoint ids are
+   * tree-scoped, so a name keeps one preset usable on every tree that
+   * deploys to a target of that name.
+   */
+  endpoint: string;
+  /** See CompareVariantConfig — declared, validated, not applied yet. */
+  config?: CompareVariantConfig;
+}
+
+/**
+ * A named A/B comparison — "a team's usual A/B is one click and not a
+ * five-field form each time" (docs/plan-ab-compare.md §3). Config supplies
+ * the PRESETS; chat compare still allows an ad-hoc endpoint selection, and
+ * this stays the only source of truth for the saved ones.
+ *
+ * Chat compare renders at most 3 columns and the baseline reply — what the
+ * live configuration answers — is always column 1, so a set carries at most
+ * TWO variants. A longer set is refused outright and named in the UI; it is
+ * never trimmed to fit, because a silently shortened comparison is a wrong
+ * comparison. Compare more than three at once in Runs.
+ */
+export interface CompareSet {
+  /** Stable identifier, unique across sets. */
+  id: string;
+  /** Human label — the picker's option text. */
+  label: string;
+  /**
+   * Restrict the preset to these agent trees. Omit to offer it on every tree
+   * that deploys to the endpoints it names.
+   */
+  trees?: string[];
+  /** The columns. A bare string is shorthand for `{ endpoint: "…" }`. */
+  variants: Array<string | CompareVariantSpec>;
+}
+
 export interface AgenticConfig {
   /** Product identity — name for code/config, label for chrome/branding. */
   product: { name: string; label: string };
@@ -105,6 +168,8 @@ export interface AgenticConfig {
   defaultTarget: { dev: string; production: string };
   /** The bundled demo backend `npm start` boots — see LocalMockConfig. */
   localMock: LocalMockConfig;
+  /** Saved A/B comparisons offered by chat compare mode — see CompareSet. */
+  compareSets?: CompareSet[];
 }
 
 export const agenticConfig: AgenticConfig = {
@@ -153,4 +218,12 @@ export const agenticConfig: AgenticConfig = {
     port: 4010,
     dbPath: "mock/cupel-mock.sqlite",
   },
+
+  // Your team's usual A/B comparisons, offered in chat compare mode — see
+  // CompareSet above. Endpoints are matched by name first, so these work on
+  // any tree that deploys to a "prod" / "staging" / "canary" target.
+  compareSets: [
+    { id: "prod-vs-staging", label: "Prod vs staging", variants: ["prod", "staging"] },
+    { id: "vs-staging", label: "Live vs staging", variants: ["staging"] },
+  ],
 };

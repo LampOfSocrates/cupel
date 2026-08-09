@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -15,17 +16,25 @@ import {
   Loader,
   MultiSelect,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
   Text,
 } from "@mantine/core";
+import { agenticConfig } from "../../../agentic.config";
 import { api } from "../../api/client";
 import { getSseEnabled } from "../../api/backendPrefs";
 import type { Attachment, Endpoint, Run, RunCell, Turn } from "../../api/types";
 import { useApp } from "../../AppContext";
 import { Markdown } from "../../lib/markdown";
 import { Composer } from "./Composer";
+import {
+  MAX_COMPARE_COLUMNS,
+  resolveCompareSet,
+  setsForTree,
+  validateCompareSets,
+} from "./compareSets";
 import { createDraftStore, type DraftStore } from "./draftStore";
 import type { ChatSettings } from "./types";
 
@@ -49,9 +58,10 @@ import type { ChatSettings } from "./types";
 // `config` shared by all of them (openapi.yaml ReplayTurnRequest), so
 // per-column instruction version / model is not expressible under contract
 // v0.3.0. Runs (POST /replay with configs[]) is where those axes live today.
+// The same limit is what compareSets.ts refuses a preset for, rather than
+// running it as an endpoints-only comparison.
 
-/** Plan §5.3: "Three is readable on a desktop; beyond that it is a grid." */
-export const MAX_COMPARE_COLUMNS = 3;
+export { MAX_COMPARE_COLUMNS } from "./compareSets";
 
 const TERMINAL = new Set<Run["status"]>(["done", "failed", "cancelled"]);
 const REFETCH_DEBOUNCE_MS = 300;
@@ -97,6 +107,7 @@ export function CompareView({
 
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [presetId, setPresetId] = useState<string | null>(null);
   // The shared user turn, rendered above the columns (plan §3).
   const [prompt, setPrompt] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<Turn | null>(null);
@@ -260,6 +271,30 @@ export function CompareView({
     if (taskId) void api.cancelTask(taskId);
   };
 
+  // The saved comparisons, from the one config artifact. Sets that cannot run
+  // exactly as written are not offered — `issues` says which and why.
+  const { sets: presets, issues: presetIssues } = useMemo(
+    () => validateCompareSets(agenticConfig.compareSets),
+    [],
+  );
+  // A preset names endpoints by id or name; resolution is per-tree, so a set
+  // this tree does not deploy to is shown greyed rather than hidden — silently
+  // dropping it looks like the config never had it.
+  const presetOptions = useMemo(
+    () =>
+      setsForTree(presets, tree).map((set) => ({
+        set,
+        ...resolveCompareSet(set, endpoints),
+      })),
+    [presets, tree, endpoints],
+  );
+
+  const applyPreset = (id: string | null) => {
+    setPresetId(id);
+    const chosen = presetOptions.find((o) => o.set.id === id);
+    if (chosen) setSelected(chosen.endpointIds);
+  };
+
   const columnCount = 1 + selected.length;
   const cells = run?.rows[0]?.cells ?? [];
   const nameOf = (id: string) => endpoints.find((e) => e.id === id)?.name ?? id;
@@ -267,13 +302,55 @@ export function CompareView({
 
   return (
     <>
+      {presetOptions.length > 0 && (
+        // Plan §3: "a team's usual A/B is one click and not a five-field form
+        // each time" — the config supplies the presets, the picker below still
+        // takes an ad-hoc selection.
+        <Select
+          size="xs"
+          label="Saved comparison"
+          placeholder="Pick a saved comparison"
+          clearable
+          value={presetId}
+          onChange={applyPreset}
+          data={presetOptions.map(({ set, unresolved }) => ({
+            value: set.id,
+            label:
+              unresolved.length > 0
+                ? `${set.label} — not deployed here: ${unresolved.join(", ")}`
+                : set.label,
+            disabled: unresolved.length > 0,
+          }))}
+          data-testid="compare-preset"
+        />
+      )}
+      {presetIssues.length > 0 && (
+        <Alert
+          color="red"
+          py={6}
+          title="Unusable compare presets"
+          data-testid="compare-preset-issues"
+        >
+          <Stack gap={2}>
+            {presetIssues.map((issue) => (
+              <Text size="xs" key={issue.id}>
+                <b>{issue.id}</b> {issue.reason}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      )}
       <MultiSelect
         size="xs"
         label="Compare against"
         placeholder={selected.length > 0 ? undefined : "Endpoints"}
         data={endpoints.map((e) => ({ value: e.id, label: e.name }))}
         value={selected}
-        onChange={setSelected}
+        // A hand edit is no longer the preset — keep the label honest.
+        onChange={(value) => {
+          setSelected(value);
+          setPresetId(null);
+        }}
         // Column 0 is the baseline reply, so the cap leaves N-1 endpoints.
         maxValues={MAX_COMPARE_COLUMNS - 1}
         data-testid="compare-endpoints"

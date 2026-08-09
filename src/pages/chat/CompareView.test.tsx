@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
+import { agenticConfig, type CompareSet } from "../../../agentic.config";
 import { ChatPage } from "../ChatPage";
 import { RunDetailPage } from "../RunDetailPage";
 import { api } from "../../api/client";
@@ -29,6 +30,15 @@ async function enterCompare(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("How do refunds work?"); // history loaded
   await user.click(screen.getByLabelText("Compare"));
   await screen.findByTestId("compare-cost-warning");
+}
+
+// PAB-3 layers the config presets on top: one click instead of hand-picking.
+const shippedSets = agenticConfig.compareSets;
+afterEach(() => {
+  agenticConfig.compareSets = shippedSets;
+});
+function withCompareSets(sets: unknown[]) {
+  agenticConfig.compareSets = sets as CompareSet[];
 }
 
 describe("chat compare mode — permission gate", () => {
@@ -159,5 +169,108 @@ describe("chat compare mode — the result IS a run", () => {
     await user.click(screen.getByLabelText("Compare"));
     await waitFor(() => expect(screen.getByTestId("transcript")).toBeInTheDocument());
     expect(screen.queryByTestId("compare-transcript")).not.toBeInTheDocument();
+  });
+});
+
+describe("chat compare mode — saved comparisons from agentic.config.ts", () => {
+  async function enterCompareWithEndpoints(user: ReturnType<typeof userEvent.setup>) {
+    await enterCompare(user);
+    // The tree's endpoints have arrived once the default selection prices up.
+    await waitFor(() =>
+      expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent("3 variants"),
+    );
+  }
+
+  it("applies a set in one click — picker, price and fan-out all follow", async () => {
+    withCompareSets([{ id: "just-staging", label: "Live vs staging", variants: ["staging"] }]);
+    const user = userEvent.setup();
+    renderChat();
+    await enterCompareWithEndpoints(user);
+
+    await user.click(screen.getByPlaceholderText("Pick a saved comparison"));
+    await user.click(await screen.findByRole("option", { name: "Live vs staging" }));
+
+    // One click replaced the hand-picked selection, and the cost warning
+    // re-priced BEFORE the send (plan §5.2).
+    expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent(
+      "2 variants — 2 generations, 2 bills",
+    );
+
+    await user.type(screen.getByPlaceholderText("Message…"), "which is best?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(replayTurnRequests).toHaveLength(1));
+    // The set names endpoints by NAME; the fan-out carries this tree's ids.
+    expect(replayTurnRequests[0].body.endpoints).toEqual(["ep_agent1_staging"]);
+    expect((await screen.findByTestId("compare-columns")).children).toHaveLength(2);
+  });
+
+  it("greys out a set this tree does not deploy to, rather than half-applying it", async () => {
+    withCompareSets([{ id: "canary", label: "Prod vs canary", variants: ["prod", "canary"] }]);
+    const user = userEvent.setup();
+    renderChat();
+    await enterCompareWithEndpoints(user);
+
+    await user.click(screen.getByPlaceholderText("Pick a saved comparison"));
+    const option = await screen.findByRole("option", {
+      name: /Prod vs canary — not deployed here: canary/,
+    });
+    expect(option).toHaveAttribute("data-combobox-disabled", "true");
+    await user.click(option);
+    // Untouched: no partial "prod only" comparison sneaks in.
+    expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent("3 variants");
+  });
+
+  it("refuses an over-long set by name instead of truncating it to the cap", async () => {
+    withCompareSets([
+      { id: "four-ways", label: "Four ways", variants: ["prod", "staging", "canary"] },
+      { id: "just-staging", label: "Live vs staging", variants: ["staging"] },
+    ]);
+    const user = userEvent.setup();
+    renderChat();
+    await enterCompareWithEndpoints(user);
+
+    const issues = screen.getByTestId("compare-preset-issues");
+    expect(issues).toHaveTextContent("four-ways");
+    expect(issues).toHaveTextContent("declares 3 variants");
+    expect(issues).toHaveTextContent("compare this many at once in Runs");
+
+    // Not offered as its first two variants — the set is gone, the good one stays.
+    await user.click(screen.getByPlaceholderText("Pick a saved comparison"));
+    expect(await screen.findByRole("option", { name: "Live vs staging" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Four ways" })).not.toBeInTheDocument();
+  });
+
+  it("refuses a set whose per-column config cannot be honoured, and says so", async () => {
+    // Only the endpoint axis varies today: turn re-fire takes endpoints[] with
+    // ONE shared config. Running this as plain prod-vs-staging would present a
+    // version comparison that never happened.
+    withCompareSets([
+      {
+        id: "v-last-two",
+        label: "Current vs previous version",
+        variants: ["prod", { endpoint: "staging", config: { instruction_version: 14 } }],
+      },
+    ]);
+    const user = userEvent.setup();
+    renderChat();
+    await enterCompareWithEndpoints(user);
+
+    const issues = screen.getByTestId("compare-preset-issues");
+    expect(issues).toHaveTextContent("v-last-two");
+    expect(issues).toHaveTextContent("per-column config");
+    expect(issues).toHaveTextContent("one shared config for every column");
+    // Nothing left to offer, so no picker at all — and the ad-hoc selection is
+    // untouched.
+    expect(screen.queryByTestId("compare-preset")).not.toBeInTheDocument();
+    expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent("3 variants");
+  });
+
+  it("shows no picker when the config declares no sets", async () => {
+    withCompareSets([]);
+    const user = userEvent.setup();
+    renderChat();
+    await enterCompareWithEndpoints(user);
+    expect(screen.queryByTestId("compare-preset")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compare-preset-issues")).not.toBeInTheDocument();
   });
 });
