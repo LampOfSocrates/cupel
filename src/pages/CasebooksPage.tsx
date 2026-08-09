@@ -391,7 +391,7 @@ function CasebookDetail({ casebook, activeTree, models, onChanged, onDelete }: D
                 <Text size="xs" key={r.run_id}>
                   {r.tree_id}:{" "}
                   {r.tree_id === activeTree ? (
-                    <Link to={`/runs/${r.run_id}`}>{r.run_id}</Link>
+                    <Link to={`/evaluations/${r.run_id}`}>{r.run_id}</Link>
                   ) : (
                     <>
                       {r.run_id} (opens when {r.tree_id} is the active tree — run pages are

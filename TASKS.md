@@ -24,12 +24,12 @@ the same page differing by which field gets focus and whether the judge panel st
 the run's turns (`openapi.yaml:1556`) — a run *is* an evaluation. Target: two doors, **Chat**
 and **Evaluate**. User decision 2026-08-09.
 
-- [ ] **#1** Two doors — merge the sidebar's three peers (`Sidebar.tsx:23-28`) into one
+- [x] **#1** Two doors — merge the sidebar's three peers (`Sidebar.tsx:23-28`) into one
       Evaluate section. **Delete** the Tune/Evaluate presets (`:36-39,:98-106`) and everything
       downstream: RunsPage's preset reducer branches (`:140-159,:172,:203,:220,:399-401,
       :439-442`), `Sidebar.test.tsx:112-120`, `RunsPage.test.tsx:299,:314,:333,:336`.
       Obsoletes `feature-spec.md:101-103,:294` — they are deleted, not renamed.
-- [ ] **#2** Routes — `/runs` → `/evaluations`, `/runs/:runId` → `/evaluations/:id`
+- [x] **#2** Routes — `/runs` → `/evaluations`, `/runs/:runId` → `/evaluations/:id`
       (`App.tsx:196-198`) **with redirects**: share deep links are in the wild and
       `CompareView.tsx:416` mints run URLs. Update route pins: `returnTo.test.ts:35` (add a
       redirect case), `App.test.tsx:152`, `QueuePage.test.tsx:37,:104`, `ForkModal.test.tsx:64`,

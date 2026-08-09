@@ -155,7 +155,7 @@ describe("casebook actions", () => {
     const alert = await screen.findByTestId("casebook-replay-accepted");
     expect(alert).toHaveTextContent("Enqueued 1 run under one task");
     await userEvent.click(within(alert).getByRole("link", { name: "run-cb-1-1" }));
-    expect(screen.getByTestId("loc")).toHaveTextContent("/runs/run-cb-1-1");
+    expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-cb-1-1");
   });
 
   it("carries the chosen model into the replay config", async () => {

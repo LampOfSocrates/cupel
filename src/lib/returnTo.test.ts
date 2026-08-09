@@ -32,6 +32,16 @@ describe("loginPath", () => {
 describe("sanitizeReturnTo — same-origin relative paths only", () => {
   it("passes app-relative paths through, query intact (?turn= deep link)", () => {
     expect(sanitizeReturnTo("/chat/c1?turn=t2")).toBe("/chat/c1?turn=t2");
+    expect(sanitizeReturnTo("/evaluations/run_1")).toBe("/evaluations/run_1");
+  });
+
+  // NOT a route allowlist — only an origin check. A return_to captured at a
+  // RETIRED path (/runs/{id}, renamed to /evaluations in #2) must survive
+  // sanitisation unrewritten, so the login bounce replays it and App's
+  // redirect route is what moves the user on. Rewriting here instead would
+  // make every future rename a two-place change and silently drop unknown
+  // paths to "/". The end of that round trip is pinned in App.test.tsx.
+  it("does not rewrite a retired path — the redirect route owns that", () => {
     expect(sanitizeReturnTo("/runs/run_1")).toBe("/runs/run_1");
   });
 

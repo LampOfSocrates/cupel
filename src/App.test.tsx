@@ -149,7 +149,7 @@ describe("boot auth (P2-T07)", () => {
     const user = userEvent.setup();
     render(
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs"]}>
+        <MemoryRouter initialEntries={["/evaluations"]}>
           <App />
           <LocationProbe />
         </MemoryRouter>
@@ -172,6 +172,85 @@ describe("boot auth (P2-T07)", () => {
 
     await screen.findByText("Sign in to continue");
     expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fqueue");
+  });
+});
+
+// Legacy /runs deep links (#2). The pages moved to /evaluations, but links
+// shared before the rename are in the wild, so /runs and /runs/{id} redirect
+// rather than 404. The redirect is a plain route, so it fires in BOTH auth
+// modes: off-mode straight through; auth-on after the login bounce replays
+// return_to — which still carries the OLD path — through the same route.
+describe("legacy /runs deep links (#2)", () => {
+  const BASE = agenticConfig.targets.find((t) => t.id === "mock")!.baseUrl;
+
+  it("off-mode: a bookmarked /runs/{id} lands on /evaluations/{id}", async () => {
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/runs/run-old-1"]}>
+          <App />
+          <LocationProbe />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
+    );
+    // Not a 404 shell: the detail page for that run actually rendered.
+    await screen.findByText("Run run-old-1");
+  });
+
+  it("the bare /runs redirects and keeps the query", async () => {
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/runs?from=share"]}>
+          <App />
+          <LocationProbe />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations?from=share"),
+    );
+  });
+
+  it("auth-on: /runs/{id} → login carrying it as return_to → /evaluations/{id}", async () => {
+    const unauthorized = () =>
+      HttpResponse.json(
+        { code: "unauthorized", message: "Missing, invalid or expired bearer token." },
+        { status: 401 },
+      );
+    server.use(
+      http.get(`${BASE}/me`, ({ request }) =>
+        request.headers.get("authorization") ? HttpResponse.json(mockAdminMe) : unauthorized(),
+      ),
+      http.get(`${BASE}/agenttrees`, ({ request }) =>
+        request.headers.get("authorization") ? HttpResponse.json(mockTrees) : unauthorized(),
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/runs/run-old-1"]}>
+          <App />
+          <LocationProbe />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await screen.findByText("Sign in to continue");
+    // The OLD path is what gets carried — sanitizeReturnTo is not a route
+    // allowlist, so nothing rewrites it before the round-trip.
+    expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fruns%2Frun-old-1");
+
+    await user.type(screen.getByLabelText(/Email/), "admin@demo");
+    await user.type(screen.getByLabelText(/^Password/), "demo");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    // Bounced to /runs/run-old-1, then the redirect route takes it home.
+    await waitFor(() =>
+      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/run-old-1"),
+    );
+    await screen.findByText("Run run-old-1");
   });
 });
 

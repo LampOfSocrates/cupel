@@ -28,11 +28,11 @@ import { RunDetailPage } from "./RunDetailPage";
 // - 202 "run row appears immediately and fills incrementally" (:617) →
 //   navigate to the detail grid.
 
-function renderRuns(route = "/runs", state?: unknown) {
+function renderRuns(route = "/evaluations", state?: unknown) {
   return renderApp(
     <Routes>
-      <Route path="/runs" element={<RunsPage />} />
-      <Route path="/runs/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations" element={<RunsPage />} />
+      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
     </Routes>,
     { route, state },
   );
@@ -210,7 +210,7 @@ describe("RunsPage — Test in Runs arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/runs", arrival);
+    renderRuns("/evaluations", arrival);
 
     // two taps: Test in Runs already happened, Queue is immediately reachable
     expect(await screen.findByTestId("config-0")).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("RunsPage — Test in Runs arrival", () => {
 
   it('empty last-selection ("first-time testing") → lands on Pick', async () => {
     seedSnapshot();
-    renderRuns("/runs", arrival);
+    renderRuns("/evaluations", arrival);
     // picker shown, nothing preselected, Configure gated as usual
     expect(
       await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
@@ -240,7 +240,7 @@ describe("RunsPage — Test in Runs arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/runs", arrival);
+    renderRuns("/evaluations", arrival);
 
     await user.click(await screen.findByRole("button", { name: "Queue" }));
     await waitFor(() => expect(replayRequests).toHaveLength(1));
@@ -266,7 +266,7 @@ describe("RunsPage — Test in Runs arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderRuns("/runs", arrival);
+    renderRuns("/evaluations", arrival);
     await screen.findByTestId("config-0");
 
     // widen the preloaded selection, then queue
@@ -295,10 +295,10 @@ describe("Disabled tree (P2-T07c)", () => {
   it("shows the read-only banner above a still-readable runs list", async () => {
     renderApp(
       <Routes>
-        <Route path="/runs" element={<RunsPage />} />
+        <Route path="/evaluations" element={<RunsPage />} />
       </Routes>,
       {
-        route: "/runs",
+        route: "/evaluations",
         trees: [
           { id: "agent1", name: "Agent 1", enabled: false },
           { id: "agent2", name: "Agent 2", enabled: true },

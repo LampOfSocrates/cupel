@@ -423,7 +423,7 @@ export function RunDetailPage() {
     <Stack gap="sm" p="md">
       <Group justify="space-between">
         <Group gap="xs">
-          <Anchor size="xs" onClick={() => navigate("/runs")}>
+          <Anchor size="xs" onClick={() => navigate("/evaluations")}>
             ‹ Runs
           </Anchor>
           <Title order={4}>Run {run.id}</Title>

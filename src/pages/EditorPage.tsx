@@ -63,7 +63,7 @@ import { relativeTime } from "../lib/relativeTime";
 // label ("v3-draft (a3f1)") that has no business in a URL, drafts are
 // session-local so a deep link to this handoff is meaningless after reload,
 // and react-router state costs no new persistence. Shape:
-// navigate("/runs", { state: { testInRuns: { agent_id, snapshot_id,
+// navigate("/evaluations", { state: { testInRuns: { agent_id, snapshot_id,
 // snapshot_label } } }) — consumed by RunsPage (see its prefill note).
 //
 // "Last tested: run …" breadcrumb in the editor: SKIPPED — the editor
@@ -207,7 +207,7 @@ export function EditorPage() {
         lastSnapshot && lastSnapshot.content === draft
           ? { snapshot_id: lastSnapshot.id, label: lastSnapshot.label }
           : await createDraftSnapshot();
-      navigate("/runs", {
+      navigate("/evaluations", {
         state: {
           testInRuns: {
             agent_id: agentId,

@@ -77,7 +77,7 @@ describe("Sidebar Evaluate group", () => {
 
     expect(screen.getByRole("button", { name: "Evaluate" })).toBeInTheDocument();
     for (const [label, path] of [
-      ["Runs", "/runs"],
+      ["Runs", "/evaluations"],
       ["Eval", "/eval"],
       ["Casebooks", "/casebooks"],
     ]) {

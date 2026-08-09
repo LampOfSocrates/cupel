@@ -20,7 +20,7 @@ function renderChat(route = "/chat/c1", overrides: AppStateOverrides = {}) {
     <Routes>
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/chat/:conversationId" element={<ChatPage />} />
-      <Route path="/runs/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
     </Routes>,
     { route, ...overrides },
   );

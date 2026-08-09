@@ -69,9 +69,9 @@ function TraceProbe() {
 function renderDetail(runId: string) {
   return renderApp(
     <Routes>
-      <Route path="/runs/:runId" element={<RunDetailPage />} />
+      <Route path="/evaluations/:runId" element={<RunDetailPage />} />
     </Routes>,
-    { route: `/runs/${runId}` },
+    { route: `/evaluations/${runId}` },
   );
 }
 
@@ -196,10 +196,10 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
-      { route: "/runs/run-refire-1" },
+      { route: "/evaluations/run-refire-1" },
     );
     await screen.findByText("Run run-refire-1");
 
@@ -218,10 +218,10 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
-      { route: "/runs/run-refire-1" },
+      { route: "/evaluations/run-refire-1" },
     );
     await screen.findByText("Run run-refire-1");
 
@@ -244,10 +244,10 @@ describe("RunDetailPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/evaluations/:runId" element={<RunDetailPage />} />
         <Route path="/trace/:turnId" element={<TraceProbe />} />
       </Routes>,
-      { route: "/runs/run-refire-1" },
+      { route: "/evaluations/run-refire-1" },
     );
     await screen.findByText("Run run-refire-1");
 

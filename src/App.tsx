@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { api, ApiError } from "./api/client";
 import { agenticConfig } from "../agentic.config";
@@ -58,6 +58,15 @@ function LoginBounce() {
   const location = useLocation();
   const returnTo = new URLSearchParams(location.search).get(RETURN_TO_PARAM);
   return <Navigate to={sanitizeReturnTo(returnTo)} replace />;
+}
+
+// /runs and /runs/{id} were the pre-rename paths and are in the wild as shared
+// deep links, so they redirect instead of 404ing. Query + hash ride along
+// (a shared link may carry them); `replace` keeps Back out of a redirect loop.
+function LegacyRunsRedirect() {
+  const { runId } = useParams();
+  const { search, hash } = useLocation();
+  return <Navigate to={`/evaluations${runId ? `/${runId}` : ""}${search}${hash}`} replace />;
 }
 
 export function App() {
@@ -193,9 +202,12 @@ export function App() {
           <Route index element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
-          <Route path="/runs" element={<RunsPage />} />
+          <Route path="/evaluations" element={<RunsPage />} />
           {/* Step 3 Results — also the detail route for stored runs. */}
-          <Route path="/runs/:runId" element={<RunDetailPage />} />
+          <Route path="/evaluations/:runId" element={<RunDetailPage />} />
+          {/* Pre-rename paths, still live in shared links (see above). */}
+          <Route path="/runs" element={<LegacyRunsRedirect />} />
+          <Route path="/runs/:runId" element={<LegacyRunsRedirect />} />
           {/* Sibling fork comparison — "compare forks of the same turn
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}

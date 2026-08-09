@@ -285,7 +285,7 @@ export function RunsPage() {
       // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
       // straight to the detail route, which owns the live fill.
       const accepted = await api.replay(tree, { selection, configs });
-      navigate(`/runs/${accepted.run_id}`);
+      navigate(`/evaluations/${accepted.run_id}`);
     } catch (e) {
       setError((e as Error).message);
       setQueueing(false);
@@ -312,7 +312,7 @@ export function RunsPage() {
         {runs == null ? (
           <Loader size="sm" mx="auto" my="md" />
         ) : (
-          <RunsList runs={runs} onOpen={(run) => navigate(`/runs/${run.id}`)} />
+          <RunsList runs={runs} onOpen={(run) => navigate(`/evaluations/${run.id}`)} />
         )}
       </Stack>
     );

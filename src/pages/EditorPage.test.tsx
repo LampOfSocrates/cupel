@@ -200,13 +200,13 @@ describe("EditorPage", () => {
   // "Test an instruction change in one click: 'Test in Runs'
   // snapshots your draft and replays your usual conversations against it —
   // using the editor → Runs flow (sketches 06 → 03)" (cupel-phases.md:18).
-  // Real RunsPage mounted at /runs so the router-state handoff is exercised
+  // Real RunsPage mounted at /evaluations so the router-state handoff is exercised
   // end to end, not against a probe.
   const renderEditorWithRuns = (agentId = "ag_concierge") =>
     renderApp(
       <Routes>
         <Route path="/agents/:agentId/editor" element={<EditorPage />} />
-        <Route path="/runs" element={<RunsPage />} />
+        <Route path="/evaluations" element={<RunsPage />} />
       </Routes>,
       { route: `/agents/${agentId}/editor` },
     );

@@ -13,13 +13,13 @@ import { useQueue } from "../QueueContext";
 // app-wide stream); TaskQueue stays a pure render.
 
 // Result deep links (Task.result, openapi.yaml:1744-1752): "'View results'
-// to the grid, 'Open in Chat' to the fork". Routes: /runs/:runId (App.tsx),
+// to the grid, 'Open in Chat' to the fork". Routes: /evaluations/:runId (App.tsx),
 // /chat/:conversationId (App.tsx).
 function resultLinks(task: Task) {
   const links = [];
   if (task.result?.run_id) {
     links.push(
-      <Anchor key="run" component={Link} to={`/runs/${task.result.run_id}`} size="xs">
+      <Anchor key="run" component={Link} to={`/evaluations/${task.result.run_id}`} size="xs">
         View results ↗
       </Anchor>,
     );
