@@ -53,16 +53,13 @@ const PHASE2_PATHS = [
   "/admin/generator/status",
   "/agenttrees/{tree}/memory",
   "/agenttrees/{tree}/memory/compact",
-  "/casebooks",
-  "/casebooks/{casebookId}",
-  "/casebooks/{casebookId}/items",
-  "/casebooks/{casebookId}/items/{itemId}",
-  "/casebooks/{casebookId}/to-eval-set",
-  "/casebooks/{casebookId}/replay",
   "/eval/cases",
   "/eval/cases/import",
   "/eval/sets",
   "/eval/sets/{setId}",
+  "/eval/sets/{setId}/items",
+  "/eval/sets/{setId}/freeze",
+  "/eval/sets/{setId}/replay",
   "/eval/rubrics/{rubricId}",
   "/settings",
 ];
@@ -286,7 +283,7 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(Object.keys(doc.paths["/agenttrees/{tree}/agents/{agentId}/snapshots"])).toEqual(["post"]);
     // New versioned stores: PUT = new version, never overwrite; no DELETE
     expect(Object.keys(doc.paths["/eval/cases/{caseId}"]).sort()).toEqual(["get", "put"]);
-    expect(Object.keys(doc.paths["/eval/sets/{setId}"])).toEqual(["put"]);
+    expect(Object.keys(doc.paths["/eval/sets/{setId}"]).sort()).toEqual(["delete", "get", "patch", "put"]);
     expect(Object.keys(doc.paths["/eval/rubrics/{rubricId}"])).toEqual(["put"]);
     for (const p of ["/eval/cases/{caseId}", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}"]) {
       expect(doc.paths[p].put.description, `${p} PUT must document new-version semantics`).toMatch(/new version/i);
@@ -295,8 +292,36 @@ describe("P2-T00 contract v0.3.0", () => {
 
   it("eval sets carry versioned membership (feature-spec.md:127)", () => {
     const set = doc.components.schemas.EvalSet;
-    expect(set.required).toEqual(expect.arrayContaining(["version", "case_ids"]));
-    expect(doc.components.schemas.EvalSetUpdate.required).toEqual(["case_ids"]);
+    expect(set.required).toEqual(expect.arrayContaining(["version", "items"]));
+    expect(doc.components.schemas.EvalSetUpdate.required).toEqual(["items"]);
+    // A rename is metadata, not membership, so PATCH must not be versioned —
+    // it is the one write on this resource that answers 200, not 201.
+    expect(doc.paths["/eval/sets/{setId}"].patch.responses["200"]).toBeDefined();
+    expect(doc.paths["/eval/sets/{setId}"].patch.description).toMatch(/NOT versioned/);
+  });
+
+  it("a set member is a live turn reference XOR a frozen case (the Casebook merge)", () => {
+    const item = doc.components.schemas.EvalSetItem;
+    expect(item.required).toEqual(expect.arrayContaining(["id", "kind"]));
+    expect(item.properties.kind.enum).toEqual(["reference", "frozen"]);
+    expect(item.properties.source.required).toEqual(["tree", "conversation_id", "turn_id"]);
+    expect(item.properties.case_id).toBeDefined();
+    expect(doc.components.schemas.EvalSetItemCreate.oneOf.map((b) => b.required.join())).toEqual([
+      "source",
+      "case_id",
+    ]);
+    // Materializing is a flip, not a conversion into a second noun: freeze
+    // answers the SAME resource, and the old /casebooks routes are gone.
+    expect(
+      doc.paths["/eval/sets/{setId}/freeze"].post.responses["201"].content["application/json"].schema.$ref
+    ).toBe("#/components/schemas/EvalSet");
+    expect(
+      doc.paths["/eval/sets/{setId}/items"].post.responses["201"].content["application/json"].schema.$ref
+    ).toBe("#/components/schemas/EvalSet");
+    expect(doc.paths["/eval/sets/{setId}/replay"].post.responses["202"]).toBeDefined();
+    expect(Object.keys(doc.paths).filter((p) => p.startsWith("/casebooks"))).toEqual([]);
+    expect(Object.keys(doc.components.schemas).filter((s) => s.startsWith("Casebook"))).toEqual([]);
+    expect(doc.tags.map((t) => t.name)).not.toContain("casebooks");
   });
 
   it("JudgeRequest selects by exactly one of evaluation_id / case_ids / set_id (feature-spec.md:129)", () => {
@@ -319,7 +344,7 @@ describe("P2-T00 contract v0.3.0", () => {
   });
 
   it("context policy widened to frozen/current/custom, Phase-1 defaults preserved (feature-spec.md:77-82)", () => {
-    for (const name of ["ReplayRequest", "ReplayTurnRequest", "CasebookReplayRequest"]) {
+    for (const name of ["ReplayRequest", "ReplayTurnRequest", "EvalSetReplayRequest"]) {
       const props = doc.components.schemas[name].properties;
       expect(props.context_policy.enum, `${name}.context_policy`).toEqual(["frozen", "current", "custom"]);
       expect(props.context_policy.default).toBe("frozen");
@@ -341,18 +366,6 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(doc.components.schemas.Task.properties.type.enum).toContain("compact");
     // "/chat accepts memory flag" (feature-spec.md:114)
     expect(doc.components.schemas.ChatRequest.properties.memory).toBeDefined();
-  });
-
-  it("casebooks: items are turn references; to-eval-set and replay exist (feature-spec.md:113)", () => {
-    expect(Object.keys(doc.paths["/casebooks"]).sort()).toEqual(["get", "post"]);
-    expect(Object.keys(doc.paths["/casebooks/{casebookId}"]).sort()).toEqual(["delete", "get", "patch"]);
-    expect(doc.components.schemas.CasebookItem.required).toEqual(
-      expect.arrayContaining(["tree", "conversation_id", "turn_id"])
-    );
-    expect(
-      doc.paths["/casebooks/{casebookId}/to-eval-set"].post.responses["201"].content["application/json"].schema.$ref
-    ).toBe("#/components/schemas/EvalSet");
-    expect(doc.paths["/casebooks/{casebookId}/replay"].post.responses["202"]).toBeDefined();
   });
 
   it("generator control matches the spec shape (feature-spec.md:118, :185)", () => {

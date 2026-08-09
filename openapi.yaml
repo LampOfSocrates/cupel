@@ -7,8 +7,9 @@ info:
     Phase-1 path and schema is unchanged or additively extended (new optional
     fields, widened enums with unchanged defaults), so Phase-1 clients keep
     working. New in v0.3.0: auth + security model, admin (users, permissions,
-    tree enable/disable, Inspector, generator control), casebooks, the eval
-    workbench (cases/sets CRUD, import, rubric saves), context-policy
+    tree enable/disable, Inspector, generator control), the eval
+    workbench (cases/sets CRUD — one set holds live turn references and
+    frozen cases — import, rubric saves), context-policy
     widening, per-tree memory, and user settings. Source of truth:
     feature-spec.md "API" section (feature-spec.md:110-131) filtered by
     the Phase 2 plan (cupel-phases.md:69-118); pro-tier endpoints are
@@ -95,7 +96,6 @@ tags:
   - name: trace
   - name: tasks
   - name: eval
-  - name: casebooks
   - name: settings
 
 paths:
@@ -315,9 +315,10 @@ paths:
         audit-logged." Requires the inspect role (403 otherwise); EVERY
         access is audit-logged server-side. Paginated like the tree-scoped
         listing; rows add the owning user and a latest-score column for the
-        score filter. Feed the ⊞ casebook action from here
+        score filter. Feed the ⊞ collect action from here
         (feature-spec.md:236 "Inspector | GET /admin/conversations,
-        POST /casebooks/{id}/items").
+        POST /casebooks/{id}/items" — quoted as written; since Casebook and
+        EvalSet merged, that POST is POST /eval/sets/{setId}/items).
       parameters:
         - name: user_id
           in: query
@@ -1488,6 +1489,19 @@ paths:
               schema: { $ref: "#/components/schemas/EvalCase" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # THE MERGED NOUN (v0.4.0). Casebook and EvalSet were the same concept
+  # modelled twice — "a named collection of turn REFERENCES" and "a named
+  # collection of cases (versioned, reusable across runs/models)". They are one
+  # resource now, EvalSet, and the only real difference between them is a FIELD
+  # on the member: an item is either a REFERENCE to a live turn or a FROZEN
+  # case (EvalSetItem.kind). /casebooks and POST /casebooks/{id}/to-eval-set are
+  # gone: materializing is no longer a conversion between two nouns, it is
+  # POST /eval/sets/{id}/freeze flipping items from reference to frozen.
+  #
+  # Membership is VERSIONED for every item, reference or frozen (the eval-set
+  # rule wins over the casebook's free mutation, because judgments reference
+  # sets and membership has to be reproducible): every add, removal and freeze
+  # appends a new version carrying its FULL item list.
   /eval/sets:
     get:
       tags: [eval]
@@ -1496,12 +1510,16 @@ paths:
       description: |
         feature-spec.md:127: "Sets: POST/GET /eval/sets". Model
         (feature-spec.md:58): "EvalSet: named collection of cases
-        (versioned, reusable across runs/models)". Returns the latest
-        version of each set, membership included — feeds the workbench set
-        manager (feature-spec.md:63) and the judge's set picker.
+        (versioned, reusable across runs/models)", widened by the merge to
+        hold live turn references as well as frozen cases. Returns the
+        latest version of each set, membership included — feeds the
+        workbench set manager (feature-spec.md:63), the ⊞ collect action
+        (cupel-phases.md:79) and the judge's set picker. Global, not
+        tree-scoped: a set may reference turns across trees, and per-item
+        visibility still follows the viewer's tree permissions.
       responses:
         "200":
-          description: Latest version of every set.
+          description: Latest version of every set, items included.
           content:
             application/json:
               schema:
@@ -1514,8 +1532,9 @@ paths:
       description: |
         feature-spec.md:127 "POST/GET /eval/sets"; workbench set manager:
         "create/name/version sets, drag cases in" (feature-spec.md:63).
-        Membership changes after creation go through PUT /eval/sets/{id}
-        (new version).
+        Starts empty unless items are supplied. Membership changes after
+        creation go through PUT /eval/sets/{id}, POST …/items or
+        POST …/freeze — each appends a new version.
       requestBody:
         required: true
         content:
@@ -1527,8 +1546,51 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /eval/sets/{setId}:
+    get:
+      tags: [eval]
+      operationId: getEvalSet
+      summary: One eval set (latest membership version)
+      description: |
+        The set with its items. Reference items are turn REFERENCES, never
+        copies (feature-spec.md:285 "Quote the reference-not-copy rule") —
+        render their transcripts by following each item's
+        source.tree/conversation_id/turn_id; the transcript stays in its
+        conversation. Frozen items name an EvalCase instead, read via
+        GET /eval/cases/{id}.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      responses:
+        "200":
+          description: The set (latest version), items included.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [eval]
+      operationId: updateEvalSetMetadata
+      summary: Rename / re-describe a set (NOT a new version)
+      description: |
+        Metadata only, and deliberately NOT versioned: a set's name and
+        description belong to the set, its items belong to the version. A
+        rename therefore does not append a membership version and does not
+        change what any judgment was made against. Membership changes go
+        through PUT /eval/sets/{id}, POST …/items or POST …/freeze.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetMetadataUpdate" }
+      responses:
+        "200":
+          description: The updated set (membership version unchanged).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [eval]
       operationId: updateEvalSet
@@ -1536,8 +1598,16 @@ paths:
       description: |
         feature-spec.md:127: "PUT /eval/sets/{id} (versioned membership)".
         Append-only like rubrics: each save is a new version carrying its
-        full case_ids list; earlier versions remain queryable so judgments
-        made against version N stay attributable to exactly that membership.
+        FULL item list; earlier versions remain queryable so judgments made
+        against version N stay attributable to exactly that membership.
+
+        ITEM IDENTITY ACROSS VERSIONS: the server carries an item's id
+        forward when the new version still holds the same referent — the
+        same case_id for a frozen item, the same source triple for a
+        reference item — and mints an id for referents the previous version
+        did not hold. So an id addresses "this member of this set", not
+        "this row of this version", which is what makes POST …/freeze able
+        to name an item.
       parameters: [{ $ref: "#/components/parameters/setId" }]
       requestBody:
         required: true
@@ -1551,6 +1621,120 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [eval]
+      operationId: deleteEvalSet
+      summary: Delete a set (its items are references — nothing else is touched)
+      description: |
+        Removes the set and every membership version. Reference items were
+        references, so the referenced turns and conversations are untouched;
+        frozen items named EvalCases, and those cases — plus the judgments
+        recorded against them and any evaluation replayed from this set —
+        remain. Deleting a set never deletes evidence.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      responses:
+        "204": { description: Deleted. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/sets/{setId}/items:
+    post:
+      tags: [eval]
+      operationId: addEvalSetItem
+      summary: Add one item — a turn reference (the ⊞ action) or a case
+      description: |
+        cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
+        keystroke … using the ⊞ action" — the keystroke now collects into an
+        eval set. Exactly one of source / case_id (request oneOf): source =
+        {tree, conversation_id, turn_id} adds a REFERENCE item (nothing about
+        the turn's text is stored); case_id adds a FROZEN item naming an
+        existing EvalCase.
+
+        The convenience half of PUT /eval/sets/{id}: ⊞ fires from anywhere a
+        turn is shown (Chat, the Inspector, results cells) where the caller
+        does not hold the set's membership and so cannot PUT it. Removal has
+        no such endpoint on purpose — you can only remove from a set you are
+        already looking at, and that caller has the full item list to PUT.
+
+        Appends a NEW membership version. IDEMPOTENT: adding a referent the
+        latest version already holds appends nothing and returns that
+        version unchanged, so a caller detects "already there" by an
+        unchanged version number.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetItemCreate" }
+      responses:
+        "201":
+          description: The set — a new membership version, or the unchanged latest when the item was already a member.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/sets/{setId}/freeze:
+    post:
+      tags: [eval]
+      operationId: freezeEvalSetItems
+      summary: Freeze reference items into cases
+      description: |
+        What "turn a casebook into an eval set" (cupel-phases.md:79) becomes
+        once the two nouns are one: not a conversion into another resource,
+        but flipping items in place from reference to frozen. For each named
+        reference item the server reuses the existing eval case for that turn
+        or creates one sourced from it (identical semantics to POST
+        /eval/cases with source), then appends a new membership version in
+        which those items carry kind: frozen and their case_id. The item
+        keeps its id and its source, so its provenance survives the freeze.
+
+        item_ids omitted = every reference item in the latest version.
+        Already-frozen items are left alone. A set with no reference item to
+        freeze is a 422 rather than a silent empty version.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetFreezeRequest" }
+      responses:
+        "201":
+          description: The new membership version, with the named items frozen.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSet" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /eval/sets/{setId}/replay:
+    post:
+      tags: [eval]
+      operationId: replayEvalSet
+      summary: Replay the set's referenced turns as a regression suite
+      description: |
+        cupel-phases.md:79 "a replay regression suite". Replays every
+        REFERENCE item's turn under the given configs — same engine as
+        POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
+        fields and frozen default. Frozen items are skipped: a frozen case
+        is content, not a turn in a conversation, so there is nothing to
+        re-fire (judge those with POST /eval/judge instead). A set may
+        reference several trees, so the response carries one evaluation per
+        tree touched, all children of a single parent task; each grid is
+        fetched tree-scoped as usual.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalSetReplayRequest" }
+      responses:
+        "202":
+          description: Replays enqueued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalSetReplayAccepted" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /eval/judge:
     post:
@@ -1565,6 +1749,15 @@ paths:
         explicit case_ids, or — since v0.3.0, with EvalSets — set_id
         (latest membership version unless set_version pins one). Judge
         prompt receives the case's envelope (feature-spec.md:81).
+
+        Since the merge, a set version holds reference items as well as
+        frozen ones, and judging resolves each item to a case: a frozen item
+        contributes its case_id; a reference item is resolved by reusing the
+        existing case for that turn or creating one sourced from it, exactly
+        as POST …/freeze does. The turn is immutable, so the resolution is
+        deterministic and re-judging version N reaches the same cases — but
+        note it does NOT alter membership: the item stays a reference until
+        someone freezes it.
       requestBody:
         required: true
         content:
@@ -1646,195 +1839,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvaluationScoreSummary" }
         "404": { $ref: "#/components/responses/NotFound" }
-
-  # --------------------------------------------------------------- casebooks
-  /casebooks:
-    get:
-      tags: [casebooks]
-      operationId: listCasebooks
-      summary: Casebooks
-      description: |
-        feature-spec.md:113: "GET/POST/PATCH/DELETE /casebooks".
-        cupel-phases.md:79: "Collect noteworthy turns into Casebooks with
-        one keystroke, then turn a casebook into an eval set, a replay
-        regression suite, or few-shot examples for an agent — using the ⊞
-        action and Casebook view." Global (not tree-scoped): a casebook may
-        reference turns across trees; per-item visibility still follows the
-        viewer's tree permissions.
-      responses:
-        "200":
-          description: All casebooks visible to the user, items included.
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Casebook" }
-    post:
-      tags: [casebooks]
-      operationId: createCasebook
-      summary: Create a casebook
-      description: The POST of feature-spec.md:113 "GET/POST/PATCH/DELETE /casebooks". Starts empty; add items via POST /casebooks/{id}/items.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CasebookCreate" }
-      responses:
-        "201":
-          description: The created casebook.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Casebook" }
-
-  /casebooks/{casebookId}:
-    get:
-      tags: [casebooks]
-      operationId: getCasebook
-      summary: One casebook (Casebook view)
-      description: |
-        feature-spec.md:237: "Casebook view | GET /casebooks/{id},
-        POST …/to-eval-set, POST …/replay". Items are turn REFERENCES —
-        render transcripts by following each item's
-        tree/conversation_id/turn_id.
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      responses:
-        "200":
-          description: The casebook with items.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Casebook" }
-        "404": { $ref: "#/components/responses/NotFound" }
-    patch:
-      tags: [casebooks]
-      operationId: updateCasebook
-      summary: Rename / re-describe a casebook
-      description: The PATCH of feature-spec.md:113 — metadata only; membership changes go through the items endpoints.
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CasebookUpdate" }
-      responses:
-        "200":
-          description: The updated casebook.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Casebook" }
-        "404": { $ref: "#/components/responses/NotFound" }
-    delete:
-      tags: [casebooks]
-      operationId: deleteCasebook
-      summary: Delete a casebook (references only — nothing else is touched)
-      description: |
-        The DELETE of feature-spec.md:113. Removes the casebook and its item
-        REFERENCES only: the referenced turns/conversations, and any eval
-        sets or evaluations already materialized from this casebook, are untouched
-        (items are references, not copies).
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      responses:
-        "204": { description: Deleted. }
-        "404": { $ref: "#/components/responses/NotFound" }
-
-  /casebooks/{casebookId}/items:
-    post:
-      tags: [casebooks]
-      operationId: addCasebookItem
-      summary: Add a turn reference (the ⊞ action)
-      description: |
-        feature-spec.md:113: "POST/DELETE /casebooks/{id}/items" — the POST
-        half. An item is a REFERENCE to a turn, never a copy (dev prompt
-        12a, feature-spec.md:285 "Quote the reference-not-copy rule"):
-        {tree, conversation_id, turn_id} plus an optional note; the
-        transcript stays in its conversation. Entry points: ⊞ on any turn,
-        Chat, the Inspector (feature-spec.md:236) and results cells.
-        Re-adding the same turn is idempotent (returns the existing item).
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CasebookItemCreate" }
-      responses:
-        "201":
-          description: The item reference.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CasebookItem" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
-  /casebooks/{casebookId}/items/{itemId}:
-    delete:
-      tags: [casebooks]
-      operationId: removeCasebookItem
-      summary: Remove a turn reference
-      description: |
-        The DELETE half of feature-spec.md:113 "POST/DELETE
-        /casebooks/{id}/items" — the item id moves into the path to address
-        the individual reference. Removes only the reference; the turn, its
-        conversation, and anything already materialized from the casebook
-        are untouched.
-      parameters:
-        - { $ref: "#/components/parameters/casebookId" }
-        - { $ref: "#/components/parameters/itemId" }
-      responses:
-        "204": { description: Removed. }
-        "404": { $ref: "#/components/responses/NotFound" }
-
-  /casebooks/{casebookId}/to-eval-set:
-    post:
-      tags: [casebooks]
-      operationId: casebookToEvalSet
-      summary: Materialize the casebook as an eval set
-      description: |
-        feature-spec.md:113: "POST /casebooks/{id}/to-eval-set";
-        cupel-phases.md:79 "turn a casebook into an eval set". For each item
-        the server reuses the existing eval case for that turn or creates
-        one sourced from it (same semantics as POST /eval/cases with
-        source), then creates a new set (set_name) or appends a new
-        membership version to an existing one (set_id — versioned
-        membership, feature-spec.md:127).
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CasebookToEvalSetRequest" }
-      responses:
-        "201":
-          description: The created / newly-versioned set.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
-  /casebooks/{casebookId}/replay:
-    post:
-      tags: [casebooks]
-      operationId: replayCasebook
-      summary: Replay the casebook as a regression suite
-      description: |
-        feature-spec.md:113: "POST /casebooks/{id}/replay";
-        cupel-phases.md:79 "a replay regression suite". Replays every
-        referenced turn under the given configs — same engine as
-        POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
-        fields and frozen default. A casebook may reference several trees,
-        so the response carries one evaluation per tree touched, all children
-        of a single parent task; each grid is fetched tree-scoped as usual.
-      parameters: [{ $ref: "#/components/parameters/casebookId" }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CasebookReplayRequest" }
-      responses:
-        "202":
-          description: Replays enqueued.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CasebookReplayAccepted" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
 
   # ---------------------------------------------------------------- settings
   /settings:
@@ -1928,16 +1932,6 @@ components:
       in: path
       required: true
       description: Tree being administered — same ids as {tree} (feature-spec.md:117).
-      schema: { type: string }
-    casebookId:
-      name: casebookId
-      in: path
-      required: true
-      schema: { type: string }
-    itemId:
-      name: itemId
-      in: path
-      required: true
       schema: { type: string }
     setId:
       name: setId
@@ -3223,128 +3217,6 @@ components:
             evaluations: { type: integer }
             judgments: { type: integer }
 
-    # -------------------------------------------------------------- casebooks
-    Casebook:
-      type: object
-      required: [id, name, created_at, items]
-      description: >
-        A named collection of turn REFERENCES (cupel-phases.md:79) — the
-        raw material for eval sets and replay regression suites. References,
-        never copies: deleting a casebook touches nothing else.
-      properties:
-        id: { type: string }
-        name: { type: string }
-        description: { type: string, nullable: true }
-        created_at: { type: string, format: date-time }
-        items:
-          type: array
-          items: { $ref: "#/components/schemas/CasebookItem" }
-
-    CasebookCreate:
-      type: object
-      required: [name]
-      properties:
-        name: { type: string }
-        description: { type: string, nullable: true }
-
-    CasebookUpdate:
-      type: object
-      description: Metadata only; membership changes go through the items endpoints.
-      properties:
-        name: { type: string, nullable: true }
-        description: { type: string, nullable: true }
-
-    CasebookItem:
-      type: object
-      required: [id, tree, conversation_id, turn_id, added_at]
-      description: >
-        A REFERENCE to a turn, never a copy (dev prompt 12a,
-        feature-spec.md:285 "reference-not-copy rule") — the transcript
-        stays in its conversation; removing the item touches nothing else.
-      properties:
-        id: { type: string }
-        tree: { type: string }
-        conversation_id: { type: string }
-        turn_id: { type: string }
-        note: { type: string, nullable: true, description: Why this turn is noteworthy. }
-        added_at: { type: string, format: date-time }
-
-    CasebookItemCreate:
-      type: object
-      required: [tree, conversation_id, turn_id]
-      properties:
-        tree: { type: string }
-        conversation_id: { type: string }
-        turn_id: { type: string }
-        note: { type: string, nullable: true }
-
-    CasebookToEvalSetRequest:
-      type: object
-      description: >
-        Exactly one target (oneOf): set_name creates a new set (version 1);
-        set_id appends a new membership version to an existing set
-        (feature-spec.md:127 "versioned membership").
-      oneOf:
-        - required: [set_name]
-        - required: [set_id]
-      properties:
-        set_name: { type: string, nullable: true }
-        set_id: { type: string, nullable: true }
-
-    CasebookReplayRequest:
-      type: object
-      required: [configs]
-      description: >
-        Same engine as ReplayRequest (feature-spec.md:41) applied to the
-        casebook's referenced turns; context fields carry ReplayRequest's
-        enums and defaults (frozen / settings / live), so Phase-1-shaped
-        requests behave identically.
-      properties:
-        configs:
-          type: array
-          minItems: 1
-          description: One grid column per config, as on ReplayRequest (feature-spec.md:49).
-          items: { $ref: "#/components/schemas/Variant" }
-        context_policy:
-          type: string
-          enum: [frozen, current, custom]
-          default: frozen
-          description: As on ReplayRequest (feature-spec.md:77, :78).
-        context_override:
-          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
-          nullable: true
-          description: As on ReplayRequest — required when context_policy is custom.
-        fallback_policy:
-          type: string
-          enum: [settings, error]
-          default: settings
-          description: As on ReplayRequest (feature-spec.md:78).
-        tools_mode:
-          type: string
-          enum: [live, replay_recorded]
-          default: live
-          description: As on ReplayRequest (feature-spec.md:79).
-
-    CasebookReplayAccepted:
-      type: object
-      required: [task_id, evaluations]
-      description: >
-        One parent task; one evaluation per tree the casebook's items reference
-        (evaluations are tree-scoped, feature-spec.md:111 — a cross-tree
-        casebook therefore yields several). Fetch each grid via
-        GET /agenttrees/{tree_id}/evaluations/{evaluation_id}.
-      properties:
-        task_id: { type: string }
-        evaluations:
-          type: array
-          minItems: 1
-          items:
-            type: object
-            required: [tree_id, evaluation_id]
-            properties:
-              tree_id: { type: string }
-              evaluation_id: { type: string }
-
     # --------------------------------------------------------- eval workbench
     EvalCaseCreate:
       type: object
@@ -3429,47 +3301,187 @@ components:
 
     EvalSet:
       type: object
-      required: [id, name, version, case_ids, created_at]
+      required: [id, name, version, items, created_at]
       description: >
         feature-spec.md:58: "EvalSet: named collection of cases (versioned,
-        reusable across runs/models)". Membership is versioned
-        (feature-spec.md:127): each PUT appends a new version with its own
-        full case_ids; judgments made against version N stay attributable
-        to exactly that membership.
+        reusable across runs/models)", merged with the Casebook —
+        "a named collection of turn REFERENCES" (cupel-phases.md:79) — into
+        the one noun. A member is either kind, so the collection is both:
+        the raw material you collect with ⊞ and the reusable suite you judge.
+        Membership is versioned (feature-spec.md:127): every change appends a
+        new version with its own full item list, so judgments made against
+        version N stay attributable to exactly that membership. name and
+        description are NOT versioned — they belong to the set, not to a
+        version (PATCH /eval/sets/{id}).
       properties:
         id: { type: string }
         name: { type: string }
-        version: { type: integer }
-        case_ids:
+        description: { type: string, nullable: true }
+        version: { type: integer, description: This membership version; the latest unless one was pinned. }
+        items:
           type: array
-          items: { type: string }
+          items: { $ref: "#/components/schemas/EvalSetItem" }
         created_at:
           type: string
           format: date-time
           description: Creation time of THIS version.
+
+    EvalSetItem:
+      type: object
+      required: [id, kind, added_at]
+      description: >
+        One member. kind is the whole difference the merge collapsed:
+        `reference` is a REFERENCE to a live turn, never a copy (dev prompt
+        12a, feature-spec.md:285 "Quote the reference-not-copy rule") — the
+        transcript stays in its conversation and nothing about its text is
+        stored here; `frozen` names an EvalCase, the {input, output,
+        reference?} record of feature-spec.md:54-58, which carries its own
+        append-only version (PUT /eval/cases/{id}). A frozen item holds the
+        case id rather than a copy of the content for the same reason
+        judgments do: Judgment.case_id has to keep naming something.
+
+        source survives a freeze, so an item frozen from a turn still says
+        where it came from; it is null only for a frozen item whose case was
+        handcrafted or imported and never lived in a conversation.
+      properties:
+        id:
+          type: string
+          description: >-
+            Stable across membership versions for as long as the item's
+            referent stays in the set (PUT /eval/sets/{id}).
+        kind: { type: string, enum: [reference, frozen] }
+        source:
+          type: object
+          nullable: true
+          description: >-
+            The referenced turn (feature-spec.md:126 "source: {tree,
+            conversation_id, turn_id}"). Non-null for kind reference.
+          required: [tree, conversation_id, turn_id]
+          properties:
+            tree: { type: string }
+            conversation_id: { type: string }
+            turn_id: { type: string }
+        case_id:
+          type: string
+          nullable: true
+          description: The EvalCase this item froze to. Non-null for kind frozen.
+        note: { type: string, nullable: true, description: Why this member is noteworthy. }
+        added_at: { type: string, format: date-time }
+
+    EvalSetItemCreate:
+      type: object
+      description: >
+        Exactly one referent (oneOf): source adds a reference item, case_id
+        adds a frozen one.
+      oneOf:
+        - required: [source]
+        - required: [case_id]
+      properties:
+        source:
+          type: object
+          nullable: true
+          required: [tree, conversation_id, turn_id]
+          properties:
+            tree: { type: string }
+            conversation_id: { type: string }
+            turn_id: { type: string }
+        case_id: { type: string, nullable: true }
+        note: { type: string, nullable: true }
 
     EvalSetCreate:
       type: object
       required: [name]
       properties:
         name: { type: string }
-        case_ids:
+        description: { type: string, nullable: true }
+        items:
           type: array
-          description: Initial membership; empty/omitted = start empty.
-          items: { type: string }
+          description: Initial membership (version 1); empty/omitted = start empty.
+          items: { $ref: "#/components/schemas/EvalSetItemCreate" }
 
     EvalSetUpdate:
       type: object
-      required: [case_ids]
+      required: [items]
       description: >
         The full membership for the NEW version (append-only,
-        feature-spec.md:127). Optional name carries a rename into the new
-        version.
+        feature-spec.md:127) — items absent from this list leave the set.
+        Metadata is not carried here; PATCH renames without a version.
       properties:
-        case_ids:
+        items:
           type: array
-          items: { type: string }
+          items: { $ref: "#/components/schemas/EvalSetItemCreate" }
+
+    EvalSetMetadataUpdate:
+      type: object
+      description: Metadata only; every membership change goes elsewhere. Absent fields are left unchanged.
+      properties:
         name: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+
+    EvalSetFreezeRequest:
+      type: object
+      description: >
+        Which reference items to freeze into cases; omit item_ids for all of
+        them.
+      properties:
+        item_ids:
+          type: array
+          nullable: true
+          items: { type: string }
+
+    EvalSetReplayRequest:
+      type: object
+      required: [configs]
+      description: >
+        Same engine as ReplayRequest (feature-spec.md:41) applied to the
+        set's REFERENCE items; context fields carry ReplayRequest's enums and
+        defaults (frozen / settings / live), so Phase-1-shaped requests
+        behave identically.
+      properties:
+        configs:
+          type: array
+          minItems: 1
+          description: One grid column per config, as on ReplayRequest (feature-spec.md:49).
+          items: { $ref: "#/components/schemas/Variant" }
+        context_policy:
+          type: string
+          enum: [frozen, current, custom]
+          default: frozen
+          description: As on ReplayRequest (feature-spec.md:77, :78).
+        context_override:
+          allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
+          nullable: true
+          description: As on ReplayRequest — required when context_policy is custom.
+        fallback_policy:
+          type: string
+          enum: [settings, error]
+          default: settings
+          description: As on ReplayRequest (feature-spec.md:78).
+        tools_mode:
+          type: string
+          enum: [live, replay_recorded]
+          default: live
+          description: As on ReplayRequest (feature-spec.md:79).
+
+    EvalSetReplayAccepted:
+      type: object
+      required: [task_id, evaluations]
+      description: >
+        One parent task; one evaluation per tree the set's reference items
+        touch (evaluations are tree-scoped, feature-spec.md:111 — a
+        cross-tree set therefore yields several). Fetch each grid via
+        GET /agenttrees/{tree_id}/evaluations/{evaluation_id}.
+      properties:
+        task_id: { type: string }
+        evaluations:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [tree_id, evaluation_id]
+            properties:
+              tree_id: { type: string }
+              evaluation_id: { type: string }
 
     RubricUpdate:
       type: object
