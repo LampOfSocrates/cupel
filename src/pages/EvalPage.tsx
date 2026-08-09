@@ -50,7 +50,7 @@ import type { EvalCase, EvalSet, Judgment, Rubric } from "../api/types";
 //    (Contract gap logged as review bucket C5 — not fixed here.)
 //
 // Eval cases are GLOBAL, not tree-scoped ("Global: tasks, span payloads, eval
-// rubrics/judgments, settings", feature-spec.md:115) — this page adds no tree
+// rubrics/judgments, settings", feature-spec.md:111) — this page adds no tree
 // gating. The one tree-scoped thing it touches is the turn picker, which reads
 // conversations from the active tree.
 
@@ -801,7 +801,7 @@ function RubricsTab({
     if (!selected) return;
     setBusy(true);
     try {
-      // "save = new version" (feature-spec.md:132; openapi.yaml:1317-1319).
+      // "save = new version" (feature-spec.md:128; openapi.yaml:1317-1319).
       const saved = await api.updateRubric(selected.id, { prompt });
       setNotice(`Saved as version ${saved.version}.`);
       onChanged();

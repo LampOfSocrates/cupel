@@ -16,7 +16,7 @@ import { CasebooksPage } from "./CasebooksPage";
 // Contract under test — Casebook view (cupel-phases.md:79 "Collect
 // noteworthy turns into Casebooks with one keystroke, then turn a casebook
 // into an eval set, a replay regression suite, or few-shot examples";
-// feature-spec.md:241 "Casebook view | GET /casebooks/{id},
+// feature-spec.md:237 "Casebook view | GET /casebooks/{id},
 // POST …/to-eval-set, POST …/replay"):
 // - GET/POST /casebooks (openapi.yaml:1643-1680)
 // - DELETE /casebooks/{id} (:1718-1730) — references only

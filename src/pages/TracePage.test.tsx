@@ -14,16 +14,16 @@ import { TracePage } from "./TracePage";
 // Contract under test — trace view:
 // - GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721): "The
 //   trace (totals + flat span list with parent links)"; header totals
-//   ("wall time, tokens in/out, cost", feature-spec.md:147) + envelope
+//   ("wall time, tokens in/out, cost", feature-spec.md:143) + envelope
 //   ("Shown in the trace header", openapi.yaml:1700).
-// - Two synced layers (feature-spec.md:146-148): call tree (nodes colored by
+// - Two synced layers (feature-spec.md:142-144): call tree (nodes colored by
 //   type, badged "time · tokens in→out") + waterfall ("one row per span, bars
 //   positioned on the turn's timeline").
-// - Span drawer (feature-spec.md:149): "full prompt/response for LLM spans,
+// - Span drawer (feature-spec.md:145): "full prompt/response for LLM spans,
 //   args/result for tool spans, model, exact token counts, cost,
 //   status/error. Errors mark the span red in both views"; payload
 //   lazy-loaded via GET /spans/{spanId}/payload (openapi.yaml:723-744).
-// - Live spans (feature-spec.md:150): "spans appear live while the turn is
+// - Live spans (feature-spec.md:146): "spans appear live while the turn is
 //   generating (same SSE channel as tasks)" — span frames on /tasks/stream
 //   (SpanEvent, openapi.yaml:1788-1794).
 
@@ -62,7 +62,7 @@ describe("TracePage", () => {
     expect(tool.style.background).toBe("rgb(225, 245, 238)"); // tool #E1F5EE
     expect(llm.style.background).toBe("rgb(250, 236, 231)"); // llm #FAECE7
 
-    // badge "time · tokens in→out" (feature-spec.md:147); tool = time alone
+    // badge "time · tokens in→out" (feature-spec.md:143); tool = time alone
     expect(llm).toHaveTextContent("1.8s · 2143→663");
     expect(tool).toHaveTextContent("0.6s");
 

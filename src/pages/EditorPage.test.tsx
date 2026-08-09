@@ -56,7 +56,7 @@ describe("EditorPage", () => {
     expect(screen.getByTestId("version-1")).toBeInTheDocument();
     expect(screen.getByText("v4 · draft")).toBeInTheDocument();
     expect(screen.queryByText("unsaved changes")).not.toBeInTheDocument();
-    // save disabled until dirty; Test in Runs always available — "drafts are
+    // save disabled until dirty; Test as evaluation always available — "drafts are
     // testable without saving" (feature-spec.md:86)
     expect(screen.getByRole("button", { name: "Save as v4" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test as evaluation" })).toBeEnabled();
@@ -200,9 +200,9 @@ describe("EditorPage", () => {
     expect(screen.getByText("v2 · draft")).toBeInTheDocument();
   });
 
-  // "Test an instruction change in one click: 'Test in Runs'
+  // "Test an instruction change in one click: 'Test as evaluation'
   // snapshots your draft and replays your usual conversations against it —
-  // using the editor → Runs flow (sketches 06 → 03)" (cupel-phases.md:18).
+  // using the editor → Evaluations flow (sketches 06 → 03)" (cupel-phases.md:18).
   // Real EvaluationsPage mounted at /evaluations so the router-state handoff is exercised
   // end to end, not against a probe.
   const renderEditorWithRuns = (agentId = "ag_concierge") =>
@@ -214,9 +214,9 @@ describe("EditorPage", () => {
       { route: `/agents/${agentId}/editor` },
     );
 
-  it("Test in Runs reuses an unchanged snapshot (no second POST) and opens Runs prefilled", async () => {
+  it("Test as evaluation reuses an unchanged snapshot (no second POST) and opens Evaluations prefilled", async () => {
     // remembered selection → the arrival lands straight on Configure
-    // (feature-spec.md:87 "Repeat testing = Test in Runs → Queue, two taps")
+    // (feature-spec.md:87 "Repeat testing = Test as evaluation → Queue, two taps")
     mockLastSelections.ag_concierge = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
     renderEditorWithRuns();
@@ -235,7 +235,7 @@ describe("EditorPage", () => {
     expect(snapshotRequests).toHaveLength(1);
   });
 
-  it("Test in Runs with an edited draft POSTs a fresh snapshot; empty last-selection lands on Pick", async () => {
+  it("Test as evaluation with an edited draft POSTs a fresh snapshot; empty last-selection lands on Pick", async () => {
     const user = userEvent.setup();
     renderEditorWithRuns();
     await setDraft(user, "Draft text.");

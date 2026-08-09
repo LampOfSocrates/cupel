@@ -32,7 +32,7 @@ import {
 import { useApp } from "../AppContext";
 import { AgentTreesSection, MembersSection } from "./SettingsAdmin";
 
-// Settings → Backend (sketch 09, feature-spec.md:157-161):
+// Settings → Backend (sketch 09, feature-spec.md:153-157):
 // "Target switcher: Mock / Local / Staging / Prod presets + custom Base URL
 // field" (:158); "Health check: GET {base}/healthz on select — shows status,
 // latency, server version, and (for mock) the loaded seed" (:159, latency
@@ -104,7 +104,7 @@ export function SettingsPage() {
     }
   }, []);
 
-  // "on select" (feature-spec.md:159): every target change re-checks — the
+  // "on select" (feature-spec.md:155): every target change re-checks — the
   // mount run covers both first visit and the post-switch remount.
   useEffect(() => {
     // KEPT: an imperative probe of an external system, not a read of one. The
@@ -213,7 +213,7 @@ export function SettingsPage() {
             </Button>
           </Group>
 
-          {/* "Prod requires an auth token field" (feature-spec.md:161).
+          {/* "Prod requires an auth token field" (feature-spec.md:157).
               Attached as a Bearer header on requiresToken targets —
               unless a login JWT exists (auth.ts precedence). */}
           {selectedPreset?.requiresToken && (
@@ -232,7 +232,7 @@ export function SettingsPage() {
             />
           )}
 
-          {/* Mock options — "visible when target = Mock" (feature-spec.md:160).
+          {/* Mock options — "visible when target = Mock" (feature-spec.md:156).
               SSE streaming is REAL today (ChatPage sends stream:<flag>,
               cupel-phases.md:43); latency / failure % / seed picker await the
               mock's injection env vars + generator control. */}

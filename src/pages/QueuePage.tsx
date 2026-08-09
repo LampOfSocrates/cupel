@@ -9,7 +9,7 @@ import { useQueue } from "../QueueContext";
 // shows live progress bar + stage text + elapsed time; expandable to child
 // tasks; cancel (parent cancels children). Failed children don't kill the
 // batch — shown as partial failure with retry-failed button"
-// (feature-spec.md:110). All data/actions come from QueueProvider (one
+// (feature-spec.md:106). All data/actions come from QueueProvider (one
 // app-wide stream); TaskQueue stays a pure render.
 
 // Result deep links (Task.result, openapi.yaml:1744-1752): "'View results'

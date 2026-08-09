@@ -3,11 +3,11 @@ import { signInApi } from "./helpers/seed";
 import { signIn } from "./helpers/auth";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 10 (feature-spec.md:215):
+// E2E checklist journey 10 (feature-spec.md:211):
 // "Permissions: second seeded tree hidden for restricted test user"
 // plus the half of journey 12 that is really about permissions:
-// "admin permission matrix edit takes effect" (feature-spec.md:217).
-// Endpoint tags (feature-spec.md:248):
+// "admin permission matrix edit takes effect" (feature-spec.md:213).
+// Endpoint tags (feature-spec.md:244):
 //   GET/PUT /admin/users · GET/PUT /admin/users/{id}/permissions
 //
 // AUTH_MODE=on only — the matrix is meaningless without real users. Run via

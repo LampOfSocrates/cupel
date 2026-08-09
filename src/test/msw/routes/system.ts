@@ -19,7 +19,7 @@ export const localBaseRequests: string[] = []; // pathnames hit on LOCAL_BASE
 export const localHealth: Health = { status: "ok", version: "0.9-local", seed: null };
 
 // GET /healthz (openapi.yaml:80-96, Health :1091-1100) — backend-switcher
-// check (feature-spec.md:159). status knob lets tests exercise the fail path.
+// check (feature-spec.md:155). status knob lets tests exercise the fail path.
 export const healthConfig: { status: number; body: Health } = {
   status: 200,
   body: { status: "ok", version: "0.2.0", seed: "demo-agent1" },
@@ -142,7 +142,7 @@ export const systemHandlers = [
   http.get(`${BASE}/agenttrees`, () => HttpResponse.json(mockTrees)),
 
   // GET /agenttrees/{tree}/endpoints — "Deploy targets for replay"
-  // (openapi.yaml:158; feature-spec.md:121).
+  // (openapi.yaml:158; feature-spec.md:117).
   http.get(`${BASE}/agenttrees/:tree/endpoints`, ({ params }) => {
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
@@ -152,7 +152,7 @@ export const systemHandlers = [
   }),
 
   // GET /models (openapi.yaml:98-112) — model dropdown source
-  // (feature-spec.md:122). With X-LLM-Key the curated live list
+  // (feature-spec.md:118). With X-LLM-Key the curated live list
   // answers instead, mirroring the real mock.
   http.get(`${BASE}/models`, ({ request }) => {
     captureLlmHeaders(request);

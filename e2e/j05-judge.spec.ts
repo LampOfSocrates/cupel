@@ -2,10 +2,10 @@ import { API_ORIGIN, expect, test } from "./helpers/api";
 import { awaitTask, seedChat, seedReplay, seedRubric } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 5 (feature-spec.md:210):
+// E2E checklist journey 5 (feature-spec.md:206):
 // "Judge: enable judge → scores stream in → judgment drawer shows reasoning +
-//  history; retroactive 'Score this run'"
-// Endpoint tags (feature-spec.md:232-234, sketch 04):
+//  history; retroactive 'Judge this evaluation'"
+// Endpoint tags (feature-spec.md:228-230, sketch 04):
 //   GET /eval/rubrics · POST /agenttrees/{tree}/replay (judge in the config)
 //   POST /eval/judge (retroactive) · GET /eval/judgments · GET /eval/runs/{id}/summary
 

@@ -2,10 +2,10 @@ import { API_ORIGIN, expect, test } from "./helpers/api";
 import { signIn, storedToken } from "./helpers/auth";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 12 (feature-spec.md:217):
+// E2E checklist journey 12 (feature-spec.md:213):
 // "Auth: suite runs twice — AUTH_MODE=off (dev user), and AUTH_MODE=on (login
 //  with seeded creds, 401 redirect, admin permission matrix edit takes effect)"
-// Endpoint tags (feature-spec.md:224): POST /auth/token · GET /me
+// Endpoint tags (feature-spec.md:220): POST /auth/token · GET /me
 //
 // The off-mode half of that line is the rest of the suite: journeys 1-9 and 13
 // run with no token at all. This file is the on-mode half — login, the session

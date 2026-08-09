@@ -18,7 +18,7 @@ import type { Casebook, CasebookItemCreate } from "../api/types";
 
 // ⊞ collect — "Collect noteworthy turns into Casebooks with one
 // keystroke" (cupel-phases.md:79). One modal behind every ⊞ entry point
-// (feature-spec.md:240 "Inspector | GET /admin/conversations,
+// (feature-spec.md:236 "Inspector | GET /admin/conversations,
 // POST /casebooks/{id}/items"): pick an existing casebook or type a new name,
 // add an optional note, POST the REFERENCE.
 //

@@ -311,7 +311,7 @@ def test_disable_blocks_writes_keeps_reads():
 
 
 def test_disabled_tree_visibility_admin_vs_restricted(monkeypatch):
-    """feature-spec.md:121 "GET /agenttrees (permitted + enabled; admins also
+    """feature-spec.md:117 "GET /agenttrees (permitted + enabled; admins also
     see disabled)": non-admins lose the disabled tree from the listing;
     admins keep it with enabled:false."""
     monkeypatch.setenv("AUTH_MODE", "on")

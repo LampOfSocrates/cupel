@@ -28,7 +28,7 @@ interface TreeNodeProps {
   dimmed?: boolean;
   /** Trace call-tree selection highlight (synced with the waterfall). */
   selected?: boolean;
-  /** "Errors mark the span red in both views" (feature-spec.md:149). */
+  /** "Errors mark the span red in both views" (feature-spec.md:145). */
   error?: boolean;
   /** Badge row inside the card (agent view: version + tools + enabled state). */
   badges?: ReactNode;

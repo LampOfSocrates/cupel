@@ -1,5 +1,5 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
-// anywhere else (feature-spec.md:158). URLs are built from the ACTIVE backend
+// anywhere else (feature-spec.md:154). URLs are built from the ACTIVE backend
 // target (agentic.config.ts via src/api/target.ts).
 import { getActiveTarget } from "./target";
 import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
@@ -183,7 +183,7 @@ export type ChatStreamEvent =
 // "scores stream into the grid live as judging tasks finish
 // (SSE)" (feature-spec.md:64); span frames: "spans appear live
 // while the turn is generating (same SSE channel as tasks)"
-// (feature-spec.md:150), consumed by the trace view's scoped subscription.
+// (feature-spec.md:146), consumed by the trace view's scoped subscription.
 export type TaskStreamEvent =
   | { event: "task"; data: Task }
   | { event: "progress"; data: TaskProgressEvent }
@@ -243,7 +243,7 @@ export const api = {
   me: () => request<Me>("/me"),
 
   // GET /healthz (openapi.yaml:80-96) — backend-switcher health check
-  // (feature-spec.md:159). Latency is client-measured (openapi.yaml:88):
+  // (feature-spec.md:155). Latency is client-measured (openapi.yaml:88):
   // the Settings page wraps this call in performance.now().
   healthz: () => request<Health>("/healthz"),
 
@@ -341,7 +341,7 @@ export const api = {
     }),
 
   // GET /models (openapi.yaml:98-112) — "chat/run/judge model dropdowns"
-  // (feature-spec.md:122). Fetched once and cached in AppContext.
+  // (feature-spec.md:118). Fetched once and cached in AppContext.
   models: () => request<Model[]>("/models"),
 
   // GET /agenttrees/{tree}/endpoints (openapi.yaml:154-172) — "Deploy targets
@@ -387,8 +387,8 @@ export const api = {
   // GET /agenttrees/{tree}/agents/{agentId}/last-selection (openapi.yaml:
   // 295-313) — "Last-used conversation selection for this agent"; "empty
   // items = first-time testing" (:311). feature-spec.md:87: "the previous
-  // conversation set is remembered per agent … Repeat testing = Test in Runs
-  // → Queue, two taps."
+  // conversation set is remembered per agent … Repeat testing = Test as
+  // evaluation → Queue, two taps."
   lastSelection: (tree: string, agentId: string) =>
     request<Selection>(`/agenttrees/${tree}/agents/${agentId}/last-selection`),
 
@@ -564,7 +564,7 @@ export const api = {
 
   // GET /spans/{spanId}/payload (openapi.yaml:723-744) — "Lazy-loaded span
   // payload … Full prompt/response for LLM spans, args/result for tool spans
-  // (feature-spec.md:149)". spanId = Span.payload_ref (openapi.yaml:1690).
+  // (feature-spec.md:145)". spanId = Span.payload_ref (openapi.yaml:1690).
   spanPayload: (spanId: string) =>
     request<SpanPayload>(`/spans/${spanId}/payload`),
 

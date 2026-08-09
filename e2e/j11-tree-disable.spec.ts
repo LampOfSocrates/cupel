@@ -3,11 +3,11 @@ import { awaitTask, seedChat, seedReplay, signInApi } from "./helpers/seed";
 import { signIn } from "./helpers/auth";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 11 (feature-spec.md:216):
+// E2E checklist journey 11 (feature-spec.md:212):
 // "Tree disable: admin disables tree 2 → hidden for non-admin, chat against it
 //  409s, its queued tasks cancel, old conversations read-only; re-enable
 //  restores"
-// Endpoint tags (feature-spec.md:249):
+// Endpoint tags (feature-spec.md:245):
 //   GET /agenttrees (incl. disabled, for admins) · PATCH /admin/agenttrees/{id}
 //
 // AUTH_MODE=on: "hidden for non-admin" needs a real non-admin. restricted@demo

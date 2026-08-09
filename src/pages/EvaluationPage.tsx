@@ -31,7 +31,7 @@ import { useApp } from "../AppContext";
 // Runs step 3 — Results, and the detail route for old runs (feature-spec.md:49:
 // "Comparison grid: baseline column + one column per run config, row per
 // turn"). Live fill contract (openapi.yaml:678-680): "Cells fill incrementally
-// as child tasks finish (feature-spec.md:112); live fill arrives via GET
+// as child tasks finish (feature-spec.md:108); live fill arrives via GET
 // /tasks/stream" — this page subscribes to the stream and refetches GET run
 // (debounced ~300ms) on task/progress events of this run's task family, until
 // the run status is terminal (refetch-on-event is the documented baseline;
@@ -72,7 +72,7 @@ export function EvaluationPage() {
 
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   // Rubrics label the summary header + feed the manual judge form; models feed
-  // its judge-model select (feature-spec.md:122 "chat/run/judge model
+  // its judge-model select (feature-spec.md:118 "chat/run/judge model
   // dropdowns" — session cache). Missing rubric names degrade to raw ids.
   useEffect(() => {
     ensureModels();
@@ -89,7 +89,7 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
 
   const [error, setError] = useState<string | null>(null);
   // Latest progress stage text off the stream ("Conversation 3/10 · turn 2/6",
-  // openapi.yaml:791-792; feature-spec.md:109).
+  // openapi.yaml:791-792; feature-spec.md:105).
   const [stage, setStage] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   // Cell re-fire target — the ⑂ modal is seeded with the CELL's source
@@ -240,7 +240,7 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   // Live fill subscription. Family membership: `task` frames are Task objects
   // — the parent itself (id) or its children (parent_id), for the run's task
   // AND any in-flight judging task; `progress` frames carry the parent's
-  // task_id (batch progress = parent ticks, feature-spec.md:107); `judgment`
+  // task_id (batch progress = parent ticks, feature-spec.md:103); `judgment`
   // frames join by judgment.run_id (openapi.yaml:1800-1802). Subscribed while
   // the run is live OR judging is in flight; terminal + idle → cleanup aborts.
   useEffect(() => {
@@ -382,7 +382,7 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
         <Group gap={2} wrap="nowrap">
           {/* ⌁ — "⌁ trace icon on every turn — in Chat, results
               grid cells, and drill-in. Works on originals, forks, and
-              replays alike" (feature-spec.md:145): done cells that carry
+              replays alike" (feature-spec.md:141): done cells that carry
               the produced turn's id (RunCell.turn_id, openapi.yaml:1652)
               route to its trace — the baseline cell to the original
               turn's, endpoint cells to the fork replays'. */}
@@ -448,7 +448,7 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
           )}
         </Group>
         <Group gap="xs">
-          {/* "'Score this run' on any finished run" (feature-spec.md:61) —
+          {/* "'Judge this evaluation' on any finished run" (feature-spec.md:61) —
               after-the-fact judging via the same POST /eval/judge. */}
           {run.status === "done" && !judging && (
             <Button

@@ -6,7 +6,7 @@ export interface StreamState {
 
 // Session-scoped chat settings: "Chat has its own Settings submenu (model,
 // temperature, system prompt — session-scoped)" (feature-spec.md:7); "sent
-// with each /chat call" (feature-spec.md:278). Session-scoped = React state
+// with each /chat call" (feature-spec.md:274). Session-scoped = React state
 // for the app session: survives conversation switches, NOT reloads — Phase 1
 // has no /settings endpoint (openapi.yaml:38-40 lists it under "Deferred to
 // later phases") and no localStorage persistence is specced.

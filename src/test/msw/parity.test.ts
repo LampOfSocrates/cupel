@@ -661,7 +661,7 @@ const UNEXERCISED_OPS: Record<string, string> = {
     "P3-GEN (TASKS.md) — the Settings drip-rate controls are greyed placeholders until then.",
   "GET /admin/generator/status": "P3-GEN — see POST /admin/generator.",
   "GET /settings":
-    "No client method: the backend target is device-local in agentic.config.ts (feature-spec.md:161) and chat settings are ChatPage state (docs/review-2026-08-05.md A5). A Settings-page binding is a UX-phase decision.",
+    "No client method: the backend target is device-local in agentic.config.ts (feature-spec.md:157) and chat settings are ChatPage state (docs/review-2026-08-05.md A5). A Settings-page binding is a UX-phase decision.",
   "PUT /settings": "No client method — see GET /settings.",
 };
 

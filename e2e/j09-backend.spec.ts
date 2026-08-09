@@ -1,12 +1,12 @@
 import { expect, test } from "./helpers/api";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 9 (feature-spec.md:214):
+// E2E checklist journey 9 (feature-spec.md:210):
 // "Backend switcher: swap target, healthz reflects, non-prod banner shows"
-// Endpoint tags (feature-spec.md:247, sketch 09): GET {base}/healthz
+// Endpoint tags (feature-spec.md:243, sketch 09): GET {base}/healthz
 //
 // Targets come from agentic.config.ts — THE one config artifact — and the
-// choice is device-local (feature-spec.md:161), which is why the last step
+// choice is device-local (feature-spec.md:157), which is why the last step
 // reloads to prove it stuck.
 
 test("backend switcher: mock → custom URL → a dead target and back, with healthz + banners", async ({
@@ -18,7 +18,7 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(page.getByText("Backend", { exact: true })).toBeVisible();
-    // Non-prod chrome banner (feature-spec.md:161), configured per target.
+    // Non-prod chrome banner (feature-spec.md:157), configured per target.
     await expect(page.getByTestId("env-banner")).toContainText("MOCK BACKEND");
     await expect(page.getByRole("radio", { name: "Mock" })).toBeChecked();
     await expect(page.getByLabel("Base URL")).toHaveValue("http://localhost:4010");

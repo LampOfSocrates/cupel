@@ -2,10 +2,10 @@ import { API_ORIGIN, expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 8 (feature-spec.md:213):
+// E2E checklist journey 8 (feature-spec.md:209):
 // "Trace: ⌁ opens tree + waterfall, span drawer lazy-loads payload, totals
 //  match seed"
-// Endpoint tags (feature-spec.md:244, sketch 08):
+// Endpoint tags (feature-spec.md:240, sketch 08):
 //   GET /agenttrees/{tree}/turns/{id}/trace · GET /spans/{id}/payload
 
 const CONV = "Trace journey: why was I charged twice?";

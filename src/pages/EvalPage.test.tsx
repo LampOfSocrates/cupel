@@ -29,7 +29,7 @@ import { EvalPage } from "./EvalPage";
 // - POST /eval/cases/import (:1370-1429) mapping + per-row report, 200 and 202
 // - POST /eval/judge with set_id (:2926-2936)
 //
-// Cases are GLOBAL (feature-spec.md:115) — no tree in any of these paths.
+// Cases are GLOBAL (feature-spec.md:111) — no tree in any of these paths.
 
 function renderEval() {
   return renderApp(

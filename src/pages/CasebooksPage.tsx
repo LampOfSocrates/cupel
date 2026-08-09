@@ -36,7 +36,7 @@ import type {
 // cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
 // keystroke, then turn a casebook into an eval set, a replay regression suite,
 // or few-shot examples for an agent — using the ⊞ action and Casebook view".
-// feature-spec.md:241: "Casebook view | GET /casebooks/{id},
+// feature-spec.md:237: "Casebook view | GET /casebooks/{id},
 // POST …/to-eval-set, POST …/replay".
 //
 // REFERENCE-NOT-COPY, and its cost: "Items are turn REFERENCES — render

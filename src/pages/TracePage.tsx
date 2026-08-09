@@ -20,22 +20,22 @@ import { EnvelopeChip, TreeBranch, TreeNode, type TreeNodeKind } from "../compon
 import { useApp } from "../AppContext";
 
 // Trace view (sketch 08). Spec:
-// - feature-spec.md:146-148: "Trace view, two synced layers: Call tree: nodes
+// - feature-spec.md:142-144: "Trace view, two synced layers: Call tree: nodes
 //   colored by type (agent / tool / LLM), each badged `time · tokens in→out`.
 //   Header shows turn totals (wall time, total tokens in/out, cost).
 //   Waterfall: one row per span, bars positioned on the turn's timeline —
 //   sequence, duration, and parallel branches visible at a glance."
-// - feature-spec.md:149: "Span drawer (tap node or bar): full prompt/response
+// - feature-spec.md:145: "Span drawer (tap node or bar): full prompt/response
 //   for LLM spans, args/result for tool spans, model, exact token counts,
 //   cost, status/error. Errors mark the span red in both views."
-// - feature-spec.md:150: "Traces stream: spans appear live while the turn is
+// - feature-spec.md:146: "Traces stream: spans appear live while the turn is
 //   generating (same SSE channel as tasks)."
 // - openapi.yaml:696-721 GET .../turns/{turnId}/trace (flat span list with
 //   parent links + totals + envelope "Shown in the trace header", :1700);
 //   openapi.yaml:723-744 GET /spans/{spanId}/payload, lazy-loaded on drawer
 //   open; spanId = Span.payload_ref (openapi.yaml:1690).
 //
-// Entry (feature-spec.md:145): "⌁ trace icon on every turn — in Chat, results
+// Entry (feature-spec.md:141): "⌁ trace icon on every turn — in Chat, results
 // grid cells, and drill-in. Works on originals, forks, and replays alike" —
 // all of which land on this one route (/trace/{turnId}; tree from context,
 // same as every other page).
@@ -62,7 +62,7 @@ function fmtDuration(millis: number): string {
   return `${(millis / 1000).toFixed(1)}s`;
 }
 
-// Badge "time · tokens in→out" (feature-spec.md:147); tool spans without
+// Badge "time · tokens in→out" (feature-spec.md:143); tool spans without
 // token counts show time alone, like the sketch's "0.6s".
 function spanMeta(span: Span): string {
   const dur =
@@ -222,7 +222,7 @@ export function TracePage() {
 
   return (
     <Stack gap="sm" p="md">
-      {/* Header — turn totals (feature-spec.md:147) + envelope
+      {/* Header — turn totals (feature-spec.md:143) + envelope
           (openapi.yaml:1700 "Shown in the trace header"). Density per
           sketches/clean/08-trace.svg: "Trace · turn 2 · 4.9s · 6,410→1,240
           tok · $0.011". */}
@@ -258,7 +258,7 @@ export function TracePage() {
           </Text>
           <Paper withBorder p="sm" data-testid="waterfall">
             <style>
-              {/* running bars pulse to signal in-flight (feature-spec.md:150) */}
+              {/* running bars pulse to signal in-flight (feature-spec.md:146) */}
               {"@keyframes cupel-span-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }"}
             </style>
             <Stack gap={6}>
@@ -337,7 +337,7 @@ export function TracePage() {
   );
 }
 
-// Span drawer (feature-spec.md:149): payload lazy-loaded on open via GET
+// Span drawer (feature-spec.md:145): payload lazy-loaded on open via GET
 // /spans/{payload_ref}/payload (openapi.yaml:729-730 "lazy-loaded
 // prompt/response bodies") — never prefetched with the trace.
 function SpanDrawer({
@@ -366,7 +366,7 @@ function SpanDrawer({
       title={`Span: ${span.name}`}
     >
       <Stack gap="xs" data-testid="span-drawer">
-        {/* model, exact token counts, cost, status (feature-spec.md:149) */}
+        {/* model, exact token counts, cost, status (feature-spec.md:145) */}
         <Group gap={6}>
           <Badge size="sm" variant="light">
             {span.type}

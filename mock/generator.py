@@ -1,11 +1,11 @@
 """Cupel data generator: deterministic seed + basic drip.
 
-Invariant (cupel-phases.md:160, feature-spec.md:185): the generator "writes
+Invariant (cupel-phases.md:160, feature-spec.md:181): the generator "writes
 through the public API (POST …/chat, /replay, /eval/judge etc.), never
 directly to the DB" — this module imports httpx and nothing from the mock
 package; every write is an HTTP call against a RUNNING server.
 
-Modes (feature-spec.md:187-188):
+Modes (feature-spec.md:183-184):
   seed     one-shot baseline: ~20 machine-origin conversations across both
            trees, forks via POST /replay/turn, replay runs, judgments across
            the 2 rubrics, a few thumbs. "Deterministic from --seed N".
@@ -47,7 +47,7 @@ CHANNEL = "generator"
 SEED_CONVERSATIONS = {"agent1": 14, "agent2": 6}
 FORKS, REPLAYS, THUMBS = 4, 3, 3
 
-# feature-spec.md:168 "judgments across 2 rubrics" — bootstrap seeds none.
+# feature-spec.md:164 "judgments across 2 rubrics" — bootstrap seeds none.
 RUBRICS = [
     ("Helpfulness",
      "Score 0-1: does the reply move the user measurably toward their goal, "

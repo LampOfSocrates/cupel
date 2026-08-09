@@ -8,7 +8,7 @@ import { useApp } from "../AppContext";
 // state before the user hits the error.
 //
 // Reaching this state at all means the caller is an admin — "GET /agenttrees
-// (permitted + enabled; admins also see disabled)" (feature-spec.md:121)
+// (permitted + enabled; admins also see disabled)" (feature-spec.md:117)
 // filters a disabled tree out of a non-admin's listing entirely, so it never
 // becomes their active tree. Nothing here reads a role or an auth mode: the
 // banner is driven purely by the tree's `enabled` flag from the boot fetch.

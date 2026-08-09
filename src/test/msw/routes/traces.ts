@@ -8,9 +8,9 @@ import { BASE, envelope, treeGate } from "../state";
 // /spans/{spanId}/payload (:723-744). Span shape openapi.yaml:
 // 1668-1690; payload_ref = span id, mirroring the real mock (engine.py:59).
 // t2: COMPLETED agent→tool→llm trace incl. an ERROR span ("Errors mark the
-// span red", feature-spec.md:149). t-live: still-generating trace (running
+// span red", feature-spec.md:145). t-live: still-generating trace (running
 // root span) for live-merge tests — spans stream on /tasks/stream
-// (feature-spec.md:150) via taskStreamRig.emit("span", …).
+// (feature-spec.md:146) via taskStreamRig.emit("span", …).
 function seedTraces(): Record<string, Trace> {
   return {
     t2: {

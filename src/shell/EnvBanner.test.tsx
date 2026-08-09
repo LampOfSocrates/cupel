@@ -5,7 +5,7 @@ import { EnvBanner } from "./EnvBanner";
 
 // Banner config lives on the target (agentic.config.ts
 // BackendTarget.banner); "Non-prod targets show a colored banner in the app
-// chrome so nobody mistakes mock data for real" (feature-spec.md:161).
+// chrome so nobody mistakes mock data for real" (feature-spec.md:157).
 describe("EnvBanner", () => {
   it("renders the mock target's configured banner (the test/dev default)", () => {
     render(<EnvBanner />);

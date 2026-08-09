@@ -1,12 +1,12 @@
 import { expect, test as base, type Page, type Request } from "@playwright/test";
 
 // Request interception that asserts the ENDPOINT TAGS from the
-// sketches. feature-spec.md:205: "one spec file per numbered dev prompt; each
+// sketches. feature-spec.md:201: "one spec file per numbered dev prompt; each
 // asserts against the endpoint tags in the sketches" — i.e. a journey must be
 // shown to CALL the documented endpoints, not merely to look right.
 //
 // Patterns are written exactly as the sketches and the UI×API grid
-// (feature-spec.md:222-250) write them:
+// (feature-spec.md:218-246) write them:
 //
 //     POST /agenttrees/{tree}/replay
 //     GET  /spans/{id}/payload

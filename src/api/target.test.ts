@@ -41,7 +41,7 @@ describe("default target resolution", () => {
   });
 });
 
-describe("device-local persistence (feature-spec.md:161)", () => {
+describe("device-local persistence (feature-spec.md:157)", () => {
   it("setActiveTarget persists to localStorage and getActiveTarget resolves it", () => {
     setActiveTarget("local");
     expect(localStorage.getItem(TARGET_STORAGE_KEY)).toBe("local");
@@ -58,7 +58,7 @@ describe("device-local persistence (feature-spec.md:161)", () => {
   });
 });
 
-// The "custom Base URL field" (feature-spec.md:158), device-local
+// The "custom Base URL field" (feature-spec.md:154), device-local
 // under cupel.backend.customUrl like the target choice itself (:161).
 describe("custom target (P2-T17)", () => {
   const URL = "http://backend.internal:9999";

@@ -128,7 +128,7 @@ describe("EvaluationsPage — stepper", () => {
   // (openapi.yaml:931-954); the queued replay config carries `judge` as the
   // UI's intent (JudgeConfig, openapi.yaml:1508-1514) and the CLIENT fires
   // the judge once the run detail page observes the run reach 'done'
-  // (feature-spec.md:61 "'Score this run' on any finished run").
+  // (feature-spec.md:61 "'Judge this evaluation' on any finished run").
   it("judge config on the queued run fires POST /eval/judge once the run reaches done", async () => {
     const user = userEvent.setup();
     renderRuns();
@@ -138,7 +138,7 @@ describe("EvaluationsPage — stepper", () => {
     await user.click(screen.getByRole("button", { name: "Configure ▸" }));
 
     // "toggle on → judge model + rubric fields appear" (feature-spec.md:48);
-    // rubric options come from GET /eval/rubrics (feature-spec.md:230).
+    // rubric options come from GET /eval/rubrics (feature-spec.md:226).
     await user.click(await screen.findByRole("switch", { name: "⚖ Judge" }));
     await user.click(screen.getByRole("combobox", { name: "Judge model" }));
     await user.click(await screen.findByRole("option", { name: "Claude Haiku 4.5" }));
@@ -184,11 +184,11 @@ describe("EvaluationsPage — stepper", () => {
 //   testing)" (openapi.yaml:309-311); PUT "Remember the conversation
 //   selection for this agent" (:315-317).
 // - feature-spec.md:87: "the previous conversation set is remembered per
-//   agent … Repeat testing = Test in Runs → Queue, two taps. First-time
+//   agent … Repeat testing = Test as evaluation → Queue, two taps. First-time
 //   testing drops into Select".
 // - feature-spec.md:86: config carries snapshot_id; "Unsaved snapshots
 //   display as 'v15-draft (a3f2)'" — column label comes from the SERVER.
-describe("EvaluationsPage — Test in Runs arrival", () => {
+describe("EvaluationsPage — Test as evaluation arrival", () => {
   const arrival = {
     testInRuns: {
       agent_id: "ag_refunds",
@@ -212,7 +212,7 @@ describe("EvaluationsPage — Test in Runs arrival", () => {
     const user = userEvent.setup();
     renderRuns("/evaluations", arrival);
 
-    // two taps: Test in Runs already happened, Queue is immediately reachable
+    // two taps: Test as evaluation already happened, Queue is immediately reachable
     expect(await screen.findByTestId("config-0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Queue" })).toBeInTheDocument();
     expect(screen.getByTestId("snapshot-badge")).toHaveTextContent("v1-draft (a3f9)");

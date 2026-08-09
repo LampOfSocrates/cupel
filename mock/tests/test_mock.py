@@ -806,7 +806,7 @@ def test_fail_marker_injects_one_failure_then_retry_succeeds(monkeypatch):
                 "selection": [{"conversation_id": r["conversation_id"]}],
                 "configs": [{"model": "deepseek-v3"}],
             })).json()
-            # Partial failure: the batch itself completes (feature-spec.md:110
+            # Partial failure: the batch itself completes (feature-spec.md:106
             # "failed children don't kill the batch") — the FAILURE is on the
             # child, which is what retry-failed and the UI's retry button read.
             parent = await wait_task(c, acc["task_id"])

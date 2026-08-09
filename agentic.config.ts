@@ -49,14 +49,14 @@ export interface BackendTarget {
    */
   baseUrl: string;
   /**
-   * The target needs an auth token before it will answer (feature-spec.md:161
+   * The target needs an auth token before it will answer (feature-spec.md:157
    * "Prod requires an auth token field"). The token UI ships with the
    * Settings → Backend switcher (P2-T17); the flag is declared here so the
    * switcher knows to ask.
    */
   requiresToken?: boolean;
   /**
-   * Chrome banner for this target (feature-spec.md:161 "Non-prod targets show
+   * Chrome banner for this target (feature-spec.md:157 "Non-prod targets show
    * a colored banner in the app chrome so nobody mistakes mock data for
    * real"). `false` = no banner (prod). When UNSET the app falls back to the
    * P2-CONFIG id-based rule: every target except id "prod" shows an orange

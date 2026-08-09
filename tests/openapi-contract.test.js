@@ -5,8 +5,8 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 
 const doc = YAML.parse(readFileSync("openapi.yaml", "utf8"));
 
-// feature-spec.md:120-135 filtered to Phase 1 (cupel-phases.md:9-66); tree-scoped
-// per feature-spec.md:115, global routes unprefixed.
+// feature-spec.md:116-131 filtered to Phase 1 (cupel-phases.md:9-66); tree-scoped
+// per feature-spec.md:111, global routes unprefixed.
 const PHASE1_PATHS = [
   "/me",
   "/healthz",
@@ -39,9 +39,9 @@ const PHASE1_PATHS = [
   "/eval/runs/{runId}/summary",
 ];
 
-// v0.3.0 additions — feature-spec.md:117-123, :128-134 filtered to Phase 2
+// v0.3.0 additions — feature-spec.md:113-119, :124-130 filtered to Phase 2
 // (cupel-phases.md:69-118). Pro-tier repo/PR endpoints excluded (TASKS.md:56);
-// /assist is Phase 3 (feature-spec.md:119).
+// /assist is Phase 3 (feature-spec.md:115).
 const PHASE2_PATHS = [
   "/auth/token",
   "/auth/logout",
@@ -78,7 +78,7 @@ describe("P1-T00 OpenAPI contract", () => {
     );
   });
 
-  it("tree-scoped resources live under /agenttrees/{tree} (feature-spec.md:115)", () => {
+  it("tree-scoped resources live under /agenttrees/{tree} (feature-spec.md:111)", () => {
     for (const p of Object.keys(doc.paths)) {
       if (p.includes("{tree}")) {
         expect(p, `${p} must be scoped under /agenttrees/{tree}`).toMatch(
@@ -124,7 +124,7 @@ describe("P1-T00 OpenAPI contract", () => {
     ).toEqual(["get", "put"]);
   });
 
-  it("/me is defined — always called, both auth modes (feature-spec.md:120)", () => {
+  it("/me is defined — always called, both auth modes (feature-spec.md:116)", () => {
     expect(doc.paths["/me"].get).toBeDefined();
   });
 
@@ -158,7 +158,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("task lifecycle and result deep-links (cupel-phases.md:43, feature-spec.md:107)", () => {
+  it("task lifecycle and result deep-links (cupel-phases.md:43, feature-spec.md:103)", () => {
     const task = doc.components.schemas.Task.properties;
     expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
     // compact + import APPENDED in v0.3.0 — additive, Phase-1 values unchanged
@@ -183,7 +183,7 @@ describe("P1-T00 OpenAPI contract", () => {
     expect(params).toContain("agent_id");
   });
 
-  it("generator can seed structures via the public API (feature-spec.md:185, :188)", () => {
+  it("generator can seed structures via the public API (feature-spec.md:181, :184)", () => {
     expect(doc.paths["/agenttrees"].post).toBeDefined();
     expect(doc.paths["/agenttrees/{tree}/agents"].post).toBeDefined();
     expect(doc.paths["/eval/rubrics"].post).toBeDefined();
@@ -293,19 +293,19 @@ describe("P2-T00 contract v0.3.0", () => {
     }
   });
 
-  it("eval sets carry versioned membership (feature-spec.md:131)", () => {
+  it("eval sets carry versioned membership (feature-spec.md:127)", () => {
     const set = doc.components.schemas.EvalSet;
     expect(set.required).toEqual(expect.arrayContaining(["version", "case_ids"]));
     expect(doc.components.schemas.EvalSetUpdate.required).toEqual(["case_ids"]);
   });
 
-  it("JudgeRequest selects by exactly one of run_id / case_ids / set_id (feature-spec.md:133)", () => {
+  it("JudgeRequest selects by exactly one of run_id / case_ids / set_id (feature-spec.md:129)", () => {
     const judge = doc.components.schemas.JudgeRequest;
     expect(judge.oneOf.map((b) => b.required.join())).toEqual(["run_id", "case_ids", "set_id"]);
     expect(judge.properties.set_id).toBeDefined();
   });
 
-  it("case creation is handcrafted XOR sourced; import reports per row (feature-spec.md:129-130)", () => {
+  it("case creation is handcrafted XOR sourced; import reports per row (feature-spec.md:125-126)", () => {
     const create = doc.components.schemas.EvalCaseCreate;
     expect(create.oneOf.map((b) => b.required.join())).toEqual(["input,output", "source"]);
     const imp = doc.paths["/eval/cases/import"].post;
@@ -333,17 +333,17 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(doc.components.schemas.Settings.properties.fallback_envelope).toBeDefined();
   });
 
-  it("memory: mutable document + compaction as a queued compact task (feature-spec.md:118)", () => {
+  it("memory: mutable document + compaction as a queued compact task (feature-spec.md:114)", () => {
     // Mutable by design — the documented exception to the append-only stores
     expect(Object.keys(doc.paths["/agenttrees/{tree}/memory"]).sort()).toEqual(["delete", "get", "put"]);
     const compact = doc.paths["/agenttrees/{tree}/memory/compact"].post;
     expect(compact.responses["202"].content["application/json"].schema.$ref).toBe("#/components/schemas/TaskRef");
     expect(doc.components.schemas.Task.properties.type.enum).toContain("compact");
-    // "/chat accepts memory flag" (feature-spec.md:118)
+    // "/chat accepts memory flag" (feature-spec.md:114)
     expect(doc.components.schemas.ChatRequest.properties.memory).toBeDefined();
   });
 
-  it("casebooks: items are turn references; to-eval-set and replay exist (feature-spec.md:117)", () => {
+  it("casebooks: items are turn references; to-eval-set and replay exist (feature-spec.md:113)", () => {
     expect(Object.keys(doc.paths["/casebooks"]).sort()).toEqual(["get", "post"]);
     expect(Object.keys(doc.paths["/casebooks/{casebookId}"]).sort()).toEqual(["delete", "get", "patch"]);
     expect(doc.components.schemas.CasebookItem.required).toEqual(
@@ -355,13 +355,13 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(doc.paths["/casebooks/{casebookId}/replay"].post.responses["202"]).toBeDefined();
   });
 
-  it("generator control matches the spec shape (feature-spec.md:122, :189)", () => {
+  it("generator control matches the spec shape (feature-spec.md:118, :185)", () => {
     expect(doc.components.schemas.GeneratorCommand.properties.mode.enum).toEqual(["seed", "drip", "stop"]);
     const status = doc.components.schemas.GeneratorStatus;
     expect(status.required).toEqual(expect.arrayContaining(["mode", "rates", "counts"]));
   });
 
-  it("settings: user-scoped, small, upload limits read-only (feature-spec.md:123)", () => {
+  it("settings: user-scoped, small, upload limits read-only (feature-spec.md:119)", () => {
     expect(Object.keys(doc.paths["/settings"]).sort()).toEqual(["get", "put"]);
     const settings = doc.components.schemas.Settings;
     expect(settings.properties.upload_limits.readOnly).toBe(true);

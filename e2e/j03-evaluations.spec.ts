@@ -2,11 +2,11 @@ import { expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 3 (feature-spec.md:208):
+// E2E checklist journey 3 (feature-spec.md:204):
 // "Evaluations: select conversations + single turns → configure (endpoints
 //  multi-select, version change highlighted) → queue → results fill
 //  incrementally"
-// Endpoint tags (feature-spec.md:229-232, sketches 02/03/04):
+// Endpoint tags (feature-spec.md:225-228, sketches 02/03/04):
 //   GET /agenttrees/{tree}/conversations · GET …/endpoints · GET …/instructions
 //   GET /models · GET /eval/rubrics · POST /agenttrees/{tree}/replay
 //   GET /agenttrees/{tree}/runs/{id}

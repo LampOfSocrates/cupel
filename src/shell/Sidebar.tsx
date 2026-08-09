@@ -13,7 +13,7 @@ import { ConversationList } from "./ConversationList";
 // starts open: it is the whole point of the second door, not a disclosure.
 // Chat carries the recent list (feature-spec.md:5 "Expanded sidebar shows
 // recent conversations under Chat"); Queue carries the pending badge + running
-// spinner (feature-spec.md:111). Inspector is ROLE-gated: it renders only when
+// spinner (feature-spec.md:107). Inspector is ROLE-gated: it renders only when
 // /me.roles includes `inspect` (openapi.yaml:308 "Requires the inspect role"),
 // never on the auth mode — an off-mode backend simply answers /me with the dev
 // user's roles (feature-spec.md:17 "default admin = all trees, all rights").
@@ -42,7 +42,7 @@ const NAV: (NavLeaf | NavGroup)[] = [
 ];
 
 // Badge on the Queue entry: "Sidebar badge: pending count; subtle
-// spinner while anything is running" (feature-spec.md:111) — pending =
+// spinner while anything is running" (feature-spec.md:107) — pending =
 // queued + running parents, fed by QueueProvider's app-wide stream.
 function QueueIndicator() {
   const { pendingCount, running } = useQueue();

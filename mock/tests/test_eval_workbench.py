@@ -511,7 +511,7 @@ def test_import_rejects_a_corrupt_workbook_whole_file():
 # --------------------------------------------------- cases stay tree-global
 def test_eval_cases_are_global_not_tree_scoped():
     """"Global: tasks, span payloads, eval rubrics/judgments, settings"
-    (feature-spec.md:115) — a disabled tree blocks new RUN work, never eval
+    (feature-spec.md:111) — a disabled tree blocks new RUN work, never eval
     case/set CRUD or judging standalone cases."""
     async def case():
         async with client_pair() as c:

@@ -47,13 +47,13 @@ import type { CasebookItemCreate } from "../api/types";
 // page additionally shows the 403 the server returns if a backend disagrees —
 // it never inspects the backend's auth mode.
 //
-// KEYBOARD MAP (feature-spec.md:289 "keyboard nav j/k/a"):
+// KEYBOARD MAP (feature-spec.md:285 "keyboard nav j/k/a"):
 //   j — next conversation row (loads it in the reader)
 //   k — previous conversation row
 //   a — ⊞ collect the focused turn into a casebook
 // Keys are ignored while typing in a filter field or while a modal is open.
 //
-// Filters live in the URL (feature-spec.md:289 "filters as URL params"), so an
+// Filters live in the URL (feature-spec.md:285 "filters as URL params"), so an
 // inspection is a shareable link — the same reasoning as the share deep links.
 //
 // NOT virtualized (the dev prompt's "virtualized" wish): the contract caps

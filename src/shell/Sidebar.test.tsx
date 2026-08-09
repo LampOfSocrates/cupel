@@ -8,7 +8,7 @@ import { getAuthToken, setAuthToken } from "../api/auth";
 import { Shell } from "./Shell";
 
 // Contract under test — "Sidebar badge: pending count; subtle spinner while
-// anything is running" (feature-spec.md:111). Pending = queued + running
+// anything is running" (feature-spec.md:107). Pending = queued + running
 // parents; fed by QueueProvider's single app-wide /tasks/stream + GET /tasks
 // (openapi.yaml:747-775 "polling fallback + sidebar badge").
 
@@ -54,7 +54,7 @@ describe("Sidebar queue badge", () => {
     expect(screen.queryByLabelText("Tasks running")).not.toBeInTheDocument();
 
     // A queued (not yet running) parent counts as pending, but no spinner
-    // (feature-spec.md:111 separates the two signals).
+    // (feature-spec.md:107 separates the two signals).
     taskStreamRig.emit("task", {
       id: "task-queued-only",
       type: "replay",

@@ -7,7 +7,7 @@
 //
 // Storage: one token PER BACKEND TARGET (cupel.auth.token.<targetId>) —
 // logging into staging must not leak a JWT to prod. Device-local like the
-// target choice itself (feature-spec.md:161); try/catch mirrors llmKey.ts
+// target choice itself (feature-spec.md:157); try/catch mirrors llmKey.ts
 // (localStorage can throw in privacy mode — auth then simply has no stored
 // token).
 import { useSyncExternalStore } from "react";
@@ -71,7 +71,7 @@ export function useAuthToken(): string | null {
  * 1. the login JWT for the active target (POST /auth/token, this store);
  * 2. else, for targets declaring requiresToken (agentic.config.ts — prod),
  *    the static token from Settings → Backend (cupel.backend.prodToken,
- *    "Prod requires an auth token field", feature-spec.md:161).
+ *    "Prod requires an auth token field", feature-spec.md:157).
  * The login JWT wins: an interactive session's identity beats the device's
  * standing credential.
  */

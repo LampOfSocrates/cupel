@@ -1,4 +1,4 @@
-// Shared components, build once (feature-spec.md:137-138): ConversationPicker
+// Shared components, build once (feature-spec.md:133-134): ConversationPicker
 // (turn-expandable), RunConfigPanel (diff-from-baseline, optional judge
 // section), ComparisonView (pluggable annotation), TaskQueue, RunsList.
 export { ConversationPicker } from "./ConversationPicker";

@@ -39,7 +39,7 @@ import { useApp } from "../AppContext";
 //
 // Judge section live (feature-spec.md:48 "Judge (optional, collapsed
 // by default): toggle on → judge model + rubric fields appear") — rubric
-// dropdown fed by GET /eval/rubrics (feature-spec.md:230 "Runs · 2 Configure |
+// dropdown fed by GET /eval/rubrics (feature-spec.md:226 "Evaluations · 2 Configure |
 // … GET /eval/rubrics"), judge model from the session models cache. The judge
 // FIRES from EvaluationPage when the run reaches done (see its judge-trigger
 // note) — queueing here only records the intent in the config.
@@ -49,14 +49,14 @@ import { useApp } from "../AppContext";
 // - baseline_run_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 //
-// Test-in-Runs arrival (cupel-phases.md:18 "editor → Runs flow
+// Test-in-Runs arrival (cupel-phases.md:18 "editor → Evaluations flow
 // (sketches 06 → 03)"): the editor navigates here with router state
 // {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set
 // is remembered per agent (GET/PUT /agents/{id}/last-selection). Repeat
-// testing = Test in Runs → Queue, two taps."):
+// testing = Test as evaluation → Queue, two taps."):
 // - GET last-selection; non-empty items → seed the selection and land on
-//   Configure directly (the two taps: Test in Runs → Queue); "empty items =
+//   Configure directly (the two taps: Test as evaluation → Queue); "empty items =
 //   first-time testing" (openapi.yaml:311) → land on Pick.
 // - the single config is prefilled {agent_id, snapshot_id}; the panel shows
 //   the snapshot's label ("v3-draft (a3f1)", feature-spec.md:86).
@@ -202,7 +202,7 @@ export function EvaluationsPage() {
   const versionsRequested = useRef(new Set<string>());
   const [queueing, setQueueing] = useState(false);
 
-  // Configure-step dropdown data (feature-spec.md:230 "Runs · 2 Configure |
+  // Configure-step dropdown data (feature-spec.md:226 "Evaluations · 2 Configure |
   // GET …/agents/{id}/instructions, GET /models, GET /eval/rubrics"): agents +
   // rubrics + models fetched on entering the step; models come from the
   // session cache (AppContext).
@@ -277,7 +277,8 @@ export function EvaluationsPage() {
     try {
       // Test-in-Runs: remember the selection ACTUALLY queued for this agent
       // before enqueueing (PUT .../last-selection, openapi.yaml:315-332;
-      // feature-spec.md:87 "Repeat testing = Test in Runs → Queue, two taps").
+      // feature-spec.md:87 "Repeat testing = Test as evaluation → Queue, two
+      // taps").
       if (testFlow) {
         await api.putLastSelection(tree, testFlow.agent_id, { items: selection });
       }

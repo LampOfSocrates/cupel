@@ -83,7 +83,7 @@ export function ChatPage() {
   // Turn id whose comment box is open (null = none). Only ever one — a thumb
   // elsewhere moves the box rather than stacking prompts.
   const [commentFor, setCommentFor] = useState<string | null>(null);
-  // Session-scoped chat settings (feature-spec.md:7, :278). They live HERE,
+  // Session-scoped chat settings (feature-spec.md:7, :274). They live HERE,
   // not in AppContext: only this page reads them, and in the context every
   // keystroke in the settings popover re-rendered the entire app
   // (docs/review-2026-08-05.md A5). Session scope still holds — this
@@ -275,14 +275,14 @@ export function ChatPage() {
           message: text,
           conversation_id: conversationId,
           // The Settings → Backend "SSE streaming on/off" mock option
-          // (feature-spec.md:160) — device-local flag, read at send time.
+          // (feature-spec.md:156) — device-local flag, read at send time.
           // stream:false answers a single JSON ChatResponse handled below
           // (cupel-phases.md:43 "the UI degrades gracefully to non-streaming
           // when the SSE toggle is off in mock options").
           stream: getSseEnabled(),
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
           // Session-scoped settings "sent with each /chat call"
-          // (feature-spec.md:278). ChatSettings keys mirror ChatRequest
+          // (feature-spec.md:274). ChatSettings keys mirror ChatRequest
           // (openapi.yaml:1425-1430) and unset keys are absent, so the spread
           // sends only what the user set — never null for untouched fields.
           ...chatSettings,
@@ -346,7 +346,7 @@ export function ChatPage() {
   };
 
   // 👍/👎 → POST /feedback {message_id, rating} (openapi.yaml:1475-1480;
-  // feature-spec.md:276). Optimistic; judgments are append-only (no un-vote
+  // feature-spec.md:272). Optimistic; judgments are append-only (no un-vote
   // endpoint), so re-clicking the same thumb simply appends again.
   // The rating is submitted on the click ITSELF — a user who only wants to
   // rate still does exactly one click — and the comment box is merely revealed

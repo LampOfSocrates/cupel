@@ -1,5 +1,5 @@
 // Runtime backend-target store over agentic.config.ts (the one
-// config artifact). The active target is DEVICE-LOCAL (feature-spec.md:161
+// config artifact). The active target is DEVICE-LOCAL (feature-spec.md:157
 // "Target is device-local (not synced via /settings)") — persisted in
 // localStorage, resolved from the config on every read so the config file
 // stays the single source of truth for what targets exist.
@@ -8,9 +8,9 @@ import { agenticConfig, type BackendTarget } from "../../agentic.config";
 
 export const TARGET_STORAGE_KEY = "cupel.backend.target";
 
-// The "custom Base URL field" of feature-spec.md:158: one extra
+// The "custom Base URL field" of feature-spec.md:154: one extra
 // non-preset target whose baseUrl the user types in Settings → Backend.
-// Device-local like the target choice itself (feature-spec.md:161).
+// Device-local like the target choice itself (feature-spec.md:157).
 export const CUSTOM_TARGET_ID = "custom";
 export const CUSTOM_URL_KEY = "cupel.backend.customUrl";
 

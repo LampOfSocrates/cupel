@@ -20,7 +20,7 @@ import { EvaluationPage } from "./EvaluationPage";
 import type { Run } from "../api/types";
 
 // Contract under test — GET …/runs/{runId} (openapi.yaml:671-693): "Cells
-// fill incrementally as child tasks finish (feature-spec.md:112); live fill
+// fill incrementally as child tasks finish (feature-spec.md:108); live fill
 // arrives via GET /tasks/stream" (:679-680). Stream events (:789-792):
 // "task — data: Task (status change)", "progress — data: TaskProgressEvent
 // (per-unit ticks, e.g. 'Conversation 3/10 · turn 2/6')". Cancel: DELETE
@@ -237,7 +237,7 @@ describe("EvaluationPage", () => {
 
   // "⌁ trace icon on every turn — in Chat, results grid cells, and
   // drill-in. Works on originals, forks, and replays alike"
-  // (feature-spec.md:145): done cells that carry the produced turn's id
+  // (feature-spec.md:141): done cells that carry the produced turn's id
   // (RunCell.turn_id) route to that turn's trace — endpoint cells to the fork
   // replay's turn, the baseline cell to the ORIGINAL turn.
   it("done cells with a turn_id expose ⌁ routing to that turn's trace", async () => {
@@ -283,7 +283,7 @@ describe("EvaluationPage", () => {
 //   (openapi.yaml:1654-1664; feature-spec.md:62)
 // - judgment frames on /tasks/stream (JudgmentEvent, openapi.yaml:1796-1804)
 // - drawer endpoints: "GET /eval/judgments?case_id=, GET /eval/cases/{id}"
-//   (feature-spec.md:233); history append-only (feature-spec.md:59 "persisted
+//   (feature-spec.md:229); history append-only (feature-spec.md:59 "persisted
 //   forever, never overwritten … Re-judging appends")
 // - POST /eval/judge {run_id, judge_model, rubric_id} → 202 TaskRef
 //   (openapi.yaml:931-954).

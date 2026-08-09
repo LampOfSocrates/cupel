@@ -3,10 +3,9 @@ import { expect, test } from "@playwright/test";
 // The Phase-1 Definition of done, walked end-to-end
 // (cupel-phases.md:64-65): "app boots on mock with seeded data → simulate
 // (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2
-// endpoints → compare → judge → read reasoning → edit agent → Test in Runs →
-// see trace with costs." Scripted as a regression asset; each DoD step is a
-// test.step so failures name the broken step. ("Test in Runs" is now
-// "Test as evaluation" in the UI — #3; cupel-phases.md is corrected in #5.)
+// endpoints → compare → judge → read reasoning → edit agent → Test as
+// evaluation → see trace with costs." Scripted as a regression asset; each DoD
+// step is a test.step so failures name the broken step.
 //
 // The "simulate" step is represented by one generator-style write (the drip
 // loop is this, repeated): an external machine-origin POST /chat through the

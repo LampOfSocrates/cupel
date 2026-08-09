@@ -126,7 +126,7 @@ export function InstructionEditor({
     }
   };
 
-  // Shared by "Snapshot draft" and "Test in Runs": POST the current draft as
+  // Shared by "Snapshot draft" and "Test as evaluation": POST the current draft as
   // an immutable snapshot and remember it for content-equality reuse.
   const createDraftSnapshot = async (): Promise<Snapshot> => {
     // Snapshot the draft as it is at this instant — the same value the
@@ -153,8 +153,8 @@ export function InstructionEditor({
     }
   };
 
-  // "Test in Runs snapshots your draft and replays your usual conversations
-  // against it" (cupel-phases.md:18). Snapshots are immutable, so an unchanged
+  // "'Test as evaluation' snapshots your draft and replays your usual
+  // conversations against it" (cupel-phases.md:18). Snapshots are immutable, so an unchanged
   // draft REUSES the last one instead of POSTing a duplicate (same rule Save
   // uses for promotion); an edited draft gets a fresh snapshot.
   const testInRuns = async () => {

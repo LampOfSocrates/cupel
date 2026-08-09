@@ -6,10 +6,10 @@ import type { Run, RunCell, RunRow } from "../api/types";
 // Runs step 3 — comparison grid (feature-spec.md:49): "baseline column + one
 // column per run config, row per turn". Run.columns index 0 = baseline
 // (openapi.yaml:1621); cells "fill incrementally" (openapi.yaml:1642,
-// feature-spec.md:112) — this is a PURE render of whatever Run it's given, so
+// feature-spec.md:108) — this is a PURE render of whatever Run it's given, so
 // live fill is just re-rendering with the updated Run.
 //
-// Annotation slot (feature-spec.md:138 "pluggable annotation: thumbs and/or
+// Annotation slot (feature-spec.md:134 "pluggable annotation: thumbs and/or
 // scores"): a render prop invoked for DONE cells only.
 
 export interface CellContext {

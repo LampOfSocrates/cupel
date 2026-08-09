@@ -55,7 +55,7 @@ async def snapshot(c):
 
 # ------------------------------------------------------- no-direct-DB (code review)
 def test_generator_writes_only_via_http():
-    """Invariant cupel-phases.md:160 / feature-spec.md:185: 'never directly to
+    """Invariant cupel-phases.md:160 / feature-spec.md:181: 'never directly to
     the DB'. The module must speak httpx and import nothing from mock."""
     src = pathlib.Path(generator_module.__file__).read_text(encoding="utf-8")
     mods = set()
@@ -83,7 +83,7 @@ def test_seed_twice_same_seed_is_idempotent():
             # nothing duplicated on the second run.
             assert snap1 == snap2
 
-            # exactly the 2 rubrics (feature-spec.md:168 "judgments across 2 rubrics")
+            # exactly the 2 rubrics (feature-spec.md:164 "judgments across 2 rubrics")
             rubrics = (await c.get("/eval/rubrics")).json()
             assert {r["name"] for r in rubrics} == {name for name, _ in RUBRICS}
             assert len(rubrics) == 2

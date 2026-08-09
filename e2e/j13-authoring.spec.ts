@@ -10,7 +10,7 @@ import { filmed } from "./helpers/hud";
 // Its free-tier equivalent — the authoring loop this build actually ships — is
 // the eval workbench plus Inspector → casebook → eval set → replay:
 // notice something in real traffic, turn it into cases, and make it
-// a regression suite. Endpoint tags (feature-spec.md:235, 241-242, sketch 10):
+// a regression suite. Endpoint tags (feature-spec.md:231, 241-242, sketch 10):
 //   POST/PUT /eval/rubrics · POST/PUT /eval/cases · POST/PUT /eval/sets
 //   POST /eval/cases/import · POST /eval/judge
 //   GET /admin/conversations · POST /casebooks · POST /casebooks/{id}/items

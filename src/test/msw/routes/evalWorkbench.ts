@@ -332,7 +332,7 @@ export const evalHandlers = [
     }
     // Disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
     // judging is blocked when the RUN'S tree is disabled; case_ids/set_id
-    // judging is NOT tree-gated (eval cases are global, feature-spec.md:115).
+    // judging is NOT tree-gated (eval cases are global, feature-spec.md:111).
     if (body.run_id) {
       const run = mockRuns.find((r) => r.id === body.run_id);
       if (!run) {

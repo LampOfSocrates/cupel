@@ -7,7 +7,7 @@ export const ENV_BANNER_HEIGHT = 22;
 // BackendTarget.banner): prod declares `false`, mock/staging declare their
 // label + color. Targets with NO banner field (e.g. local, custom) fall back
 // to the id-based rule — "Non-prod targets show a colored banner in
-// the app chrome so nobody mistakes mock data for real" (feature-spec.md:161).
+// the app chrome so nobody mistakes mock data for real" (feature-spec.md:157).
 export function resolveBanner(
   target: BackendTarget,
 ): { label: string; color?: string } | false {

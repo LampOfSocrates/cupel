@@ -114,7 +114,7 @@ describe("ChatPage streaming", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
-  // The Settings → Backend SSE toggle (feature-spec.md:160 "SSE
+  // The Settings → Backend SSE toggle (feature-spec.md:156 "SSE
   // streaming on/off") drives ChatRequest.stream; off → the JSON path
   // renders the full reply ("the UI degrades gracefully to non-streaming when
   // the SSE toggle is off in mock options", cupel-phases.md:43).
@@ -184,7 +184,7 @@ describe("ChatPage streaming", () => {
 // (openapi.yaml:550, :1421-1424); oversize → 413 and "the UI surfaces the
 // message" (openapi.yaml:535-536); UI spec: "attach images and files
 // (attachment chips, removable before send)" (feature-spec.md:12);
-// "multipart upload to /upload before send" (feature-spec.md:277).
+// "multipart upload to /upload before send" (feature-spec.md:273).
 describe("Composer attachments", () => {
   // Picks files via the hidden FileButton input (display:none, so
   // fireEvent.change instead of userEvent.upload's visibility-checked click).
@@ -397,7 +397,7 @@ describe("Composer attachments", () => {
 // (openapi.yaml:1475-1480), returns the appended type:human Judgment
 // (openapi.yaml:578-582); reload state via GET /eval/judgments filtered by
 // conversation_id, "newest first" (openapi.yaml:966-968, :994); "copy copies
-// raw markdown" (feature-spec.md:276).
+// raw markdown" (feature-spec.md:272).
 describe("Turn actions", () => {
   it("thumb click posts {message_id, rating} and shows the selected state; re-click re-posts (append-only)", async () => {
     const user = userEvent.setup();
@@ -409,7 +409,7 @@ describe("Turn actions", () => {
     expect(up).toHaveAttribute("aria-pressed", "false");
 
     await user.click(up);
-    // message_id = Turn.id (openapi.yaml:1479 / feature-spec.md:276)
+    // message_id = Turn.id (openapi.yaml:1479 / feature-spec.md:272)
     await waitFor(() => expect(feedbackRequests).toHaveLength(1));
     expect(feedbackRequests[0]).toEqual({ message_id: "t2", rating: "up" });
     expect(up).toHaveAttribute("aria-pressed", "true");
@@ -650,8 +650,8 @@ describe("Turn actions", () => {
 
 // Chat settings submenu. Spec: "Chat has its own Settings submenu
 // (model, temperature, system prompt — session-scoped)" (feature-spec.md:7);
-// "session-scoped, sent with each /chat call" (feature-spec.md:278); model
-// dropdown fed by GET /models (feature-spec.md:122). Contract: ChatRequest
+// "session-scoped, sent with each /chat call" (feature-spec.md:274); model
+// dropdown fed by GET /models (feature-spec.md:118). Contract: ChatRequest
 // model/temperature/system_prompt are nullable — untouched settings are
 // OMITTED from the body, never sent as null (openapi.yaml:1425-1430).
 describe("Chat settings", () => {
@@ -882,7 +882,7 @@ function ForksProbe() {
 }
 
 // "⌁ trace icon on every turn — in Chat, results grid cells, and
-// drill-in" (feature-spec.md:145). Chat surface: sketch 01's action row
+// drill-in" (feature-spec.md:141). Chat surface: sketch 01's action row
 // (👍👎⧉⑂⌁) exists on assistant turns only, so ⌁ ships there (user turns'
 // traces are empty-span per the contract — no affordance).
 describe("Turn trace entry (P1-T16)", () => {

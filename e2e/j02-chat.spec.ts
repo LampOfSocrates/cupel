@@ -1,10 +1,10 @@
 import { expect, test } from "./helpers/api";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 2 (feature-spec.md:207):
+// E2E checklist journey 2 (feature-spec.md:203):
 // "Chat: send → SSE tokens render; 👍/👎 posts feedback; copy; attach +
 //  upload; stop generation"
-// Endpoint tags (feature-spec.md:227-228, sketch 01):
+// Endpoint tags (feature-spec.md:223-224, sketch 01):
 //   POST /agenttrees/{tree}/chat (SSE → task_id) · stop = DELETE /tasks/{id}
 //   POST /upload · POST /feedback · GET /models
 //

@@ -2,10 +2,10 @@ import { API_ORIGIN, expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 4 (feature-spec.md:209):
+// E2E checklist journey 4 (feature-spec.md:205):
 // "Forks: 🔀 a turn against 2 endpoints → 2 new conversations with lineage →
 //  Open in Chat → continue"
-// Endpoint tags (feature-spec.md:228-231, sketch 01/04):
+// Endpoint tags (feature-spec.md:224-227, sketch 01/04):
 //   GET /agenttrees/{tree}/endpoints (the multi-select's data)
 //   POST /agenttrees/{tree}/replay/turn · POST /agenttrees/{tree}/chat
 //

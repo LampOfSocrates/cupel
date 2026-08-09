@@ -71,14 +71,14 @@ function LegacyRunsRedirect() {
 
 export function App() {
   // Boot: GET /me is always called (invariant, cupel-phases.md:160) alongside
-  // GET /agenttrees (feature-spec.md:225 "App shell / sidebar | GET /me, GET /agenttrees").
+  // GET /agenttrees (feature-spec.md:221 "App shell / sidebar | GET /me, GET /agenttrees").
   const [conversationsVersion, setConversationsVersion] = useState(0);
   const refreshConversations = useCallback(() => {
     setConversationsVersion((v) => v + 1);
   }, []);
 
   // GET /models fetched lazily on first settings-menu open, once per
-  // session (feature-spec.md:122). Ref guards a duplicate in-flight fetch;
+  // session (feature-spec.md:118). Ref guards a duplicate in-flight fetch;
   // cleared on failure so a later open can retry.
   //
   // Models are per-backend (GET {base}/models), so the cache is TAGGED with the
@@ -205,7 +205,7 @@ export function App() {
       }}
     >
       {/* ONE app-wide /tasks/stream subscription, opened on boot —
-          feeds the queue panel and the sidebar badge (feature-spec.md:108,
+          feeds the queue panel and the sidebar badge (feature-spec.md:104,
           :111). Design notes in QueueContext.tsx. */}
       <QueueProvider>
       {/* Mid-session 401 → /login?return_to=… (see component). */}
@@ -229,13 +229,13 @@ export function App() {
               lineage banner (design rationale in ForkComparePage.tsx). */}
           <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
           {/* Trace — one route for every ⌁ entry ("Works on originals,
-              forks, and replays alike", feature-spec.md:145); tree from
+              forks, and replays alike", feature-spec.md:141); tree from
               context like all pages. */}
           <Route path="/trace/:turnId" element={<TracePage />} />
           {/* Eval workbench (sketch 10) — "manage the eval domain
               directly: case editor …, set manager …, rubric editor"
               (feature-spec.md:63). Global, not tree-scoped
-              (feature-spec.md:115), so the route carries no tree. */}
+              (feature-spec.md:111), so the route carries no tree. */}
           <Route path="/eval" element={<EvalPage />} />
           {/* Casebooks — global like Eval (a casebook may reference
               turns across trees, openapi.yaml:1654-1656), so no tree in the

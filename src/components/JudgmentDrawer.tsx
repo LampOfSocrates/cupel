@@ -10,7 +10,7 @@ import { ScoreChip } from "./ScoreChip";
 // Contents per feature-spec.md:64: "Tap a badge → judgment drawer: score,
 // judge reasoning, rubric+version, judge model, input/output/reference side by
 // side, and append-only history below", wired to the drawer's endpoints
-// (feature-spec.md:233): "GET /eval/judgments?case_id=, GET /eval/cases/{id}".
+// (feature-spec.md:229): "GET /eval/judgments?case_id=, GET /eval/cases/{id}".
 //
 // History is APPEND-ONLY and rendered as such — feature-spec.md:59: "Judgment
 // (persisted forever, never overwritten) … Re-judging appends a new judgment;

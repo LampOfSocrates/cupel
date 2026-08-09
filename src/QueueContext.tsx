@@ -11,21 +11,21 @@ import {
 import { api } from "./api/client";
 import type { Task, TaskProgress } from "./api/types";
 
-// App-wide task visibility (feature-spec.md:105-112). One provider
+// App-wide task visibility (feature-spec.md:101-108). One provider
 // owns the single GET /tasks/stream subscription for the whole app plus the
 // task map behind the queue panel and the sidebar badge:
 // - "Live updates via SSE (GET /tasks/stream): status changes and progress
 //   events push as they happen — no refresh. Fallback: polling GET /tasks"
-//   (feature-spec.md:108).
+//   (feature-spec.md:104).
 // - "Sidebar badge: pending count; subtle spinner while anything is running"
-//   (feature-spec.md:111).
+//   (feature-spec.md:107).
 //
 // Reconnection choice: on stream drop, reconnect with a LINEAR backoff
 // (reconnectBaseMs × consecutive-failures, capped at 5×) — drops are usually
 // transient proxy/network resets, so quick early retries recover fast, and
 // the cap plus the polling fallback bound the cost of a long outage. After
 // `pollAfterFailures` consecutive failures the provider polls GET /tasks
-// every `pollMs` (~5s, feature-spec.md:108) until a reconnect succeeds; every
+// every `pollMs` (~5s, feature-spec.md:104) until a reconnect succeeds; every
 // successful (re)connect does one GET /tasks reconcile (this doubles as the
 // boot load) because frames emitted while disconnected are gone for good.
 //
@@ -42,9 +42,9 @@ const ACTIVE = new Set<Task["status"]>(["queued", "running"]);
 export interface QueueState {
   /** Parent tasks, newest first (GET /tasks order, openapi.yaml:769). */
   tasks: Task[];
-  /** Queued + running parents (badge count, feature-spec.md:111). */
+  /** Queued + running parents (badge count, feature-spec.md:107). */
   pendingCount: number;
-  /** Anything running → sidebar spinner (feature-spec.md:111). */
+  /** Anything running → sidebar spinner (feature-spec.md:107). */
   running: boolean;
   /** Expand: GET /tasks/{id} → children populated (openapi.yaml:826). */
   loadChildren: (taskId: string) => Promise<void>;
@@ -66,7 +66,7 @@ interface Props {
   children: ReactNode;
   /** Reconnect backoff base; delay = base × failures, capped at 5×. */
   reconnectBaseMs?: number;
-  /** Polling-fallback interval (feature-spec.md:108 "~5s"). */
+  /** Polling-fallback interval (feature-spec.md:104 "~5s"). */
   pollMs?: number;
   /** Consecutive stream failures before the polling fallback engages. */
   pollAfterFailures?: number;
@@ -224,7 +224,7 @@ export function QueueProvider({
     }
   }, [applyList]);
 
-  // "cancel (parent cancels children)" (feature-spec.md:110): optimistic flip
+  // "cancel (parent cancels children)" (feature-spec.md:106): optimistic flip
   // of the parent + its active children, then reconcile from the DELETE
   // response (server-side cascade, openapi.yaml:836-842) and stream frames.
   const cancel = useCallback(
@@ -252,7 +252,7 @@ export function QueueProvider({
     [refreshList, upsertParent],
   );
 
-  // "shown as partial failure with retry-failed button" (feature-spec.md:110).
+  // "shown as partial failure with retry-failed button" (feature-spec.md:106).
   const retryFailed = useCallback(
     async (taskId: string) => {
       const parent = await api.retryFailedTask(taskId); // 202 (openapi.yaml:858)

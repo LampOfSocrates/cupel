@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // Guard — "All API calls go through one configurable client
-// ({base} prefix) — no hardcoded hosts anywhere" (feature-spec.md:158).
+// ({base} prefix) — no hardcoded hosts anywhere" (feature-spec.md:154).
 // The mock's host may appear ONLY in agentic.config.ts (the one config
 // artifact, repo root); everything under src/ — code, tests, MSW fixtures —
 // must resolve it through the target store.

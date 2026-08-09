@@ -10,9 +10,9 @@ import type { Task } from "./api/types";
 // data: Task (status change; includes progress)", "progress — data:
 // TaskProgressEvent (per-unit ticks, e.g. 'Conversation 3/10 · turn 2/6')".
 // GET /tasks (:747-775) is "polling fallback + sidebar badge": "Live updates
-// via SSE … Fallback: polling GET /tasks" (feature-spec.md:108); "Sidebar
+// via SSE … Fallback: polling GET /tasks" (feature-spec.md:104); "Sidebar
 // badge: pending count; subtle spinner while anything is running"
-// (feature-spec.md:111).
+// (feature-spec.md:107).
 //
 // Timing: instead of vi.useFakeTimers (which fights MSW's real async I/O),
 // the provider's reconnect/poll intervals are injectable — tests run them at
@@ -75,7 +75,7 @@ describe("QueueProvider", () => {
     expect(screen.getByTestId("pending")).toHaveTextContent("1");
   });
 
-  it("applies progress frames (progress + stage label, feature-spec.md:109)", async () => {
+  it("applies progress frames (progress + stage label, feature-spec.md:105)", async () => {
     mountProvider();
     await waitFor(() => expect(taskStreamRig.clients).toBe(1));
     await screen.findByTestId("row-task-seed-replay");
@@ -104,7 +104,7 @@ describe("QueueProvider", () => {
     await waitFor(() => expect(taskListRequests.length).toBeGreaterThanOrEqual(2), {
       timeout: 3000,
     });
-    // …and the polled data still populates the panel (feature-spec.md:108).
+    // …and the polled data still populates the panel (feature-spec.md:104).
     await screen.findByTestId("row-task-seed-replay");
 
     // Recovery: restore the real stream handler → reconnect succeeds.

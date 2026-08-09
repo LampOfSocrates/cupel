@@ -70,7 +70,7 @@ describe("target switcher", () => {
     await waitFor(() =>
       expect(screen.getByTestId("health-result")).toHaveTextContent(/ok · \d+ms · v0\.9-local$/),
     );
-    // Mock options are gone off-mock (feature-spec.md:160 "visible when
+    // Mock options are gone off-mock (feature-spec.md:156 "visible when
     // target = Mock").
     expect(screen.queryByText("Mock options")).not.toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe("target switcher", () => {
   });
 });
 
-describe("custom target (feature-spec.md:158 'custom Base URL field')", () => {
+describe("custom target (feature-spec.md:154 'custom Base URL field')", () => {
   it("Custom without a URL stays pending; committing a URL persists it and switches", async () => {
     const user = userEvent.setup();
     renderSettings();
@@ -125,7 +125,7 @@ describe("custom target (feature-spec.md:158 'custom Base URL field')", () => {
   });
 });
 
-describe("prod auth token (feature-spec.md:161)", () => {
+describe("prod auth token (feature-spec.md:157)", () => {
   it("selecting Prod shows a masked token field stored device-locally", async () => {
     // Prod is same-origin (baseUrl "") — answer its healthz so the on-select
     // check resolves.
@@ -153,7 +153,7 @@ describe("prod auth token (feature-spec.md:161)", () => {
   });
 });
 
-describe("mock options (feature-spec.md:160)", () => {
+describe("mock options (feature-spec.md:156)", () => {
   it("SSE streaming toggle is real: flips the device-local flag both ways", async () => {
     const user = userEvent.setup();
     renderSettings();

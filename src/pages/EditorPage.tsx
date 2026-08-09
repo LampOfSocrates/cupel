@@ -36,7 +36,7 @@ import { InstructionEditor } from "./editor/InstructionEditor";
 // - format select is metadata only: "Phase 1 treats both as plain text; YAML
 //   schema validation is Phase 2" (openapi.yaml:1163-1164).
 //
-// "Test in Runs" (sketch 06 "Test ▸"; annotated 06 tags it
+// "Test as evaluation" (sketch 06 "Test ▸"; annotated 06 tags it
 // "POST …/refunds/snapshots"): "the draft text is snapshotted immutably into
 // the run config (snapshot_id), so the tested text is exactly what ran even
 // if editing continues" (feature-spec.md:86). The button ensures a snapshot

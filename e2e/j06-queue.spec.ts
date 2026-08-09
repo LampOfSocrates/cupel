@@ -2,10 +2,10 @@ import { API_ORIGIN, expect, test } from "./helpers/api";
 import { awaitTask, seedChat, seedReplay } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 6 (feature-spec.md:211):
+// E2E checklist journey 6 (feature-spec.md:207):
 // "Queue: parent/child progress via SSE, cancel cascades, injected failure →
 //  retry-failed succeeds"
-// Endpoint tags (feature-spec.md:245, sketch 05):
+// Endpoint tags (feature-spec.md:241, sketch 05):
 //   GET /tasks · GET /tasks/stream (SSE) · DELETE /tasks/{id}
 //   POST /tasks/{id}/retry-failed
 //
@@ -59,7 +59,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
       await expect(row).toContainText("cancelled");
 
       // The cascade is the point: no child is left running behind a cancelled
-      // parent (feature-spec.md:110 "cancel (parent cancels children)").
+      // parent (feature-spec.md:106 "cancel (parent cancels children)").
       await expect
         .poll(async () => {
           const res = await request.get(`${API_ORIGIN}/tasks?parent_id=${big.task_id}`);
@@ -83,7 +83,7 @@ test("queue: parent/child progress → cancel cascades → injected failure → 
     await page.goto("/queue");
     await failRow.getByRole("button", { name: "Toggle children of Replay" }).click();
     await expect(page.getByTestId(`children-${failRun.task_id}`)).toContainText("failed");
-    // Partial failure, not a dead batch (feature-spec.md:110).
+    // Partial failure, not a dead batch (feature-spec.md:106).
     await expect(failRow).toContainText("done");
   });
 

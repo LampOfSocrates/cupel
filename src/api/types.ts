@@ -66,7 +66,7 @@ export interface AgentTree {
 }
 
 // openapi.yaml:1091 Health — GET /healthz (backend switcher,
-// feature-spec.md:159 "shows status, latency, server version, and (for mock)
+// feature-spec.md:155 "shows status, latency, server version, and (for mock)
 // the loaded seed"; latency is CLIENT-measured, openapi.yaml:88 — not a field).
 export interface Health {
   status: "ok";
@@ -81,7 +81,7 @@ export interface Health {
 }
 
 // openapi.yaml:1102 Model — GET /models feeds the chat model dropdown
-// (feature-spec.md:122 "GET /models (chat/run/judge model dropdowns)").
+// (feature-spec.md:118 "GET /models (chat/run/judge model dropdowns)").
 export interface Model {
   id: string;
   name: string;
@@ -292,7 +292,7 @@ export interface ChatResponse {
 }
 
 // openapi.yaml:1447 ChatTaskEvent — "First SSE event; task_id enables
-// stop = DELETE /tasks/{task_id} (feature-spec.md:123)."
+// stop = DELETE /tasks/{task_id} (feature-spec.md:119)."
 export interface ChatTaskEvent {
   task_id: string;
   conversation_id: string;
@@ -314,7 +314,7 @@ export interface ChatDoneEvent {
 }
 
 // openapi.yaml:1475 FeedbackRequest — "message_id = Turn.id (spec wording per
-// feature-spec.md:276)".
+// feature-spec.md:272)".
 export interface FeedbackRequest {
   message_id: string;
   rating: "up" | "down";
@@ -441,7 +441,7 @@ export interface Snapshot {
   created_at: string;
 }
 
-// openapi.yaml:1807 Rubric — versioned, save = new version (feature-spec.md:132).
+// openapi.yaml:1807 Rubric — versioned, save = new version (feature-spec.md:128).
 export interface Rubric {
   id: string;
   name: string;
@@ -623,7 +623,7 @@ export interface ReplayRequest {
 }
 
 // openapi.yaml:1548 ReplayAccepted — "Every request returns task_id
-// (feature-spec.md:106)"; run_id feeds GET …/runs/{id} for the grid.
+// (feature-spec.md:102)"; run_id feeds GET …/runs/{id} for the grid.
 export interface ReplayAccepted {
   task_id: string;
   run_id: string;
@@ -658,7 +658,7 @@ export interface RunSummaryItem {
 }
 
 // openapi.yaml:1645 RunCell — ":1642 One per column, same order; fills
-// incrementally (feature-spec.md:112)".
+// incrementally (feature-spec.md:108)".
 export interface RunCell {
   status: "pending" | "running" | "done" | "failed";
   content?: string | null;
@@ -695,7 +695,7 @@ export interface Run {
 
 // openapi.yaml:1668 Span — "Span = {id, parent_id, type: agent|llm|tool, name,
 // start, end, tokens_in?, tokens_out?, cost?, model?, status, payload_ref}"
-// (feature-spec.md:144); error ":1686-1689 Error message when status is error
+// (feature-spec.md:140); error ":1686-1689 Error message when status is error
 // — 'Errors mark the span red'"; payload_ref ":1690 Id for GET
 // /spans/{id}/payload".
 export interface Span {
@@ -716,7 +716,7 @@ export interface Span {
 
 // openapi.yaml:1692 Trace — envelope ":1700 Shown in the trace header
 // (feature-spec.md:76)"; totals ":1703 Turn totals — wall time, total tokens
-// in/out, cost (feature-spec.md:147)".
+// in/out, cost (feature-spec.md:143)".
 export interface Trace {
   turn_id: string;
   envelope: ContextEnvelope | null;
@@ -730,7 +730,7 @@ export interface Trace {
 }
 
 // openapi.yaml:1714 SpanPayload — "LLM spans carry prompt/response; tool spans
-// carry args/result (feature-spec.md:149)"; lazy-loaded (openapi.yaml:729-730).
+// carry args/result (feature-spec.md:145)"; lazy-loaded (openapi.yaml:729-730).
 export interface SpanPayload {
   span_id: string;
   prompt?: string | null;
@@ -740,7 +740,7 @@ export interface SpanPayload {
 }
 
 // openapi.yaml:1788 SpanEvent — "Live trace span on the tasks channel
-// (feature-spec.md:150)"; `span` frame on GET /tasks/stream (openapi.yaml:793).
+// (feature-spec.md:146)"; `span` frame on GET /tasks/stream (openapi.yaml:793).
 export interface SpanEvent {
   turn_id: string;
   span: Span;

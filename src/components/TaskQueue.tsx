@@ -12,7 +12,7 @@ import {
 import type { Task } from "../api/types";
 import { STATUS_COLOR } from "./status";
 
-// Queue panel (feature-spec.md:110): "each task shows live progress bar +
+// Queue panel (feature-spec.md:106): "each task shows live progress bar +
 // stage text + elapsed time; expandable to child tasks; cancel (parent
 // cancels children). Failed children don't kill the batch — shown as partial
 // failure with retry-failed button." Task model: openapi.yaml:1726-1773.
@@ -109,7 +109,7 @@ export function TaskQueue({
       {tasks.map((task) => {
         const { done, total, stage } = task.progress;
         const failedChildren = (task.children ?? []).filter((c) => c.status === "failed");
-        // Partial failure (feature-spec.md:110) — retry-failed applies when
+        // Partial failure (feature-spec.md:106) — retry-failed applies when
         // the batch has failed children or the task itself failed.
         const retryable = failedChildren.length > 0 || task.status === "failed";
         const time = elapsed(task, now);

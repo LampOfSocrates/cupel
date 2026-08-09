@@ -132,7 +132,7 @@ export function TurnBubble({
           >
             &#x1F44E;
           </ActionIcon>
-          {/* "copy copies raw markdown" (feature-spec.md:276) — Turn.content,
+          {/* "copy copies raw markdown" (feature-spec.md:272) — Turn.content,
               not the rendered HTML. */}
           <CopyButton value={turn.content} timeout={1500}>
             {({ copied, copy }) => (
@@ -192,7 +192,7 @@ export function TurnBubble({
             </ActionIcon>
           )}
           {/* ⌁ — "trace icon on every turn — in Chat, results grid cells, and
-              drill-in" (feature-spec.md:145); routes to the trace view. */}
+              drill-in" (feature-spec.md:141); routes to the trace view. */}
           {onTrace && (
             <ActionIcon
               size="sm"

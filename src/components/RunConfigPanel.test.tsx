@@ -10,7 +10,7 @@ import type { Endpoint, Model, Rubric, RunConfig } from "../api/types";
 // live version"; JudgeConfig requires judge_model + rubric_id (:1508-1514,
 // "Judge section, collapsed by default"). Diff-from-baseline: "prefilled from
 // the baseline so changing one axis = one field" (feature-spec.md:45);
-// "version change highlighted" (feature-spec.md:208).
+// "version change highlighted" (feature-spec.md:204).
 
 const models: Model[] = [
   { id: "claude-sonnet-5", name: "Claude Sonnet 5" },

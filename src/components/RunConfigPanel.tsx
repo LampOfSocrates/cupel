@@ -35,7 +35,7 @@ import type {
 // Data flow: dropdown data (agents/versions/models/endpoints/rubrics) is
 // passed IN as props — the panel stays pure/fetch-free so it renders in tests
 // and drawers alike; the page-level Configure step owns the fetches
-// (feature-spec.md:230: "GET …/endpoints, GET …/instructions, GET /models,
+// (feature-spec.md:226: "GET …/endpoints, GET …/instructions, GET /models,
 // GET /eval/rubrics"). endpoints render only when `showEndpoints` — the
 // multi-select "only applies to turn re-fire" (openapi.yaml:1490;
 // feature-spec.md:67).

@@ -518,7 +518,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         AUTH_MODE=on filters to trees the token's user can view — "GET
         /agent-trees returns only permitted trees; unpermitted trees never
         render" (feature-spec.md:32). Also "permitted + enabled; admins
-        also see disabled" (feature-spec.md:121) — non-admins additionally
+        also see disabled" (feature-spec.md:117) — non-admins additionally
         lose disabled trees; admins get them with enabled:false
         (openapi.yaml:443-446). Off mode: the dev user is admin, so all
         trees, disabled included."""
@@ -1801,7 +1801,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             # chat/replay/judge against it return 409 tree_disabled"
             # (feature-spec.md:20; Conflict wired on /eval/judge,
             # openapi.yaml:1573). case_ids-only judging is NOT tree-gated:
-            # eval cases are global resources (feature-spec.md:115).
+            # eval cases are global resources (feature-spec.md:111).
             need_enabled_tree(r["tree_id"])
             cells = db.all(
                 "SELECT * FROM run_cells WHERE run_id = ? AND col_idx > 0 AND status = 'done'",
@@ -1833,7 +1833,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 cases.append((cid, None, source.get("turn_id"), source.get("conversation_id")))
 
         # Judging a run is tree-scoped; judging standalone eval cases is not
-        # (they are global resources, feature-spec.md:115) — its events then
+        # (they are global resources, feature-spec.md:111) — its events then
         # reach holders of every tree only (Broker docstring).
         parent = engine.create_task("judge", total=len(cases),
                                     payload={"result": {"run_id": run_id}},

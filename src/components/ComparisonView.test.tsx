@@ -16,7 +16,7 @@ vi.mock("marked", async (importOriginal) => {
 // Contract under test: Run (openapi.yaml:1607-1643) — "columns: Index 0 =
 // baseline"; "cells: One per column, same order; fills incrementally"; RunCell
 // status enum pending/running/done/failed (:1649). Annotation slot per
-// feature-spec.md:138 "pluggable annotation: thumbs and/or scores".
+// feature-spec.md:134 "pluggable annotation: thumbs and/or scores".
 
 const run: Run = {
   id: "812",

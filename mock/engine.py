@@ -72,7 +72,7 @@ class Broker:
 
     tree_id None = "not resolvable from what the event references" (e.g. a
     judge task over standalone eval cases, which are global resources with no
-    tree — feature-spec.md:115). Such events are DROPPED for a caller whose
+    tree — feature-spec.md:111). Such events are DROPPED for a caller whose
     permissions are limited, never broadcast: omitting beats leaking.
     """
 
@@ -259,7 +259,7 @@ class Engine:
              cost, model, status, error, prompt, response, j(args), j(result)),
         )
         span = self.db.one("SELECT * FROM spans WHERE id = ?", (sid,))
-        # Spans stream live on the tasks channel (feature-spec.md:150); the
+        # Spans stream live on the tasks channel (feature-spec.md:146); the
         # span's turn carries the tree that may see it (A2).
         self.broker.publish("span", {"turn_id": turn_id, "span": span_dict(span)},
                             self.turn_tree(turn_id))
@@ -417,7 +417,7 @@ class Engine:
     # ------------------------------------------------------------ batches
     async def run_batch(self, parent_id: str):
         """Drive queued children of a batch sequentially; cells fill
-        incrementally (feature-spec.md:112)."""
+        incrementally (feature-spec.md:108)."""
         self.set_status(parent_id, "running")
         children = self.db.all(
             "SELECT * FROM tasks WHERE parent_id = ? ORDER BY rowid", (parent_id,))
@@ -449,7 +449,7 @@ class Engine:
                 raise ValueError(f"unknown child payload kind: {kind}")
             if not self.is_cancelled(child["id"]):
                 self.set_status(child["id"], "done", result=payload.get("result"))
-        except Exception as exc:  # child failure must not kill the batch (feature-spec.md:110)
+        except Exception as exc:  # child failure must not kill the batch (feature-spec.md:106)
             self.set_status(child["id"], "failed", error=str(exc))
 
     def _inject_failure(self, child: dict):

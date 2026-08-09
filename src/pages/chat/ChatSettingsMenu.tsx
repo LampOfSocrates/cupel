@@ -17,8 +17,8 @@ import type { ChatSettings } from "./types";
 
 // Chat settings submenu. "Chat has its own Settings submenu (model,
 // temperature, system prompt — session-scoped)" (feature-spec.md:7); "sent
-// with each /chat call" (feature-spec.md:278). Model options from GET /models
-// (feature-spec.md:122), fetched once on first open and cached in AppContext.
+// with each /chat call" (feature-spec.md:274). Model options from GET /models
+// (feature-spec.md:118), fetched once on first open and cached in AppContext.
 // Placement per the sketches' chat header (title left, "⚙" top-right;
 // annotated 01-chat.svg shows a "model · temp" summary beside the gear — we
 // render that summary only when settings deviate from defaults, doubling as
@@ -91,7 +91,7 @@ export function ChatSettingsMenu({
         </Popover.Target>
         <Popover.Dropdown>
           <Stack gap="xs" w={260}>
-            {/* Model dropdown fed by GET /models (feature-spec.md:122);
+            {/* Model dropdown fed by GET /models (feature-spec.md:118);
                 clearable back to the backend default. Combobox kept inside
                 the popover DOM so option clicks don't count as outside. */}
             <Select

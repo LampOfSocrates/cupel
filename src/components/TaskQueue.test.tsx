@@ -7,7 +7,7 @@ import type { Task } from "../api/types";
 
 // Contract under test: Task (openapi.yaml:1726-1761) — status enum queued/
 // running/done/failed/cancelled, progress {done,total,stage}, children.
-// Queue panel behaviour (feature-spec.md:110): "progress bar + stage text +
+// Queue panel behaviour (feature-spec.md:106): "progress bar + stage text +
 // elapsed time; expandable to child tasks; cancel … Failed children don't
 // kill the batch — shown as partial failure with retry-failed button."
 

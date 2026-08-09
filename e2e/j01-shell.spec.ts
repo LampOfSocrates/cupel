@@ -2,14 +2,10 @@ import { expect, test } from "./helpers/api";
 import { seedChat, seedTurnFork, awaitTask } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 1 (feature-spec.md:206):
-// "Shell: sidebar collapse, presets route to Runs, conversation list
-//  loads/searches, fork nesting expands"
-// The presets clause of that line is DEAD: #1 deleted the Tune/Evaluate
-// presets outright (they were the same page differing only by initial focus),
-// so this journey is shell + list + nesting. feature-spec.md:206 is corrected
-// in #5.
-// Endpoint tags (feature-spec.md:225-226, sketch 07):
+// E2E checklist journey 1 (feature-spec.md:202):
+// "Shell: sidebar collapse, conversation list loads/searches, fork nesting
+//  expands"
+// Endpoint tags (feature-spec.md:221-222, sketch 07):
 //   GET /me · GET /agenttrees · GET /tasks/stream (badge)
 //   GET /agenttrees/{tree}/conversations (?search, ?forks_of)
 

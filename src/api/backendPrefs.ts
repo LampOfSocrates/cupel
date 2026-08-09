@@ -1,9 +1,9 @@
 // Device-local Settings → Backend preferences (localStorage, the
-// specced home for device-local state: feature-spec.md:161 "Target is
+// specced home for device-local state: feature-spec.md:157 "Target is
 // device-local (not synced via /settings)"). try/catch mirrors llmKey.ts:
 // localStorage can throw (privacy mode) — prefs then fall back to defaults.
 
-// "Prod requires an auth token field" (feature-spec.md:161). The client
+// "Prod requires an auth token field" (feature-spec.md:157). The client
 // attaches it as "Authorization: Bearer" on requiresToken targets —
 // but only when no login JWT exists for the target (precedence documented in
 // src/api/auth.ts authHeaders: the login JWT wins).
@@ -26,7 +26,7 @@ export function setProdToken(token: string): void {
   }
 }
 
-// "SSE streaming on/off" (feature-spec.md:160) — the one mock option that is
+// "SSE streaming on/off" (feature-spec.md:156) — the one mock option that is
 // real today: ChatPage sends stream:<flag> and "the UI degrades gracefully to
 // non-streaming when the SSE toggle is off in mock options"
 // (cupel-phases.md:43). Default ON; only the off state is stored.

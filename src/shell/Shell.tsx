@@ -23,7 +23,7 @@ const MOBILE_BAR_HEIGHT = 44;
 
 // Shell frame per sketches/clean/01-chat.svg: left sidebar + main content.
 // Banner-declaring targets add a slim header (per-target config via
-// resolveBanner; feature-spec.md:161); on phones the header also
+// resolveBanner; feature-spec.md:157); on phones the header also
 // carries the burger, so the header slot exists when EITHER applies and prod
 // on desktop still loses no vertical space.
 export function Shell() {

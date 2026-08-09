@@ -2,10 +2,10 @@ import { expect, test } from "./helpers/api";
 import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
-// E2E checklist journey 7 (feature-spec.md:212):
-// "Editor: edit draft → Test in Runs (snapshot) → back → save v16 → run
-//  relabels" — the button is "Test as evaluation" since #3.
-// Endpoint tags (feature-spec.md:236-237, sketch 06):
+// E2E checklist journey 7 (feature-spec.md:208):
+// "Editor: edit draft → Test as evaluation (snapshot) → back → save v16 → run
+//  relabels"
+// Endpoint tags (feature-spec.md:232-233, sketch 06):
 //   GET/PUT /agenttrees/{tree}/agents/{id}/instructions
 //   POST …/agents/{id}/snapshots · GET/PUT …/agents/{id}/last-selection
 //

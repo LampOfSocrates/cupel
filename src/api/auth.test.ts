@@ -14,7 +14,7 @@ import { setProdToken } from "./backendPrefs";
 
 // Token store — one login token PER BACKEND TARGET
 // (cupel.auth.token.<targetId>), device-local like the target choice
-// (feature-spec.md:161). localStorage is cleared between tests by setup.ts.
+// (feature-spec.md:157). localStorage is cleared between tests by setup.ts.
 
 describe("auth token store", () => {
   it("stores per target id and defaults to the active target (mock in dev)", () => {

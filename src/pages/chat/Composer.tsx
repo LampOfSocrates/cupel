@@ -19,7 +19,7 @@ import type { Attachment } from "../../api/types";
 import { formatBytes } from "../../lib/formatBytes";
 
 // One composer chip per picked file. Files upload immediately on pick
-// ("multipart upload to /upload before send", feature-spec.md:277); a 413/415
+// ("multipart upload to /upload before send", feature-spec.md:273); a 413/415
 // leaves the chip in state "error" with the server's message and its file is
 // never referenced in ChatRequest.attachments ("the UI surfaces the message",
 // openapi.yaml:535-536).
@@ -58,7 +58,7 @@ export function Composer({
   const uploading = pending.some((p) => p.status === "uploading");
 
   // Attach flow: picker, drag-drop or paste → immediate POST /upload per file
-  // ("multipart upload to /upload before send", feature-spec.md:277). Chips
+  // ("multipart upload to /upload before send", feature-spec.md:273). Chips
   // are removable before send (feature-spec.md:12 "attachment chips,
   // removable before send").
   const addFiles = (files: File[]) => {
@@ -167,7 +167,7 @@ export function Composer({
     const text = input.trim();
     // Design choice: send is DISABLED until in-flight uploads settle (rather
     // than queued) — the spec sequences "upload to /upload before send"
-    // (feature-spec.md:277) and disabling is the simplest state users can see.
+    // (feature-spec.md:273) and disabling is the simplest state users can see.
     if (!text || streaming || uploading) return;
     // Only successfully uploaded files go out (openapi.yaml:1423 "Attachment
     // ids from POST /upload"); error chips are dropped with the rest on send.

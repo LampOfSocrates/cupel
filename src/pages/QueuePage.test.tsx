@@ -12,7 +12,7 @@ import {
 } from "../test/msw/handlers";
 import { QueuePage } from "./QueuePage";
 
-// Contract under test — queue panel (feature-spec.md:110): "each task shows
+// Contract under test — queue panel (feature-spec.md:106): "each task shows
 // live progress bar + stage text + elapsed time; expandable to child tasks;
 // cancel (parent cancels children). Failed children don't kill the batch —
 // shown as partial failure with retry-failed button." Expand = GET
@@ -89,7 +89,7 @@ describe("QueuePage", () => {
     await screen.findByTestId("task-task-seed-replay");
 
     // The retry button appears once the failed child is visible (children
-    // loaded on expand — feature-spec.md:110 partial failure).
+    // loaded on expand — feature-spec.md:106 partial failure).
     await user.click(screen.getByRole("button", { name: "Toggle children of Replay" }));
     await screen.findByTestId("children-task-seed-replay");
     await user.click(screen.getByRole("button", { name: "Retry failed" }));

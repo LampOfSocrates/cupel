@@ -26,7 +26,7 @@ STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 
 def fail_marker() -> str:
     """FAILURE INJECTION for the e2e suite (cupel-phases.md:98 "failure/latency
-    injection env vars"; feature-spec.md:203 "e2e runs with failure-injection ON
+    injection env vars"; feature-spec.md:199 "e2e runs with failure-injection ON
     at fixed seed, so retry-failed and error states are exercised
     reproducibly").
 
