@@ -59,23 +59,41 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    Also drifted and belonging here: **310 `feature-spec.md:NNN` citations inside `openapi.yaml`**
    (contract `description:` text, so out of item 4's comments-only scope).
 
-8. **DECIDE — is the generated `<name>-ui/` folder a copy or a dependency?** A copy is
-   editable but never receives updates; a dependency is the reverse. A copy is the only thing
-   that works while the package is unpublished — but the adopter must be told.
+8. **DECIDED 2026-08-09 — a COPY.** Template the files into their folder; they own and can
+   edit everything. Free to build and works today while the package is private. **The generated
+   README must say plainly that they will not receive upstream fixes** — that is the cost they
+   are consenting to, and burying it would be dishonest. Revisit publishing only once real
+   adopters exist and you know what they actually customise.
 
-9. **DECIDE — does the command accept a bare agent endpoint, not just a Swagger?** Your wedge
-   persona has a framework agent on an HTTP endpoint and **no OpenAPI document at all**.
-   Without this, the on-ramp only serves adopters who already have a service.
+9. **DECIDED 2026-08-09 — BOTH: a bare agent endpoint or an OpenAPI document.** "Where does your
+   agent answer, and how does it stream?" is the wedge persona's entry, since they have a
+   framework agent on HTTP and no spec at all. ~1 week: stream-shape declaration/detection, a
+   shim mapping their endpoint onto the chat contract, tests, docs. Also recovers most of the
+   parked AG-UI bridge's value at a fraction of its cost.
 
-10. **DECIDE — the four scaffolder questions.** What language for a generated backend
-    (recommend Python/FastAPI first) · feature trimming in or out (recommend out) · does
-    `--same-repo` touch git state (recommend no) · does the generated backend really implement
-    chat + conversations, or only stubs (recommend real for those two).
+10. **DECIDED 2026-08-09.** Backend language: **Python/FastAPI**, settled by dropping item 6 —
+    the reference implementation stays Python, so the generated backend should match it.
+    The generated backend **implements chat + conversations for real**, stubs elsewhere, so the
+    adopter has a working example of the intended shape rather than a folder of NotImplemented.
+    **Families are selectable from the CLI, not only interactively** (user addition) — and that
+    subsumes feature trimming: `--family eval=hide` answers the question AND drops the feature,
+    so there is no second flag surface to design or test. Flags win over prompts; prompt only
+    for families the flags left unanswered; support a fully non-interactive run for CI.
+    **`--same-repo` never touches git state** — print a suggestion instead.
+
+10b. **DECIDED 2026-08-09 — the generated folder BUNDLES the Python mock**, and the tech check
+    **states the Python 3.11+ prerequisite before generating**, not at first run. A JS/TS agent
+    developer meeting an unannounced pip install is the exact bounce this flow exists to prevent;
+    if the dependency cannot be removed it must at least be declared up front.
 
 11. **One command → `<name>-ui/`.** Clone → one command → a folder that `npm run`s a chat +
     studio UI. Checks the tech stack, optionally takes your backend's OpenAPI, asks **per
     family** (~10 questions) with three answers — **mine / mock / hide** — and mocks the rest
-    with a "served by mock" badge. Then a staged hook-up guide: chat only (one endpoint, their
+    with a "served by mock" badge — bundled Python mock, prerequisite declared up front (10b).
+    Answers come from `--family <name>=mine|mock|hide` flags or, for whatever the flags leave
+    unanswered, an interactive prompt; a fully non-interactive run must work for CI. Accepts a
+    bare agent endpoint as well as an OpenAPI document (9). The folder is a COPY they own (8),
+    and its README says so. Then a staged hook-up guide: chat only (one endpoint, their
     agent in a real UI within the hour) → conversations + turns → agents/instructions/versions
     → evaluations + traces. Plan: `docs/plan-adopter-onboarding.md`.
 
