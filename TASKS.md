@@ -106,16 +106,28 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     developer meeting an unannounced pip install is the exact bounce this flow exists to prevent;
     if the dependency cannot be removed it must at least be declared up front.
 
-11. **One command → `<name>-ui/`.** Clone → one command → a folder that `npm run`s a chat +
-    studio UI. Checks the tech stack, optionally takes your backend's OpenAPI, asks **per
-    family** (~10 questions) with three answers — **mine / mock / hide** — and mocks the rest
-    with a "served by mock" badge — bundled Python mock, prerequisite declared up front (10b).
-    Answers come from `--family <name>=mine|mock|hide` flags or, for whatever the flags leave
-    unanswered, an interactive prompt; a fully non-interactive run must work for CI. Accepts a
-    bare agent endpoint as well as an OpenAPI document (9). The folder is a COPY they own (8),
-    and its README says so. Then a staged hook-up guide: chat only (one endpoint, their
-    agent in a real UI within the hour) → conversations + turns → agents/instructions/versions
-    → evaluations + traces. Plan: `docs/plan-adopter-onboarding.md`.
+11. **DONE 2026-08-10 — `npm run create` writes a folder the adopter owns.** Four commits.
+    The family question needed a runtime that could answer it, so first: the path→family
+    table is DERIVED from the contract's tags (`scripts/gen-families.mjs` →
+    `src/api/families.generated.ts`, drift-tested), `agentic.config.ts` gained
+    `families`/`mockTarget`/`agentEndpoint`, and `buildUrl` routes per family — one app,
+    two backends, the adopter's and the bundled mock. `hide` removes the door AND the route
+    (an unmatched path now lands on the front door instead of a blank frame, and the front
+    door moves when chat is hidden); `mock` wears a per-screen badge naming the family.
+    The generator itself: tech check with the Python 3.11+ prerequisite stated before
+    anything is written (10b), one question per family with `--family` flags answering ahead
+    of the prompts and `--yes` for CI, suggestions taken from the per-family conformance
+    verdict (`full`→mine, anything less→mock), a refusal when the answers would leave no
+    screens. Persona B is served: `--agent-endpoint [--stream sse|json]` writes
+    `agentEndpoint` and `src/api/bareAgent.ts` maps chat onto it — SSE frames in the shapes
+    frameworks emit (delta/token/content, OpenAI `choices`, plain text, `[DONE]`) or one JSON
+    reply, ids minted client-side, conversations in tab memory until stage 2 (9).
+    The folder is a COPY with no upstream fixes (8) and its README says so, states the
+    prerequisite, and carries the four-stage ladder. **Proved: a generated folder typechecks,
+    `vite build`s, and its copied mock boots and serves the seeded trees.**
+    732 vitest green, tsc clean, lint clean. Deliberately left out: the generated copy
+    carries no test suite (Cupel's own suites assert Cupel's family answers), and item 13's
+    persistence guidance is NOT linked from the generated README — write 13, then add it.
 
 12. Memory panel — view/edit/clear per tree, compaction as a visible job. The last contracted
     but unbuilt family; leaving it stubbed makes the contract a lie to anyone running
@@ -124,8 +136,9 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
 13. Persistence guidance — `docs/persistence.md` (Postgres spine, object storage for span
     payloads, ClickHouse/OTLP for span metadata, a durable workflow engine for the queue, Redis
     for SSE fan-out), the "do NOT copy the physical layer" header on the db module, and a
-    schema-wide owner column. **Item 11 is supposed to point adopters at this**, so it should
-    exist by then.
+    schema-wide owner column. Item 11 shipped WITHOUT linking it (user, 2026-08-10) — a
+    generated README must not point at a document that does not exist — so add the link to
+    `scripts/generated-readme.mjs` as part of this item.
 
 14. **DECIDE — go public.** Both repos are private. This is the launch, and it closes the
     no-backward-compatibility window, so item 7 must be done and the README/site ready.

@@ -102,8 +102,41 @@ are grouped into **families** — its top-level `tags` in
 full/partial/none per family, so "implement chat first" is a plan you can
 measure, and a backend can *declare* the same thing about itself in
 `GET /healthz` (`contract_version` + `capabilities`). Families are also the
-unit the project scaffolder will ask about, one question each — your endpoints,
-the bundled mock, or hide that part of the UI.
+unit `npm run create` asks about, one question each — see below.
+
+## One command → an app of your own
+
+```
+npm run create -- "My Product"
+```
+
+You get a `my-product-ui/` folder you own: `npm install && npm start` and your
+product's chat + studio UI is running. It asks one question per family with
+three answers, and each answer changes the app:
+
+| answer | what happens |
+|---|---|
+| **mine** | that family calls your backend |
+| **mock** | the bundled demo backend serves it, and every screen it answers says **"served by mock"** |
+| **hide** | no nav entry, no route, no requests — that part of the product does not exist |
+
+Answer ahead of the questions (or skip them entirely, for CI) with
+`--family chat=mine --family eval=hide --yes`, and hand it what you have:
+
+- `--openapi <url|file>` — your backend's spec. Its per-family conformance
+  becomes the suggested answers: `full` suggests `mine`, anything less suggests
+  `mock`, because a half-reachable family is a screen that half-works.
+- `--agent-endpoint <url> [--stream sse|json]` — **no spec at all**, just a
+  framework agent answering over HTTP. Chat is mapped onto it by
+  `src/api/bareAgent.ts` (SSE frames in the shapes frameworks emit, or a single
+  JSON reply) and everything else starts mocked. Conversations live in the tab
+  until you implement that family for real.
+
+The folder is a COPY: editable, yours, and it receives no upstream fixes. Its
+README says so, states the Python 3.11+ prerequisite up front if anything is
+mocked, and carries the four-stage ladder — chat only → conversations and turns
+→ the studio → evaluations and traces — with `npm run ready` to tell you where
+you are on it.
 
 One error shape you implement once too: every non-2xx of every operation
 answers `{code, message, request_id, details?}`. `code` is the stable string a
@@ -155,6 +188,8 @@ further costs a round trip and nothing else.
 | `npm run e2e:auth` | just the `AUTH_MODE=on` journeys |
 | `npm run e2e:record` | film the journeys into Playwright's HTML report |
 | `npm run ready -- <openapi>` | check a backend against the contract |
+| `npm run create -- "<name>"` | generate an app of your own — one question per family |
+| `npm run gen:families` | regenerate the family table from `openapi.yaml` |
 
 ## End-to-end suite
 
