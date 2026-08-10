@@ -207,27 +207,33 @@ runs `mock/root.py`'s merged app), `render.yaml` (blueprint), `mock/boot.py`
    `http://localhost:4010/` (landing page) or
    `http://localhost:4010/cupel-demo/` (the demo).
 
-### Consolidating the two existing Render services into this one (manual, one-time)
+### Consolidating the two existing Render services into this one (done 2026-08-10)
 Before 2026-08-10 this was TWO separate Render services: a Docker service
 (`cupel-demo` in `render.yaml`, but Render minted the hostname
 `skein.onrender.com` at creation and never changed it) running the demo alone,
 and a standalone Static Site (`cupel-site`, dashboard-configured, not in this
-repo) serving only `docs/index.html`. This document and `render.yaml` now
-describe the END STATE — one Docker service, named `cupel-site`, serving both
-— but getting there needs Render dashboard actions this repo's code cannot
-perform:
-1. Delete the `skein.onrender.com` Docker service (old `cupel-demo`
-   blueprint). It dies instantly with no redirect.
-2. Delete the standalone `cupel-site` Static Site.
-3. Render dashboard → New → Blueprint → this repo → applies the `render.yaml`
-   above, creating a fresh Docker service named `cupel-site`. Render hostnames
-   are minted from the service name at creation and are usually available if
-   nothing else is using that exact name — but this is Render's behaviour, not
-   a guarantee this repo controls; if the name is taken, you get a suffixed
-   hostname instead and this doc's URLs need a one-line update to match.
-Steps 1–2 make step 3's data loss safe: with `CUPEL_STORAGE=local` (the
-default) the demo dataset is already just the deterministic seed, regenerated
-on first boot — there is nothing to carry over.
+repo) serving only `docs/index.html`. This document and `render.yaml` describe
+the END STATE this repo now runs — one Docker service, named `cupel-site`,
+serving both. Kept here as a record of what it took, and as the playbook if
+this ever needs redoing (e.g. a future rename):
+1. **Delete** both old services — `srv-...` the Docker one (`skein.onrender.com`)
+   and the standalone Static Site. **Suspending is not enough**: a suspended
+   service still reserves its name, so creating a new service under the same
+   name 400s with `name: (cupel-site) already in use` until it is actually
+   gone. Both die instantly with no redirect; safe here because
+   `CUPEL_STORAGE=local` means the demo dataset was already just the
+   deterministic seed, regenerated on first boot — nothing to carry over.
+2. Create a fresh Docker service named `cupel-site` from `render.yaml`'s
+   config (Render dashboard → New → Blueprint, or the Render API directly).
+   Render hostnames are minted from the service name at creation and are
+   available once nothing else holds that exact name — this reclaimed
+   `cupel-site.onrender.com`.
+3. One deploy failure surfaced doing this live: the Dockerfile's
+   `COPY docs/index.html` / `COPY docs/assets` (needed so `mock/root.py` has a
+   landing page and its logo photo to serve) had nothing to read, because
+   `.dockerignore` blanket-excluded `docs/` from the build CONTEXT. Fixed by
+   narrowing `.dockerignore`, not the Dockerfile — `.dockerignore` only gates
+   what reaches the build, never what a `COPY` puts in the final image.
 
 ## Live-LLM BYOK mode (P1-T18c)
 Mock stays the backend of record (conversations, tasks, runs, SQLite, SSE);

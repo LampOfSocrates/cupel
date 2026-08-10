@@ -15,7 +15,7 @@ import { facts } from "../scripts/contract-facts.mjs";
 // version its counts belong to.
 
 const DATED = {
-  "TASKS.md": "a dated log — each item records what was true when it shipped",
+  "docs/TASKS.md": "a dated log — each item records what was true when it shipped",
   "docs/open-items.md": "a dated log of findings, quoting the counts as found",
   "docs/spike-agui.md": "research spike, 2026-08-07; its whole §5a analysis is built on the count of the day",
   "docs/review-2026-08-05.md": "a dated review of a specific commit",
