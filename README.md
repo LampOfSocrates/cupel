@@ -120,6 +120,13 @@ operation are the ones an operation produces by design — `404`, `409`, `413`,
 `422`, `429` — while `401` is implied by the top-level security block and no
 `5xx` is declared anywhere, because a server fault is not a specified outcome.
 
+`?search=` on the conversation listing is defined rather than left to taste,
+because an undefined filter is where two conformant backends quietly disagree:
+it is a case-insensitive SUBSTRING of the conversation's title **or of any
+turn's content**, taken as one string (never split into words), matched
+literally (no wildcards — escape `%` and `_` if you implement it over SQL
+`LIKE`), ANDed with the other filters and applied before paging.
+
 One collection shape you implement once and reuse: every operation that returns
 a collection of user data answers `{items, page, page_size, total}` and takes
 `?page`/`?page_size` — offset paging, because `total` is what lets a screen say

@@ -10,6 +10,9 @@ import { filmed } from "./helpers/hud";
 //   GET /agenttrees/{tree}/conversations (?search, ?forks_of)
 
 const UNIQUE = "Zephyr courier routing question"; // <48 chars → title verbatim
+// Said in a LATER turn, so it is in the transcript and NOT in the title —
+// which is the whole difference between searching titles and searching turns.
+const BURIED_WORD = "quokka";
 
 // Mantine's CopyButton writes via navigator.clipboard, which headless Chromium
 // refuses without the permission — the "Link copied" confirmation is the thing
@@ -21,10 +24,13 @@ test("shell: boot → sidebar → search → fork nesting expands", async ({
   request,
   api,
 }) => {
-  const step = filmed(page, "Journey 1", 5);
+  const step = filmed(page, "Journey 1", 6);
   // A conversation of our own with a fork, so the nesting step never depends
   // on which seeded conversation happens to be on page 1.
   const chat = await seedChat(request, UNIQUE);
+  await seedChat(request, `A follow-up about ${BURIED_WORD} deliveries`, {
+    conversationId: chat.conversationId,
+  });
   const fork = await seedTurnFork(request, chat, ["ep_agent1_prod"]);
   await awaitTask(request, fork.results[0].task_id);
 
@@ -58,6 +64,36 @@ test("shell: boot → sidebar → search → fork nesting expands", async ({
 
     await search.fill("no-such-conversation-anywhere");
     await expect(page.getByText("No matches")).toBeVisible();
+    await search.fill("");
+  });
+
+  // The parameter's SEMANTICS, not just that it reaches the backend
+  // (openapi.yaml listConversations ?search=). Each of these was undefined
+  // until item 7 stage F8, and the two implementations in this repo had
+  // already drifted apart on the second one.
+  await step("search is a literal, untokenised substring of the title OR a turn", async () => {
+    const search = page.getByPlaceholder("Search");
+    const row = page.getByRole("button", { name: `Actions for ${UNIQUE}` });
+
+    // TURN CONTENT: the title is the FIRST message verbatim, so a word that
+    // appears only in a later turn is findable only if turns are searched.
+    await search.fill(BURIED_WORD);
+    await expect(row).toBeVisible();
+
+    // ONE SUBSTRING, not tokens — the same words, reordered, match nothing.
+    await search.fill("routing courier");
+    await expect(page.getByText("No matches")).toBeVisible();
+
+    // LITERAL — a SQL LIKE wildcard is a character, not syntax. Before this
+    // was defined, "%" returned the entire collection.
+    await search.fill("%");
+    await expect(page.getByText("No matches")).toBeVisible();
+
+    // TRIMMED, and whitespace-only means "no filter", not "match nothing".
+    await search.fill(`  ${UNIQUE}  `);
+    await expect(row).toBeVisible();
+    await search.fill("   ");
+    await expect(row).toBeVisible();
     await search.fill("");
   });
 

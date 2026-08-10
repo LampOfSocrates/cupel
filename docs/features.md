@@ -16,7 +16,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Thumb a reply up or down, then **say why** — your note stays under that reply for good |
 | ✅ | Choose the model, temperature and system prompt for your session |
 | ✅ | **Use your own model key** — it stays in your browser and is never stored or logged on the server |
-| ✅ | Find any past conversation by search or recency; rename or delete it |
+| ✅ | Find any past conversation by search or recency; rename or delete it — search looks **inside what was actually said**, not just the title, and what you type is matched literally, so `50%` finds the conversation about 50%, not everything |
 | ✅ | **Deleting is a tombstone, not a shredder** — the conversation leaves your list and takes no new messages, but its forks keep working and every score and eval case recorded against it still resolves |
 | ✅ | Open a long conversation instantly — it loads the latest turns, with **Load earlier turns** for the rest |
 | ✅ | See forked conversations nested under the one they came from |

@@ -19,8 +19,8 @@ from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
 from .static import mount_spa, resolve_static_dir
-from .util import (canned_title, clamp_page, new_id, now_iso, page_of, request_id, sse,
-                   stamp_envelope)
+from .util import (canned_title, clamp_page, like_term, new_id, now_iso, page_of, request_id,
+                   sse, stamp_envelope)
 
 
 def err(status: int, code: str, message: str, details: list[dict] | None = None):
@@ -1098,11 +1098,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if origin:
             where.append("c.origin = ?")
             params.append(origin)
-        if search:
-            like = f"%{search.lower()}%"
-            where.append("(LOWER(c.title) LIKE ? OR EXISTS (SELECT 1 FROM turns t"
-                         " WHERE t.conversation_id = c.id AND LOWER(t.content) LIKE ?))")
-            params += [like, like]
+        term = like_term(search)
+        if term:
+            # Title OR any turn's content, either role (openapi.yaml
+            # listConversations ?search=): the sidebar's search is how a user
+            # finds "the conversation where I asked about parcels", and a
+            # canned title cannot answer that. ci_lower folds both sides
+            # through the same Unicode rule (mock/db.py) — SQLite's own
+            # lower() is ASCII-only and left non-ASCII titles unfindable.
+            where.append(
+                "(ci_lower(c.title) LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM turns t"
+                " WHERE t.conversation_id = c.id AND ci_lower(t.content) LIKE ? ESCAPE '\\'))")
+            params += [term, term]
         base = f"FROM conversations c WHERE {' AND '.join(where)}"
         total = db.one(f"SELECT COUNT(*) AS n {base}", params)["n"]
         rows = db.all(

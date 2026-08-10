@@ -245,6 +245,26 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    or task exists. Only a request carrying `X-LLM-Key` is limited. Detached replay/judge
    children deliberately keep the canned fallback: there is no request left to fail, and a
    half-finished grid is worse than a noted cell.
+   Stage F8 DONE 2026-08-10 — **`?search=` says what it matches.** It was a bare
+   `{type: string}` with no description: the contract exposed a filter and never defined it,
+   so two conformant backends could disagree on every axis and `cupel-ready` could check
+   nothing. Declared from what the reference implementation actually did (probed, not read
+   off the SQL): SUBSTRING not tokens, the WHOLE value as one substring so `refund policy`
+   never matches "policy for refunds", case-insensitive, matched LITERALLY, over the
+   conversation's `title` OR the `content` of any turn in it, ANDed with the other filters,
+   narrowing BEFORE paging so `total` is the match count, answering with the CONVERSATION and
+   no snippet. **Three things the mock was doing wrong, so the mock changed:** `%` and `_`
+   reached SQL `LIKE` unescaped (searching `50%` returned the WHOLE collection, `5_%` matched
+   "50%"); case folding was ASCII-only on the column but Unicode on the term, which made
+   **every non-ASCII conversation unfindable** — `ÜBER` and `über` both returned nothing —
+   fixed by a `ci_lower` SQL function so both sides fold by one rule; and the term was not
+   trimmed, so a pasted trailing space matched nothing and `"   "` filtered for three spaces.
+   **The drift had already happened here**: MSW searched TITLES ONLY while `mock/main.py`
+   searched title or turn content, and nothing caught it because there was no rule to catch
+   it against. One clause is declared mainly because it surprises — the default listing is
+   roots-only, so a match inside a FORK surfaces only under `?forks_of=`. A contract test
+   also pins that this is the contract's ONLY free-text search, so a second one cannot
+   appear with semantics of its own.
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,
    soft delete, search semantics, span retention…) **plus** the domain tighten: `Run`→

@@ -29,6 +29,31 @@ def request_id(inbound: str | None) -> str:
     return new_id("req")
 
 
+def like_term(search: str | None) -> str | None:
+    """?search= → a SQL LIKE pattern, or None for "no filter at all".
+
+    Three rules from the contract (openapi.yaml listConversations ?search=),
+    all of which the first implementation got wrong:
+
+    - TRIMMED, and empty-after-trim means ABSENT. A pasted value with a
+      trailing space used to match nothing at all, and "   " used to be a
+      filter for three consecutive spaces — a user cannot have meant either.
+    - LITERAL. `%` and `_` are LIKE wildcards, so searching for "50%" used to
+      return the WHOLE collection and "5_%" used to match "50%". They are
+      escaped here (backslash, matching the ESCAPE clause at the call site);
+      the backslash itself is escaped first, or escaping would be
+      self-defeating.
+    - CASE-INSENSITIVE via str.lower on this side and ci_lower() on the
+      column, so the two sides fold by the SAME rule (mock/db.py).
+    """
+    if not search or not search.strip():
+        return None
+    escaped = search.strip().lower()
+    for ch in ("\\", "%", "_"):
+        escaped = escaped.replace(ch, "\\" + ch)
+    return f"%{escaped}%"
+
+
 def det_hash(*parts) -> int:
     h = hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
     return int(h, 16)

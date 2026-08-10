@@ -481,6 +481,122 @@ def test_conversation_list_search_rename_delete():
     run(case())
 
 
+async def _say(c, message, tree="agent1", conv=None):
+    r = await c.post(f"/agenttrees/{tree}/chat",
+                     json={"message": message, "conversation_id": conv, "stream": False})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    await wait_task(c, body["task_id"])
+    return body["conversation_id"]
+
+
+def test_search_is_a_literal_case_insensitive_substring_of_title_or_turn():
+    """openapi.yaml listConversations ?search=, every clause of it.
+
+    The parameter used to be a bare {type: string} with no description, and
+    the two implementations in this repo had already drifted apart under it
+    (MSW searched titles only). Each assertion below is one sentence of the
+    declaration."""
+    async def case():
+        async with client_pair() as c:
+            parcels = await _say(c, "Where is my parcel, it is late")
+            await c.patch(f"/agenttrees/agent1/conversations/{parcels}",
+                          json={"title": "Refund policy for late parcels"})
+            discount = await _say(c, "Plain question")
+            await c.patch(f"/agenttrees/agent1/conversations/{discount}",
+                          json={"title": "A 50% discount question"})
+            uber = await _say(c, "Plain question")
+            await c.patch(f"/agenttrees/agent1/conversations/{uber}",
+                          json={"title": "Der ÜBER wichtige Fall"})
+
+            async def total(term):
+                r = await c.get("/agenttrees/agent1/conversations",
+                                params={"search": term, "page_size": 100})
+                return r.json()["total"]
+
+            # SUBSTRING, not tokens: a partial word hits, a reordered phrase
+            # does not.
+            assert await total("fund pol") == 1
+            assert await total("policy refund") == 0
+            # CASE-INSENSITIVE beyond ASCII — SQLite's own lower() folds ASCII
+            # only, which left every non-ASCII title unfindable.
+            assert await total("REFUND") == 1
+            assert await total("über") == 1
+            assert await total("ÜBER") == 1
+            # TURN CONTENT, not just the title: the title here says nothing
+            # about parcels being late, the user's message does.
+            assert await total("my parcel") == 1
+            # LITERAL: % and _ are LIKE wildcards, and unescaped they turned
+            # "50%" into "everything" and "5_%" into a match.
+            assert await total("50%") == 1
+            assert await total("5_%") == 0
+            assert await total("%") == 1  # the one title containing a % sign
+            assert await total("_") == 0
+            # TRIMMED, and empty-after-trim means ABSENT rather than
+            # "match nothing".
+            assert await total("  refund  ") == 1
+            assert await total("   ") == 3
+            assert await total("") == 3
+
+    run(case())
+
+
+def test_search_ands_with_the_other_filters_and_narrows_before_paging():
+    async def case():
+        async with client_pair() as c:
+            for i in range(3):
+                cid = await _say(c, f"parcel enquiry {i}")
+                await c.patch(f"/agenttrees/agent1/conversations/{cid}",
+                              json={"title": f"Parcel {i}"})
+            await _say(c, "something else entirely")
+
+            # total is the number of MATCHES, not the size of the collection,
+            # and the first page is a page OF the matches.
+            r = (await c.get("/agenttrees/agent1/conversations",
+                             params={"search": "parcel", "page": 1, "page_size": 2})).json()
+            assert r["total"] == 3 and len(r["items"]) == 2
+
+            # ANDs with the other filters rather than replacing them.
+            both = (await c.get("/agenttrees/agent1/conversations",
+                                params={"search": "parcel", "origin": "machine"})).json()
+            assert both["total"] == 0
+
+    run(case())
+
+
+def test_a_match_inside_a_fork_needs_forks_of():
+    """Stated in the contract because it surprises: the default listing is
+    roots-only, so a fork carrying the term is not a second row in it — and
+    the fork is reachable, with the same search, under ?forks_of=."""
+    async def case():
+        async with client_pair() as c:
+            root = await _say(c, "aardvark, an unlikely word")
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{root}")
+            r = await c.post("/agenttrees/agent1/replay/turn", json={
+                "conversation_id": root, "turn_id": conv["turns"][1]["id"],
+                "endpoints": ["ep_agent1_staging"]})
+            assert r.status_code == 202
+            for res in r.json()["results"]:
+                await wait_task(c, res["task_id"])
+
+            # The fork copied the parent's history, so it CONTAINS the term —
+            # and the default listing still answers 1, not 2.
+            roots = (await c.get("/agenttrees/agent1/conversations",
+                                 params={"search": "aardvark"})).json()
+            assert roots["total"] == 1 and roots["items"][0]["id"] == root
+
+            forks = (await c.get("/agenttrees/agent1/conversations",
+                                 params={"search": "aardvark", "forks_of": root})).json()
+            assert forks["total"] >= 1
+            assert all(f["lineage"]["parent_conversation_id"] == root for f in forks["items"])
+            # …and the same filter still filters there.
+            none = (await c.get("/agenttrees/agent1/conversations",
+                                params={"search": "pangolin", "forks_of": root})).json()
+            assert none["total"] == 0
+
+    run(case())
+
+
 def test_soft_delete_is_visible_idempotent_and_read_only():
     """The soft delete a client can SEE (openapi.yaml Conversation.deleted): a
     tombstone answers GET and /turns, is absent from listings, takes no new

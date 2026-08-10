@@ -214,6 +214,15 @@ class Db:
                 "PRAGMA journal_mode=WAL").fetchone()[0]
             self.conn.execute("PRAGMA synchronous=NORMAL")
             self.conn.execute("PRAGMA busy_timeout=5000")
+            # SQLite's built-in lower() folds ASCII ONLY, so a title holding
+            # "ÜBER" stayed "ÜBER" while the search term was lowered in
+            # Python — which made every non-ASCII conversation unsearchable.
+            # The contract says ?search= is case-insensitive full stop
+            # (openapi.yaml listConversations), so both sides fold through the
+            # same Python rule.
+            self.conn.create_function("ci_lower", 1,
+                                      lambda v: v.lower() if isinstance(v, str) else v,
+                                      deterministic=True)
             self.conn.executescript(SCHEMA)
             self._migrate_eval_cases()
             self._migrate_conversation_owner()

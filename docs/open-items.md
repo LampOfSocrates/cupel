@@ -285,7 +285,39 @@ C8 per-operation permission semantics + 403s ·
 C10 batch turn fetch · **C11 `Health.contract_version` + capabilities — DONE 2026-08-09**
 (item 7 stage E; delivered early because it is additive and it is where the declared families
 land) ·
-C13 search semantics · C14 span retention · C15 close the mock's implementation gap.
+C14 span retention · C15 close the mock's implementation gap.
+
+**C13 search semantics — DONE 2026-08-10** (item 7 stage F8). `?search=` on
+`GET /agenttrees/{tree}/conversations` was a bare `{type: string}` with no description at all —
+the contract exposed a filter and never said what it matched, so no two backends would agree
+and `cupel-ready` had nothing to check. It is now declared on every axis, and the declaration
+was written from what the reference implementation ACTUALLY did, checked by probing it rather
+than by reading the SQL: substring (not tokens), the WHOLE value as one substring so
+`refund policy` never matches "policy for refunds", case-insensitive, matched literally, over
+the conversation's `title` OR the `content` of any turn in it, ANDed with the other filters,
+narrowing before paging so `total` is the match count, and answering with the CONVERSATION —
+never the turn, and with no snippet or highlight.
+
+**Three of those the mock was getting wrong, so the mock changed rather than the declaration.**
+(1) `%` and `_` reached SQL `LIKE` unescaped, so a search for `50%` returned the WHOLE
+collection and `5_%` matched "50%" — the storage engine's query syntax leaking through the
+API. They are escaped now, with an `ESCAPE` clause. (2) Case-insensitivity was ASCII-only on
+the stored side (SQLite's `lower()`) while the search term was folded by Python's Unicode
+`str.lower()`, so the two sides disagreed and **every non-ASCII conversation was unfindable** —
+searching either `ÜBER` or `über` returned nothing. A `ci_lower` SQL function registered in
+`mock/db.py` folds both sides by the same rule. (3) The term was not trimmed, so a pasted
+value with a trailing space matched nothing and `"   "` was a filter for three consecutive
+spaces; it is trimmed now, and empty-after-trim means the parameter is ABSENT rather than a
+filter matching nothing.
+
+**The drift this was supposed to prevent had already happened inside this repo**: MSW searched
+the TITLE ONLY while `mock/main.py` searched title OR turn content, and nothing caught it
+because there was no rule to catch it against. MSW now implements the declared rule and a
+parity test pins each clause. One clause is stated in the contract mainly because it surprises:
+the default listing is roots-only, so a match that occurs inside a FORK surfaces only under
+`?forks_of=`. And `?search=` is the contract's ONLY free-text search — the Inspector filters by
+user/tree/date/score — which a contract test now asserts, so a second one cannot appear with
+semantics of its own.
 
 **C9 structured errors — DONE 2026-08-10** (item 7 stage F7). The error body is now
 `{code, message, request_id, details?}` on every non-2xx of every operation, and a new contract

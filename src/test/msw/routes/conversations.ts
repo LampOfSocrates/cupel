@@ -211,7 +211,13 @@ export const conversationHandlers = [
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
     const forksOf = url.searchParams.get("forks_of");
-    const search = url.searchParams.get("search")?.toLowerCase();
+    // ?search= per openapi.yaml listConversations: the whole value as ONE
+    // substring (never tokenised), case-insensitive, matched LITERALLY, and
+    // trimmed — empty after trimming means "no filter", never "match
+    // nothing". It used to search the TITLE ONLY here while mock/main.py
+    // searched title OR turn content, which is exactly the disagreement an
+    // undefined parameter produces between two conformant backends.
+    const search = url.searchParams.get("search")?.trim().toLowerCase();
     // Tombstones are never listed (openapi.yaml listConversations: no
     // include_deleted, deliberately) — they are reached by id only.
     let items = (forksOf ? (mockForks[forksOf] ?? []) : mockRoots).filter((c) => !c.deleted);
@@ -219,7 +225,13 @@ export const conversationHandlers = [
     // (openapi.yaml:365-371).
     const agentId = url.searchParams.get("agent_id");
     if (agentId) items = items.filter((c) => c.agent_id === agentId);
-    if (search) items = items.filter((c) => c.title.toLowerCase().includes(search));
+    if (search) {
+      items = items.filter(
+        (c) =>
+          c.title.toLowerCase().includes(search) ||
+          c.turns.some((t) => t.content.toLowerCase().includes(search)),
+      );
+    }
     // Server-side sort (openapi.yaml:381; mock/main.py:754, :910
     // ORDER BY last_activity_at DESC) — not a property of the fixture order.
     items = items.slice().sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));

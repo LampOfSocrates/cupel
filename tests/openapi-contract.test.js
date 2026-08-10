@@ -793,6 +793,38 @@ describe("P2-T00 contract v0.3.0", () => {
     }
   });
 
+  // ------------------------------------------------------ search (F8)
+  it("?search= says what it matches — substring, case, fields, composition", () => {
+    // The defect this closes: the parameter existed with a bare
+    // `{type: string}` and no description at all, so two conformant backends
+    // could disagree on every axis of it and cupel-ready had nothing to check.
+    const op = doc.paths["/agenttrees/{tree}/conversations"].get;
+    const search = op.parameters.find((p) => p.name === "search");
+    const text = search.description ?? "";
+    // Each clause is load-bearing; a rewrite that drops one re-opens the gap.
+    expect(text, "substring, not tokens").toMatch(/SUBSTRING, not tokens/);
+    expect(text, "the whole value is one substring").toMatch(/WHOLE parameter is one substring/);
+    expect(text, "case-insensitivity, beyond ASCII").toMatch(/CASE-INSENSITIVE/);
+    expect(text, "no wildcards").toMatch(/LITERAL/);
+    // The field list is the half the two implementations actually disagreed
+    // on — MSW searched titles only while the reference searched turns too.
+    expect(text, "which fields").toMatch(/FIELDS:/);
+    expect(text, "turn content is searched").toMatch(/content` of any turn/);
+    expect(text, "a hit answers with the conversation").toMatch(/never the turn/);
+    expect(text, "ANDs with the other filters").toMatch(/ANDs with every other parameter/);
+    expect(text, "narrows before paging").toMatch(/BEFORE paging/);
+    expect(text, "forks are only reachable via forks_of").toMatch(/forks_of/);
+    expect(text, "empty means absent, not 'match nothing'").toMatch(/as if the parameter were/);
+
+    // …and it is the ONLY free-text search in the contract. The Inspector
+    // filters by user/tree/date/score, not by text, so there is no second
+    // search whose semantics could drift from this one.
+    const searches = contractOperations().flatMap(({ id, op: o }) =>
+      (o.parameters ?? []).filter((p) => p.name === "search").map(() => id),
+    );
+    expect(searches).toEqual(["GET /agenttrees/{tree}/conversations"]);
+  });
+
   it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
       expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);

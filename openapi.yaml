@@ -865,6 +865,41 @@ paths:
         - { $ref: "#/components/parameters/tree" }
         - name: search
           in: query
+          description: |
+            Free-text filter. Defined precisely because an undefined one makes
+            two conformant backends disagree and gives `cupel-ready` nothing
+            to check.
+
+            SUBSTRING, not tokens. The WHOLE parameter is one substring: it is
+            not split on whitespace and the words are not reordered, so
+            `refund policy` matches "…refund policy…" and does NOT match
+            "policy for refunds". A partial word matches — `fund pol` finds
+            "Refund policy".
+
+            CASE-INSENSITIVE, and not only for ASCII: `ÜBER` matches `über`.
+
+            LITERAL. The value is matched exactly as sent; there is no query
+            syntax and there are no wildcards. `%`, `_`, `*` and quotes match
+            themselves — a backend implementing this over SQL `LIKE` MUST
+            escape them, or a caller searching for `50%` gets the whole
+            collection back.
+
+            FIELDS: the conversation's `title`, and the `content` of any turn
+            in it, either role — the sidebar's search is how a user finds "the
+            conversation where I asked about parcels", and titles alone cannot
+            answer that. The result is the CONVERSATION, never the turn, and
+            no snippet or highlight is returned; a caller that wants the
+            matching turn fetches …/turns.
+
+            COMPOSITION: it ANDs with every other parameter, and it narrows
+            BEFORE paging — `total` is the number of matches, not the size of
+            the collection. Because the default listing is roots-only, a match
+            that occurs inside a FORK surfaces only under `?forks_of=`.
+            Tombstones are excluded here as everywhere.
+
+            Leading and trailing whitespace is trimmed, and a value that is
+            empty or all whitespace is treated as if the parameter were
+            absent — never as a filter matching nothing.
           schema: { type: string }
         - name: page
           in: query

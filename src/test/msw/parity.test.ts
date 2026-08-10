@@ -1046,6 +1046,32 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(frozen.source).toEqual(reference.source);
   });
 
+  // ?search= was declared in item 7 stage F8 after being an undescribed
+  // `{type: string}`. The drift it left behind was in THIS file's fake: it
+  // searched the title only, while mock/main.py searched title OR turn
+  // content — two implementations of the same repo disagreeing, which is
+  // exactly what an undefined parameter produces.
+  it("?search= matches the title OR any turn's content, literally and untokenised", async () => {
+    const titles = async (search: string) =>
+      (await api.conversations("agent1", { search, page_size: 50 })).items.map((c) => c.title);
+
+    // Title, case-insensitively, on a partial word.
+    expect(await titles("refund esc")).toEqual(["Refund escalation"]);
+    expect(await titles("REFUND ESC")).toEqual(["Refund escalation"]);
+    // TURN CONTENT — the fixture's first user turn asks "How do refunds
+    // work?", which no title says.
+    expect(await titles("how do refunds work")).toContain("Refund escalation");
+    // One substring, not tokens: reordering the words finds nothing.
+    expect(await titles("escalation refund")).toEqual([]);
+    // Literal: no wildcard syntax leaks out of whatever store backs it.
+    expect(await titles("%")).toEqual([]);
+    // Trimmed, and empty-after-trim is ABSENT rather than "match nothing".
+    expect(await titles("  refund esc  ")).toEqual(["Refund escalation"]);
+    const all = await titles("");
+    expect(await titles("   ")).toEqual(all);
+    expect(all.length).toBeGreaterThan(1);
+  });
+
   it("an unpermitted tree answers 404, never 403 (openapi.yaml NotFound)", async () => {
     await expect(api.agents("agent-nope")).rejects.toMatchObject({ status: 404, code: "not_found" });
     await expect(api.conversations("agent-nope")).rejects.toMatchObject({ status: 404 });
