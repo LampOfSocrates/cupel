@@ -134,6 +134,44 @@ async def complete(key: str, model: str | None, prompt: str, *,
         raise LiveUnavailable(type(exc).__name__) from None
 
 
+def _tool_payload(model: str | None, messages: list[dict], tools: list[dict],
+                  temperature: float | None) -> dict:
+    payload = {
+        "model": model or config.LIVE_DEFAULT_MODEL,
+        "messages": messages,
+        "max_tokens": config.LIVE_MAX_TOKENS,  # server-side cap, always
+        "tools": tools,
+        "tool_choice": "auto",
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    return payload
+
+
+async def complete_with_tools(key: str, model: str | None, messages: list[dict],
+                              tools: list[dict], *, temperature: float | None = None) -> dict:
+    """One non-streaming chat completion with OpenAI-style function-calling
+    tools (mock/agents/financial_advisor/engine.py's tool loop). Unlike
+    complete(), the caller needs the raw assistant MESSAGE ({content,
+    tool_calls?}), not just text, so a tool_calls decision can drive another
+    round. Same safety contract as complete(): rate-limited, raises
+    LiveUnavailable on any provider problem — the exception carries a status
+    code or exception class name only, never the key."""
+    check_rate_limit(key)
+    try:
+        async with _client(key) as client:
+            r = await client.post(
+                "/chat/completions",
+                json=_tool_payload(model, messages, tools, temperature))
+            if r.status_code != 200:
+                raise LiveUnavailable(f"provider_status_{r.status_code}")
+            return r.json()["choices"][0]["message"]
+    except LiveUnavailable:
+        raise
+    except Exception as exc:
+        raise LiveUnavailable(type(exc).__name__) from None
+
+
 async def stream(key: str, model: str | None, prompt: str, *,
                  system_prompt: str | None = None,
                  temperature: float | None = None):

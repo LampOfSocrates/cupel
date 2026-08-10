@@ -14,6 +14,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
 from . import auth, capabilities, config, llm, permissions, storage, tabular
+from .agents.financial_advisor import engine as financial_advisor_engine
+from .agents.financial_advisor.tree import TREE_ID as FINANCIAL_ADVISOR_TREE_ID
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -1244,9 +1246,21 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             "llm_key": llm_key, "llm_model": llm_model,
         }
 
+        # Financial Advisor runs a real multi-step tool-calling loop
+        # (mock/agents/financial_advisor/engine.py) instead of the shared
+        # canned/single-live-call generator every other tree uses — it is the
+        # only tree that exists specifically to demonstrate one.
+        async def chat_events(c, streaming):
+            if tree == FINANCIAL_ADVISOR_TREE_ID:
+                async for evt in financial_advisor_engine.run(engine, c, streaming):
+                    yield evt
+            else:
+                async for evt in engine.chat_events(c, streaming=streaming):
+                    yield evt
+
         if not stream:
             turn, status = None, "completed"
-            async for kind, *data in engine.chat_events(ctx, streaming=False):
+            async for kind, *data in chat_events(ctx, streaming=False):
                 if kind == "done":
                     turn, status = data
             return {"task_id": task["id"], "conversation_id": conv["id"], "turn": turn}
@@ -1257,7 +1271,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                "user_turn_id": user_turn_id,
                                "assistant_turn_id": assistant_turn_id})
             try:
-                async for kind, *data in engine.chat_events(ctx, streaming=True):
+                async for kind, *data in chat_events(ctx, streaming=True):
                     if kind == "token":
                         yield sse("token", {"delta": data[0]})
                     else:

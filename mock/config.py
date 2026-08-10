@@ -57,6 +57,21 @@ def live_disabled() -> bool:
     return os.environ.get("MOCK_LIVE_DISABLED") == "1"
 
 
+def live_env_key() -> str | None:
+    """Server-side OpenRouter key, if this PROCESS was booted with one.
+    Read per call, not at import, so tests can flip it.
+
+    Used ONLY to decide, once, whether mock/seed.py seeds the Financial
+    Advisor demo tree at bootstrap — a tree that exists to show a genuine
+    multi-step tool-calling loop (mock/agents/financial_advisor/engine.py)
+    and would have nothing honest to demonstrate without a real provider
+    available. This is NOT a substitute for BYOK: every chat request against
+    that tree still needs its own X-LLM-Key header, exactly like every other
+    tree's live path (mock/llm.py's never-persisted-key rule applies here
+    unchanged — this function never touches a request)."""
+    return os.environ.get("OPENROUTER_API_KEY") or os.environ.get("CUPEL_LLM_KEY") or None
+
+
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 LIVE_DEFAULT_MODEL = "deepseek/deepseek-chat"
 # "Cost control: server-side max_tokens cap + simple rate limit so
