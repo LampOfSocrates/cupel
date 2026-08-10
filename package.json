@@ -9,6 +9,7 @@
   "scripts": {
     "init": "node scripts/init.mjs",
     "gen:families": "node scripts/gen-families.mjs",
+    "create": "node scripts/create-app.mjs",
     "ready": "node scripts/cupel-ready.mjs",
     "start": "node scripts/dev.mjs",
     "dev": "vite",
