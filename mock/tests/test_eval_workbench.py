@@ -1,6 +1,8 @@
 """Eval workbench — the mock half of contract v0.3.0's eval surface:
-POST /eval/cases, GET+PUT /eval/cases/{caseId}, POST /eval/cases/import,
-GET+POST /eval/sets, PUT /eval/sets/{setId}, PUT /eval/rubrics/{rubricId},
+POST /eval/cases, GET /eval/cases/{caseId}, POST /eval/cases/{caseId}/versions,
+POST /eval/cases/import,
+GET+POST /eval/sets, POST /eval/sets/{setId}/versions,
+POST /eval/rubrics/{rubricId}/versions,
 and JudgeRequest.set_id (+ set_version).
 
 Run: npm run test:mock.
@@ -128,21 +130,21 @@ def test_case_put_appends_versions_and_get_returns_latest():
     async def case():
         async with client_pair() as c:
             created = await make_case(c)
-            v2 = await c.put(f"/eval/cases/{created['id']}", json={
+            v2 = await c.post(f"/eval/cases/{created['id']}/versions", json={
                 "input": {"prompt": "Why was I charged twice?"},
                 "output": "A temporary authorisation hold.", "reference": "Not a double charge."})
             assert v2.status_code == 201, v2.text
             assert v2.json()["version"] == 2
-            v3 = (await c.put(f"/eval/cases/{created['id']}", json={
+            v3 = (await c.post(f"/eval/cases/{created['id']}/versions", json={
                 "input": {"prompt": "Why two charges?"}, "output": "Third take."})).json()
             assert v3["version"] == 3
             assert v3["id"] == created["id"]
 
             latest = (await c.get(f"/eval/cases/{created['id']}")).json()
             assert latest["version"] == 3 and latest["output"] == "Third take."
-            # Rollback = PUT the old content again -> yet another version
+            # Rollback = post the old content again -> yet another version
             # (openapi.yaml:1465-1466), never a mutation of v1.
-            rolled = (await c.put(f"/eval/cases/{created['id']}", json={
+            rolled = (await c.post(f"/eval/cases/{created['id']}/versions", json={
                 "input": created["input"], "output": created["output"]})).json()
             assert rolled["version"] == 4 and rolled["output"] == created["output"]
     run(case())
@@ -152,11 +154,11 @@ def test_case_put_validation_and_missing_case():
     async def case():
         async with client_pair() as c:
             created = await make_case(c)
-            assert (await c.put("/eval/cases/nope",
+            assert (await c.post("/eval/cases/nope/versions",
                                 json={"input": {"prompt": "p"}, "output": "o"})).status_code == 404
-            assert (await c.put(f"/eval/cases/{created['id']}",
+            assert (await c.post(f"/eval/cases/{created['id']}/versions",
                                 json={"output": "o"})).status_code == 422
-            assert (await c.put(f"/eval/cases/{created['id']}",
+            assert (await c.post(f"/eval/cases/{created['id']}/versions",
                                 json={"input": {"prompt": "p"}})).status_code == 422
     run(case())
 
@@ -339,11 +341,11 @@ def test_set_create_list_and_versioned_membership():
             assert s1["version"] == 1 and case_ids(s1) == [a["id"], b["id"]]
             assert [i["kind"] for i in s1["items"]] == ["frozen", "frozen"]
 
-            s2 = await c.put(f"/eval/sets/{s1['id']}",
+            s2 = await c.post(f"/eval/sets/{s1['id']}/versions",
                              json={"items": [frozen(a), frozen(b), frozen(d)]})
             assert s2.status_code == 201, s2.text
             assert s2.json()["version"] == 2 and len(s2.json()["items"]) == 3
-            s3 = (await c.put(f"/eval/sets/{s1['id']}",
+            s3 = (await c.post(f"/eval/sets/{s1['id']}/versions",
                               json={"items": [frozen(d)]})).json()
             assert s3["version"] == 3
             # A rename is NOT a membership change, so it takes no version.
@@ -366,8 +368,8 @@ def test_set_validation():
                                  json={"name": "s", "items": [{"case_id": "ghost"}]})).status_code == 404
             s = (await c.post("/eval/sets", json={"name": "s"})).json()
             assert s["items"] == []  # "empty/omitted = start empty"
-            assert (await c.put(f"/eval/sets/{s['id']}", json={})).status_code == 422
-            assert (await c.put("/eval/sets/ghost",
+            assert (await c.post(f"/eval/sets/{s['id']}/versions", json={})).status_code == 422
+            assert (await c.post("/eval/sets/ghost/versions",
                                 json={"items": [frozen(a)]})).status_code == 404
     run(case())
 
@@ -377,7 +379,7 @@ def test_rubric_put_appends_a_new_version():
     async def case():
         async with client_pair() as c:
             v1 = await make_rubric(c)
-            v2 = await c.put(f"/eval/rubrics/{v1['id']}", json={"prompt": "Stricter wording."})
+            v2 = await c.post(f"/eval/rubrics/{v1['id']}/versions", json={"prompt": "Stricter wording."})
             assert v2.status_code == 201, v2.text
             assert v2.json() == {**v1, "version": 2, "prompt": "Stricter wording.",
                                  "created_at": v2.json()["created_at"]}
@@ -385,9 +387,9 @@ def test_rubric_put_appends_a_new_version():
             mine = [r for r in latest if r["id"] == v1["id"]]
             assert len(mine) == 1 and mine[0]["version"] == 2
 
-            assert (await c.put("/eval/rubrics/ghost",
+            assert (await c.post("/eval/rubrics/ghost/versions",
                                 json={"prompt": "x"})).status_code == 404
-            assert (await c.put(f"/eval/rubrics/{v1['id']}", json={})).status_code == 422
+            assert (await c.post(f"/eval/rubrics/{v1['id']}/versions", json={})).status_code == 422
     run(case())
 
 
@@ -400,7 +402,7 @@ def test_judge_by_set_id_fans_out_over_membership():
             s1 = (await c.post("/eval/sets", json={
                 "name": "set-a", "items": [frozen(c_) for c_ in cases[:2]]})).json()
             # v2 adds the third case; judging without set_version uses LATEST.
-            (await c.put(f"/eval/sets/{s1['id']}",
+            (await c.post(f"/eval/sets/{s1['id']}/versions",
                          json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
@@ -431,7 +433,7 @@ def test_judge_by_set_version_pins_the_older_membership():
             rubric = await make_rubric(c)
             s1 = (await c.post("/eval/sets", json={
                 "name": "pinned", "items": [frozen(cases[0])]})).json()
-            (await c.put(f"/eval/sets/{s1['id']}",
+            (await c.post(f"/eval/sets/{s1['id']}/versions",
                          json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
@@ -667,7 +669,7 @@ def test_eval_cases_are_global_not_tree_scoped():
                                   json={"enabled": False})).status_code == 200
             assert (await c.post("/eval/cases", json={"input": {"prompt": "p"},
                                                       "output": "o"})).status_code == 201
-            assert (await c.put(f"/eval/sets/{s['id']}",
+            assert (await c.post(f"/eval/sets/{s['id']}/versions",
                                 json={"items": [frozen(a)]})).status_code == 201
             judged = await c.post("/eval/judge", json={
                 "set_id": s["id"], "judge_model": "claude-haiku-4-5",

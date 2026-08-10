@@ -76,11 +76,22 @@ info:
     Invariants encoded in this contract: instruction versions, judgments and
     snapshots are append-only — no endpoint updates or deletes them
     (cupel-phases.md:160). Phase 2 adds more versioned stores under the same
-    rule: PUT /eval/cases/{id}, PUT /eval/sets/{id} and
-    PUT /eval/rubrics/{id} each append a NEW version, never overwrite
-    (feature-spec.md:126-128). Per-tree memory is the deliberate exception:
-    a mutable working document (PUT overwrites, DELETE clears) — it is not
-    one of the append-only stores.
+    rule, and the VERB now says so. Every versioned store is written through a
+    `…/versions` sub-collection that is POSTed to — POST
+    /agenttrees/{tree}/agents/{id}/instructions/versions, POST
+    /eval/cases/{id}/versions, POST /eval/sets/{id}/versions and POST
+    /eval/rubrics/{id}/versions — each appending a NEW version and answering
+    201 with it (feature-spec.md:126-128, whose rule is "save = new version").
+    None of them is a PUT: a save that creates a new
+    resource on every call is neither idempotent nor a replacement, and
+    writing it as PUT would oblige every implementor of this contract to
+    reproduce that lie. PUT is reserved for genuine replacement, where sending
+    the same body twice leaves the same state — PUT /settings, PUT
+    /admin/users/{id}/permissions, PUT …/agents/{id}/last-selection, PUT
+    /admin/users (upsert keyed by email) and PUT /agenttrees/{tree}/memory.
+    Per-tree memory is the deliberate exception to append-only: a mutable
+    working document (PUT overwrites, DELETE clears) — it is not one of the
+    append-only stores.
 
     Machine-originated conversations: headless clients (the generator, or a
     production pipeline such as a mail scanner) speak this same public API —
@@ -640,9 +651,10 @@ paths:
       operationId: getInstructions
       summary: Instruction versions for an agent
       description: |
-        feature-spec.md:120: "GET/PUT /agenttrees/{tree}/agents/{id}/instructions
-        (versioned; carries format…)". Versions are append-only: "save = new
-        version, never overwrite. Diff view + rollback" (feature-spec.md:33).
+        feature-spec.md:120: "GET /agenttrees/{tree}/agents/{id}/instructions
+        + POST …/instructions/versions (versioned; carries format…)". Versions
+        are append-only: "save = new version, never overwrite. Diff view +
+        rollback" (feature-spec.md:33). This half is the READ — the history.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -653,18 +665,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/InstructionHistory" }
         "404": { $ref: "#/components/responses/NotFound" }
-    put:
+
+  /agenttrees/{tree}/agents/{agentId}/instructions/versions:
+    post:
       tags: [agents]
-      operationId: saveInstructions
-      summary: Save instructions as a NEW version (append-only)
+      operationId: createInstructionVersion
+      summary: Append the next instruction version (append-only)
       description: |
-        Never overwrites (feature-spec.md:33). If snapshot_id is supplied, this
-        save promotes that draft snapshot: "On save, the snapshot is promoted to
-        the next version (e.g. v16) and all runs referencing that snapshot_id
-        relabel to v16" (feature-spec.md:86, API at :85 "snapshot promotion on
-        PUT /agents/{id}/instructions"). Rollback = PUT the old version's content
-        (creates a new version). format field per feature-spec.md:34; YAML
-        schema validation is Phase 2 and not part of this contract.
+        Never overwrites (feature-spec.md:33, :120). A save that mints v16 and
+        answers 201 is a creation, not a replacement, so the write is POST
+        against the version sub-collection and the parent GET stays the
+        history. If snapshot_id is supplied, this save promotes that draft
+        snapshot: "On save, the snapshot is promoted to the next version (e.g.
+        v16) and all runs referencing that snapshot_id relabel to v16"
+        (feature-spec.md:86, API at :85 "snapshot promotion on PUT
+        /agents/{id}/instructions"). Rollback = post the old version's content
+        again (which creates a new version). format field per
+        feature-spec.md:34; YAML schema validation is Phase 2 and not part of
+        this contract.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -1531,14 +1549,16 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Rubric" }
 
-  /eval/rubrics/{rubricId}:
-    put:
+  /eval/rubrics/{rubricId}/versions:
+    post:
       tags: [eval]
-      operationId: updateRubric
-      summary: Save a rubric as a NEW version (append-only)
+      operationId: createRubricVersion
+      summary: Append the next rubric version (append-only)
       description: |
-        feature-spec.md:128: "PUT /eval/rubrics/{id} (save = new version)";
-        workbench rubric editor: "prompt text, save = new version, test
+        feature-spec.md:128: "POST /eval/rubrics/{id}/versions (save = new
+        version)" — each save mints a version and answers 201, which is why
+        it is a POST and not a PUT on the rubric.
+        Workbench rubric editor: "prompt text, save = new version, test
         against one case" (feature-spec.md:63). Appends the next version of
         this rubric id — never overwrites (invariant cupel-phases.md:160);
         Judgment.scorer.version keeps old scores comparable
@@ -1673,17 +1693,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalCase" }
         "404": { $ref: "#/components/responses/NotFound" }
-    put:
+
+  /eval/cases/{caseId}/versions:
+    post:
       tags: [eval]
-      operationId: updateEvalCase
-      summary: Save an eval case as a NEW version (append-only)
+      operationId: createEvalCaseVersion
+      summary: Append the next eval-case version (append-only)
       description: |
-        feature-spec.md:126: "PUT (new version)" — the same append-only
-        versioning as rubrics (feature-spec.md:128) and instructions
-        (feature-spec.md:33): each save appends the next version, never
-        overwrites. Prior versions stay readable and existing judgments keep
-        pointing at the content they actually judged. Rollback = PUT the old
-        content again (a new version).
+        feature-spec.md:126: "POST /eval/cases/{id}/versions (new version)" —
+        the same append-only versioning as rubrics (feature-spec.md:128) and
+        instructions (feature-spec.md:33): each save appends the next version
+        and never overwrites, which is why the write is a POST here and not a
+        PUT on the case.
+        Prior versions stay readable and existing judgments keep pointing at
+        the content they actually judged. Rollback = post the old content
+        again (a new version).
       parameters:
         - name: caseId
           in: path
@@ -1755,7 +1779,7 @@ paths:
         feature-spec.md:127 "POST/GET /eval/sets"; workbench set manager:
         "create/name/version sets, drag cases in" (feature-spec.md:63).
         Starts empty unless items are supplied. Membership changes after
-        creation go through PUT /eval/sets/{id}, POST …/items or
+        creation go through POST /eval/sets/{id}/versions, POST …/items or
         POST …/freeze — each appends a new version.
       requestBody:
         required: true
@@ -1799,7 +1823,7 @@ paths:
         description belong to the set, its items belong to the version. A
         rename therefore does not append a membership version and does not
         change what any judgment was made against. Membership changes go
-        through PUT /eval/sets/{id}, POST …/items or POST …/freeze.
+        through POST /eval/sets/{id}/versions, POST …/items or POST …/freeze.
       parameters: [{ $ref: "#/components/parameters/setId" }]
       requestBody:
         required: true
@@ -1813,15 +1837,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
-    put:
+    delete:
       tags: [eval]
-      operationId: updateEvalSet
-      summary: Save set membership as a NEW version (append-only)
+      operationId: deleteEvalSet
+      summary: Delete a set (its items are references — nothing else is touched)
       description: |
-        feature-spec.md:127: "PUT /eval/sets/{id} (versioned membership)".
-        Append-only like rubrics: each save is a new version carrying its
-        FULL item list; earlier versions remain queryable so judgments made
-        against version N stay attributable to exactly that membership.
+        Removes the set and every membership version. Reference items were
+        references, so the referenced turns and conversations are untouched;
+        frozen items named EvalCases, and those cases — plus the judgments
+        recorded against them and any evaluation replayed from this set —
+        remain. Deleting a set never deletes evidence.
+      parameters: [{ $ref: "#/components/parameters/setId" }]
+      responses:
+        "204": { description: Deleted. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /eval/sets/{setId}/versions:
+    post:
+      tags: [eval]
+      operationId: createEvalSetVersion
+      summary: Append the next membership version (append-only)
+      description: |
+        feature-spec.md:127: "POST /eval/sets/{id}/versions (versioned
+        membership)". Each save is a new version carrying its FULL item
+        list; earlier versions
+        remain queryable so judgments made against version N stay
+        attributable to exactly that membership. Metadata is NOT here: a
+        rename is PATCH /eval/sets/{id} and appends nothing, because a set's
+        name belongs to the set and its items belong to the version.
 
         ITEM IDENTITY ACROSS VERSIONS: the server carries an item's id
         forward when the new version still holds the same referent — the
@@ -1843,20 +1886,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
-    delete:
-      tags: [eval]
-      operationId: deleteEvalSet
-      summary: Delete a set (its items are references — nothing else is touched)
-      description: |
-        Removes the set and every membership version. Reference items were
-        references, so the referenced turns and conversations are untouched;
-        frozen items named EvalCases, and those cases — plus the judgments
-        recorded against them and any evaluation replayed from this set —
-        remain. Deleting a set never deletes evidence.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
-      responses:
-        "204": { description: Deleted. }
-        "404": { $ref: "#/components/responses/NotFound" }
 
   /eval/sets/{setId}/items:
     post:
@@ -1871,11 +1900,12 @@ paths:
         the turn's text is stored); case_id adds a FROZEN item naming an
         existing EvalCase.
 
-        The convenience half of PUT /eval/sets/{id}: ⊞ fires from anywhere a
-        turn is shown (Chat, the Inspector, results cells) where the caller
-        does not hold the set's membership and so cannot PUT it. Removal has
-        no such endpoint on purpose — you can only remove from a set you are
-        already looking at, and that caller has the full item list to PUT.
+        The convenience half of POST /eval/sets/{id}/versions: ⊞ fires from
+        anywhere a turn is shown (Chat, the Inspector, results cells) where
+        the caller does not hold the set's membership and so cannot post a
+        full one. Removal has no such endpoint on purpose — you can only
+        remove from a set you are already looking at, and that caller has the
+        full item list to post.
 
         Appends a NEW membership version. IDEMPOTENT: adding a referent the
         latest version already holds appends nothing and returns that
@@ -3319,7 +3349,7 @@ components:
           type: integer
           description: >
             Additive in v0.3.0 (not required — Phase-1 backends omit it,
-            read as 1): versions append on PUT /eval/cases/{id}
+            read as 1): versions append on POST /eval/cases/{id}/versions
             (feature-spec.md:126 "PUT (new version)"); GET returns the
             latest.
         created_at: { type: string, format: date-time }
@@ -3820,7 +3850,7 @@ components:
         transcript stays in its conversation and nothing about its text is
         stored here; `frozen` names an EvalCase, the {input, output,
         reference?} record of feature-spec.md:54-58, which carries its own
-        append-only version (PUT /eval/cases/{id}). A frozen item holds the
+        append-only version (POST /eval/cases/{id}/versions). A frozen item holds the
         case id rather than a copy of the content for the same reason
         judgments do: Judgment.case_id has to keep naming something.
 
@@ -3832,7 +3862,7 @@ components:
           type: string
           description: >-
             Stable across membership versions for as long as the item's
-            referent stays in the set (PUT /eval/sets/{id}).
+            referent stays in the set (POST /eval/sets/{id}/versions).
         kind: { type: string, enum: [reference, frozen] }
         source:
           type: object

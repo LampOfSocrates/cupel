@@ -34,9 +34,10 @@ export const mockAgents: Record<string, Agent[]> = seedAgents();
 export const agentCreateRequests: AgentCreate[] = [];
 
 // ------------------------------------------------- instructions + snapshots
-// GET/PUT .../instructions (openapi.yaml:221-266) + POST .../snapshots
-// (:268-293). Versions ascending, append-only (openapi.yaml:1203); PUT never
-// overwrites — appends live_version+1 and moves the live pointer. Fixture
+// GET .../instructions + POST .../instructions/versions + POST .../snapshots.
+// Versions ascending, append-only; a save never overwrites — it appends
+// live_version+1 and moves the live pointer, which is why the write is a POST
+// to the version sub-collection rather than a PUT on the parent. Fixture
 // versions mirror the real mock's seed shape (mock/seed.py:39-44) with line
 // changes between versions so diff tests have real hunks.
 function seedInstructions(): Record<string, InstructionHistory> {
@@ -151,38 +152,41 @@ export const agentHandlers = [
     return HttpResponse.json(history);
   }),
 
-  // PUT .../instructions — appends a new version, never overwrites
-  // (openapi.yaml:243); 201 = "The newly created version (now live)" (:262);
-  // snapshot_id promotes a draft (:245-249) → promoted_from_snapshot_id set.
-  http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, async ({ params, request }) => {
-    const denied = enabledTreeGate(params.tree as string);
-    if (denied) return denied;
-    const agent = findAgent(params.tree as string, params.agentId as string);
-    if (!agent) {
-      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
-    }
-    const body = (await request.json()) as InstructionSave;
-    instructionSaveRequests.push({ agentId: agent.id, body });
-    const history =
-      mockInstructions[agent.id] ??
-      (mockInstructions[agent.id] = {
-        agent_id: agent.id,
-        format: agent.format,
-        live_version: 0,
-        versions: [],
-      });
-    const version = {
-      version: history.live_version + 1,
-      content: body.content,
-      format: body.format ?? history.format,
-      created_at: new Date().toISOString(),
-      promoted_from_snapshot_id: body.snapshot_id ?? null,
-    };
-    history.versions.push(version);
-    history.live_version = version.version;
-    history.format = version.format;
-    return HttpResponse.json(version, { status: 201 });
-  }),
+  // POST .../instructions/versions (createInstructionVersion) — appends a new
+  // version, never overwrites; 201 = "The newly created version (now live)";
+  // snapshot_id promotes a draft → promoted_from_snapshot_id set.
+  http.post(
+    `${BASE}/agenttrees/:tree/agents/:agentId/instructions/versions`,
+    async ({ params, request }) => {
+      const denied = enabledTreeGate(params.tree as string);
+      if (denied) return denied;
+      const agent = findAgent(params.tree as string, params.agentId as string);
+      if (!agent) {
+        return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+      }
+      const body = (await request.json()) as InstructionSave;
+      instructionSaveRequests.push({ agentId: agent.id, body });
+      const history =
+        mockInstructions[agent.id] ??
+        (mockInstructions[agent.id] = {
+          agent_id: agent.id,
+          format: agent.format,
+          live_version: 0,
+          versions: [],
+        });
+      const version = {
+        version: history.live_version + 1,
+        content: body.content,
+        format: body.format ?? history.format,
+        created_at: new Date().toISOString(),
+        promoted_from_snapshot_id: body.snapshot_id ?? null,
+      };
+      history.versions.push(version);
+      history.live_version = version.version;
+      history.format = version.format;
+      return HttpResponse.json(version, { status: 201 });
+    },
+  ),
 
   // POST .../snapshots — "Immutable draft snapshot" (openapi.yaml:272); label
   // format "v15-draft (a3f2)" (openapi.yaml:1237, feature-spec.md:86); ids

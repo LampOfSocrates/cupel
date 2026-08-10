@@ -479,8 +479,8 @@ export interface EvalCase {
   output: string;
   reference?: string | null;
   source?: Partial<EvalCaseSource> | null;
-  /** openapi.yaml:2903-2909 — "Additive in v0.3.0 (not required — Phase-1
-   * backends omit it, read as 1): versions append on PUT /eval/cases/{id}". */
+  /** EvalCase.version — "Additive in v0.3.0 (not required — Phase-1 backends
+   * omit it, read as 1): versions append on POST /eval/cases/{id}/versions". */
   version?: number;
   created_at?: string;
 }

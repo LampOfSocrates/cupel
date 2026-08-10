@@ -221,8 +221,8 @@ def test_permissions_unknown_user_404_and_bad_body_422(monkeypatch):
 # --------------------------------------------------- tree disable semantics
 def test_disable_blocks_writes_keeps_reads():
     """The documented write-block set (mock/main.py need_enabled_tree): chat,
-    replay, replay/turn, judge-on-evaluation, create agent, PUT instructions, POST
-    snapshots, PUT last-selection, conversation rename/delete → 409
+    replay, replay/turn, judge-on-evaluation, create agent, POST instruction
+    versions, POST snapshots, PUT last-selection, conversation rename/delete → 409
     tree_disabled; every GET stays 200 — "new work blocked, history kept
     read-only" (cupel-phases.md:77). Off mode (dev user = admin) — the
     disable gate is mode-independent."""
@@ -258,7 +258,7 @@ def test_disable_blocks_writes_keeps_reads():
                     "conversation_id": conv_id, "turn_id": turn_id,
                     "endpoints": ["ep_agent1_prod"]}),
                 c.post("/agenttrees/agent1/agents", json={"name": "New"}),
-                c.put("/agenttrees/agent1/agents/ag_concierge/instructions",
+                c.post("/agenttrees/agent1/agents/ag_concierge/instructions/versions",
                       json={"content": "x"}),
                 c.post("/agenttrees/agent1/agents/ag_concierge/snapshots",
                        json={"content": "x"}),

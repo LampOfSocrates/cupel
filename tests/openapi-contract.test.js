@@ -15,6 +15,9 @@ const PHASE1_PATHS = [
   "/agenttrees/{tree}/endpoints",
   "/agenttrees/{tree}/agents",
   "/agenttrees/{tree}/agents/{agentId}/instructions",
+  // The save, relocated off the parent: appending v(n+1) is a creation, so it
+  // is POST …/versions and the parent GET is the history (item 7 stage F4).
+  "/agenttrees/{tree}/agents/{agentId}/instructions/versions",
   "/agenttrees/{tree}/agents/{agentId}/snapshots",
   "/agenttrees/{tree}/agents/{agentId}/last-selection",
   "/agenttrees/{tree}/conversations",
@@ -60,7 +63,9 @@ const PHASE2_PATHS = [
   "/eval/sets/{setId}/items",
   "/eval/sets/{setId}/freeze",
   "/eval/sets/{setId}/replay",
-  "/eval/rubrics/{rubricId}",
+  "/eval/cases/{caseId}/versions",
+  "/eval/sets/{setId}/versions",
+  "/eval/rubrics/{rubricId}/versions",
   "/settings",
   // The transcript, split off GET /conversations/{id} so opening a long
   // conversation costs a bounded body (item 7 stage F2).
@@ -116,12 +121,19 @@ describe("P1-T00 OpenAPI contract", () => {
     expect(
       Object.keys(doc.paths["/agenttrees/{tree}/agents/{agentId}/snapshots"])
     ).toEqual(["post"]);
-    // PUT on instructions appends a new version, never overwrites (feature-spec.md:33)
+    // Instructions: the parent is READ-ONLY and the save is a POST to the
+    // version sub-collection — appending v(n+1), never overwriting
+    // (feature-spec.md:33), so the verb matches the invariant.
     expect(
       Object.keys(
         doc.paths["/agenttrees/{tree}/agents/{agentId}/instructions"]
-      ).sort()
-    ).toEqual(["get", "put"]);
+      )
+    ).toEqual(["get"]);
+    expect(
+      Object.keys(
+        doc.paths["/agenttrees/{tree}/agents/{agentId}/instructions/versions"]
+      )
+    ).toEqual(["post"]);
   });
 
   it("/me is defined — always called, both auth modes (feature-spec.md:116)", () => {
@@ -284,12 +296,42 @@ describe("P2-T00 contract v0.3.0", () => {
     // Phase-1 append-only stores unchanged
     expect(Object.keys(doc.paths["/eval/judgments"])).toEqual(["get"]);
     expect(Object.keys(doc.paths["/agenttrees/{tree}/agents/{agentId}/snapshots"])).toEqual(["post"]);
-    // New versioned stores: PUT = new version, never overwrite; no DELETE
-    expect(Object.keys(doc.paths["/eval/cases/{caseId}"]).sort()).toEqual(["get", "put"]);
-    expect(Object.keys(doc.paths["/eval/sets/{setId}"]).sort()).toEqual(["delete", "get", "patch", "put"]);
-    expect(Object.keys(doc.paths["/eval/rubrics/{rubricId}"])).toEqual(["put"]);
-    for (const p of ["/eval/cases/{caseId}", "/eval/sets/{setId}", "/eval/rubrics/{rubricId}"]) {
-      expect(doc.paths[p].put.description, `${p} PUT must document new-version semantics`).toMatch(/new version/i);
+    // New versioned stores: the write is POST …/versions (a save mints a
+    // version, so it is neither idempotent nor a replacement); no DELETE.
+    expect(Object.keys(doc.paths["/eval/cases/{caseId}"])).toEqual(["get"]);
+    expect(Object.keys(doc.paths["/eval/sets/{setId}"]).sort()).toEqual(["delete", "get", "patch"]);
+    for (const p of [
+      "/eval/cases/{caseId}/versions",
+      "/eval/sets/{setId}/versions",
+      "/eval/rubrics/{rubricId}/versions",
+      "/agenttrees/{tree}/agents/{agentId}/instructions/versions",
+    ]) {
+      expect(Object.keys(doc.paths[p]), `${p} is POST-only`).toEqual(["post"]);
+      expect(doc.paths[p].post.responses["201"], `${p} answers 201`).toBeDefined();
+      expect(doc.paths[p].post.description, `${p} must document new-version semantics`).toMatch(/version/i);
+    }
+  });
+
+  it("no PUT anywhere creates a resource — PUT is replacement only", () => {
+    // The rule this encodes: a PUT must be idempotent, so it may never answer
+    // 201. Every append-only save is POST …/versions above. Left as PUT are
+    // the five genuine replacements (settings, the permission matrix, the
+    // user upsert keyed by email, last-selection, and the mutable memory
+    // document); each answers 200 with the stored state.
+    const puts = [];
+    for (const [path, item] of Object.entries(doc.paths)) {
+      if (item.put) puts.push([path, item.put]);
+    }
+    expect(puts.map(([p]) => p).sort()).toEqual([
+      "/admin/users",
+      "/admin/users/{userId}/permissions",
+      "/agenttrees/{tree}/agents/{agentId}/last-selection",
+      "/agenttrees/{tree}/memory",
+      "/settings",
+    ]);
+    for (const [path, op] of puts) {
+      expect(Object.keys(op.responses), `PUT ${path} must not create`).not.toContain("201");
+      expect(op.responses["200"], `PUT ${path} echoes the stored state`).toBeDefined();
     }
   });
 

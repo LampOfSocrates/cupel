@@ -35,6 +35,7 @@ export const PHASE1_PATHS = [
   "/agenttrees/{tree}/endpoints",
   "/agenttrees/{tree}/agents",
   "/agenttrees/{tree}/agents/{agentId}/instructions",
+  "/agenttrees/{tree}/agents/{agentId}/instructions/versions",
   "/agenttrees/{tree}/agents/{agentId}/snapshots",
   "/agenttrees/{tree}/agents/{agentId}/last-selection",
   "/agenttrees/{tree}/conversations",
@@ -59,14 +60,13 @@ export const PHASE1_PATHS = [
   "/eval/evaluations/{evaluationId}/summary",
 ];
 
-// v0.3.0 added Phase-2 METHODS onto Phase-1 paths in one place: the versioned
-// PUT on /eval/cases/{caseId} (append-only case saves).
-// --phase1-only must therefore filter per operation, not just per path: only
-// the methods listed here count as Phase 1 for that path (unlisted paths
-// include all their contract methods).
-export const PHASE1_METHODS = {
-  "/eval/cases/{caseId}": ["get"],
-};
+// There is no per-METHOD Phase-1 exemption any more. v0.3.0 had exactly one —
+// the versioned PUT that Phase 2 added onto the Phase-1 path
+// /eval/cases/{caseId} — and item 7 stage F4 moved every versioned save onto
+// its own POST …/versions path, so the phase split is once again a split
+// between PATHS. Filtering is path-level below; if a Phase-2 method is ever
+// added to a Phase-1 path again, that is when a per-method map earns its
+// place back.
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
@@ -215,7 +215,6 @@ export function compare(contract, target, { prefix = "", phase1Only = false } = 
     for (const method of HTTP_METHODS) {
       const op = pathItem[method];
       if (!op) continue;
-      if (phase1Only && PHASE1_METHODS[path] && !PHASE1_METHODS[path].includes(method)) continue;
       const row = { method: method.toUpperCase(), path, targetPath, family: operationFamily(op) };
       if (!targetPath) {
         Object.assign(row, { status: "missing", problems: ["path not in target"] });

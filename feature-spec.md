@@ -117,15 +117,15 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 - Trees: `GET /agenttrees` (permitted + enabled; admins also see disabled), `GET /agenttrees/{tree}/endpoints` (deploy targets for replay); Admin: `PATCH /admin/agenttrees/{id}` (`{enabled}`)
 - Meta: `GET /models` (chat/run/judge model dropdowns), `GET /healthz` (backend switcher); Generator: `POST /admin/generator` (`{mode: seed|drip|stop, seed?, rates?}`), `GET /admin/generator/status`
 - Chat: `POST /agenttrees/{tree}/chat` (SSE; queued → returns task_id), stop = `DELETE /tasks/{task_id}`, `POST /feedback` (writes a `scorer: human` judgment — single store with /eval/judgments), `POST /upload`, `GET/PUT /settings`
-- Agents: `GET /agenttrees/{tree}/agents`, `GET/PUT /agenttrees/{tree}/agents/{id}/instructions` (versioned; carries `format`, YAML saves validated server-side too), `POST /agenttrees/{tree}/agents/{id}/snapshots` (immutable drafts), `GET/PUT /agenttrees/{tree}/agents/{id}/last-selection`
+- Agents: `GET /agenttrees/{tree}/agents`, `GET /agenttrees/{tree}/agents/{id}/instructions` + `POST …/instructions/versions` (versioned; carries `format`, YAML saves validated server-side too), `POST /agenttrees/{tree}/agents/{id}/snapshots` (immutable drafts), `GET/PUT /agenttrees/{tree}/agents/{id}/last-selection`
 - Conversations: `GET /agenttrees/{tree}/conversations` (paginated, `?search=`, `?forks_of={id}`, sorted by last activity; turns paged at `{id}/turns`; lineage on forks), `PATCH`/`DELETE /agenttrees/{tree}/conversations/{id}`
 - Runs: `POST /agenttrees/{tree}/replay`, `POST /agenttrees/{tree}/replay/turn` (`endpoints[]` → task + conversation per endpoint), `GET /agenttrees/{tree}/runs`, `GET /agenttrees/{tree}/runs/{id}`
 - Trace: `GET /agenttrees/{tree}/turns/{turn_id}/trace`, `GET /spans/{id}/payload`
 - **Evaluation domain** (global; cases reference tree-scoped sources):
   - Import: `POST /eval/cases/import` (CSV/XLSX/pasted table, column mapping, per-row error report)
-  - Cases: `POST /eval/cases` (handcrafted or `source: {tree, conversation_id, turn_id}`), `GET /eval/cases/{id}`, `PUT` (new version)
-  - Sets: `POST/GET /eval/sets`, `PUT /eval/sets/{id}` (versioned membership)
-  - Rubrics: `GET/POST /eval/rubrics`, `PUT /eval/rubrics/{id}` (save = new version)
+  - Cases: `POST /eval/cases` (handcrafted or `source: {tree, conversation_id, turn_id}`), `GET /eval/cases/{id}`, `POST /eval/cases/{id}/versions` (new version)
+  - Sets: `POST/GET /eval/sets`, `POST /eval/sets/{id}/versions` (versioned membership)
+  - Rubrics: `GET/POST /eval/rubrics`, `POST /eval/rubrics/{id}/versions` (save = new version)
   - Judging: `POST /eval/judge` (`{set_id | case_ids | evaluation_id, judge_model, rubric_id}` → enqueued), judgments append-only
   - Scores: `GET /eval/judgments?subject_id=&evaluation_id=&scorer_ref=` (history), `GET /eval/evaluations/{evaluation_id}/summary` (aggregates)
 - Queue: `GET /tasks`, `GET /tasks/{id}` (incl. children), **`GET /tasks/stream`** (SSE: status + progress), `DELETE /tasks/{id}` (cancel, cascades), `POST /tasks/{id}/retry-failed`
@@ -227,12 +227,12 @@ The app should never look empty — a generator produces realistic synthetic dat
 | Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
 | Evaluations · 3 Results grid | `GET /agenttrees/{tree}/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
 | Judgment drawer | `GET /eval/judgments?subject_kind=case&subject_id=`, `GET /eval/cases/{id}` |
-| Eval workbench | `POST /eval/cases/import`, `POST/PUT /eval/cases`, `POST/GET/PUT /eval/sets`, `GET/POST/PUT /eval/rubrics`, `POST /eval/judge` |
+| Eval workbench | `POST /eval/cases/import`, `POST /eval/cases` (+ `…/{id}/versions`), `POST/GET /eval/sets` (+ `…/{id}/versions`), `GET/POST /eval/rubrics` (+ `…/{id}/versions`), `POST /eval/judge` |
 | Agent tree view | `GET /agenttrees/{tree}/agents` |
-| Instruction editor | `GET/PUT /agenttrees/{tree}/agents/{id}/instructions`, `POST …/snapshots`, `GET/PUT …/last-selection` |
+| Instruction editor | `GET /agenttrees/{tree}/agents/{id}/instructions`, `POST …/instructions/versions`, `POST …/snapshots`, `GET/PUT …/last-selection` |
 | Editor · AI copilot | `POST /assist` (streams via task SSE) |
 | Editor · Open PR / Settings · Repo | `POST …/agents/{id}/pr`, `GET/PUT /settings/repo` |
-| New agent wizard | `POST /assist` (draft), `PUT …/instructions` (v1) |
+| New agent wizard | `POST /assist` (draft), `POST …/instructions/versions` (v1) |
 | Inspector | `GET /admin/conversations`, `POST /casebooks/{id}/items` |
 | Casebook view | `GET /casebooks/{id}`, `POST …/to-eval-set`, `POST …/replay` |
 | Memory panel | `GET/PUT/DELETE /agenttrees/{tree}/memory`, `POST …/memory/compact` |

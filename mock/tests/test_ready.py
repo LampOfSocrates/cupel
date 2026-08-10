@@ -124,8 +124,9 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
     missing_paths = {m["path"] for m in report["missing"]}
     assert missing_paths, "expected Phase-2 endpoints to be missing today"
     # Subset (not equality): implemented-later endpoints simply drop out.
-    # The PUT on the Phase-1 path /eval/cases/{caseId} is implemented, so
-    # that path is fully conformant now and the old exemption is gone.
+    # The version append under the Phase-1 path /eval/cases/{caseId} is
+    # implemented, so that path is fully conformant now and the old
+    # exemption is gone.
     assert missing_paths <= phase2_paths
     # Sentinels that are certainly unimplemented today (endpoints leave this
     # list as they get implemented, so the missing set shrinks task by task,

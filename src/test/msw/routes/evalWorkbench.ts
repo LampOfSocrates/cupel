@@ -77,21 +77,21 @@ export const evalCaseRequests: string[] = [];
 export const judgeRequests: JudgeRequest[] = [];
 
 // -------------------------------------------------- eval workbench (v0.3.0)
-// POST /eval/cases (openapi.yaml:1340-1369), PUT /eval/cases/{caseId}
-// (:1455-1483), GET/POST /eval/sets (:1484-1523), PUT /eval/sets/{setId}
-// (:1524-1547), PUT /eval/rubrics/{rubricId} (:1313-1338),
-// POST /eval/cases/import (:1370-1429).
+// POST /eval/cases, GET /eval/cases/{caseId}, GET/POST /eval/sets,
+// GET/PATCH/DELETE /eval/sets/{setId}, POST /eval/cases/import, and the three
+// append-only version sub-collections — POST /eval/cases/{id}/versions,
+// POST /eval/sets/{id}/versions, POST /eval/rubrics/{id}/versions.
 export const evalCaseCreates: unknown[] = [];
-export const evalCasePuts: Array<{ caseId: string; body: unknown }> = [];
+export const evalCaseVersionPosts: Array<{ caseId: string; body: unknown }> = [];
 export const evalSetCreates: unknown[] = [];
-export const evalSetPuts: Array<{ setId: string; body: unknown }> = [];
+export const evalSetVersionPosts: Array<{ setId: string; body: unknown }> = [];
 export const evalSetPatches: Array<{ setId: string; body: EvalSetMetadataUpdate }> = [];
 export const evalSetDeletes: string[] = [];
 export const evalSetItemPosts: Array<{ setId: string; body: EvalSetItemCreate }> = [];
 export const evalSetFreezes: Array<{ setId: string; body: EvalSetFreezeRequest }> = [];
 export const evalSetReplays: Array<{ setId: string; body: EvalSetReplayRequest }> = [];
 export const rubricCreates: unknown[] = [];
-export const rubricPuts: Array<{ rubricId: string; body: unknown }> = [];
+export const rubricVersionPosts: Array<{ rubricId: string; body: unknown }> = [];
 export const importRequests: Array<{
   filename: string;
   mapping: string;
@@ -212,12 +212,13 @@ export const evalHandlers = [
     return HttpResponse.json(created, { status: 201 });
   }),
 
-  // PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Appends the next
-  // version of this rubric id — never overwrites"; 201 = the new version.
-  http.put(`${BASE}/eval/rubrics/:rubricId`, async ({ params, request }) => {
+  // POST /eval/rubrics/{rubricId}/versions (createRubricVersion) — "Appends
+  // the next version of this rubric id — never overwrites"; 201 = the new
+  // version.
+  http.post(`${BASE}/eval/rubrics/:rubricId/versions`, async ({ params, request }) => {
     const rubricId = params.rubricId as string;
     const body = (await request.json()) as RubricUpdate;
-    rubricPuts.push({ rubricId, body });
+    rubricVersionPosts.push({ rubricId, body });
     const existing = mockRubrics.find((r) => r.id === rubricId);
     if (!existing) {
       return HttpResponse.json({ code: "not_found", message: "rubric not found" }, { status: 404 });
@@ -417,13 +418,13 @@ export const evalHandlers = [
     return HttpResponse.json(existing);
   }),
 
-  // PUT /eval/sets/{setId} — "each save is a new version carrying its FULL item
-  // list"; 201 = the new version. Item ids follow their referent across
-  // versions, as the real mock does.
-  http.put(`${BASE}/eval/sets/:setId`, async ({ params, request }) => {
+  // POST /eval/sets/{setId}/versions (createEvalSetVersion) — "each save is a
+  // new version carrying its FULL item list"; 201 = the new version. Item ids
+  // follow their referent across versions, as the real mock does.
+  http.post(`${BASE}/eval/sets/:setId/versions`, async ({ params, request }) => {
     const setId = params.setId as string;
     const body = (await request.json()) as EvalSetUpdate;
-    evalSetPuts.push({ setId, body });
+    evalSetVersionPosts.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
       return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
@@ -463,12 +464,13 @@ export const evalHandlers = [
     return HttpResponse.json(found);
   }),
 
-  // PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "each save appends the
-  // next version, never overwrites"; 201 = the new version (now latest).
-  http.put(`${BASE}/eval/cases/:caseId`, async ({ params, request }) => {
+  // POST /eval/cases/{caseId}/versions (createEvalCaseVersion) — "each save
+  // appends the next version, never overwrites"; 201 = the new version (now
+  // latest).
+  http.post(`${BASE}/eval/cases/:caseId/versions`, async ({ params, request }) => {
     const caseId = params.caseId as string;
     const body = (await request.json()) as EvalCaseUpdate;
-    evalCasePuts.push({ caseId, body });
+    evalCaseVersionPosts.push({ caseId, body });
     const existing = mockEvalCases[caseId];
     if (!existing) {
       return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
@@ -566,16 +568,16 @@ export function resetEvalWorkbench() {
   mockEvalSets.length = 0;
   mockEvalSets.push(...seedEvalSets());
   evalCaseCreates.length = 0;
-  evalCasePuts.length = 0;
+  evalCaseVersionPosts.length = 0;
   evalSetCreates.length = 0;
-  evalSetPuts.length = 0;
+  evalSetVersionPosts.length = 0;
   evalSetPatches.length = 0;
   evalSetDeletes.length = 0;
   evalSetItemPosts.length = 0;
   evalSetFreezes.length = 0;
   evalSetReplays.length = 0;
   rubricCreates.length = 0;
-  rubricPuts.length = 0;
+  rubricVersionPosts.length = 0;
   importRequests.length = 0;
   importConfig.queued = false;
   importConfig.report = {

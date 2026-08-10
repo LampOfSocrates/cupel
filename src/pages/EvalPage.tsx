@@ -229,7 +229,7 @@ export function EvalPage() {
       if (draftId) {
         // "each save appends the next version, never overwrites"
         // (openapi.yaml:1459-1462).
-        const saved = await api.updateEvalCase(draftId, {
+        const saved = await api.createEvalCaseVersion(draftId, {
           input: { prompt: draft.prompt },
           output: draft.output,
           reference,
@@ -776,7 +776,7 @@ function SetsTab({
     try {
       // "The full membership for the NEW version" — items absent from this
       // list leave the set.
-      const saved = await api.updateEvalSet(selected.id, { items: membership });
+      const saved = await api.createEvalSetVersion(selected.id, { items: membership });
       await onChanged();
       applied(saved, `Membership saved as version ${saved.version}.`);
     } catch (e) {
@@ -1205,7 +1205,7 @@ function RubricsTab({
     setBusy(true);
     try {
       // "save = new version" (feature-spec.md:128; openapi.yaml:1317-1319).
-      const saved = await api.updateRubric(selected.id, { prompt });
+      const saved = await api.createRubricVersion(selected.id, { prompt });
       setNotice(`Saved as version ${saved.version}.`);
       onChanged();
     } catch (e) {

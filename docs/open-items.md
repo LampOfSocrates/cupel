@@ -257,8 +257,27 @@ cache and hand back a synthesised 200. UI: the grid gained a Previous/Next row p
 appears only when the rows do not fit, mirroring the Inspector's; `CompareView` revalidates
 on the same channel.
 
-C4 `POST …/versions` replacing non-idempotent PUTs (mock
-still `PUT /eval/rubrics/{id}`:1454, `/eval/cases/{id}`:1669, `/eval/sets/{id}`:1731, all 201) ·
+**C4 `POST …/versions` replacing the non-idempotent PUTs — DONE 2026-08-10** (item 7 stage
+F4). All nine `put:` operations were classified, not just the known offenders. FOUR were
+version-appends answering 201 and are now POSTs to a `…/versions` sub-collection:
+`POST /agenttrees/{tree}/agents/{id}/instructions/versions`, `POST /eval/cases/{id}/versions`,
+`POST /eval/sets/{id}/versions`, `POST /eval/rubrics/{id}/versions`. FIVE are genuine
+replacements and stay `PUT`, each answering 200 with the stored state: `/settings`,
+`/admin/users/{id}/permissions`, `…/agents/{id}/last-selection`, `/agenttrees/{tree}/memory`
+(the deliberate mutable document) and `/admin/users` — the last is a bulk upsert keyed by
+email rather than a whole-collection replacement, but sending the same body twice leaves the
+same state, which is the property PUT actually promises. Operation count is unchanged at 67
+and every family keeps its size, so `mock/capabilities.py` did not move; paths went 49 → 52
+(`/eval/rubrics/{rubricId}` was replaced in place by its `…/versions` form, the other three
+are new). Stage B's split survives intact: a set's metadata is still `PATCH /eval/sets/{id}`
+and appends nothing, its membership is the new POST. A new contract test states the rule
+directly — no `put:` anywhere may declare a 201, and the list of five is pinned. Side effect
+worth recording: `PHASE1_METHODS` in `scripts/conformance.mjs` is GONE, because its only
+entry existed to exempt the Phase-2 `PUT` that sat on the Phase-1 path `/eval/cases/{id}`;
+with every versioned save on its own path the phase split is once again purely by path.
+NOT done here, and still C5: there is no GET on any `…/versions` collection, so version
+history remains unreadable — the POST-only sub-collection is where that GET will land.
+
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this
 is why the workbench cannot show history today · C6 `Idempotency-Key` on 202s — **also the
 only way to close the two-tab double-judge residual** · C7 SSE event ids + `Last-Event-ID` ·
@@ -276,8 +295,8 @@ at the endpoint axis alone. Same family as the `endpoint_ids` widening PAB-2 nee
 in one edit.
 
 Plus two gaps found after the review: (i) the mock correctly returns 409 `tree_disabled` from
-six ops whose contract entries declare only 2xx/404 (POST agents, PUT instructions, POST
-snapshots, PUT last-selection, PATCH + DELETE conversation) — the contract under-declares;
+six ops whose contract entries declare only 2xx/404 (POST agents, POST instruction
+versions, POST snapshots, PUT last-selection, PATCH + DELETE conversation) — the contract under-declares;
 (ii) 422 is undeclared everywhere except `/eval/cases/import` while both implementations
 return it freely.
 

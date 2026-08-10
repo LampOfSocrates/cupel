@@ -6,7 +6,6 @@ import YAML from "yaml";
 import {
   compare,
   PHASE1_PATHS,
-  PHASE1_METHODS,
   renderReport,
   UNCLASSIFIED,
 } from "../scripts/conformance.mjs";
@@ -218,21 +217,23 @@ describe("cupel-ready comparator", () => {
     expect(row.problems[0]).toMatch(/param 'thingId' \(path\) missing \(target path is/);
   });
 
-  it("phase1Only checks only the Phase-1 surface, per operation", () => {
+  it("phase1Only checks only the Phase-1 surface", () => {
+    // Every method of a Phase-1 path counts; a Phase-2 path is skipped whole.
+    // Since item 7 stage F4 the split is purely by path — the one Phase-2
+    // METHOD that used to sit on a Phase-1 path (the versioned case save) is
+    // now POST /eval/cases/{caseId}/versions, a path of its own.
     const c = doc({
       "/me": { get: { responses: { 200: jsonResponse() } } },
       "/auth/token": { post: { responses: { 200: jsonResponse() } } },
-      "/eval/cases/{caseId}": {
-        get: { responses: { 200: jsonResponse() } },
-        put: { responses: { 201: jsonResponse() } }, // Phase-2 method on a Phase-1 path
-      },
+      "/eval/cases/{caseId}": { get: { responses: { 200: jsonResponse() } } },
+      "/eval/cases/{caseId}/versions": { post: { responses: { 201: jsonResponse() } } },
     });
     const target = doc({
       "/me": { get: { responses: { 200: jsonResponse() } } },
       "/eval/cases/{caseId}": { get: { responses: { 200: jsonResponse() } } },
     });
     const report = compare(c, target, { phase1Only: true });
-    expect(report.ok).toBe(true); // /auth/token and the PUT were not checked
+    expect(report.ok).toBe(true); // /auth/token and the versions POST were not checked
     expect(report.checked).toBe(2);
     expect(compare(c, target).ok).toBe(false);
   });
@@ -241,10 +242,6 @@ describe("cupel-ready comparator", () => {
     const real = YAML.parse(readFileSync("openapi.yaml", "utf8"));
     for (const p of PHASE1_PATHS) {
       expect(real.paths[p], `${p} must exist in openapi.yaml`).toBeDefined();
-    }
-    for (const [p, methods] of Object.entries(PHASE1_METHODS)) {
-      expect(PHASE1_PATHS).toContain(p);
-      for (const m of methods) expect(real.paths[p][m], `${m} ${p}`).toBeDefined();
     }
   });
 

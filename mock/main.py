@@ -459,8 +459,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         while every GET keeps working — "new chat/replay/judge against it
         return 409 tree_disabled; existing conversations stay READABLE"
         (feature-spec.md:20). Blocked writes (documented set): chat, replay,
-        replay/turn, judge-on-an-evaluation-of-this-tree, create agent, PUT
-        instructions, POST snapshots, PUT last-selection, and conversation
+        replay/turn, judge-on-an-evaluation-of-this-tree, create agent, POST
+        instruction versions, POST snapshots, PUT last-selection, and conversation
         rename/delete (history is read-only, not just readable). Feedback
         stays allowed — a thumb annotates existing history, it creates no
         new work. 404 (absent tree) wins over 409."""
@@ -854,8 +854,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             } for v in versions],
         }
 
-    @app.put("/agenttrees/{tree}/agents/{agentId}/instructions", status_code=201)
-    async def save_instructions(tree: str, agentId: str, request: Request):
+    @app.post("/agenttrees/{tree}/agents/{agentId}/instructions/versions",
+              status_code=201)
+    async def create_instruction_version(tree: str, agentId: str, request: Request):
+        """createInstructionVersion — appends the next version, never
+        overwrites, which is why the write is a POST to the version
+        sub-collection and the parent GET stays the history."""
         need_enabled_tree(tree)  # write — blocked on a disabled tree
         agent = need_agent(tree, agentId)
         body = await body_json(request)
@@ -1552,11 +1556,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return {"id": rid, "name": body["name"], "version": version,
                 "prompt": body["prompt"], "created_at": now}
 
-    @app.put("/eval/rubrics/{rubricId}", status_code=201)
-    async def update_rubric(rubricId: str, request: Request):
-        """PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Save a
-        rubric as a NEW version (append-only) … Appends the next version of
-        this rubric id — never overwrites"."""
+    @app.post("/eval/rubrics/{rubricId}/versions", status_code=201)
+    async def create_rubric_version(rubricId: str, request: Request):
+        """createRubricVersion — "Appends the next version of this rubric id
+        — never overwrites"."""
         body = await body_json(request)
         prompt = body.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
@@ -1775,12 +1778,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             err(404, "not_found", f"Eval case '{caseId}' not found.")
         return case_dict(c)
 
-    @app.put("/eval/cases/{caseId}", status_code=201)
-    async def update_case(caseId: str, request: Request):
-        """PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "each save
-        appends the next version, never overwrites. Prior versions stay
-        readable and existing judgments keep pointing at the content they
-        actually judged"."""
+    @app.post("/eval/cases/{caseId}/versions", status_code=201)
+    async def create_case_version(caseId: str, request: Request):
+        """createEvalCaseVersion — "each save appends the next version, never
+        overwrites. Prior versions stay readable and existing judgments keep
+        pointing at the content they actually judged"."""
         body = await body_json(request)
         latest = latest_case(caseId)
         if not latest:
@@ -1815,10 +1817,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # never gated: they name an eval case, and cases are global
     # (feature-spec.md:111).
     #
-    # The one place omission would be destructive is PUT, which carries the
-    # FULL membership: a partially-permitted caller cannot send back what they
-    # were never shown. So PUT PRESERVES the items it hid — omitting must not
-    # become deleting.
+    # The one place omission would be destructive is the full-membership save
+    # (createEvalSetVersion): a partially-permitted caller cannot send back
+    # what they were never shown. So a new version PRESERVES the items it hid
+    # — omitting must not become deleting.
     def visible_trees(request: Request) -> set[str] | None:
         return permitted_trees(request)
 
@@ -1974,10 +1976,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
                         latest_version(setId), request)
 
-    @app.put("/eval/sets/{setId}", status_code=201)
-    async def update_set(setId: str, request: Request):
-        """"each save is a new version carrying its FULL item list; earlier
-        versions remain queryable"."""
+    @app.post("/eval/sets/{setId}/versions", status_code=201)
+    async def create_set_version(setId: str, request: Request):
+        """createEvalSetVersion — "each save is a new version carrying its
+        FULL item list; earlier versions remain queryable"."""
         need_set(setId)
         body = await body_json(request)
         if body.get("items") is None:

@@ -5,18 +5,18 @@ import { Route, Routes } from "react-router";
 import { renderApp } from "../test/render";
 import {
   evalCaseCreates,
-  evalCasePuts,
+  evalCaseVersionPosts,
   evalSetCreates,
   evalSetDeletes,
   evalSetFreezes,
-  evalSetPuts,
+  evalSetVersionPosts,
   evalSetReplays,
   importConfig,
   importRequests,
   judgeRequests,
   mockEvalSets,
   mockRubrics,
-  rubricPuts,
+  rubricVersionPosts,
 } from "../test/msw/handlers";
 import { EvalPage } from "./EvalPage";
 
@@ -25,11 +25,11 @@ import { EvalPage } from "./EvalPage";
 // picker), set manager (create/name/version sets, drag cases in), rubric
 // editor (prompt text, save = new version…)"):
 // - POST /eval/cases (openapi.yaml:1340-1369) handcrafted + sourced
-// - PUT /eval/cases/{caseId} (:1455-1483) "save = NEW version"
-// - GET/POST /eval/sets, PUT /eval/sets/{setId} "each save is a new version
-//   carrying its FULL item list", DELETE, POST …/items, …/freeze, …/replay —
-//   the merged noun, so this tab is also where collected turns land
-// - PUT /eval/rubrics/{rubricId} (:1313-1338) "save = new version"
+// - POST /eval/cases/{caseId}/versions "save = NEW version"
+// - GET/POST /eval/sets, POST /eval/sets/{setId}/versions "each save is a new
+//   version carrying its FULL item list", DELETE, POST …/items, …/freeze,
+//   …/replay — the merged noun, so this tab is also where collected turns land
+// - POST /eval/rubrics/{rubricId}/versions "save = new version"
 // - POST /eval/cases/import (:1370-1429) mapping + per-row report, 200 and 202
 // - POST /eval/judge with set_id (:2926-2936)
 //
@@ -104,9 +104,9 @@ describe("cases tab", () => {
     setField("Output (candidate response)", "o2");
     await userEvent.click(saveAgain);
 
-    await waitFor(() => expect(evalCasePuts).toHaveLength(1));
-    expect(evalCasePuts[0].caseId).toBe("case-new-1");
-    expect(evalCasePuts[0].body).toEqual({
+    await waitFor(() => expect(evalCaseVersionPosts).toHaveLength(1));
+    expect(evalCaseVersionPosts[0].caseId).toBe("case-new-1");
+    expect(evalCaseVersionPosts[0].body).toEqual({
       input: { prompt: "p" },
       output: "o2",
       reference: null,
@@ -203,8 +203,8 @@ describe("sets tab", () => {
     await userEvent.click(await screen.findByTestId("toggle-esi-1"));
     await userEvent.click(screen.getByRole("button", { name: "Save membership as new version" }));
 
-    await waitFor(() => expect(evalSetPuts).toHaveLength(1));
-    expect(evalSetPuts[0]).toEqual({ setId: "set-refunds", body: { items: [] } });
+    await waitFor(() => expect(evalSetVersionPosts).toHaveLength(1));
+    expect(evalSetVersionPosts[0]).toEqual({ setId: "set-refunds", body: { items: [] } });
     expect(await screen.findByTestId("set-notice")).toHaveTextContent("version 4");
   });
 
@@ -291,8 +291,8 @@ describe("rubrics tab", () => {
     await userEvent.type(prompt, "Stricter wording.");
     await userEvent.click(screen.getByRole("button", { name: "Save as new version" }));
 
-    await waitFor(() => expect(rubricPuts).toHaveLength(1));
-    expect(rubricPuts[0]).toEqual({
+    await waitFor(() => expect(rubricVersionPosts).toHaveLength(1));
+    expect(rubricVersionPosts[0]).toEqual({
       rubricId: "rub-help",
       body: { prompt: "Stricter wording." },
     });

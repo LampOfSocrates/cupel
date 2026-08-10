@@ -7,7 +7,8 @@ Contract under test (openapi.yaml v0.3.0):
   audit-logged server-side")
 - :3129-3155 AdminConversationItem (user_id, user_email, latest_score) +
   AdminConversationPage (items/page/page_size/total)
-- GET/POST /eval/sets, GET/PATCH/PUT/DELETE /eval/sets/{setId} — the noun
+- GET/POST /eval/sets, GET/PATCH/DELETE /eval/sets/{setId},
+  POST /eval/sets/{setId}/versions — the noun
   Casebook merged into ("A member is either kind, so the collection is both")
 - POST /eval/sets/{setId}/items ("IDEMPOTENT: adding a referent the latest
   version already holds appends nothing and returns that version unchanged")
@@ -395,7 +396,7 @@ def test_create_requires_a_name():
 
 def test_reference_items_are_references_only_and_removal_appends_a_version():
     """A reference item is a REFERENCE to a turn, never a copy; removing it
-    (PUT with the item left out) touches nothing else."""
+    (a new version with the item left out) touches nothing else."""
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "keep this one")
@@ -419,7 +420,7 @@ def test_reference_items_are_references_only_and_removal_appends_a_version():
             fetched = (await c.get(f"/eval/sets/{s['id']}")).json()
             assert [i["id"] for i in fetched["items"]] == [item["id"]]
 
-            r = await c.put(f"/eval/sets/{s['id']}", json={"items": []})
+            r = await c.post(f"/eval/sets/{s['id']}/versions", json={"items": []})
             assert r.status_code == 201, r.text
             assert r.json()["items"] == [] and r.json()["version"] == 3
             # The turn and its conversation survived the removal.
@@ -443,7 +444,7 @@ def test_item_ids_are_stable_across_membership_versions():
             s = await seed_set(c)
             first = (await c.post(f"/eval/sets/{s['id']}/items", json=ref(a))).json()
             item_id = first["items"][0]["id"]
-            after = (await c.put(f"/eval/sets/{s['id']}",
+            after = (await c.post(f"/eval/sets/{s['id']}/versions",
                                  json={"items": [ref(b), ref(a)]})).json()
             assert after["version"] == 3
             assert [i["id"] for i in after["items"]][1] == item_id
@@ -539,9 +540,9 @@ def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
             assert (await c.post(f"/eval/sets/{s['id']}/items", headers=limited,
                                  json=ref(two, "agent2"))).status_code == 404
 
-            # Omitting must not become DELETING: a PUT from the partially
+            # Omitting must not become DELETING: a save from the partially
             # permitted viewer preserves what they were never shown.
-            r = await c.put(f"/eval/sets/{s['id']}", headers=limited,
+            r = await c.post(f"/eval/sets/{s['id']}/versions", headers=limited,
                             json={"items": [ref(one)]})
             assert r.status_code == 201, r.text
             assert [i["source"]["tree"] for i in r.json()["items"]] == ["agent1"]

@@ -172,7 +172,7 @@ def test_instructions_append_only_and_snapshot_promotion():
             assert hist["live_version"] == 3
             assert [v["version"] for v in hist["versions"]] == [1, 2, 3]
 
-            r = await c.put("/agenttrees/agent1/agents/ag_concierge/instructions",
+            r = await c.post("/agenttrees/agent1/agents/ag_concierge/instructions/versions",
                             json={"content": "v4 text"})
             assert r.status_code == 201 and r.json()["version"] == 4
 
@@ -180,7 +180,7 @@ def test_instructions_append_only_and_snapshot_promotion():
                                  json={"content": "draft text", "base_version": 4})).json()
             assert snap["label"].startswith("v4-draft (")
 
-            r = await c.put("/agenttrees/agent1/agents/ag_concierge/instructions",
+            r = await c.post("/agenttrees/agent1/agents/ag_concierge/instructions/versions",
                             json={"content": "draft text", "snapshot_id": snap["snapshot_id"]})
             v5 = r.json()
             assert v5["version"] == 5

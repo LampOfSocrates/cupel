@@ -317,7 +317,7 @@ describe("EditorPage", () => {
   describe("the draft survives everything short of a new agent", () => {
     it("a failed save keeps the draft on screen", async () => {
       server.use(
-        http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, () =>
+        http.post(`${BASE}/agenttrees/:tree/agents/:agentId/instructions/versions`, () =>
           HttpResponse.json({ code: "internal", message: "instruction store down" }, { status: 500 }),
         ),
       );
@@ -358,7 +358,7 @@ describe("EditorPage", () => {
         release = r;
       });
       server.use(
-        http.put(`${BASE}/agenttrees/:tree/agents/:agentId/instructions`, async (info) => {
+        http.post(`${BASE}/agenttrees/:tree/agents/:agentId/instructions/versions`, async (info) => {
           await gate;
           return info.request.clone().json().then((body) => {
             const b = body as { content: string; format?: "text" | "yaml" };

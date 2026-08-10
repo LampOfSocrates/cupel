@@ -414,8 +414,8 @@ const EXERCISES: Exercise[] = [
     run: () => api.createAgent("agent1", { name: "Parity", parent_id: "ag_concierge" }),
   },
   {
-    apiMethod: "saveInstructions",
-    run: () => api.saveInstructions("agent1", "ag_concierge", { content: "Parity v4." }),
+    apiMethod: "createInstructionVersion",
+    run: () => api.createInstructionVersion("agent1", "ag_concierge", { content: "Parity v4." }),
   },
   {
     apiMethod: "createSnapshot",
@@ -451,7 +451,7 @@ const EXERCISES: Exercise[] = [
     run: () => api.judge({ evaluation_id: "evaluation-old-1", judge_model: "claude-haiku-4-5", rubric_id: "rub-help" }),
   },
   { apiMethod: "createRubric", run: () => api.createRubric({ name: "parity", prompt: "Score it." }) },
-  { apiMethod: "updateRubric", run: () => api.updateRubric("rub-help", { prompt: "Score it better." }) },
+  { apiMethod: "createRubricVersion", run: () => api.createRubricVersion("rub-help", { prompt: "Score it better." }) },
   {
     apiMethod: "createEvalCase",
     run: () => api.createEvalCase({ input: { prompt: "Hi" }, output: "Hello" }),
@@ -463,11 +463,11 @@ const EXERCISES: Exercise[] = [
       api.createEvalCase({ source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" } }),
   },
   {
-    apiMethod: "updateEvalCase",
-    run: () => api.updateEvalCase("case-1", { input: { prompt: "Hi" }, output: "Hello again" }),
+    apiMethod: "createEvalCaseVersion",
+    run: () => api.createEvalCaseVersion("case-1", { input: { prompt: "Hi" }, output: "Hello again" }),
   },
   { apiMethod: "createEvalSet", run: () => api.createEvalSet({ name: "parity-set" }) },
-  { apiMethod: "updateEvalSet", run: () => api.updateEvalSet("set-refunds", { items: [{ case_id: "case-1" }] }) },
+  { apiMethod: "createEvalSetVersion", run: () => api.createEvalSetVersion("set-refunds", { items: [{ case_id: "case-1" }] }) },
   {
     apiMethod: "updateEvalSetMetadata",
     run: () => api.updateEvalSetMetadata("set-misses", { name: "Renamed" }),
@@ -543,22 +543,22 @@ const ERROR_EXERCISES: ErrorExercise[] = [
   { label: "retryFailedTask 404", status: 404, code: "not_found", run: () => api.retryFailedTask("nope") },
   { label: "evalCase 404", status: 404, code: "not_found", run: () => api.evalCase("nope") },
   {
-    label: "updateEvalCase 404",
+    label: "createEvalCaseVersion 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateEvalCase("nope", { input: { prompt: "p" }, output: "o" }),
+    run: () => api.createEvalCaseVersion("nope", { input: { prompt: "p" }, output: "o" }),
   },
   {
-    label: "updateEvalSet 404",
+    label: "createEvalSetVersion 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateEvalSet("nope", { items: [] }),
+    run: () => api.createEvalSetVersion("nope", { items: [] }),
   },
   {
-    label: "updateRubric 404",
+    label: "createRubricVersion 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateRubric("nope", { prompt: "p" }),
+    run: () => api.createRubricVersion("nope", { prompt: "p" }),
   },
   { label: "evaluationSummary 404", status: 404, code: "not_found", run: () => api.evaluationSummary("nope") },
   { label: "evalSet 404", status: 404, code: "not_found", run: () => api.evalSet("nope") },
@@ -936,7 +936,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
 
   it("PUT instructions creates a NEW version and moves the live pointer", async () => {
     const before = await api.instructions("agent1", "ag_concierge");
-    const saved = await api.saveInstructions("agent1", "ag_concierge", { content: "next" });
+    const saved = await api.createInstructionVersion("agent1", "ag_concierge", { content: "next" });
     expect(saved.version).toBe(before.live_version + 1);
     const after = await api.instructions("agent1", "ag_concierge");
     expect(after.versions).toHaveLength(before.versions.length + 1);
@@ -947,18 +947,18 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
 
   it("PUT eval case / set / rubric append a version, latest wins on read", async () => {
     const caseBefore = await api.evalCase("case-1");
-    const caseAfter = await api.updateEvalCase("case-1", {
+    const caseAfter = await api.createEvalCaseVersion("case-1", {
       input: { prompt: "p" },
       output: "o",
     });
     expect(caseAfter.version).toBe((caseBefore.version ?? 1) + 1);
     expect((await api.evalCase("case-1")).output).toBe("o");
 
-    const setAfter = await api.updateEvalSet("set-refunds", { items: [] });
+    const setAfter = await api.createEvalSetVersion("set-refunds", { items: [] });
     expect(setAfter.version).toBe(4); // fixture is v3
     expect((await api.evalSets()).items.find((s) => s.id === "set-refunds")?.version).toBe(4);
 
-    const rubricAfter = await api.updateRubric("rub-help", { prompt: "p" });
+    const rubricAfter = await api.createRubricVersion("rub-help", { prompt: "p" });
     expect(rubricAfter.version).toBe(3); // fixture is v2
   });
 
@@ -1041,7 +1041,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
   it("pins the contract's undeclared-409 gap (retire when v0.4.0 adds them)", () => {
     const undeclared = [
       "POST /agenttrees/{tree}/agents",
-      "PUT /agenttrees/{tree}/agents/{agentId}/instructions",
+      "POST /agenttrees/{tree}/agents/{agentId}/instructions/versions",
       "POST /agenttrees/{tree}/agents/{agentId}/snapshots",
       "PUT /agenttrees/{tree}/agents/{agentId}/last-selection",
       "PATCH /agenttrees/{tree}/conversations/{conversationId}",
@@ -1074,7 +1074,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     ).rejects.toMatchObject({ code: "tree_disabled" });
     await expect(api.createAgent("agent1", { name: "x" })).rejects.toMatchObject({ code: "tree_disabled" });
     await expect(
-      api.saveInstructions("agent1", "ag_concierge", { content: "x" }),
+      api.createInstructionVersion("agent1", "ag_concierge", { content: "x" }),
     ).rejects.toMatchObject({ code: "tree_disabled" });
     await expect(
       api.createSnapshot("agent1", "ag_concierge", { content: "x" }),

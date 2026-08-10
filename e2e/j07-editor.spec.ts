@@ -6,7 +6,8 @@ import { filmed } from "./helpers/hud";
 // "Editor: edit draft → Test as evaluation (snapshot) → back → save v16 → run
 //  relabels"
 // Endpoint tags (feature-spec.md:232-233, sketch 06):
-//   GET/PUT /agenttrees/{tree}/agents/{id}/instructions
+//   GET /agenttrees/{tree}/agents/{id}/instructions
+//   POST …/agents/{id}/instructions/versions
 //   POST …/agents/{id}/snapshots · GET/PUT …/agents/{id}/last-selection
 //
 // Order note: the draft lives in component state, so navigating to Evaluations
@@ -43,7 +44,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test as
     );
     const draftRow = page.getByTestId("version-draft");
     await expect(draftRow).toContainText("unsaved changes");
-    api.expectNotCalled("PUT /agenttrees/{tree}/agents/{agent}/instructions");
+    api.expectNotCalled("POST /agenttrees/{tree}/agents/{agent}/instructions/versions");
   });
 
   await step("Snapshot draft: the text is frozen immutably", async () => {
@@ -63,7 +64,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test as
 
   await step(`Save as v${nextVersion}: append-only, and labelled from its snapshot`, async () => {
     await saveButton.click();
-    await api.expectCalled("PUT /agenttrees/{tree}/agents/{agent}/instructions");
+    await api.expectCalled("POST /agenttrees/{tree}/agents/{agent}/instructions/versions");
     const row = page.getByTestId(`version-${nextVersion}`);
     await expect(row).toBeVisible();
     await expect(row.getByText("live")).toBeVisible();

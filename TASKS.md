@@ -170,6 +170,22 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    change. Found and NOT fixed: **(viii)** cross-conversation batch turn fetch (bucket C10)
    is still absent — `?turn_ids=` narrows within ONE conversation, so the eval-set preview
    still issues one request per referenced conversation.
+   Stage F4 DONE 2026-08-10 — **the append-only saves are POSTs to `…/versions`.** All nine
+   `put:` operations were classified, not just the three known offenders. FOUR minted a
+   version and answered 201 — instructions, eval cases, eval sets, rubrics — and are now
+   `POST …/instructions/versions`, `POST /eval/cases/{id}/versions`,
+   `POST /eval/sets/{id}/versions`, `POST /eval/rubrics/{id}/versions`. FIVE are genuine
+   replacements and STAY `PUT`, each answering 200 with the stored state: `/settings`,
+   `/admin/users/{id}/permissions`, `…/last-selection`, `/agenttrees/{tree}/memory` (the
+   documented mutable exception) and `/admin/users` — a bulk upsert keyed by email, which is
+   not a whole-collection replacement but IS idempotent, and idempotence is the property PUT
+   promises. The new rule is a contract test rather than prose: no `put:` may declare a 201,
+   and the list of five is pinned. Counts: 67 operations unchanged, every family unchanged
+   (so `mock/capabilities.py` did not move), paths 49 → 52. Stage B's split is preserved —
+   set metadata stays `PATCH /eval/sets/{id}` and appends nothing. `feature-spec.md` took
+   seven in-place substitutions, no line-count change. Found and NOT fixed: **(ix)** there is
+   still no GET on any `…/versions` collection, so version history stays unreadable (bucket-C
+   C5); the sub-collection these POSTs created is exactly where that GET belongs.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

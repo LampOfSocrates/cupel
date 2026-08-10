@@ -323,15 +323,16 @@ export const api = {
   instructions: (tree: string, agentId: string) =>
     request<InstructionHistory>(`/agenttrees/${tree}/agents/${agentId}/instructions`),
 
-  // PUT — "Save instructions as a NEW version (append-only)" (openapi.yaml:
-  // 243); 201 = "The newly created version (now live)" (:262). snapshot_id
-  // promotes a draft snapshot (:245-249); "Rollback = PUT the old version's
-  // content (creates a new version)" (:249-250).
-  saveInstructions: (tree: string, agentId: string, body: InstructionSave) =>
-    request<InstructionVersion>(`/agenttrees/${tree}/agents/${agentId}/instructions`, {
-      method: "PUT",
-      body,
-    }),
+  // POST …/instructions/versions (createInstructionVersion) — "Append the
+  // next instruction version (append-only)"; 201 = "The newly created version
+  // (now live)". A POST, not a PUT: every save mints a version, so it is
+  // neither idempotent nor a replacement. snapshot_id promotes a draft
+  // snapshot; rollback = post the old version's content again.
+  createInstructionVersion: (tree: string, agentId: string, body: InstructionSave) =>
+    request<InstructionVersion>(
+      `/agenttrees/${tree}/agents/${agentId}/instructions/versions`,
+      { method: "POST", body },
+    ),
 
   // POST /agenttrees/{tree}/agents/{agentId}/snapshots (openapi.yaml:268-293)
   // — "Immutable draft snapshot (for Test as evaluation)" (:272); 201 → Snapshot.
@@ -583,11 +584,11 @@ export const api = {
   createRubric: (body: RubricCreate) =>
     request<Rubric>("/eval/rubrics", { method: "POST", body }),
 
-  // PUT /eval/rubrics/{rubricId} (openapi.yaml:1313-1338) — "Save a rubric as
-  // a NEW version (append-only) … Appends the next version of this rubric id —
-  // never overwrites"; 201 = "The new rubric version (now latest)".
-  updateRubric: (rubricId: string, body: RubricUpdate) =>
-    request<Rubric>(`/eval/rubrics/${rubricId}`, { method: "PUT", body }),
+  // POST /eval/rubrics/{rubricId}/versions (createRubricVersion) — "Appends
+  // the next version of this rubric id — never overwrites"; 201 = "The new
+  // rubric version (now latest)".
+  createRubricVersion: (rubricId: string, body: RubricUpdate) =>
+    request<Rubric>(`/eval/rubrics/${rubricId}/versions`, { method: "POST", body }),
 
   // GET /eval/cases/{caseId} (openapi.yaml:907-929) — "One eval case (judgment
   // drawer) … Phase 1 cases are auto-created from conversation turns during
@@ -599,11 +600,11 @@ export const api = {
   createEvalCase: (body: EvalCaseCreate) =>
     request<EvalCase>("/eval/cases", { method: "POST", body }),
 
-  // PUT /eval/cases/{caseId} (openapi.yaml:1455-1483) — "Save an eval case as
-  // a NEW version (append-only) … Rollback = PUT the old content again (a new
-  // version)"; 201 = "The new case version (now latest)".
-  updateEvalCase: (caseId: string, body: EvalCaseUpdate) =>
-    request<EvalCase>(`/eval/cases/${caseId}`, { method: "PUT", body }),
+  // POST /eval/cases/{caseId}/versions (createEvalCaseVersion) — "each save
+  // appends the next version, never overwrites … Rollback = post the old
+  // content again"; 201 = "The new case version (now latest)".
+  createEvalCaseVersion: (caseId: string, body: EvalCaseUpdate) =>
+    request<EvalCase>(`/eval/cases/${caseId}/versions`, { method: "POST", body }),
 
   // Eval sets — the noun Casebook merged into. Global, not tree-scoped: no
   // tree in any of these paths, and one set may reference turns across trees.
@@ -612,7 +613,7 @@ export const api = {
     request<EvalSetPage>("/eval/sets", { query: params as Query }),
 
   // POST /eval/sets — "Create an eval set (version 1)"; membership changes
-  // afterwards append versions through PUT, …/items or …/freeze.
+  // afterwards append versions through …/versions, …/items or …/freeze.
   createEvalSet: (body: EvalSetCreate) =>
     request<EvalSet>("/eval/sets", { method: "POST", body }),
 
@@ -626,10 +627,11 @@ export const api = {
   updateEvalSetMetadata: (setId: string, body: EvalSetMetadataUpdate) =>
     request<EvalSet>(`/eval/sets/${setId}`, { method: "PATCH", body }),
 
-  // PUT /eval/sets/{setId} — "Save set membership as a NEW version
-  // (append-only) … each save is a new version carrying its FULL item list".
-  updateEvalSet: (setId: string, body: EvalSetUpdate) =>
-    request<EvalSet>(`/eval/sets/${setId}`, { method: "PUT", body }),
+  // POST /eval/sets/{setId}/versions (createEvalSetVersion) — "each save is a
+  // new version carrying its FULL item list". Metadata is the sibling PATCH
+  // on the set itself and appends nothing.
+  createEvalSetVersion: (setId: string, body: EvalSetUpdate) =>
+    request<EvalSet>(`/eval/sets/${setId}/versions`, { method: "POST", body }),
 
   // DELETE /eval/sets/{setId} — "Deleting a set never deletes evidence": the
   // referenced turns, the frozen cases and their judgments all survive.

@@ -103,7 +103,7 @@ export function InstructionEditor({
       if (lastSnapshot && lastSnapshot.content === draft) {
         body.snapshot_id = lastSnapshot.id;
       }
-      const created = await api.saveInstructions(tree, agentId, body);
+      const created = await api.createInstructionVersion(tree, agentId, body);
       setHistory((h) => ({
         ...h,
         live_version: created.version,

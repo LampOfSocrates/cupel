@@ -13,7 +13,9 @@ import { filmed } from "./helpers/hud";
 // EvalSet merged there is one noun for that, so the middle hop is gone: no
 // casebook to convert, just a set whose items start as live turn references.
 // Endpoint tags (feature-spec.md:231, 241-242, sketch 10):
-//   POST/PUT /eval/rubrics · POST/PUT /eval/cases · POST/PUT /eval/sets
+//   POST /eval/rubrics · POST /eval/rubrics/{id}/versions
+//   POST /eval/cases · POST /eval/cases/{id}/versions
+//   POST /eval/sets · POST /eval/sets/{id}/versions
 //   POST /eval/cases/import · POST /eval/judge
 //   GET /admin/conversations · POST /eval/sets/{id}/items
 //   POST /eval/sets/{id}/replay · POST /eval/sets/{id}/freeze
@@ -47,7 +49,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await page.getByLabel("Rubric prompt").fill("Score 0-1: does the reply state the policy?");
     await page.getByRole("button", { name: "Save as new version" }).click();
     // Append-only: a rubric edit is a NEW version, never an overwrite.
-    await api.expectCalled("PUT /eval/rubrics/{rubric}");
+    await api.expectCalled("POST /eval/rubrics/{rubric}/versions");
     await expect(page.getByTestId("rubric-notice")).toBeVisible();
   });
 
@@ -122,7 +124,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await row.click();
     await page.locator('[data-testid^="toggle-"]').first().click();
     await page.getByRole("button", { name: "Save membership as new version" }).click();
-    await api.expectCalled("PUT /eval/sets/{set}");
+    await api.expectCalled("POST /eval/sets/{set}/versions");
     await expect(page.getByTestId("set-notice")).toBeVisible();
   });
 });
