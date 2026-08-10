@@ -169,7 +169,10 @@ export function InstructionEditor({
         lastSnapshot && lastSnapshot.content === draft
           ? { snapshot_id: lastSnapshot.id, label: lastSnapshot.label }
           : await createDraftSnapshot();
-      navigate("/evaluations", {
+      // Results tab (formerly the bare /evaluations route — UX polish
+      // 2026-08-10, Studio merge); the handoff mechanism itself (location.
+      // state read by EvaluationsPage, now embedded there) is unchanged.
+      navigate("/studio?tab=results", {
         state: {
           testInRuns: {
             agent_id: agentId,

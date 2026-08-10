@@ -32,7 +32,9 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
   });
 
   await step("1 Select: a whole conversation plus a single turn of another", async () => {
-    await page.goto("/evaluations");
+    // Results tab, Studio (formerly the bare /evaluations route — UX
+    // polish 2026-08-10, Studio merge).
+    await page.goto("/studio?tab=results");
     await page.getByRole("button", { name: "New evaluation" }).click();
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
     await page.getByRole("checkbox", { name: `Select ${CONV_A}` }).check();
@@ -113,7 +115,9 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
     const evaluationUrl = page.url();
     // The back control is a Mantine Anchor with an onClick and no href, so it
     // has no link role — matched by text (noted for the UX phase).
-    await page.getByText("‹ Evaluations").click();
+    await page.getByText("‹ Studio").click();
+    // Lands back on Studio's Results tab — EvaluationsPage's own list-mode
+    // heading, unchanged by the merge.
     await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
     await page.goto(evaluationUrl);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();

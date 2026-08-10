@@ -21,11 +21,16 @@ import { AgentConversationsPage } from "./AgentConversationsPage";
 //   recent conversations (feature-spec.md:26).
 // - POST → 201 agent with live_version 0 (openapi.yaml:215).
 
+// Nested, mirroring App.tsx: the editor is a child route of /agents, not a
+// sibling, so it renders inside AgentsPage's own Outlet and the tree stays
+// mounted beside it (conversations stays a sibling — a full page swap, not
+// part of this split).
 function renderAgents(route = "/agents") {
   return renderApp(
     <Routes>
-      <Route path="/agents" element={<AgentsPage />} />
-      <Route path="/agents/:agentId/editor" element={<EditorPage />} />
+      <Route path="/agents" element={<AgentsPage />}>
+        <Route path=":agentId/editor" element={<EditorPage />} />
+      </Route>
       <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
     </Routes>,
     { route },
@@ -66,13 +71,19 @@ describe("AgentsPage tree view", () => {
     expect(within(card).getByText("disabled")).toBeInTheDocument();
   });
 
-  it("node click navigates to the editor route for that agent", async () => {
+  it("node click opens the editor beside the tree, not instead of it", async () => {
     const user = userEvent.setup();
     renderAgents();
-    await user.click(await screen.findByRole("button", { name: "Open Refunds" }));
+    const refundsCard = await screen.findByRole("button", { name: "Open Refunds" });
+    await user.click(refundsCard);
     expect(
       await screen.findByText("Instruction editor — ag_refunds"),
     ).toBeInTheDocument();
+    // The tree — this is the point of nesting the route — is still there,
+    // and marks the open agent selected.
+    expect(screen.getByRole("button", { name: "Open Refunds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Shipping" })).toBeInTheDocument();
+    expect(refundsCard).toHaveAttribute("data-selected", "true");
   });
 
   it("⋯ Edit instructions navigates to the editor route", async () => {

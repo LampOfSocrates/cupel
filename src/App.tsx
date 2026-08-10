@@ -6,14 +6,13 @@ import { agenticConfig } from "../agentic.config";
 import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api/target";
 import { onAuthRequired, useAuthToken } from "./api/auth";
 import { loginPath, RETURN_TO_PARAM, sanitizeReturnTo } from "./lib/returnTo";
-import { isRouteHidden, landingRoute } from "./lib/families";
+import { isRouteHidden, isStudioHidden, landingRoute } from "./lib/families";
 import type { Model } from "./api/types";
 import { useAsync } from "./hooks/useAsync";
 import { AppContext } from "./AppContext";
 import { QueueProvider } from "./QueueContext";
 import { Shell } from "./shell/Shell";
 import { ChatPage } from "./pages/ChatPage";
-import { EvaluationsPage } from "./pages/EvaluationsPage";
 import { EvaluationPage } from "./pages/EvaluationPage";
 import { QueuePage } from "./pages/QueuePage";
 import { AgentsPage } from "./pages/AgentsPage";
@@ -21,8 +20,7 @@ import { EditorPage } from "./pages/EditorPage";
 import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 import { ForkComparePage } from "./pages/ForkComparePage";
 import { TracePage } from "./pages/TracePage";
-import { EvalPage } from "./pages/EvalPage";
-import { InspectorPage } from "./pages/InspectorPage";
+import { StudioPage } from "./pages/StudioPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
@@ -69,10 +67,29 @@ function LoginBounce() {
 // /runs and /runs/{id} were the pre-rename paths and are in the wild as shared
 // deep links, so they redirect instead of 404ing. Query + hash ride along
 // (a shared link may carry them); `replace` keeps Back out of a redirect loop.
+// /runs/{id} still lands on /evaluations/{id} — that detail route survived
+// the Studio merge unchanged. Bare /runs (no id) meant "the evaluations
+// list", which is now the Results tab, so it redirects into /studio instead.
 function LegacyRunsRedirect() {
   const { evaluationId } = useParams();
   const { search, hash } = useLocation();
-  return <Navigate to={`/evaluations${evaluationId ? `/${evaluationId}` : ""}${search}${hash}`} replace />;
+  if (evaluationId) {
+    return <Navigate to={`/evaluations/${evaluationId}${search}${hash}`} replace />;
+  }
+  const params = new URLSearchParams(search);
+  params.set("tab", "results");
+  return <Navigate to={`/studio?${params.toString()}${hash}`} replace />;
+}
+
+// /inspector was its own route before the Studio merge; its filters live in
+// the URL by design (InspectorPage.tsx, "an inspection is a shareable
+// link"), so old links redirect to the Inspector tab with those filters
+// intact rather than 404ing.
+function LegacyInspectorRedirect() {
+  const { search, hash } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("tab", "inspector");
+  return <Navigate to={`/studio?${params.toString()}${hash}`} replace />;
 }
 
 export function App() {
@@ -229,12 +246,13 @@ export function App() {
               <Route path="/chat/:conversationId" element={<ChatPage />} />
             </>
           )}
+          {/* The list + "new run" stepper (formerly the bare /evaluations
+              route) now lives in Studio's Results tab. The detail route
+              survives on its own: it's linked from six other places (chat
+              compare, the queue, fork modal, share links, Studio's own Sets
+              tab) that all keep working unchanged. */}
           {visible("/evaluations") && (
-            <>
-              <Route path="/evaluations" element={<EvaluationsPage />} />
-              {/* Step 3 Results — also the detail route for stored evaluations. */}
-              <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
-            </>
+            <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
           )}
           {/* Pre-rename paths, still live in shared links (see above). */}
           <Route path="/runs" element={<LegacyRunsRedirect />} />
@@ -249,29 +267,32 @@ export function App() {
               forks, and replays alike", feature-spec.md:141); tree from
               context like all pages. */}
           {visible("/trace") && <Route path="/trace/:turnId" element={<TracePage />} />}
-          {/* Eval workbench (sketch 10) — "manage the eval domain
-              directly: case editor …, set manager …, rubric editor"
-              (feature-spec.md:63). Global, not tree-scoped
-              (feature-spec.md:111), so the route carries no tree. */}
-          {/* Its Sets tab is also where collected turns land: Casebook and
-              EvalSet are one noun now, so there is no second route. */}
-          {visible("/eval") && <Route path="/eval" element={<EvalPage />} />}
-          {/* Inspector — ROLE-gated, never mode-gated: the route
-              exists only when /me.roles includes `inspect` (openapi.yaml:308
-              "Requires the inspect role"). Without it the path falls through
-              to the index redirect, so a hand-typed /inspector cannot render
-              a screen whose every request would 403. A hidden `admin` family
-              closes it the same way, for the same reason. */}
+          {/* Studio (sketch 10, formerly /eval "Eval workbench" +
+              /evaluations "Evaluations" + /inspector — merged, UX polish
+              2026-08-10): case editor, set manager, rubric editor, the
+              run/results flow, and (role-gated) the Inspector, as tabs on
+              one page rather than three-plus nav entries for one workflow.
+              Global, not tree-scoped (feature-spec.md:111), so the route
+              carries no tree. Visible if EITHER family it merges still
+              answers something other than hide (isStudioHidden); which
+              *tabs* render is StudioPage's own per-family/role call. */}
+          {!isStudioHidden() && <Route path="/studio" element={<StudioPage />} />}
+          {/* Old standalone paths — see the redirect components above for
+              why each still resolves instead of 404ing. */}
+          <Route path="/eval" element={<Navigate to="/studio" replace />} />
           {me.roles?.includes("inspect") && visible("/inspector") && (
-            <Route path="/inspector" element={<InspectorPage />} />
+            <Route path="/inspector" element={<LegacyInspectorRedirect />} />
           )}
           {visible("/queue") && <Route path="/queue" element={<QueuePage />} />}
           {visible("/agents") && (
             <>
-              <Route path="/agents" element={<AgentsPage />} />
-              {/* Editor route target for node click / "Edit instructions"
-                  (feature-spec.md:26). */}
-              <Route path="/agents/:agentId/editor" element={<EditorPage />} />
+              {/* Editor nested (not a sibling): node click / "Edit
+                  instructions" (feature-spec.md:26) opens it in AgentsPage's
+                  own Outlet, so the tree stays mounted beside it — same
+                  page, not a navigation away from it. */}
+              <Route path="/agents" element={<AgentsPage />}>
+                <Route path=":agentId/editor" element={<EditorPage />} />
+              </Route>
               <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
             </>
           )}

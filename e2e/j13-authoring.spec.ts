@@ -32,8 +32,10 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
   api,
 }) => {
   const step = filmed(page, "Journey 13", 5);
+  // /eval redirects into /studio (UX polish 2026-08-10, Studio merge) —
+  // goto'ing the old path exercises that redirect still resolves.
   await page.goto("/eval");
-  await expect(page.getByRole("heading", { name: "Eval workbench" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Studio" })).toBeVisible();
 
   await step("rubrics: create one, then save a second version of it", async () => {
     await page.getByRole("tab", { name: "Rubrics" }).click();
@@ -143,8 +145,11 @@ test("inspector → eval set + replay suite", async ({ page, request, api }) => 
 
   await step("Inspector lists conversations across users", async () => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Inspector" }).click();
-    await page.waitForURL(/\/inspector/);
+    // Inspector is a Studio tab now (UX polish 2026-08-10, Studio merge) —
+    // switching tabs is local state, so no URL change to wait on.
+    await page.getByRole("link", { name: "Studio" }).click();
+    await page.waitForURL(/\/studio$/);
+    await page.getByRole("tab", { name: "Inspector" }).click();
     await api.expectCalled("GET /admin/conversations");
     await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
     await expect(page.getByTestId("inspector-count")).toContainText("conversations");
@@ -169,7 +174,7 @@ test("inspector → eval set + replay suite", async ({ page, request, api }) => 
   await step(
     "the set is a regression suite: replay its references, then freeze them",
     async () => {
-      await page.goto("/eval");
+      await page.goto("/studio");
       await page.getByRole("tab", { name: "Sets" }).click();
       await api.expectCalled("GET /eval/sets");
       await page.locator('[data-testid^="set-row-"]', { hasText: "Journey set" }).click();

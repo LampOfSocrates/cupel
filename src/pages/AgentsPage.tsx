@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router";
 import {
   ActionIcon,
   Alert,
   Badge,
+  Box,
   Button,
+  Group,
   Loader,
   Menu,
   Modal,
@@ -31,10 +33,18 @@ import { TreeBranch, TreeNode } from "../components";
 // The AI New-agent wizard is Phase 3 (openapi.yaml:204-206) — plain form here.
 // "View recent conversations" routes to /agents/{id}/conversations, a minimal
 // GET /conversations?agent_id= listing (openapi.yaml:365-371).
+//
+// Editor split (UX polish, planned 2026-08-10): the editor route nests under
+// this page (App.tsx) rather than sitting beside it, so a node click swaps
+// only the right-hand Outlet — the tree, its scroll position, stay mounted.
+// The open agent is read back out of the URL (not local state) so a reload
+// or a direct link to /agents/{id}/editor lands on the same split.
 
 export function AgentsPage() {
   const { tree } = useApp();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const selectedAgentId = pathname.match(/^\/agents\/([^/]+)\/editor$/)?.[1] ?? null;
   // Add-agent modal target: null = closed; parent null = new root
   // (openapi.yaml:1169 "null parent_id = new root").
   const [adding, setAdding] = useState<{ parent: Agent | null } | null>(null);
@@ -76,59 +86,78 @@ export function AgentsPage() {
   if (agents === null) return <Loader size="sm" />;
 
   return (
-    <Stack gap="md">
-      <Title order={3}>Agents</Title>
-      {roots.length === 0 ? (
-        <Stack gap="xs" align="flex-start">
-          <Text size="sm" c="dimmed">
-            No agents in this tree yet.
-          </Text>
-          <Button size="xs" onClick={() => setAdding({ parent: null })}>
-            Add root agent
-          </Button>
+    <Group align="flex-start" gap="md" wrap="nowrap">
+      <Box style={{ flex: "0 0 340px", minWidth: 280 }}>
+        <Stack gap="md">
+          <Title order={3}>Agents</Title>
+          {roots.length === 0 ? (
+            <Stack gap="xs" align="flex-start">
+              <Text size="sm" c="dimmed">
+                No agents in this tree yet.
+              </Text>
+              <Button size="xs" onClick={() => setAdding({ parent: null })}>
+                Add root agent
+              </Button>
+            </Stack>
+          ) : (
+            <div>
+              {roots.map((agent) => (
+                <AgentNode
+                  key={agent.id}
+                  agent={agent}
+                  childrenOf={childrenOf}
+                  selectedId={selectedAgentId}
+                  onEdit={(a) => navigate(`/agents/${a.id}/editor`)}
+                  onAddChild={(a) => setAdding({ parent: a })}
+                  onConversations={(a) => navigate(`/agents/${a.id}/conversations`)}
+                />
+              ))}
+            </div>
+          )}
         </Stack>
-      ) : (
-        <div>
-          {roots.map((agent) => (
-            <AgentNode
-              key={agent.id}
-              agent={agent}
-              childrenOf={childrenOf}
-              onEdit={(a) => navigate(`/agents/${a.id}/editor`)}
-              onAddChild={(a) => setAdding({ parent: a })}
-              onConversations={(a) => navigate(`/agents/${a.id}/conversations`)}
+        <Modal
+          opened={adding !== null}
+          onClose={() => setAdding(null)}
+          title={
+            adding?.parent ? `Add sub-agent under ${adding.parent.name}` : "Add root agent"
+          }
+        >
+          {adding && (
+            <AddAgentForm
+              onSubmit={(values) =>
+                void create({ ...values, parent_id: adding.parent?.id ?? null })
+              }
             />
-          ))}
-        </div>
-      )}
-      <Modal
-        opened={adding !== null}
-        onClose={() => setAdding(null)}
-        title={
-          adding?.parent ? `Add sub-agent under ${adding.parent.name}` : "Add root agent"
-        }
-      >
-        {adding && (
-          <AddAgentForm
-            onSubmit={(values) =>
-              void create({ ...values, parent_id: adding.parent?.id ?? null })
-            }
-          />
+          )}
+        </Modal>
+      </Box>
+      {/* Right panel: the instruction editor for whichever agent is open —
+          a nested route (App.tsx), rendered here via Outlet, so this is the
+          same page as the tree rather than a navigation away from it. */}
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        {selectedAgentId ? (
+          <Outlet />
+        ) : (
+          <Text size="sm" c="dimmed" mt={40} ta="center">
+            Select an agent to edit its instructions.
+          </Text>
         )}
-      </Modal>
-    </Stack>
+      </Box>
+    </Group>
   );
 }
 
 function AgentNode({
   agent,
   childrenOf,
+  selectedId,
   onEdit,
   onAddChild,
   onConversations,
 }: {
   agent: Agent;
   childrenOf: Map<string, Agent[]>;
+  selectedId: string | null;
   onEdit: (agent: Agent) => void;
   onAddChild: (agent: Agent) => void;
   onConversations: (agent: Agent) => void;
@@ -139,6 +168,7 @@ function AgentNode({
       <TreeNode
         label={agent.name}
         dimmed={!agent.enabled}
+        selected={agent.id === selectedId}
         onClick={() => onEdit(agent)}
         badges={
           <>
@@ -193,6 +223,7 @@ function AgentNode({
               key={child.id}
               agent={child}
               childrenOf={childrenOf}
+              selectedId={selectedId}
               onEdit={onEdit}
               onAddChild={onAddChild}
               onConversations={onConversations}

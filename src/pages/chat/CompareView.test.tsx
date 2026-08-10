@@ -108,7 +108,7 @@ describe("chat compare mode — column cap", () => {
       // Three deploy targets exist, but the picker stops at MAX-1 endpoints.
       expect(screen.getByTestId("compare-cost-warning")).toHaveTextContent("3 variants");
       expect(screen.queryByRole("button", { name: "Remove canary" })).not.toBeInTheDocument();
-      expect(screen.getByTestId("compare-cap-hint")).toHaveTextContent("use Evaluations");
+      expect(screen.getByTestId("compare-cap-hint")).toHaveTextContent("use Studio");
 
       await user.type(screen.getByPlaceholderText("Message…"), "which is best?");
       await user.click(screen.getByRole("button", { name: "Send" }));

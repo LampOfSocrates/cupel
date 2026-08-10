@@ -80,8 +80,16 @@ export function mockTargetId(): string {
 // `chat`. routeFamily() takes the first segment, so they need no entries.
 const ROUTE_FAMILY: Record<string, Family> = {
   "/chat": "chat",
+  // /studio merges two contract families — cases/sets/rubrics ("eval") and
+  // the run/results flow ("evaluations") — into one screen with tabs. This
+  // map is one-family-per-route (also what the mock badge names,
+  // shell/MockBadge.tsx), so it picks "eval" as the representative family;
+  // actual show/hide for the route and its nav entry goes through
+  // isStudioHidden() below, which checks both.
+  "/studio": "eval",
+  // /evaluations/:id (the results-grid detail route) survives the merge on
+  // its own — this entry is still what routeFamily() resolves it to.
   "/evaluations": "evaluations",
-  "/eval": "eval",
   "/inspector": "admin",
   "/queue": "tasks",
   "/agents": "agents",
@@ -103,6 +111,16 @@ export function isRouteHidden(path: string): boolean {
 }
 
 /**
+ * /studio is visible if EITHER family it merges still answers something
+ * other than `hide` — routeFamily()/isRouteHidden() model one family per
+ * route, which doesn't fit a genuine two-family merge, so this is the one
+ * route that bypasses them for its own show/hide decision.
+ */
+export function isStudioHidden(): boolean {
+  return isHidden("eval") && isHidden("evaluations");
+}
+
+/**
  * The family of a UI path IF the bundled mock is what answers it — what the
  * chrome badge names, per screen (shell/MockBadge.tsx). null when the page is
  * the adopter's own backend, which is the normal case.
@@ -118,6 +136,9 @@ export function mockedFamilyOfRoute(path: string): Family | null {
  * to a route that does not exist.
  */
 export function landingRoute(): string {
-  const doors = ["/chat", "/evaluations", "/eval", "/agents", "/queue", "/settings"];
-  return doors.find((route) => !isRouteHidden(route)) ?? "/settings";
+  const doors = ["/chat", "/studio", "/agents", "/queue", "/settings"];
+  return (
+    doors.find((route) => (route === "/studio" ? !isStudioHidden() : !isRouteHidden(route))) ??
+    "/settings"
+  );
 }

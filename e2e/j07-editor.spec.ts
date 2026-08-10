@@ -84,7 +84,9 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test as
     api.clear();
     await page.getByRole("button", { name: "Test as evaluation" }).click();
     await api.expectCalled("POST /agenttrees/{tree}/agents/{agent}/snapshots");
-    await page.waitForURL(/\/evaluations$/);
+    // Studio's Results tab (formerly the bare /evaluations route — UX
+    // polish 2026-08-10, Studio merge).
+    await page.waitForURL(/\/studio\?tab=results$/);
     // First time for THIS agent → empty last-selection lands on Pick. The
     // Refunds agent (not Concierge) precisely so that stays true whatever else
     // the suite has already tested — dod.spec.ts leaves Concierge with a
@@ -110,7 +112,7 @@ test("editor: draft → snapshot → save a new version (relabelled) → Test as
     await page.goto("/agents");
     await page.getByRole("button", { name: "Open Refunds" }).click();
     await page.getByRole("button", { name: "Test as evaluation" }).click();
-    await page.waitForURL(/\/evaluations$/);
+    await page.waitForURL(/\/studio\?tab=results$/);
     // Remembered selection → straight to Configure, no re-picking.
     await expect(page.getByTestId("snapshot-badge")).toBeVisible();
   });

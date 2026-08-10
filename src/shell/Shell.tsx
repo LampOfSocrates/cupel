@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { AppShell, Burger, Group, Text } from "@mantine/core";
-import { useDisclosure, useMediaQuery } from "@mantine/hooks";
+import { useDisclosure, useLocalStorage, useMediaQuery } from "@mantine/hooks";
 import { useBackendTarget } from "../api/target";
 import { product } from "../lib/product";
 import { mockedFamilyOfRoute } from "../lib/families";
@@ -22,6 +22,12 @@ const NAV_BREAKPOINT = "sm";
 // (is there a burger, how tall is the header); the collapse itself is CSS.
 const NAV_MOBILE_QUERY = "(max-width: 47.99em)";
 const MOBILE_BAR_HEIGHT = 44;
+// Two desktop widths, toggled rather than dragged — same pattern as Claude's
+// own UI / Slack / VS Code, and it sidesteps drag-resize's edge cases (min/max
+// clamping, cursor affordance, touch support). Persisted device-locally, same
+// convention as the backend-target picker (src/api/target.ts).
+const NAVBAR_WIDTH = 280;
+const NAVBAR_RAIL_WIDTH = 68;
 
 // Shell frame per sketches/clean/01-chat.svg: left sidebar + main content.
 // Banner-declaring targets add a slim header (per-target config via
@@ -35,6 +41,14 @@ export function Shell() {
   // never flashes in on a desktop load or in after a phone load.
   const isMobile = useMediaQuery(NAV_MOBILE_QUERY, false, { getInitialValueInEffect: false });
   const [navOpened, { toggle: toggleNav, close: closeNav }] = useDisclosure(false);
+  // Rail collapse is a desktop-only concept — the mobile overlay is already
+  // full-width-or-nothing (comment above), so a rail state on top of it would
+  // be a third, untested combination for no benefit.
+  const [railCollapsed, setRailCollapsed] = useLocalStorage({
+    key: "cupel-sidebar-rail-collapsed",
+    defaultValue: false,
+  });
+  const collapsed = !isMobile && railCollapsed;
 
   // THE reported bug: tapping "New chat" (or a conversation) DID change the
   // route, the full-width overlay just stayed on top of it. Fixed centrally —
@@ -61,7 +75,11 @@ export function Shell() {
   return (
     <AppShell
       header={headerHeight > 0 ? { height: headerHeight } : undefined}
-      navbar={{ width: 280, breakpoint: NAV_BREAKPOINT, collapsed: { mobile: !navOpened } }}
+      navbar={{
+        width: collapsed ? NAVBAR_RAIL_WIDTH : NAVBAR_WIDTH,
+        breakpoint: NAV_BREAKPOINT,
+        collapsed: { mobile: !navOpened },
+      }}
       padding="md"
     >
       {headerHeight > 0 && (
@@ -96,8 +114,14 @@ export function Shell() {
         // Mirrors the collapsed state that CSS applies, for tests and for
         // anyone inspecting the DOM: jsdom evaluates no media queries.
         data-collapsed={isMobile && !navOpened ? "true" : "false"}
+        data-rail-collapsed={collapsed ? "true" : "false"}
       >
-        <Sidebar />
+        <Sidebar
+          collapsed={collapsed}
+          // Only offered on desktop — the mobile overlay stays full-width,
+          // labeled nav; there is no icon rail to toggle into there.
+          onToggleCollapsed={isMobile ? undefined : () => setRailCollapsed((v) => !v)}
+        />
       </AppShell.Navbar>
       <AppShell.Main>
         <Outlet />

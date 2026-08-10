@@ -39,34 +39,46 @@ afterEach(() => {
 });
 
 describe("hide", () => {
-  it("takes the family's doors out of the sidebar", async () => {
+  it("takes the Studio door out of the sidebar when BOTH families it merges hide", async () => {
     await boot({ eval: "hide", evaluations: "hide" });
     await screen.findByRole("link", { name: "Chat" });
-    // The whole Evaluate group goes when both of its children hid.
-    expect(screen.queryByText("Evaluate")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Evaluations" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Eval" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Studio" })).not.toBeInTheDocument();
     // Everything unanswered is still `mine`, so it stays.
     // The queue entry carries the pending badge, so it is matched by prefix.
     expect(screen.getByRole("link", { name: /^Queue/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Agents" })).toBeInTheDocument();
   });
 
-  it("keeps a group whose other child is still visible", async () => {
-    await boot({ eval: "hide" });
-    expect(await screen.findByRole("link", { name: "Evaluations" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Eval" })).not.toBeInTheDocument();
+  it("keeps the Studio door open when only one of its two families hides — but drops that half's tabs", async () => {
+    await boot({ eval: "hide" }, "/studio");
+    expect(await screen.findByRole("link", { name: "Studio" })).toBeInTheDocument();
+    // Cases/Sets/Rubrics share the "eval" family and are gone...
+    expect(screen.queryByRole("tab", { name: "Cases" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Sets" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Rubrics" })).not.toBeInTheDocument();
+    // ...Results ("evaluations") stays, and is what the page lands on since
+    // Cases is no longer the default tab.
+    expect(await screen.findByRole("tab", { name: "Results" })).toBeInTheDocument();
   });
 
   // A hidden family's screen must not render — its requests would go nowhere.
-  it("takes the route with it: a hand-typed path lands on the front door", async () => {
+  // /eval is a redirect into /studio now (App.tsx), so hitting it lands
+  // wherever /studio's OWN visibility says: still there if evaluations
+  // survives (Studio has something to show), the front door only once
+  // BOTH families — and so the route itself — are gone.
+  it("a hand-typed /eval lands on Studio if evaluations still answers", async () => {
     await boot({ eval: "hide" }, "/eval");
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio"));
+  });
+
+  it("a hand-typed /eval lands on the front door once BOTH families hide", async () => {
+    await boot({ eval: "hide", evaluations: "hide" }, "/eval");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/chat"));
   });
 
   it("moves the front door when chat itself is hidden", async () => {
     await boot({ chat: "hide" }, "/");
-    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations"));
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio"));
     expect(screen.queryByRole("button", { name: "+ New chat" })).not.toBeInTheDocument();
     // No chat means no recent-conversation list under it either.
     expect(screen.queryByText(/· Recent/)).not.toBeInTheDocument();

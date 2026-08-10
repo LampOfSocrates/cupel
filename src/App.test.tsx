@@ -209,7 +209,7 @@ describe("legacy /runs deep links (#2)", () => {
       </MantineProvider>,
     );
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations?from=share"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/studio?from=share&tab=results"),
     );
   });
 

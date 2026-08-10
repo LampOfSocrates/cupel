@@ -24,7 +24,9 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
   });
 
   await step("configure an evaluation with the judge enabled up front", async () => {
-    await page.goto("/evaluations");
+    // Results tab, Studio (formerly the bare /evaluations route — UX
+    // polish 2026-08-10, Studio merge).
+    await page.goto("/studio?tab=results");
     await page.getByRole("button", { name: "New evaluation" }).click();
     await page.getByRole("checkbox", { name: `Select ${CONV}` }).check();
     await page.getByRole("button", { name: "Configure ▸" }).click();
@@ -198,8 +200,8 @@ test("judge: an evaluation that finished before its page was opened is judged, o
 
   await step("navigating away and back is idempotent too", async () => {
     api.clear();
-    await page.getByRole("link", { name: "Evaluations" }).first().click();
-    await page.waitForURL(/\/evaluations$/);
+    await page.getByRole("link", { name: "Studio" }).first().click();
+    await page.waitForURL(/\/studio$/);
     await page.goto(`/evaluations/${replay.evaluation_id}`);
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,

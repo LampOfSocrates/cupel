@@ -67,25 +67,22 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// Two doors: Chat and Evaluate. Evaluations and Eval are one workflow, so they
-// nest under the Evaluate group rather than sitting as peers — their routes are
-// unchanged and the group is open by default. Casebooks was a third entry until
-// Casebook and EvalSet merged; its collections are the Eval workbench's Sets
-// tab now, and /casebooks no longer exists.
-describe("Sidebar Evaluate group", () => {
-  it("nests Evaluations and Eval under Evaluate, each at its own route", async () => {
+// Doors: Chat and Studio — flat, no sublevels (UX polish 2026-08-10):
+// Evaluations, Eval workbench, and Inspector used to be a group plus a
+// separate role-gated entry; they're one route with tabs now
+// (StudioPage.test.tsx covers the tabs themselves). Casebooks was a third
+// entry until Casebook and EvalSet merged; its collections are the Sets tab
+// now, and /casebooks no longer exists.
+describe("Sidebar Studio entry", () => {
+  it("is a flat link to /studio, not a group", async () => {
     const user = userEvent.setup();
     renderShell();
 
-    expect(screen.getByRole("button", { name: "Evaluate" })).toBeInTheDocument();
-    for (const [label, path] of [
-      ["Evaluations", "/evaluations"],
-      ["Eval", "/eval"],
-    ]) {
-      await user.click(screen.getByRole("link", { name: label }));
-      expect(screen.getByTestId("loc")).toHaveTextContent(`${path}|null`);
-    }
+    expect(screen.queryByRole("button", { name: "Evaluate" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Studio" }));
+    expect(screen.getByTestId("loc")).toHaveTextContent("/studio|null");
     expect(screen.queryByRole("link", { name: "Casebooks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Inspector" })).not.toBeInTheDocument();
   });
 });
 
@@ -107,6 +104,36 @@ describe("Sidebar Landing / FAQ entry", () => {
     renderShell();
     const link = screen.getByRole("link", { name: "Landing / FAQ" });
     expect(link).toHaveAttribute("href", "/");
+  });
+});
+
+// Desktop rail collapse (UX polish, planned 2026-08-10): a toggle swaps the
+// 280px labeled column for a 68px icon-only rail — Shell.tsx's two navbar
+// widths — rather than resurrecting the full-width mobile overlay. Every
+// route stays one click away; nav is flat (no groups) since the Studio merge,
+// so the rail is a plain one-icon-per-entry list.
+describe("Sidebar rail collapse", () => {
+  it("collapses to icon-only links, and expands back, on toggle", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    expect(screen.getByRole("button", { name: "+ New chat" })).toBeInTheDocument();
+    expect(screen.getByTestId("app-navbar")).toHaveAttribute("data-rail-collapsed", "false");
+
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    expect(screen.getByTestId("app-navbar")).toHaveAttribute("data-rail-collapsed", "true");
+    // The labeled controls are gone — replaced by icon-only equivalents that
+    // keep the same accessible names, so every route is still reachable.
+    expect(screen.queryByRole("button", { name: "+ New chat" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+
+    expect(screen.getByTestId("app-navbar")).toHaveAttribute("data-rail-collapsed", "false");
+    expect(screen.getByRole("button", { name: "+ New chat" })).toBeInTheDocument();
   });
 });
 

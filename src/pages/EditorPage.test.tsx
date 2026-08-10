@@ -14,7 +14,7 @@ import {
   snapshotRequests,
 } from "../test/msw/handlers";
 import { EditorPage } from "./EditorPage";
-import { EvaluationsPage } from "./EvaluationsPage";
+import { StudioPage } from "./StudioPage";
 
 // Contract under test:
 // - GET .../instructions → live pointer + full ascending history
@@ -203,13 +203,14 @@ describe("EditorPage", () => {
   // "Test an instruction change in one click: 'Test as evaluation'
   // snapshots your draft and replays your usual conversations against it —
   // using the editor → Evaluations flow (sketches 06 → 03)" (cupel-phases.md:18).
-  // Real EvaluationsPage mounted at /evaluations so the router-state handoff is exercised
-  // end to end, not against a probe.
+  // Real StudioPage mounted at /studio (Results tab, formerly the bare
+  // /evaluations route — UX polish 2026-08-10) so the router-state handoff is
+  // exercised end to end, not against a probe.
   const renderEditorWithEvaluations = (agentId = "ag_concierge") =>
     renderApp(
       <Routes>
         <Route path="/agents/:agentId/editor" element={<EditorPage />} />
-        <Route path="/evaluations" element={<EvaluationsPage />} />
+        <Route path="/studio" element={<StudioPage />} />
       </Routes>,
       { route: `/agents/${agentId}/editor` },
     );

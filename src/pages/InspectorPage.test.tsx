@@ -8,10 +8,8 @@ import {
   adminConversationRequests,
   evalSetCreates,
   evalSetItemPosts,
-  mockAdminMe,
   mockEvalSets,
 } from "../test/msw/handlers";
-import { Shell } from "../shell/Shell";
 import { product } from "../lib/product";
 import { InspectorPage } from "./InspectorPage";
 
@@ -25,7 +23,9 @@ import { InspectorPage } from "./InspectorPage";
 // - the reader loads GET /agenttrees/{tree}/conversations/{id} for the
 //   selected row (admin rows carry no transcript)
 // - POST /eval/sets/{setId}/items from the ⊞ action / `a` key
-// - role gating: no `inspect` role → no nav entry and no route
+// - role gating: Inspector is now a Studio tab (UX polish 2026-08-10), not
+//   its own nav entry/route — that gate is tested in StudioPage.test.tsx
+//   ("Inspector tab" describe block), not here.
 
 function renderInspector(route = "/inspector") {
   return renderApp(
@@ -257,26 +257,3 @@ describe("⊞ collect", () => {
   });
 });
 
-describe("role gating (never mode gating)", () => {
-  const renderShell = (me: typeof mockAdminMe) =>
-    renderApp(
-      <Routes>
-        <Route element={<Shell />}>
-          <Route path="*" element={<div />} />
-        </Route>
-      </Routes>,
-      { route: "/chat", queue: true, me },
-    );
-
-  it("shows the Inspector nav entry when /me.roles includes inspect", async () => {
-    renderShell(mockAdminMe);
-    expect(await screen.findByRole("link", { name: "Inspector" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Eval" })).toBeInTheDocument();
-  });
-
-  it("hides it when the role is absent", async () => {
-    renderShell({ ...mockAdminMe, roles: [] });
-    expect(await screen.findByRole("link", { name: "Eval" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Inspector" })).not.toBeInTheDocument();
-  });
-});

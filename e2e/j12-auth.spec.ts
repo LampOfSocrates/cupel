@@ -55,11 +55,12 @@ test(
       await page.goto("/settings");
       await expect(page.getByText("Members", { exact: true })).toBeVisible();
       await expect(page.getByText("Agent trees", { exact: true })).toBeVisible();
-      // The `inspect` role gates the Inspector; the Eval workbench is open to
-      // everyone.
-      await expect(page.getByRole("link", { name: "Eval", exact: true })).toBeVisible();
-      await page.getByRole("link", { name: "Inspector" }).click();
-      await page.waitForURL(/\/inspector/);
+      // Studio (cases/sets/rubrics + results) is open to everyone; only its
+      // Inspector tab is `inspect`-role-gated (UX polish 2026-08-10, Studio
+      // merge — Eval workbench + Inspector are tabs there now).
+      await page.getByRole("link", { name: "Studio", exact: true }).click();
+      await page.waitForURL(/\/studio$/);
+      await page.getByRole("tab", { name: "Inspector" }).click();
       await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
     });
 

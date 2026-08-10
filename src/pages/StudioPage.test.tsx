@@ -14,11 +14,12 @@ import {
   importConfig,
   importRequests,
   judgeRequests,
+  mockAdminMe,
   mockEvalSets,
   mockRubrics,
   rubricVersionPosts,
 } from "../test/msw/handlers";
-import { EvalPage } from "./EvalPage";
+import { StudioPage } from "./StudioPage";
 
 // Contract under test — eval workbench (sketch 10; feature-spec.md:63
 // "case editor (input / output / reference fields; 'reference from turn'
@@ -38,11 +39,11 @@ import { EvalPage } from "./EvalPage";
 function renderEval() {
   return renderApp(
     <Routes>
-      <Route path="/eval" element={<EvalPage />} />
+      <Route path="/studio" element={<StudioPage />} />
     </Routes>,
     // queue: the import modal reads the 202 task's report off the app-wide
     // queue store (openapi.yaml:2795-2802), so the provider must be present.
-    { route: "/eval", queue: true },
+    { route: "/studio", queue: true },
   );
 }
 
@@ -384,5 +385,37 @@ describe("import", () => {
     // report arrives on the task (openapi.yaml:1386-1389).
     expect(await within(dialog).findByText(/queued as task task-import-1/i)).toBeInTheDocument();
     expect(screen.queryByTestId("import-report")).not.toBeInTheDocument();
+  });
+});
+
+// UX polish (2026-08-10): the former standalone /evaluations and /inspector
+// routes now live here as same-page tabs — no navigation on click.
+function renderStudio(me?: typeof mockAdminMe) {
+  return renderApp(
+    <Routes>
+      <Route path="/studio" element={<StudioPage />} />
+    </Routes>,
+    { route: "/studio", queue: true, me },
+  );
+}
+
+describe("Results tab", () => {
+  it("hosts the evaluations list/stepper flow (EvaluationsPage) as a same-page tab", async () => {
+    renderStudio();
+    await openTab("Results");
+    expect(await screen.findByRole("heading", { name: "Evaluations" })).toBeInTheDocument();
+  });
+});
+
+describe("Inspector tab", () => {
+  it("shows when /me.roles includes inspect", async () => {
+    renderStudio(mockAdminMe);
+    expect(await screen.findByRole("tab", { name: "Inspector" })).toBeInTheDocument();
+  });
+
+  it("hides when the role is absent — the default test identity carries none", async () => {
+    renderStudio();
+    await screen.findByRole("tab", { name: "Cases" });
+    expect(screen.queryByRole("tab", { name: "Inspector" })).not.toBeInTheDocument();
   });
 });

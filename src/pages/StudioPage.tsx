@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   Alert,
   Badge,
@@ -24,6 +24,9 @@ import { ApiErrorNote, errorMessage } from "../components/ApiErrorNote";
 import { EvalImportModal } from "../components/EvalImportModal";
 import { TurnSourceModal } from "../components/TurnSourceModal";
 import { product } from "../lib/product";
+import { familyAnswer } from "../lib/families";
+import { EvaluationsPage } from "./EvaluationsPage";
+import { InspectorPage } from "./InspectorPage";
 import type {
   EvalCase,
   EvalCaseSource,
@@ -73,9 +76,29 @@ function shorten(text: string, max = 64) {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
-export function EvalPage() {
-  const { tree, models, ensureModels } = useApp();
-  const [tab, setTab] = useState<string | null>("cases");
+export function StudioPage() {
+  const { tree, me, models, ensureModels } = useApp();
+  const [searchParams] = useSearchParams();
+  // Cases/Sets/Rubrics share the "eval" family; Results is "evaluations";
+  // Inspector is role-gated AND the "admin" family (App.tsx's /inspector
+  // gate, mirrored here since it is a tab now, not its own route).
+  const casesHidden = familyAnswer("eval") === "hide";
+  const resultsHidden = familyAnswer("evaluations") === "hide";
+  const inspectorAllowed = (me.roles?.includes("inspect") ?? false) && familyAnswer("admin") !== "hide";
+  // Uncontrolled after mount, same as before the merge — only the INITIAL
+  // value comes from the URL, so a deep link (Test-as-evaluation handoff,
+  // an old /eval or /inspector bookmark redirected here, App.tsx) opens on
+  // the right tab, but clicking between tabs afterward is a plain state
+  // change, not a navigation — it doesn't re-trigger EvaluationsPage's
+  // location-keyed arrival effect below. Falls back past whichever tabs a
+  // family hides rather than requesting one that doesn't exist.
+  const [tab, setTab] = useState<string | null>(() => {
+    const requested = searchParams.get("tab");
+    if (requested) return requested;
+    if (!casesHidden) return "cases";
+    if (!resultsHidden) return "results";
+    return inspectorAllowed ? "inspector" : null;
+  });
   const [sets, setSets] = useState<EvalSet[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   // GET /eval/sets and GET /eval/rubrics are paged, so both lists here are
@@ -289,7 +312,7 @@ export function EvalPage() {
   return (
     <Stack gap="sm" p="md">
       <Group justify="space-between">
-        <Title order={4}>Eval workbench</Title>
+        <Title order={4}>Studio</Title>
         <Text size="xs" c="dimmed">
           Cases, sets and rubrics are global — they are not scoped to a single {product.tree.one}.
         </Text>
@@ -303,12 +326,20 @@ export function EvalPage() {
 
       <Tabs value={tab} onChange={setTab}>
         <Tabs.List>
-          <Tabs.Tab value="cases">Cases</Tabs.Tab>
-          <Tabs.Tab value="sets">Sets</Tabs.Tab>
-          <Tabs.Tab value="rubrics">Rubrics</Tabs.Tab>
+          {!casesHidden && (
+            <>
+              <Tabs.Tab value="cases">Cases</Tabs.Tab>
+              <Tabs.Tab value="sets">Sets</Tabs.Tab>
+              <Tabs.Tab value="rubrics">Rubrics</Tabs.Tab>
+            </>
+          )}
+          {!resultsHidden && <Tabs.Tab value="results">Results</Tabs.Tab>}
+          {inspectorAllowed && <Tabs.Tab value="inspector">Inspector</Tabs.Tab>}
         </Tabs.List>
 
         {/* ------------------------------------------------------- cases */}
+        {!casesHidden && (
+        <>
         <Tabs.Panel value="cases" pt="sm">
           <Group align="flex-start" gap="sm" wrap="nowrap">
             <Paper withBorder p="xs" w={300} style={{ flexShrink: 0 }}>
@@ -563,6 +594,27 @@ export function EvalPage() {
             onError={setError}
           />
         </Tabs.Panel>
+        </>
+        )}
+
+        {/* -------------------------------------------------------- results */}
+        {/* EvaluationsPage's own component, unchanged internally — its
+            location.state/location.key handoff (Test-as-evaluation) still
+            works because navigating here is a real router navigation
+            (App.tsx call sites now target /studio?tab=results), even though
+            switching to this tab by hand is not. */}
+        {!resultsHidden && (
+          <Tabs.Panel value="results" pt="sm">
+            <EvaluationsPage />
+          </Tabs.Panel>
+        )}
+
+        {/* ------------------------------------------------------ inspector */}
+        {inspectorAllowed && (
+          <Tabs.Panel value="inspector" pt="sm">
+            <InspectorPage />
+          </Tabs.Panel>
+        )}
       </Tabs>
 
       <EvalImportModal

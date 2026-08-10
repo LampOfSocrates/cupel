@@ -466,8 +466,10 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
     <Stack gap="sm" p="md">
       <Group justify="space-between">
         <Group gap="xs">
-          <Anchor size="xs" onClick={() => navigate("/evaluations")}>
-            ‹ Evaluations
+          {/* Studio's Results tab (formerly the bare /evaluations route —
+              UX polish 2026-08-10, Studio merge). */}
+          <Anchor size="xs" onClick={() => navigate("/studio?tab=results")}>
+            ‹ Studio
           </Anchor>
           <Title order={4}>Evaluation {evaluation.id}</Title>
           <Badge size="sm" variant="light" color={STATUS_COLOR[evaluation.status]}>
