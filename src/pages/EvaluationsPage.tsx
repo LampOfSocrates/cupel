@@ -16,6 +16,7 @@ import type { Agent, Rubric, Variant, SelectionItem } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
+import { ApiErrorNote, errorMessage, errorTitle } from "../components/ApiErrorNote";
 import { useApp } from "../AppContext";
 
 // Evaluations 3-step flow (cupel-phases.md:19): "Replay stored conversations
@@ -207,7 +208,10 @@ export function EvaluationsPage() {
     const next = await api.evaluations(tree, { page: evaluationPage.page + 1 });
     setEvaluationPage((prev) => ({ ...next, items: [...prev.items, ...next.items] }));
   };
-  const [error, setError] = useState<string | null>(null);
+  // The thrown VALUE, not its message: queueing an evaluation needs `evaluate`
+  // on this tree, and its 403 carries the permission sentence plus the request
+  // id (openapi.yaml responses.Forbidden). A string kept neither.
+  const [error, setError] = useState<unknown>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
@@ -222,13 +226,13 @@ export function EvaluationsPage() {
     if (mode !== "stepper" || step !== 1) return;
     ensureModels();
     if (agents == null) {
-      api.agents(tree).then(setAgents).catch((e: Error) => setError(e.message));
+      api.agents(tree).then(setAgents).catch(setError);
     }
     if (rubrics == null) {
       api
         .rubrics({ page_size: 100 })
         .then((page) => setRubrics(page.items))
-        .catch((e: Error) => setError(e.message));
+        .catch(setError);
     }
   }, [mode, step, agents, rubrics, tree, ensureModels]);
 
@@ -264,9 +268,9 @@ export function EvaluationsPage() {
       .then((sel) => {
         if (!cancelled) dispatch({ type: "prefilled", items: sel.items });
       })
-      .catch((e: Error) => {
+      .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e.message);
+        setError(e);
         dispatch({ type: "prefillFailed" });
       });
     return () => {
@@ -303,7 +307,7 @@ export function EvaluationsPage() {
       const accepted = await api.replay(tree, { selection, configs });
       navigate(`/evaluations/${accepted.evaluation_id}`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
       setQueueing(false);
     }
   };
@@ -320,9 +324,10 @@ export function EvaluationsPage() {
         {/* A disabled tree keeps its evaluations readable while queueing new
             work 409s (feature-spec.md:20 "read-only banner"). */}
         <ReadOnlyTreeBanner />
-        {(evaluationsError ?? error) && (
-          <Alert color="red" title="Error">
-            {evaluationsError?.message ?? error}
+        {(evaluationsError ?? error) != null && (
+          <Alert color="red" title={errorTitle(evaluationsError ?? error, "Error")}>
+            {errorMessage(evaluationsError ?? error)}
+            <ApiErrorNote error={evaluationsError ?? error} />
           </Alert>
         )}
         {evaluationPage == null ? (
@@ -359,9 +364,15 @@ export function EvaluationsPage() {
         <Stepper.Step label="Results" />
       </Stepper>
       <ReadOnlyTreeBanner />
-      {error && (
-        <Alert color="red" title="Error" withCloseButton onClose={() => setError(null)}>
-          {error}
+      {error != null && (
+        <Alert
+          color="red"
+          title={errorTitle(error, "Error")}
+          withCloseButton
+          onClose={() => setError(null)}
+        >
+          {errorMessage(error)}
+          <ApiErrorNote error={error} />
         </Alert>
       )}
 

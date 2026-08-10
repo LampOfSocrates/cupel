@@ -334,6 +334,41 @@ describe("EditorPage", () => {
       expect(screen.getByRole("button", { name: "Save as v4" })).toBeEnabled();
     });
 
+    // Item 7 stage F5. Saving instructions requires `tune` on this tree
+    // (openapi.yaml x-requires on createInstructionVersion), so a viewer's
+    // Save is a 403, not a fault. It used to render under "Instruction editor
+    // error" with the bare sentence — indistinguishable from the store being
+    // down, above — which is precisely the bug: the user could not tell
+    // "you may not" from "it broke", and had nothing to quote to whoever
+    // could grant them the permission.
+    it("a 403 reads as a permission refusal, not a fault", async () => {
+      server.use(
+        http.post(`${BASE}/agenttrees/:tree/agents/:agentId/instructions/versions`, () =>
+          HttpResponse.json(
+            {
+              code: "forbidden",
+              message: "You do not have permission to tune agent tree 'agent1'.",
+              request_id: "req_perm42",
+            },
+            { status: 403 },
+          ),
+        ),
+      );
+      const user = userEvent.setup();
+      renderEditor();
+      await setDraft(user, "A viewer's edit.");
+
+      await user.click(screen.getByRole("button", { name: "Save as v4" }));
+      const alert = await screen.findByTestId("editor-write-error");
+      expect(within(alert).getByText("Not permitted")).toBeInTheDocument();
+      expect(
+        within(alert).getByText("You do not have permission to tune agent tree 'agent1'."),
+      ).toBeInTheDocument();
+      // …and the correlation id, which is what a support request quotes.
+      expect(within(alert).getByTestId("error-request-id")).toHaveTextContent("req_perm42");
+      expect(screen.getByLabelText("Instructions")).toHaveValue("A viewer's edit.");
+    });
+
     it("a failed Test-as-evaluation snapshot keeps the draft on screen", async () => {
       server.use(
         http.post(`${BASE}/agenttrees/:tree/agents/:agentId/snapshots`, () =>

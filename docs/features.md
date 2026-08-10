@@ -66,6 +66,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | **Generate your config from your own OpenAPI file** — base URL, route prefix and auth scheme detected for you |
 | ✅ | Switch between mock, local, staging and prod live from Settings, with health checks |
 | ✅ | **Turn login on or off with one environment variable** — real tokens and a login screen, or straight in as a dev user. Same UI either way |
+| ✅ | **Per-tree permissions that explain themselves** — a tree you cannot see stays invisible, while an action you are not allowed to take says which permission you are missing, on which tree |
 | ✅ | Control who can view, tune or evaluate each agent tree; disable a tree so new work stops but history stays readable |
 | ✅ | Fill the app with realistic activity for a demo, on demand |
 | ✅ | Send a client a token-gated demo URL |

@@ -265,6 +265,41 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    roots-only, so a match inside a FORK surfaces only under `?forks_of=`. A contract test
    also pins that this is the contract's ONLY free-text search, so a second one cannot
    appear with semantics of its own.
+   Stage F5 DONE 2026-08-10 — **the two failures are split: 404 hides, 403 explains.** The
+   contract knew the words `view`/`tune`/`evaluate` and never said which operation needed
+   which, so the mock enforced `view` centrally and nothing else — a user with `view` but not
+   `tune` pressed Save in the editor and got a write that looked like a backend fault. Every
+   one of the **67 operations** now declares `x-requires` — `none` 36 · `view` 14 · `tune` 6 ·
+   `evaluate` 3 · `admin` 7 · `inspect` 1 — **on the operation itself**, the same mechanism
+   for the same reason as stage E's family tags: a declaration that lives with the thing it
+   classifies cannot drift from it. It is an `x-` extension only because OpenAPI 3.0 has no
+   native vocabulary — security-requirement SCOPES would be the home, but scopes are
+   meaningless for an `http bearer` scheme, and minting an unimplemented oauth2 scheme to
+   borrow their syntax would be the bigger lie. **The 404 is untouched**, and a contract test
+   now pins that: a `view` operation may never declare a 403, because doing so would confirm
+   a tree exists to a caller who is meant to be unable to tell. Four contract tests make it a
+   partition (every operation classified; a per-tree permission only on a `{tree}` path and
+   every `{tree}` path carrying one; 403 declared by exactly the tune/evaluate/admin/inspect
+   set). Enforcement is one new innermost `PermissionGate` over the table in
+   `mock/permissions.py` — a cached projection guarded like `mock/capabilities.py`, with a
+   pytest that re-reads `openapi.yaml` and fails on drift — and it **runs in both auth modes
+   with no branch**: the answer comes from the matrix, and an unverified caller IS the dev
+   user, who holds everything. `need_admin`/`need_inspect` were DELETED from the handlers
+   rather than left beside it; two enforcement points are two things that can disagree.
+   One code (`forbidden`) for role and per-tree refusals alike, because the machine-readable
+   half is the declaration, not a second discriminator in the body. UI: a 403 now reads
+   "Not permitted" + the server's sentence + the request id, in the instruction editor and
+   the evaluation stepper — the two surfaces that can now produce one. **Hiding or disabling
+   controls per permission is NOT done and is item 17**: `CompareView` already hides the A/B
+   toggle without `tune`, but doing that everywhere needs a real answer for what a viewer's
+   editor looks like (read-only? no Save? no editor at all?), which is UX design, not a
+   permission check. Found and NOT fixed: **(x)** two global operations touch tree-scoped rows
+   without narrowing to permitted trees — `GET /tasks` (unlike `/tasks/stream`, which does)
+   and `POST /feedback` (a thumb on a turn in a tree the caller cannot view). Their declared
+   requirement (`none`) is truthful; the narrowing is its own change. **(xi)** `POST
+   /agenttrees` is `none` and grants its creator NO permission on the tree it just made, so
+   the creator immediately cannot see it — a real gap, named rather than guessed at, and
+   closing it is a contract decision about who may mint a tree.
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,
    soft delete, search semantics, span retention…) **plus** the domain tighten: `Run`→

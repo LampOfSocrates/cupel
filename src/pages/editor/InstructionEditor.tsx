@@ -26,6 +26,7 @@ import {
   triggerDownload,
 } from "../../lib/exportInstructions";
 import { relativeTime } from "../../lib/relativeTime";
+import { ApiErrorNote, errorMessage, errorTitle } from "../../components/ApiErrorNote";
 
 // The editor body: everything downstream of a loaded InstructionHistory.
 //
@@ -78,7 +79,10 @@ export function InstructionEditor({
     label: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [writeError, setWriteError] = useState<string | null>(null);
+  // The thrown VALUE, not its message: a 403 from a tune operation carries a
+  // request id and a permission sentence, and flattening it to a string threw
+  // both away (openapi.yaml responses.Forbidden).
+  const [writeError, setWriteError] = useState<unknown>(null);
 
   const dirty = draft !== savedContent;
   const nextVersion = history.live_version + 1;
@@ -120,7 +124,7 @@ export function InstructionEditor({
       setLastSnapshot(null);
       setDiffFrom(String(created.version));
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(e);
     } finally {
       setBusy(false);
     }
@@ -147,7 +151,7 @@ export function InstructionEditor({
     try {
       await createDraftSnapshot();
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(e);
     } finally {
       setBusy(false);
     }
@@ -175,7 +179,7 @@ export function InstructionEditor({
         },
       });
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(e);
     } finally {
       setBusy(false);
     }
@@ -326,15 +330,16 @@ export function InstructionEditor({
 
         {/* Content area: editor or diff (sketch 06) */}
         <Stack gap="xs" style={{ flexGrow: 1, minWidth: 0 }}>
-          {writeError && (
+          {writeError != null && (
             <Alert
               color="red"
-              title="Instruction editor error"
+              title={errorTitle(writeError, "Instruction editor error")}
               withCloseButton
               onClose={() => setWriteError(null)}
               data-testid="editor-write-error"
             >
-              {writeError}
+              {errorMessage(writeError)}
+              <ApiErrorNote error={writeError} />
             </Alert>
           )}
           {mode === "edit" ? (

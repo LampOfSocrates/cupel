@@ -38,6 +38,23 @@ export function ApiErrorNote({ error }: { error: unknown }) {
   );
 }
 
+/**
+ * The heading a failure deserves. A 403 is not a fault — it is an ANSWER: the
+ * server understood the request and the caller is not allowed to make it
+ * (openapi.yaml responses.Forbidden, whose message names the permission and
+ * the tree). Titling it "Error" told the user their save had broken; titling
+ * it "Not permitted" tells them the truth, and the server's own sentence below
+ * says which permission on which tree.
+ *
+ * Deliberately keyed on the STATUS, not on a code: the contract answers one
+ * `forbidden` for a missing role and for a missing per-tree permission alike,
+ * because the machine-readable half is the operation's own `x-requires`
+ * declaration, not a second discriminator in the body.
+ */
+export function errorTitle(error: unknown, fallback: string): string {
+  return error instanceof ApiError && error.status === 403 ? "Not permitted" : fallback;
+}
+
 /** The human half — the one sentence, whatever the thrown value turned out to be. */
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;

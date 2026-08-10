@@ -74,6 +74,23 @@ what lets a UI or a generator ask cheaply instead of guessing. The mock
 declares its own honestly in `mock/capabilities.py`, and a pytest recomputes it
 from the contract so it cannot go stale.
 
+### Every operation declares what it requires of its caller
+
+The same trick, one axis over. Beside its family tag, every operation carries
+`x-requires` — `none`, one of the per-tree permissions `view` / `tune` /
+`evaluate`, or one of the global roles `admin` / `inspect` — so "may this user
+do this?" is answerable from the contract instead of from a backend's source.
+The declaration sits on the operation for the same reason the tag does: it
+cannot drift from the thing it describes.
+
+Two failures, on purpose. A caller without `view` on a tree gets **404** from
+every operation under it, so an unpermitted tree is indistinguishable from an
+absent one — which means a `view` operation never answers 403, and
+`tests/openapi-contract.test.js` asserts that none declares one. A caller who
+lacks `tune`, `evaluate`, `admin` or `inspect` gets **403** naming what is
+missing, because inside a tree you can already see there is nothing left to
+hide and plenty left to explain.
+
 ### Remapped backends
 
 Backends whose routes are named differently (cupel-phases.md:75), e.g.

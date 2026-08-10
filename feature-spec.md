@@ -29,7 +29,7 @@
 
 ## Agent trees & permissions
 - Agents are organised in **trees**; multiple trees per deployment.
-- Permissions per tree (`view` / `tune` / `evaluate`). `GET /agent-trees` returns only permitted trees; unpermitted trees never render.
+- Permissions per tree (`view` / `tune` / `evaluate`), declared per operation in the contract (`x-requires`). `GET /agent-trees` returns only permitted trees; unpermitted trees never render — a tree you cannot `view` answers 404 from every operation under it, indistinguishable from one that does not exist. Inside a tree you CAN view, an action needing `tune` or `evaluate` that you do not hold answers 403, naming the permission and the tree.
 - Instruction editing is **versioned**: save = new version, never overwrite. Diff view + rollback.
 - **Instruction format per agent**: `format: text | yaml` (agent metadata). YAML mode: syntax highlighting + **schema validation in the editor** — Phase 2 ships the **Google ADK agent-config schema**; a failing edit blocks save with inline errors, so bad config dies in the editor, not at runtime. The validation layer is schema-pluggable by design, but additional frameworks (CrewAI, LangGraph, …) are **Phase 4 scope** — do not build their schemas earlier.
 - **Model precedence rule**: Run Config's model override beats the YAML's `model:` key **for that run only** (grid column labeled with the override). The YAML remains the sole source of truth for live traffic; permanently changing the model = editing `model:` → new version → (optionally) PR → promote.

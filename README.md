@@ -173,7 +173,7 @@ journeys 1–12 at `feature-spec.md:202-213`, journey 13 (authoring) at
 | 7 | Editor — draft, snapshot, new version, Test as evaluation | `j07-editor.spec.ts` |
 | 8 | Trace — call tree, waterfall, lazy span payload | `j08-trace.spec.ts` |
 | 9 | Backend switcher — targets, healthz, banners | `j09-backend.spec.ts` |
-| 10 | Permissions — hidden tree, matrix edit takes effect | `j10-permissions.spec.ts` |
+| 10 | Permissions — hidden tree (404), refused tuning (403), matrix edit takes effect | `j10-permissions.spec.ts` |
 | 11 | Tree disable — 409s, cancels, read-only, restore | `j11-tree-disable.spec.ts` |
 | 12 | Auth — login, 401 redirect, deep link, logout | `j12-auth.spec.ts` |
 | 13 | Authoring — eval workbench + inspector → eval set → replay | `j13-authoring.spec.ts` |

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import { ApiErrorNote, errorMessage } from "./ApiErrorNote";
+import { ApiErrorNote, errorMessage, errorTitle } from "./ApiErrorNote";
 import { ApiError } from "../api/client";
 
 const show = (error: unknown) =>
@@ -51,5 +51,15 @@ describe("ApiErrorNote", () => {
     expect(errorMessage(new Error("boom"))).toBe("boom");
     expect(errorMessage("boom")).toBe("boom");
     expect(errorMessage(undefined)).toBe("Something went wrong.");
+  });
+
+  // Item 7 stage F5: a 403 is an answer, not a fault, and the heading is the
+  // first thing that says so. Keyed on the STATUS — the contract answers one
+  // `forbidden` code for a missing role and a missing per-tree permission
+  // alike, because what is required is declared on the operation.
+  it("errorTitle calls a 403 what it is and leaves everything else alone", () => {
+    expect(errorTitle(new ApiError(403, "forbidden", "You do not have permission to tune agent tree 'agent1'."), "Save failed")).toBe("Not permitted");
+    expect(errorTitle(new ApiError(500, "internal", "store down"), "Save failed")).toBe("Save failed");
+    expect(errorTitle(new Error("network down"), "Save failed")).toBe("Save failed");
   });
 });

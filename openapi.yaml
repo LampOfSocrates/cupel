@@ -73,6 +73,47 @@ info:
     operations it is implied by the top-level security block rather than
     repeated per path.
 
+    Per-operation permissions (`x-requires`): being signed in is not the same
+    as being allowed, so EVERY operation declares the one capability its
+    caller must hold, on the operation itself — `x-requires: none | view |
+    tune | evaluate | admin | inspect`. `view`/`tune`/`evaluate` are per-tree
+    permissions (Me.permissions, PermissionMatrix); `admin`/`inspect` are
+    global roles (Me.roles); `none` means any authenticated caller.
+
+    The two failures are deliberately DIFFERENT, and the difference is the
+    point:
+
+    * **404 hides existence.** `view` on `{tree}` is the precondition of the
+      PATH, not of the operation: a caller without it gets `404 not_found`
+      from every `/agenttrees/{tree}/…` operation, indistinguishable from a
+      tree that does not exist ("unpermitted trees never render",
+      feature-spec.md:32). So an operation declaring `x-requires: view` can
+      never answer 403 — there is nothing left to explain once the tree is
+      visible — and none of them declares one.
+    * **403 explains capability.** WITHIN a tree the caller can already see,
+      an operation whose `x-requires` is `tune` or `evaluate` answers
+      `403 forbidden` when the caller holds `view` but not that permission,
+      and the message names the permission and the tree. The same 403 answers
+      a missing `admin`/`inspect` role. There is ONE code (`forbidden`) rather
+      than one per flavour, because the machine-readable half is the
+      declaration: a client knows which operation it called and this document
+      says what that operation requires.
+
+    A `none` operation is not necessarily unfiltered: several of them return
+    tree-scoped rows and NARROW the result to the caller's permitted trees
+    instead of refusing (GET /agenttrees, GET /tasks/stream,
+    GET /spans/{spanId}/payload, GET /admin/conversations, the eval sets'
+    reference items) — omitting beats leaking, and a refusal there would make
+    a legitimate mixed-scope listing unusable. The whole eval workbench is
+    `none` because it is tree-LESS by construction: a case, a set and a rubric
+    carry no tree, so `evaluate` would have nothing to be checked against.
+
+    AUTH_MODE=off does not disable any of this. The permissions come from the
+    matrix in both modes; an off-mode backend simply resolves every request to
+    the dev user, who holds every permission on every tree
+    (feature-spec.md:17), so the same code path runs and answers 200. There is
+    no mode branch anywhere in the check.
+
     Errors (ONE body, everywhere): every non-2xx response of every operation
     is the `Error` schema — `{code, message, request_id, details?}`. `code` is
     the stable machine discriminator and the ONLY part a client may branch on;
@@ -176,6 +217,22 @@ servers:
     description: FastAPI mock (cupel-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
 security:
   - bearerAuth: []
+# PERMISSIONS. Every operation carries `x-requires` (see the per-operation
+# permissions note in info.description for the semantics). The mechanism is
+# the same choice, for the same reason, as the family tags below: the
+# declaration is written ON the operation, so it cannot drift from the thing it
+# describes. A separate "these operations need tune" list would need a second
+# edit per new operation and would be silently wrong until someone noticed —
+# which is exactly how a permission model rots. It is an `x-` extension only
+# because OpenAPI 3.0 has no vocabulary for it: security requirement SCOPES
+# would be the native home, but scopes are meaningless for an `http bearer`
+# scheme (3.0 requires an empty array there), and inventing an oauth2 scheme
+# the backends do not implement to borrow its scope syntax would be a bigger
+# lie than an extension. tests/openapi-contract.test.js makes it a partition:
+# every operation declares exactly one value from the enum below, every
+# tune/evaluate/admin/inspect operation declares 403, and no view/none
+# operation does.
+#
 # FAMILIES. This list IS the contract's family vocabulary — the names
 # `cupel-ready` groups its report by, that a Health.capabilities entry is keyed
 # on, and that the project generator's `--family <name>=mine|mock|hide` takes.
@@ -227,6 +284,7 @@ paths:
     post:
       tags: [auth]
       operationId: createToken
+      x-requires: none
       summary: Exchange credentials for a bearer JWT + user
       security: []
       description: |
@@ -269,6 +327,7 @@ paths:
     post:
       tags: [auth]
       operationId: logout
+      x-requires: none
       summary: Invalidate the current token
       description: |
         feature-spec.md:116 "POST /auth/logout"; the session is shown in
@@ -286,6 +345,7 @@ paths:
     get:
       tags: [identity]
       operationId: getMe
+      x-requires: none
       summary: Current user and per-tree permissions
       description: |
         feature-spec.md:116: "GET /me (user + per-tree permissions; answers in
@@ -308,6 +368,7 @@ paths:
     get:
       tags: [admin]
       operationId: listUsers
+      x-requires: admin
       summary: All users (Settings → Members)
       description: |
         feature-spec.md:19: "Admin UI (visible when /me grants admin):
@@ -335,6 +396,7 @@ paths:
     put:
       tags: [admin]
       operationId: putUsers
+      x-requires: admin
       summary: Upsert users (invite by email)
       description: |
         The PUT half of feature-spec.md:19 "GET/PUT /admin/users" — upsert
@@ -370,6 +432,7 @@ paths:
     get:
       tags: [admin]
       operationId: getUserPermissions
+      x-requires: admin
       summary: One user's per-tree permission matrix
       description: |
         feature-spec.md:19: "GET/PUT /admin/users/{id}/permissions" — the
@@ -390,6 +453,7 @@ paths:
     put:
       tags: [admin]
       operationId: putUserPermissions
+      x-requires: admin
       summary: Replace one user's per-tree permission matrix
       description: |
         Full replacement of the matrix (feature-spec.md:19). Takes effect on
@@ -418,6 +482,7 @@ paths:
     patch:
       tags: [admin]
       operationId: toggleAgentTree
+      x-requires: admin
       summary: Enable/disable an agent tree (history stays read-only)
       description: |
         feature-spec.md:20: "Admin → Agent trees: … enable/disable toggle per
@@ -450,6 +515,7 @@ paths:
     get:
       tags: [admin]
       operationId: listAdminConversations
+      x-requires: inspect
       summary: Inspector — every conversation, cross-user
       description: |
         feature-spec.md:113: "Inspector/Casebooks: GET /admin/conversations
@@ -504,6 +570,7 @@ paths:
     post:
       tags: [admin]
       operationId: controlGenerator
+      x-requires: admin
       summary: Control the data generator (seed / drip / stop)
       description: |
         feature-spec.md:118: "Generator: POST /admin/generator ({mode:
@@ -535,6 +602,7 @@ paths:
     get:
       tags: [admin]
       operationId: getGeneratorStatus
+      x-requires: admin
       summary: Generator status — counts produced, current rates
       description: |
         feature-spec.md:185: "GET /admin/generator/status (counts produced,
@@ -555,6 +623,7 @@ paths:
     get:
       tags: [meta]
       operationId: getHealthz
+      x-requires: none
       summary: Liveness / server info
       security: []
       description: |
@@ -575,6 +644,7 @@ paths:
     get:
       tags: [meta]
       operationId: listModels
+      x-requires: none
       summary: Available models
       description: |
         feature-spec.md:118: "GET /models (chat/run/judge model dropdowns)".
@@ -595,6 +665,7 @@ paths:
     get:
       tags: [trees]
       operationId: listAgentTrees
+      x-requires: none
       summary: Permitted agent trees
       description: |
         feature-spec.md:117: "GET /agenttrees (permitted + enabled; admins also
@@ -617,6 +688,7 @@ paths:
     post:
       tags: [trees]
       operationId: createAgentTree
+      x-requires: none
       summary: Create an agent tree (generator seed path)
       description: |
         Generator seed mode "builds the baseline dataset — trees, agents +
@@ -641,6 +713,7 @@ paths:
     get:
       tags: [trees]
       operationId: listEndpoints
+      x-requires: view
       summary: Deploy targets for replay
       description: |
         feature-spec.md:117: "GET /agenttrees/{tree}/endpoints (deploy targets
@@ -665,6 +738,7 @@ paths:
     get:
       tags: [agents]
       operationId: listAgents
+      x-requires: view
       summary: Agent hierarchy for the tree view
       description: |
         feature-spec.md:28: "Data: GET /agenttrees/{tree}/agents (returns
@@ -690,6 +764,7 @@ paths:
     post:
       tags: [agents]
       operationId: createAgent
+      x-requires: tune
       summary: Create an agent (add sub-agent under a node)
       description: |
         Tree-view node context menu: "add sub-agent (opens New-agent wizard
@@ -711,6 +786,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Agent" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -719,6 +795,7 @@ paths:
     get:
       tags: [agents]
       operationId: getInstructions
+      x-requires: view
       summary: Instruction versions for an agent
       description: |
         feature-spec.md:120: "GET /agenttrees/{tree}/agents/{id}/instructions
@@ -740,6 +817,7 @@ paths:
     post:
       tags: [agents]
       operationId: createInstructionVersion
+      x-requires: tune
       summary: Append the next instruction version (append-only)
       description: |
         Never overwrites (feature-spec.md:33, :120). A save that mints v16 and
@@ -767,6 +845,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InstructionVersion" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -775,6 +854,7 @@ paths:
     post:
       tags: [agents]
       operationId: createSnapshot
+      x-requires: tune
       summary: Immutable draft snapshot (for Test as evaluation)
       description: |
         feature-spec.md:89: "POST /agents/{id}/snapshots (immutable draft
@@ -796,6 +876,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Snapshot" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -804,6 +885,7 @@ paths:
     get:
       tags: [agents]
       operationId: getLastSelection
+      x-requires: view
       summary: Last-used conversation selection for this agent
       description: |
         feature-spec.md:87: "the previous conversation set is remembered per
@@ -822,6 +904,7 @@ paths:
     put:
       tags: [agents]
       operationId: putLastSelection
+      x-requires: evaluate
       summary: Remember the conversation selection for this agent
       parameters:
         - { $ref: "#/components/parameters/tree" }
@@ -837,6 +920,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Selection" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -846,6 +930,7 @@ paths:
     get:
       tags: [conversations]
       operationId: listConversations
+      x-requires: view
       summary: Conversations (paginated, searchable, fork-filterable)
       description: |
         feature-spec.md:121: "GET /agenttrees/{tree}/conversations (paginated,
@@ -946,6 +1031,7 @@ paths:
     get:
       tags: [conversations]
       operationId: getConversation
+      x-requires: view
       summary: One conversation (metadata; turns are a separate collection)
       description: |
         Single-resource fetch backing "Open in Chat: any fork can be opened in
@@ -979,6 +1065,7 @@ paths:
     patch:
       tags: [conversations]
       operationId: updateConversation
+      x-requires: view
       summary: Rename a conversation
       description: |
         feature-spec.md:121 "PATCH/DELETE /agenttrees/{tree}/conversations/{id}";
@@ -1006,6 +1093,7 @@ paths:
     delete:
       tags: [conversations]
       operationId: deleteConversation
+      x-requires: view
       summary: Delete a conversation (soft — history invariants survive)
       description: |
         Delete is a tombstone: the conversation disappears from listings and
@@ -1039,6 +1127,7 @@ paths:
     get:
       tags: [conversations]
       operationId: listTurns
+      x-requires: view
       summary: A conversation's transcript, paged
       description: |
         The transcript, separated from the conversation resource so that
@@ -1102,6 +1191,7 @@ paths:
     get:
       tags: [memory]
       operationId: getMemory
+      x-requires: view
       summary: The tree's memory document
       description: |
         feature-spec.md:114: "Memory: GET/PUT/DELETE /agenttrees/{tree}/memory".
@@ -1121,6 +1211,7 @@ paths:
     put:
       tags: [memory]
       operationId: putMemory
+      x-requires: tune
       summary: Edit the memory document (overwrites — mutable by design)
       description: |
         The edit half of cupel-phases.md:85 "view, edit, or clear". Memory
@@ -1139,11 +1230,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Memory" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
       tags: [memory]
       operationId: clearMemory
+      x-requires: tune
       summary: Clear the memory document
       description: |
         The clear half of cupel-phases.md:85 "view, edit, or clear the
@@ -1153,12 +1246,14 @@ paths:
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "204": { description: Cleared. }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /agenttrees/{tree}/memory/compact:
     post:
       tags: [memory]
       operationId: compactMemory
+      x-requires: tune
       summary: Compact conversations into memory (queued task)
       description: |
         feature-spec.md:114: "POST /agenttrees/{tree}/memory/compact
@@ -1176,6 +1271,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TaskRef" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # -------------------------------------------------------------------- chat
@@ -1183,6 +1279,7 @@ paths:
     post:
       tags: [chat]
       operationId: chat
+      x-requires: view
       summary: Send a message (SSE stream or single JSON, flag in body)
       description: |
         feature-spec.md:119: "POST /agenttrees/{tree}/chat (SSE; queued →
@@ -1257,6 +1354,7 @@ paths:
     post:
       tags: [chat]
       operationId: upload
+      x-requires: none
       summary: Upload an attachment before send
       description: |
         feature-spec.md:119 "POST /upload"; composer flow (feature-spec.md:273,
@@ -1291,6 +1389,7 @@ paths:
     post:
       tags: [chat]
       operationId: postFeedback
+      x-requires: none
       summary: 👍/👎 on an assistant message
       description: |
         feature-spec.md:119: "POST /feedback (writes a scorer: human judgment —
@@ -1324,6 +1423,7 @@ paths:
     post:
       tags: [evaluations]
       operationId: replay
+      x-requires: evaluate
       summary: Replay selected conversations/turns under a changed config
       description: |
         feature-spec.md:122: "POST /agenttrees/{tree}/replay". Engine
@@ -1355,6 +1455,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReplayAccepted" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -1364,6 +1465,7 @@ paths:
     post:
       tags: [evaluations]
       operationId: replayTurn
+      x-requires: evaluate
       summary: Re-fire one turn against one or many endpoints (forks)
       description: |
         feature-spec.md:122: "POST /agenttrees/{tree}/replay/turn (endpoints[] →
@@ -1389,6 +1491,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReplayTurnAccepted" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -1398,6 +1501,7 @@ paths:
     get:
       tags: [evaluations]
       operationId: listEvaluations
+      x-requires: view
       summary: List evaluations
       description: |
         feature-spec.md:122 "GET /agenttrees/{tree}/runs". Paged: a tree
@@ -1423,6 +1527,7 @@ paths:
     get:
       tags: [evaluations]
       operationId: getEvaluation
+      x-requires: view
       summary: Evaluation detail — one page of the comparison grid
       description: |
         feature-spec.md:122 "GET /agenttrees/{tree}/runs/{id}". Grid shape
@@ -1490,6 +1595,7 @@ paths:
     get:
       tags: [trace]
       operationId: getTrace
+      x-requires: view
       summary: Span tree for a turn
       description: |
         feature-spec.md:123: "GET /agenttrees/{tree}/turns/{turn_id}/trace".
@@ -1517,6 +1623,7 @@ paths:
     get:
       tags: [trace]
       operationId: getSpanPayload
+      x-requires: none
       summary: Lazy-loaded span payload
       description: |
         feature-spec.md:123 / :147: "GET /spans/{id}/payload (lazy-loaded
@@ -1541,6 +1648,7 @@ paths:
     get:
       tags: [tasks]
       operationId: listTasks
+      x-requires: none
       summary: List tasks (polling fallback + sidebar badge)
       description: |
         feature-spec.md:131 "GET /tasks"; polling fallback for the SSE stream
@@ -1576,6 +1684,7 @@ paths:
     get:
       tags: [tasks]
       operationId: streamTasks
+      x-requires: none
       summary: SSE — task status/progress + live trace spans
       description: |
         feature-spec.md:131: "GET /tasks/stream (SSE: status + progress)".
@@ -1614,6 +1723,7 @@ paths:
     get:
       tags: [tasks]
       operationId: getTask
+      x-requires: none
       summary: Task detail including children
       description: |
         feature-spec.md:131 "GET /tasks/{id} (incl. children)". Task model
@@ -1630,6 +1740,7 @@ paths:
     delete:
       tags: [tasks]
       operationId: cancelTask
+      x-requires: none
       summary: Cancel a task (cascades to children); also stop-generation
       description: |
         feature-spec.md:131 "DELETE /tasks/{id} (cancel, cascades)"; parent
@@ -1648,6 +1759,7 @@ paths:
     post:
       tags: [tasks]
       operationId: retryFailed
+      x-requires: none
       summary: Retry only the failed children of a batch
       description: |
         feature-spec.md:131 "POST /tasks/{id}/retry-failed". "Failed children
@@ -1667,6 +1779,7 @@ paths:
     get:
       tags: [eval]
       operationId: listRubrics
+      x-requires: none
       summary: Rubrics (for the Variant judge section)
       description: |
         feature-spec.md:128 "GET/POST /eval/rubrics". Rubric EDITOR UI is
@@ -1695,6 +1808,7 @@ paths:
     post:
       tags: [eval]
       operationId: createRubric
+      x-requires: none
       summary: Create a rubric (append-only; new name = v1)
       description: |
         feature-spec.md:128 "GET/POST /eval/rubrics" — versioned, "save = new
@@ -1717,6 +1831,7 @@ paths:
     post:
       tags: [eval]
       operationId: createRubricVersion
+      x-requires: none
       summary: Append the next rubric version (append-only)
       description: |
         feature-spec.md:128: "POST /eval/rubrics/{id}/versions (save = new
@@ -1747,6 +1862,7 @@ paths:
     post:
       tags: [eval]
       operationId: createEvalCase
+      x-requires: none
       summary: Create an eval case (handcrafted or sourced from a turn)
       description: |
         feature-spec.md:126: "POST /eval/cases (handcrafted or source: {tree,
@@ -1778,6 +1894,7 @@ paths:
     post:
       tags: [eval]
       operationId: importEvalCases
+      x-requires: none
       summary: Bulk import cases (CSV/XLSX, column mapping, per-row errors)
       description: |
         feature-spec.md:125: "Import: POST /eval/cases/import
@@ -1837,6 +1954,7 @@ paths:
     get:
       tags: [eval]
       operationId: getEvalCase
+      x-requires: none
       summary: One eval case (judgment drawer)
       description: |
         feature-spec.md:126 "GET /eval/cases/{id}". Model (feature-spec.md:54):
@@ -1862,6 +1980,7 @@ paths:
     post:
       tags: [eval]
       operationId: createEvalCaseVersion
+      x-requires: none
       summary: Append the next eval-case version (append-only)
       description: |
         feature-spec.md:126: "POST /eval/cases/{id}/versions (new version)" —
@@ -1908,6 +2027,7 @@ paths:
     get:
       tags: [eval]
       operationId: listEvalSets
+      x-requires: none
       summary: Eval sets (latest version each)
       description: |
         feature-spec.md:127: "Sets: POST/GET /eval/sets". Model
@@ -1940,6 +2060,7 @@ paths:
     post:
       tags: [eval]
       operationId: createEvalSet
+      x-requires: none
       summary: Create an eval set (version 1)
       description: |
         feature-spec.md:127 "POST/GET /eval/sets"; workbench set manager:
@@ -1965,6 +2086,7 @@ paths:
     get:
       tags: [eval]
       operationId: getEvalSet
+      x-requires: none
       summary: One eval set (latest membership version)
       description: |
         The set with its items. Reference items are turn REFERENCES, never
@@ -1984,6 +2106,7 @@ paths:
     patch:
       tags: [eval]
       operationId: updateEvalSetMetadata
+      x-requires: none
       summary: Rename / re-describe a set (NOT a new version)
       description: |
         Metadata only, and deliberately NOT versioned: a set's name and
@@ -2008,6 +2131,7 @@ paths:
     delete:
       tags: [eval]
       operationId: deleteEvalSet
+      x-requires: none
       summary: Delete a set (its items are references — nothing else is touched)
       description: |
         Removes the set and every membership version. Reference items were
@@ -2024,6 +2148,7 @@ paths:
     post:
       tags: [eval]
       operationId: createEvalSetVersion
+      x-requires: none
       summary: Append the next membership version (append-only)
       description: |
         feature-spec.md:127: "POST /eval/sets/{id}/versions (versioned
@@ -2060,6 +2185,7 @@ paths:
     post:
       tags: [eval]
       operationId: addEvalSetItem
+      x-requires: none
       summary: Add one item — a turn reference (the ⊞ action) or a case
       description: |
         cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
@@ -2099,6 +2225,7 @@ paths:
     post:
       tags: [eval]
       operationId: freezeEvalSetItems
+      x-requires: none
       summary: Freeze reference items into cases
       description: |
         What "turn a casebook into an eval set" (cupel-phases.md:79) becomes
@@ -2132,6 +2259,7 @@ paths:
     post:
       tags: [eval]
       operationId: replayEvalSet
+      x-requires: none
       summary: Replay the set's referenced turns as a regression suite
       description: |
         cupel-phases.md:79 "a replay regression suite". Replays every
@@ -2164,6 +2292,7 @@ paths:
     post:
       tags: [eval]
       operationId: judge
+      x-requires: none
       summary: Enqueue LLM judging
       description: |
         feature-spec.md:129: "POST /eval/judge ({set_id | case_ids | evaluation_id,
@@ -2202,6 +2331,7 @@ paths:
     get:
       tags: [eval]
       operationId: listJudgments
+      x-requires: none
       summary: Judgment history (append-only)
       description: |
         feature-spec.md:130: "GET /eval/judgments?subject_id=&evaluation_id=
@@ -2258,6 +2388,7 @@ paths:
     get:
       tags: [eval]
       operationId: getEvaluationScoreSummary
+      x-requires: none
       summary: Aggregate scores for an evaluation
       description: |
         feature-spec.md:130: "GET /eval/evaluations/{evaluation_id}/summary (aggregates)".
@@ -2282,6 +2413,7 @@ paths:
     get:
       tags: [settings]
       operationId: getSettings
+      x-requires: none
       summary: User-scoped app settings
       description: |
         feature-spec.md:119 "GET/PUT /settings"; consumed by Settings ·
@@ -2305,6 +2437,7 @@ paths:
     put:
       tags: [settings]
       operationId: putSettings
+      x-requires: none
       summary: Replace settings
       description: |
         Full replacement of the writable fields; readOnly fields
@@ -2460,9 +2593,16 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Forbidden:
       description: >
-        Authenticated but lacking the required role (code forbidden): admin
-        for /admin/* management, inspect for the Inspector
-        (cupel-phases.md:78 "requires the inspect role").
+        Authenticated, but lacking the capability this operation declares in
+        its x-requires (code forbidden). Two shapes, one code: a missing global
+        ROLE — admin for /admin/* management, inspect for the Inspector
+        (cupel-phases.md:78 "requires the inspect role") — or a missing PER-TREE
+        permission on a tree the caller can already see, which is every
+        operation declaring x-requires tune or evaluate. The message names the
+        permission and the tree ("You do not have permission to tune agent tree
+        'agent1'."), so a refusal reads as a permission problem rather than an
+        unexplained failure. Never answered for a missing view: that is 404, so
+        an unpermitted tree stays indistinguishable from an absent one.
       headers:
         X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:

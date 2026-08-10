@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import auth, capabilities, config, llm, storage, tabular
+from . import auth, capabilities, config, llm, permissions, storage, tabular
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
@@ -247,6 +247,62 @@ class AuthGate:
         return await self.app(scope, receive, send)
 
 
+class PermissionGate:
+    """Per-operation permission enforcement — openapi.yaml `x-requires`, table
+    in mock/permissions.py.
+
+    Runs in BOTH auth modes, which is the whole design. The AuthGate above is
+    inert with AUTH_MODE=off; this one is not, because the answer does not come
+    from the mode, it comes from the permission matrix: a verified user brings
+    their own, and an unverified caller IS the dev user, who holds every
+    permission on every tree and both roles (feature-spec.md:17, same rule
+    request_roles/permitted_trees follow). So an off-mode request runs this
+    code and is allowed, rather than skipping it — no branch, and the path that
+    matters is exercised by every local test run.
+
+    What it does NOT do, deliberately: anything about `view`. A caller without
+    view on {tree} was already answered 404 by the AuthGate, and that 404 is a
+    security property — an unpermitted tree must stay indistinguishable from an
+    absent one. Adding a 403 here for view would undo it, so `view` and `none`
+    are pass-through and permissions.ENFORCED contains neither.
+
+    Placement: innermost gate (registered first, so it ends up nearest the
+    app), because it needs the users row the AuthGate stashed on the scope.
+    Pure ASGI like the other two, so SSE streaming is untouched — and it runs
+    before routing, which is why permissions.py matches path TEMPLATES with
+    regexes rather than reading a resolved route.
+    """
+
+    def __init__(self, app, db: Db):
+        self.app = app
+        self.db = db
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] == "OPTIONS":
+            return await self.app(scope, receive, send)
+        found = permissions.requirement(scope["method"], scope["path"])
+        if found is None:
+            return await self.app(scope, receive, send)
+        requires, _template = found
+        user = scope.get("state", {}).get("cupel_user")
+        if user is not None:
+            if requires in permissions.ROLES:
+                held = requires in unj(user["roles"], [])
+            else:
+                tree = permissions.tree_of(scope["path"])
+                held = requires in unj(user["permissions"], {}).get(tree, [])
+            if not held:
+                response = JSONResponse(
+                    error_body(scope, {
+                        "code": "forbidden",
+                        "message": permissions.refusal(
+                            requires, permissions.tree_of(scope["path"])),
+                    }),
+                    status_code=403)
+                return await response(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
 async def body_json(request: Request) -> dict:
     try:
         body = await request.json()
@@ -274,8 +330,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # stack: RequestId (outermost — so even a gate's 401 is traceable) → CORS
     # (preflight answered early; every 401 still carries CORS headers) →
     # DemoTokenGate (deployment shared token) → AuthGate (per-user JWT when
-    # AUTH_MODE=on) → app. Both gates can be active at once; the demo gate
-    # runs first (see AuthGate docstring).
+    # AUTH_MODE=on) → PermissionGate (per-operation x-requires, BOTH modes) →
+    # app. Both token gates can be active at once; the demo gate runs first
+    # (see AuthGate docstring). PermissionGate is innermost because it reads
+    # the user the AuthGate resolved.
+    app.add_middleware(PermissionGate, db=db)
     app.add_middleware(AuthGate, db=db)
     app.add_middleware(DemoTokenGate)
     # expose_headers: without it a browser cannot READ ETag or X-Request-Id off
@@ -542,20 +601,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return None
         return {t for t, perms in unj(user["permissions"], {}).items() if "view" in perms}
 
-    def need_admin(request: Request) -> None:
-        """403 Forbidden unless the caller holds the admin role — "admin for
-        /admin/* management" (openapi.yaml:1966-1970, code forbidden)."""
-        if "admin" not in request_roles(request):
-            err(403, "forbidden", "The admin role is required.")
-
-    def need_inspect(request: Request) -> None:
-        """403 unless the caller holds the INSPECT role — "Requires
-        the inspect role (403 otherwise)" (openapi.yaml:308). Deliberately a
-        separate role from admin (openapi.yaml roles enum): a super-user
-        reader is not necessarily a tenant administrator. Mirrors need_admin;
-        in off mode the dev user carries admin+inspect (request_roles)."""
-        if "inspect" not in request_roles(request):
-            err(403, "forbidden", "The inspect role is required.")
+    # need_admin/need_inspect USED TO LIVE HERE. The admin role on /admin/* and
+    # the inspect role on the Inspector are now enforced by PermissionGate from
+    # the contract's own `x-requires`, alongside the per-tree permissions — one
+    # gate, one table, one place a new operation's requirement is written. Two
+    # enforcement points would mean a handler and a declaration that can
+    # disagree, which is the drift this stage exists to remove. The 403s are
+    # unchanged (code forbidden, same message) and mock/tests/test_admin.py
+    # still pins them.
 
     def conversation_owner(request: Request, body: dict) -> str:
         """The owning user stamped on a new conversation
@@ -753,7 +806,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """listUsers — a page of users, cross-user (admin-only). Ordered by
         email so the page boundary is stable while invites are being created;
         rowid order would reshuffle the tail on every invite."""
-        need_admin(request)
         auth.ensure_users(db)
         page, page_size = clamp_page(page, page_size, 100)
         total = db.one("SELECT COUNT(*) AS n FROM users")["n"]
@@ -769,7 +821,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         no user delete". Invited users carry an unusable password hash (the
         mock has no set-password flow — they exist for the Members list and
         permission assignment until a real IdP takes over)."""
-        need_admin(request)
         try:
             body = await request.json()
         except Exception:
@@ -804,7 +855,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def get_user_permissions(userId: str, request: Request):
         """GET /admin/users/{userId}/permissions (openapi.yaml:220-240):
         "Same shape as Me.permissions so the admin UI and /me agree"."""
-        need_admin(request)
         user = auth.user_by_id(db, userId)
         if not user:
             err(404, "not_found", f"User '{userId}' not found.")
@@ -815,7 +865,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """PUT (openapi.yaml:241-265): "Full replacement of the matrix ...
         Takes effect on the user's next request — their GET /me reflects it,
         and unpermitted trees stop rendering"."""
-        need_admin(request)
         user = auth.user_by_id(db, userId)
         if not user:
             err(404, "not_found", f"User '{userId}' not found.")
@@ -838,7 +887,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         (feature-spec.md:20): every evaluation-owning task (replay/replay_turn via
         evaluations.task_id, judge via its payload's result.evaluation_id) is cancelled;
         chat tasks are sub-second in the mock and simply drain."""
-        need_admin(request)
         row = db.one("SELECT * FROM trees WHERE id = ?", (treeId,))
         if not row:
             err(404, "not_found", f"Agent tree '{treeId}' not found.")
@@ -899,7 +947,6 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
            every conversation in the system" (cupel-phases.md:78). Deleted
            conversations stay hidden; a tombstone is not history to browse.
         """
-        need_inspect(request)
         page, page_size = clamp_page(page, page_size, 100)
         where, params = ["c.deleted = 0"], []
         allowed = permitted_trees(request)

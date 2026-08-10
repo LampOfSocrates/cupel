@@ -599,6 +599,75 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(capability.properties.status.enum).toEqual(["full", "partial", "none"]);
   });
 
+  // -------------------------------------------------- permissions (F5)
+  // The contract declares, per operation, the ONE capability its caller must
+  // hold — `x-requires` written on the operation itself, for the same reason
+  // the family tag is (see the PERMISSIONS comment in openapi.yaml). These
+  // tests are what make it a partition rather than a wish: without them an
+  // operation could ship with no declaration, or declare `tune` and quietly
+  // never answer 403, and the difference between "hidden" and "refused" —
+  // the whole point of the split — would rot.
+  const REQUIREMENTS = ["none", "view", "tune", "evaluate", "admin", "inspect"];
+  // The two failures, kept apart: view is a precondition of the PATH and its
+  // absence is 404 (existence-hiding); everything else is a capability and its
+  // absence is 403 (explained).
+  const HIDDEN = ["none", "view"];
+  const EXPLAINED = ["tune", "evaluate", "admin", "inspect"];
+
+  it("every operation declares exactly one permission requirement", () => {
+    for (const { id, op } of contractOperations()) {
+      expect(REQUIREMENTS, `${id} must declare x-requires`).toContain(op["x-requires"]);
+    }
+  });
+
+  it("a tree permission is only ever required by a tree-scoped operation", () => {
+    // view/tune/evaluate are per-tree (Me.permissions is keyed by tree id), so
+    // requiring one where the path names no tree would be unenforceable.
+    for (const { id, op } of contractOperations()) {
+      if (!["view", "tune", "evaluate"].includes(op["x-requires"])) continue;
+      expect(id, `${id} requires a per-tree permission`).toMatch(/ \/agenttrees\/\{tree\}\//);
+    }
+    // …and conversely every tree-scoped operation requires one: a path that
+    // hangs off {tree} can never be `none`, or the scope would buy nothing.
+    for (const { id, op } of contractOperations()) {
+      if (!/ \/agenttrees\/\{tree\}\//.test(id)) continue;
+      expect(["view", "tune", "evaluate"], `${id}`).toContain(op["x-requires"]);
+    }
+  });
+
+  it("403 is declared by exactly the operations whose refusal is EXPLAINED", () => {
+    for (const { id, op } of contractOperations()) {
+      const requires = op["x-requires"];
+      const declared = "403" in (op.responses ?? {});
+      expect(declared, `${id} requires ${requires}, 403 declared=${declared}`).toBe(
+        EXPLAINED.includes(requires),
+      );
+    }
+    // The negative half stated as itself: a `view` operation must never answer
+    // 403, because doing so would confirm the tree exists to a caller who is
+    // supposed to be unable to tell.
+    for (const { id, op } of contractOperations()) {
+      if (!HIDDEN.includes(op["x-requires"])) continue;
+      expect(op.responses?.["403"], `${id} must hide, not explain`).toBeUndefined();
+    }
+    // 404 stays the answer for an unpermitted tree, said at the shared response.
+    expect(doc.components.responses.NotFound.description).toMatch(/not permitted/i);
+    expect(doc.components.responses.Forbidden.description).toMatch(/x-requires/);
+    expect(doc.components.responses.Forbidden.description).toMatch(/Never answered for a missing view/);
+  });
+
+  it("the headline case is declared: saving instructions requires tune", () => {
+    // The bug this closes: a user with view but not tune got something that
+    // looked like a backend fault when they pressed Save.
+    const save = doc.paths["/agenttrees/{tree}/agents/{agentId}/instructions/versions"].post;
+    expect(save["x-requires"]).toBe("tune");
+    expect(save.responses["403"].$ref).toBe("#/components/responses/Forbidden");
+    // …while READING them is view, so a viewer still sees what the agent says.
+    expect(doc.paths["/agenttrees/{tree}/agents/{agentId}/instructions"].get["x-requires"]).toBe(
+      "view",
+    );
+  });
+
   // ---------------------------------------------------------- collections
   // ONE collection shape (see the Collections rule in info.description and the
   // comment above ConversationPage). OpenAPI 3.0 cannot express Page<T>, so

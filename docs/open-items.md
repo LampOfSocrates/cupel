@@ -278,10 +278,61 @@ with every versioned save on its own path the phase split is once again purely b
 NOT done here, and still C5: there is no GET on any `…/versions` collection, so version
 history remains unreadable — the POST-only sub-collection is where that GET will land.
 
+**C8 per-operation permission semantics + 403s — DONE 2026-08-10** (item 7 stage F5).
+The contract knew about `view`/`tune`/`evaluate` and never said which operation needed which,
+so the reference implementation enforced `view` centrally and NOTHING else: a user holding
+`view` but not `tune` could press Save in the instruction editor and get a write that looked
+like a backend fault. **The two failures are now split, deliberately.** A missing `view` still
+answers **404 not_found** — an unpermitted tree stays indistinguishable from an absent one,
+which is a security property and was not weakened; a `view` operation may therefore never
+declare a 403, and a contract test asserts that none does. A missing `tune`/`evaluate` on a
+tree the caller can ALREADY see answers **403 forbidden** with a message naming the permission
+and the tree ("You do not have permission to tune agent tree 'agent1'."), as does a missing
+`admin`/`inspect` role. One code for both flavours, because the machine-readable half is the
+declaration, not a second discriminator in the body: the client knows which operation it
+called, and the contract says what that operation requires.
+
+Mechanism: **`x-requires` written on the operation itself**, the same choice for the same
+reason as stage E's family tags — a declaration that lives with the thing it classifies cannot
+drift from it, whereas a separate "these need tune" list needs a second edit per new operation
+and is silently wrong until someone notices. It is an `x-` extension only because OpenAPI 3.0
+has no native vocabulary: security-requirement SCOPES would be the right home, but scopes are
+meaningless for an `http bearer` scheme, and inventing an unimplemented oauth2 scheme to borrow
+their syntax would be the bigger lie. Four contract tests make it a partition — every operation
+declares exactly one value of `none|view|tune|evaluate|admin|inspect`; a per-tree permission is
+required only by a `{tree}`-scoped operation and every `{tree}`-scoped operation requires one;
+403 is declared by exactly the tune/evaluate/admin/inspect operations and by no other.
+
+**Counts (67 operations):** `none` 36 · `view` 14 · `tune` 6 · `evaluate` 3 · `admin` 7 ·
+`inspect` 1. Newly refusable: `POST …/agents`, `POST …/instructions/versions`,
+`POST …/snapshots`, `PUT …/memory`, `DELETE …/memory`, `POST …/memory/compact` (tune);
+`POST …/replay`, `POST …/replay/turn`, `PUT …/agents/{id}/last-selection` (evaluate). The last
+one is the only operation whose family and permission disagree — it is tagged `agents` because
+of its path, but its sole caller is the evaluation stepper's Queue, so `evaluate` is what it
+actually needs. Chat is `view`: the vocabulary has no "use" permission, and a viewer who
+cannot talk to the agent cannot do the product's primary job.
+
+Enforcement: a new innermost `PermissionGate` in `mock/main.py`, reading the table in
+`mock/permissions.py` — a cached projection of `openapi.yaml` guarded exactly like
+`mock/capabilities.py` (a pytest re-reads the contract and fails on any drift). It runs in
+BOTH auth modes and has no mode branch: the answer comes from the permission matrix, and an
+unverified caller IS the dev user, who holds everything, so `AUTH_MODE=off` exercises the same
+code and is allowed. `need_admin`/`need_inspect` were DELETED from the handlers rather than
+left beside it — two enforcement points would be two things that can disagree.
+
+Deliberately left `none`, each because the honest answer is "unclear", not "unrestricted":
+**the whole eval workbench** (a case, a set and a rubric carry no tree, so `evaluate` has
+nothing to be checked against; judge's `evaluation_id` branch does resolve one, but its
+`case_ids`/`set_id` branches do not, and a conditional requirement is not a declaration —
+this needs the eval-set tree-scope design already parked in finding (vii)); **`POST /tasks/{id}/retry-failed`**,
+for the same reason one level down; and **`POST /agenttrees`**, which today anyone may call and
+which grants its creator NO permission on the tree it just made — so the creator immediately
+cannot see it. That is a real gap and naming it is the fix here; closing it is a contract
+decision about who may mint a tree, not a guess.
+
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this
 is why the workbench cannot show history today · C6 `Idempotency-Key` on 202s — **also the
 only way to close the two-tab double-judge residual** · C7 SSE event ids + `Last-Event-ID` ·
-C8 per-operation permission semantics + 403s ·
 C10 batch turn fetch · **C11 `Health.contract_version` + capabilities — DONE 2026-08-09**
 (item 7 stage E; delivered early because it is additive and it is where the declared families
 land) ·
@@ -367,7 +418,8 @@ refuses** — `POST …/agents`, `POST …/instructions/versions`, `POST …/sna
 `POST /eval/cases/import`**; and `/upload`'s and the freeze's hand-rolled refs retargeted at
 named `PayloadTooLarge` / `UnprocessableEntity` responses. `401` was deliberately NOT swept:
 the contract has always stated that it is spelled out on `/me`, `/auth/logout` and `/admin/*`
-and implied elsewhere by the top-level security block. 403s were out of scope (C8).
+and implied elsewhere by the top-level security block. 403s were out of scope there and are
+now declared per operation by C8 above.
 
 **503 was declared NOWHERE, and that is the decision, not an omission.** No implementation
 here produces one: the BYOK fallback path degrades to canned content rather than failing, and
@@ -442,7 +494,7 @@ return it freely.
 
 **Partially done, do not assume open:** A2's per-event tree resolution and per-subscriber
 permission filter landed (`mock/engine.py:68-92,128-180`); only the `tree`/`run_id`/`task_id`
-subscription params remain, and they live in C8/C1. C15 is partial — casebooks and eval
+subscription params remain, and they live in C1. C15 is partial — casebooks and eval
 sets/cases/import are implemented; memory, settings and generator endpoints are not, and
 those belong to P3-MEM / P3-CTX step 0 / P3-GEN respectively.
 
