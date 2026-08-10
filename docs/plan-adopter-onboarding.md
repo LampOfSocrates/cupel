@@ -20,7 +20,7 @@ backend fill (#25). Written 2026-08-09 from the user's description of the intend
 **Ask per family, not per operation. APPROVED by the user 2026-08-09**, along with the
 three-answer shape **mine / mock / hide**. A stranger's backend will match almost nothing —
 the contract is 67 operations across 14 families, and the worked `cupel-ready --init`
-example only reaches 37/66 because its remap was contrived for a backend already built to
+example only reaches 37/67 because its remap was contrived for a backend already built to
 this shape. A real first run is closer to 0–5 matched operations, which means 60+ questions
 if we ask per endpoint.
 

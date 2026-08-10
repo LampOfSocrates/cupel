@@ -151,7 +151,7 @@ npm run ready -- https://nabu.example.com/openapi.json --init --id nabu --label 
   id: "nabu",
   label: "Nabu",
   baseUrl: "https://nabu.example.com", // from the fetched URL's origin (spec declares no absolute servers[0].url)
-  // conformance without remap 5/66 -> with /nabu-service remap 37/66
+  // conformance without remap 5/67 -> with /nabu-service remap 37/67
   remap: (p) => "/nabu-service" + p,
   requiresToken: true, // securityScheme "bearerAuth" (http bearer)
   banner: { label: "NABU BACKEND" }, // non-prod default; use `banner: false` for prod

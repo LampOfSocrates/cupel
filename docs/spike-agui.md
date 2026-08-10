@@ -3,6 +3,13 @@
 Research spike, 2026-08-07. Deliverable is this document. No product code was
 changed; the prototype lives outside the repo (paths in §4).
 
+**Counts here are as of contract v0.3.0, when it had 69 operations.** It has 67
+now (`npm run facts`), and §5a's arithmetic is built on the number of the day —
+the ratios are the point, not the absolutes. Left as written on purpose:
+rewriting a dated document's sums to today's total would make it a lie about
+its own date. tests/doc-counts.test.js exempts this file by name for that
+reason.
+
 **Evidence key** — `[V]` = verified by running code or reading the file/package
 named. `[I]` = inferred from documentation or reasoning, not executed.
 

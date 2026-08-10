@@ -220,10 +220,18 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
 36. `docs/deployment.md` describes the R2 bucket and s3 restore as if configured and observed.
     None of it has ever run (item 16). Mark it untested until it has.
 
-37. Stop hardcoding counts in prose. **Half done 2026-08-10 `cda9659`** — the landing page's
-    four hand-copied counts (533 unit tests, 160 backend tests, 13 journeys, 66 operations)
-    are gone, replaced by claims that do not rot. Still open: "69 operations" copy-pasted
-    into three docs with no source of truth. Derive it, or delete it.
+37. **DONE 2026-08-10** — counts are derived and enforced. `cda9659` deleted the landing
+    page's four hand-copied numbers (533 unit tests, 160 backend tests, 13 journeys, 66
+    operations) for claims that do not rot. Then `scripts/contract-facts.mjs` (`npm run
+    facts`) became the source of truth — 67 operations · 52 paths · 14 families, read from
+    `openapi.yaml` — and `tests/doc-counts.test.js` fails the build when living prose
+    disagrees. It found the two sites nobody had noticed: `docs/readiness.md:154` and
+    `docs/plan-adopter-onboarding.md:23` still said `/66`. Subset counts ("422 on 38
+    operations") are left alone; the five DATED documents (this file, `open-items.md`,
+    `spike-agui.md`, `review-2026-08-05.md`, `plan-agentic-app-maker.md`) are exempt BY NAME
+    with the reason in the test, and each now carries a header saying which contract version
+    its counts belong to — rewriting a dated document's arithmetic would make it lie about
+    its own date. Proved by breaking it: `README.md` set to "66 operations" fails the guard.
 
 38. Make the suite clean under full shuffle — two pre-existing failures, both reproducing in
     isolation: a listener in `parity.test.ts` that misattributes later requests, and one

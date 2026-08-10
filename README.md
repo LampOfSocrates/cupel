@@ -190,6 +190,7 @@ further costs a round trip and nothing else.
 | `npm run ready -- <openapi>` | check a backend against the contract |
 | `npm run create -- "<name>"` | generate an app of your own — one question per family |
 | `npm run gen:families` | regenerate the family table from `openapi.yaml` |
+| `npm run facts` | the contract's counts, derived — what prose is allowed to say |
 
 ## End-to-end suite
 
