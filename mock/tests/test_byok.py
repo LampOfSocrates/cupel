@@ -285,7 +285,7 @@ def test_replay_children_generate_live_key_in_memory_only():
             await wait_task(c, accepted["task_id"])
             evaluation_doc = (await c.get(
                 f"/agenttrees/agent1/evaluations/{accepted['evaluation_id']}")).json()
-            cell = evaluation_doc["rows"][0]["cells"][1]
+            cell = evaluation_doc["rows"]["items"][0]["cells"][1]
             assert cell["status"] == "done"
             assert cell["content"] == "LIVE replayed cell."
             assert len(calls) == 1

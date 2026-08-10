@@ -1245,24 +1245,65 @@ paths:
     get:
       tags: [evaluations]
       operationId: getEvaluation
-      summary: Evaluation detail — comparison grid data
+      summary: Evaluation detail — one page of the comparison grid
       description: |
         feature-spec.md:122 "GET /agenttrees/{tree}/runs/{id}". Grid shape
         (feature-spec.md:49): "baseline column + one column per run config, row
         per turn." Cells fill incrementally as child tasks finish
         (feature-spec.md:108); live fill arrives via GET /tasks/stream.
+
+        ROWS ARE PAGED (`rows` is an EvaluationRowPage) because the body is a
+        product: rows × columns × cells, and a replay of fifty conversations
+        against four configs is a large response that a client POLLS while it
+        fills. Paging here is stable in a way a newest-first listing is not —
+        an evaluation's rows are ALL created when the evaluation is created,
+        and only its CELLS change afterwards — so a page number means the same
+        rows for the life of the evaluation, including while it is running.
+        Columns are not paged: they are the configs the caller chose, so the
+        set is small, caller-authored and needed whole to read any row.
+
+        CONDITIONAL: the response carries an `ETag` over this page's content
+        (status, columns, and the cells of the rows returned). Send it back as
+        `If-None-Match` and an unchanged grid answers 304 with no body, which
+        is what makes polling a filling evaluation cheap. The tag covers ONE
+        page of one evaluation — the URL, query included, is part of its
+        identity, as HTTP requires.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - name: evaluationId
           in: path
           required: true
           schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          description: Grid ROWS per page; every column of a returned row comes with it.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: If-None-Match
+          in: header
+          description: An ETag from a previous read of this page; matches answer 304.
+          schema: { type: string }
       responses:
         "200":
-          description: Full evaluation with columns and per-turn cells.
+          description: The evaluation, with one page of rows and every column.
+          headers:
+            ETag:
+              description: Opaque validator for this page; replay it as If-None-Match.
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Evaluation" }
+        "304":
+          description: >-
+            Not modified — the page is byte-identical to the one the caller's
+            ETag names. No body, so a poll over a finished (or idle) grid costs
+            a round trip and nothing else.
+          headers:
+            ETag:
+              description: The same validator, so the caller can keep using it.
+              schema: { type: string }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ------------------------------------------------------------------- trace
@@ -2984,21 +3025,38 @@ components:
               label: { type: string, example: v15-draft (a3f2) }
               config: { $ref: "#/components/schemas/Variant" }
         rows:
+          allOf: [{ $ref: "#/components/schemas/EvaluationRowPage" }]
+          description: >-
+            ONE PAGE of rows (?page/?page_size), not the whole grid. Stable
+            under the live fill: an evaluation's row set is fixed when the
+            evaluation is created and only its cells change, so page N holds
+            the same rows before, during and after the run.
+
+    EvaluationRow:
+      type: object
+      required: [source, cells]
+      properties:
+        source:
+          type: object
+          required: [conversation_id, turn_id]
+          properties:
+            conversation_id: { type: string }
+            turn_id: { type: string }
+        cells:
           type: array
-          items:
-            type: object
-            required: [source, cells]
-            properties:
-              source:
-                type: object
-                required: [conversation_id, turn_id]
-                properties:
-                  conversation_id: { type: string }
-                  turn_id: { type: string }
-              cells:
-                type: array
-                description: One per column, same order; fills incrementally (feature-spec.md:108).
-                items: { $ref: "#/components/schemas/Result" }
+          description: One per column, same order; fills incrementally (feature-spec.md:108).
+          items: { $ref: "#/components/schemas/Result" }
+
+    EvaluationRowPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EvaluationRow" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
 
     Result:
       type: object

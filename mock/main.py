@@ -4,6 +4,7 @@ Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 """
 
 import asyncio
+import hashlib
 import json
 import os
 
@@ -198,7 +199,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # be active at once; the demo gate runs first (see AuthGate docstring).
     app.add_middleware(AuthGate, db=db)
     app.add_middleware(DemoTokenGate)
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    # expose_headers: without it a browser cannot READ ETag off a cross-origin
+    # response, so the evaluation grid's conditional poll would never send an
+    # If-None-Match and the 304 path would be dead in the one deployment (UI on
+    # :5173, API on :4010) that this mock exists for.
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
+                       allow_headers=["*"], expose_headers=["ETag"])
 
     seed_label = bootstrap(db)
     broker = Broker()
@@ -309,8 +315,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return cfg["model"]
         return f"config {index + 1}"
 
-    def evaluation_dict(r: dict) -> dict:
-        rows = db.all("SELECT * FROM evaluation_rows WHERE evaluation_id = ? ORDER BY row_idx", (r["id"],))
+    def evaluation_dict(r: dict, page: int = 1, page_size: int = 50) -> dict:
+        """One PAGE of the grid. The body is a product — rows × columns ×
+        cells — and clients poll it while the evaluation fills, so the whole
+        grid was the wrong unit. Rows page safely because an evaluation's row
+        set is written once at creation and never grows; only the cells
+        change."""
+        page, page_size = clamp_page(page, page_size, 200)
+        total = db.one("SELECT COUNT(*) AS n FROM evaluation_rows WHERE evaluation_id = ?",
+                       (r["id"],))["n"]
+        rows = db.all(
+            "SELECT * FROM evaluation_rows WHERE evaluation_id = ?"
+            " ORDER BY row_idx LIMIT ? OFFSET ?",
+            (r["id"], page_size, (page - 1) * page_size))
         out_rows = []
         for row in rows:
             cells = db.all(
@@ -332,7 +349,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             "id": r["id"], "tree_id": r["tree_id"],
             "status": engine.evaluation_status(r["id"], r["task_id"]),
             "created_at": r["created_at"], "task_id": r["task_id"],
-            "columns": unj(r["columns"], []), "rows": out_rows,
+            "columns": unj(r["columns"], []),
+            "rows": page_of(out_rows, page, page_size, total),
         }
 
     def assistant_rows(conversation: dict, turn_ids: list | None) -> list[dict]:
@@ -1352,12 +1370,28 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         return page_of(items, page, page_size, total)
 
     @app.get("/agenttrees/{tree}/evaluations/{evaluationId}")
-    async def get_evaluation(tree: str, evaluationId: str):
+    async def get_evaluation(tree: str, evaluationId: str, request: Request,
+                             page: int = 1, page_size: int = 50):
+        """getEvaluation — one page of the grid, revalidatable.
+
+        The ETag is a digest of the RESPONSE BODY, so it changes exactly when
+        something a caller can see changes: a cell filling, the derived status
+        moving, a column relabelling. That makes the common poll — an
+        evaluation that has not advanced since the last tick, or has finished
+        altogether — a 304 with no body. It is per (evaluation, page,
+        page_size) because the body is, which is also what HTTP means by an
+        entity tag being scoped to the URL."""
         need_tree(tree)
         r = db.one("SELECT * FROM evaluations WHERE id = ? AND tree_id = ?", (evaluationId, tree))
         if not r:
             err(404, "not_found", f"Evaluation '{evaluationId}' not found.")
-        return evaluation_dict(r)
+        payload = evaluation_dict(r, page, page_size)
+        etag = '"%s"' % hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()[:32]
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        return JSONResponse(payload, headers={"ETag": etag})
 
     # --------------------------------------------------------------- trace
     @app.get("/agenttrees/{tree}/turns/{turnId}/trace")

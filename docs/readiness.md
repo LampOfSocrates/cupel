@@ -172,6 +172,11 @@ bare array reports the four as missing. `page`/`page_size` are optional query
 params, so a target that ignores them is conformant but will answer its whole
 collection to a caller expecting a page.
 
+Response HEADERS are not checked either, which matters for exactly one
+operation: `GET …/evaluations/{id}` declares an `ETag` and a `304`, and a
+target that omits both is reported conformant. Clients degrade cleanly — no
+validator means no `If-None-Match`, so the grid simply re-downloads.
+
 Deliberately **not** checked: deep JSON-Schema diffing (types, enums, nested
 required, formats), error responses, header/cookie params, security
 declarations, `x-sse-events` frame schemas, and runtime behaviour — a

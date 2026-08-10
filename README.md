@@ -113,6 +113,11 @@ ports to any store. Four operations deliberately return a bare array and say so
 at their own response: the model and endpoint enumerations, the agent-tree list
 and the agent hierarchy, all of which a caller needs whole.
 
+One endpoint goes further, because clients poll it: `GET …/evaluations/{id}`
+returns one page of the comparison grid plus an `ETag`, and an `If-None-Match`
+that still matches answers `304` with no body — a grid that has not filled any
+further costs a round trip and nothing else.
+
 ## Commands
 
 | | |

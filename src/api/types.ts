@@ -745,14 +745,22 @@ export interface EvaluationRow {
   cells: Result[];
 }
 
+// openapi.yaml EvaluationRowPage — Evaluation.rows. The grid body is a product
+// (rows × columns × cells) and clients POLL it while it fills, so rows are
+// paged. Safe to page, unlike a newest-first listing: an evaluation's row set
+// is written when the evaluation is created and only the CELLS change, so page
+// N holds the same rows before, during and after the run.
+export type EvaluationRowPage = Page<EvaluationRow>;
+
 export interface Evaluation {
   id: string;
   tree_id: string;
   status: "queued" | "running" | "done" | "failed" | "cancelled";
   created_at: string;
   task_id: string;
+  /** Not paged: the caller's own configs, needed whole to read any row. */
   columns: EvaluationColumn[];
-  rows: EvaluationRow[];
+  rows: EvaluationRowPage;
 }
 
 // openapi.yaml:1668 Span — "Span = {id, parent_id, type: agent|llm|tool, name,

@@ -128,13 +128,44 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   // there. useAsync's seq guard is what keeps
   // only the latest load applying. Summary rides the same (debounced) tick —
   // "summary header … updates live" (feature-spec.md:64).
+  // Which page of the GRID's rows is on screen. Paging is safe under the live
+  // fill because an evaluation's row set is fixed at creation and only its
+  // cells change — page 2 means the same two dozen turns before, during and
+  // after the run — so the poll below can keep asking for exactly this page.
+  const [rowPage, setRowPage] = useState(1);
+  // Conditional-request state for that poll. `etagRef` is the validator from
+  // the last 200; `gridRef` is what it validates, so a 304 (evaluation: null,
+  // "nothing you have is stale") re-serves the grid already rendered instead
+  // of blanking it. Both are refs, not state: they are the loader's own
+  // bookkeeping and must not schedule a render of their own.
+  const etagRef = useRef<string | null>(null);
+  const gridRef = useRef<Evaluation | null>(null);
+  useEffect(() => {
+    // A different page is a different entity — its tag and body must not be
+    // validated against the previous page's.
+    etagRef.current = null;
+    gridRef.current = null;
+  }, [tree, evaluationId, rowPage]);
+
   const {
     data: loaded,
     error: loadError,
     reload,
   } = useAsync(
-    () => Promise.all([api.evaluation(tree, evaluationId), api.evaluationSummary(evaluationId)]),
-    [tree, evaluationId],
+    () =>
+      Promise.all([
+        api
+          .evaluation(tree, evaluationId, { page: rowPage, etag: etagRef.current })
+          .then((got) => {
+            if (got.evaluation) {
+              gridRef.current = got.evaluation;
+              etagRef.current = got.etag;
+            }
+            return gridRef.current;
+          }),
+        api.evaluationSummary(evaluationId),
+      ]),
+    [tree, evaluationId, rowPage],
   );
   const evaluation = loaded?.[0] ?? null;
   const summary = loaded?.[1] ?? null;
@@ -426,6 +457,10 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   }
 
   const rubricName = (id: string) => rubrics.find((r) => r.id === id)?.name ?? id;
+  const rowTotalPages = Math.max(
+    1,
+    Math.ceil(evaluation.rows.total / Math.max(1, evaluation.rows.page_size)),
+  );
 
   return (
     <Stack gap="sm" p="md">
@@ -575,6 +610,35 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
         renderAnnotation={renderAnnotation}
         renderCellAction={renderCellAction}
       />
+      {/* The grid is one page of rows. Say which page, and offer the rest —
+          a comparison that silently stopped at row 50 would read as "these are
+          the results" when it is a fiftieth of them. Hidden entirely while
+          everything fits, which is every evaluation the demo produces. */}
+      {rowTotalPages > 1 && (
+        <Group justify="space-between" data-testid="grid-pager">
+          <Text size="xs" c="dimmed">
+            {evaluation.rows.total} rows · page {evaluation.rows.page} of {rowTotalPages}
+          </Text>
+          <Group gap={6}>
+            <Button
+              size="compact-xs"
+              variant="default"
+              disabled={rowPage <= 1}
+              onClick={() => setRowPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              size="compact-xs"
+              variant="default"
+              disabled={rowPage >= rowTotalPages}
+              onClick={() => setRowPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </Group>
+        </Group>
+      )}
       {forkSource && (
         <ForkModal
           conversationId={forkSource.conversation_id}

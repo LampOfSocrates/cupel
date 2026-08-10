@@ -451,8 +451,8 @@ def test_replay_grid_fills_and_children_progress():
             evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
             assert evaluation["status"] == "done"
             assert [col["label"] for col in evaluation["columns"]] == ["baseline", "deepseek-v3", "v2"]
-            assert len(evaluation["rows"]) == 2  # one per assistant turn
-            for row in evaluation["rows"]:
+            assert len(evaluation["rows"]["items"]) == 2  # one per assistant turn
+            for row in evaluation["rows"]["items"]:
                 base, c1, c2 = row["cells"]
                 assert base["status"] == "done" and base["content"]
                 assert c1["status"] == "done" and c1["content"] and c1["turn_id"]
@@ -463,7 +463,7 @@ def test_replay_grid_fills_and_children_progress():
             assert listed[0]["id"] == acc["evaluation_id"]
 
             trace = (await c.get(
-                f"/agenttrees/agent1/turns/{evaluation['rows'][0]['cells'][1]['turn_id']}/trace")).json()
+                f"/agenttrees/agent1/turns/{evaluation['rows']['items'][0]['cells'][1]['turn_id']}/trace")).json()
             assert trace["spans"]  # replayed turns are traceable
             assert trace["envelope"]  # frozen from the original turn
     run(case())
@@ -501,7 +501,7 @@ def test_replay_turn_forks_with_lineage():
 
             evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
             assert [col["label"] for col in evaluation["columns"]] == ["baseline", "prod", "staging"]
-            assert len(evaluation["rows"]) == 1
+            assert len(evaluation["rows"]["items"]) == 1
     run(case())
 
 
@@ -550,7 +550,7 @@ def test_replay_cell_turn_reuses_source_envelope(monkeypatch):
             })).json()
             await wait_task(c, acc["task_id"])
             evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
-            cell = evaluation["rows"][0]["cells"][1]
+            cell = evaluation["rows"]["items"][0]["cells"][1]
             trace = (await c.get(
                 f"/agenttrees/agent1/turns/{cell['turn_id']}/trace")).json()
             assert trace["envelope"] == source_env  # frozen, not a fresh stamp
@@ -667,7 +667,7 @@ def test_judge_score_update_is_scoped_to_its_evaluation():
                 "rubric_id": rubric["id"]})).json()
             await wait_task(c, first["task_id"])
             grid_a = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[0]}")).json()
-            case_id = grid_a["rows"][0]["cells"][1]["case_id"]
+            case_id = grid_a["rows"]["items"][0]["cells"][1]["case_id"]
             assert case_id
 
             # Make the two evaluations share the case. No endpoint attaches an
@@ -686,8 +686,8 @@ def test_judge_score_update_is_scoped_to_its_evaluation():
 
             judged = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[0]}")).json()
             untouched = (await c.get(f"/agenttrees/agent1/evaluations/{evaluation_ids[1]}")).json()
-            assert judged["rows"][0]["cells"][1]["latest_score"] is not None
-            assert untouched["rows"][0]["cells"][1]["latest_score"] is None
+            assert judged["rows"]["items"][0]["cells"][1]["latest_score"] is not None
+            assert untouched["rows"]["items"][0]["cells"][1]["latest_score"] is None
     run(case())
 
 
@@ -709,7 +709,7 @@ def test_judge_evaluation_auto_cases_judgments_summary():
             await wait_task(c, jr.json()["task_id"])
 
             evaluation = (await c.get(f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}")).json()
-            scored = [row["cells"][1] for row in evaluation["rows"]]
+            scored = [row["cells"][1] for row in evaluation["rows"]["items"]]
             assert all(cell["case_id"] for cell in scored)
             assert all(cell["latest_score"] is not None for cell in scored)
 
@@ -773,6 +773,59 @@ def test_tasks_stream_emits_task_progress_span_events():
 
             await asyncio.wait_for(asyncio.gather(consume(), produce()), timeout=20)
             assert {"task", "progress", "span"} <= seen
+    run(case())
+
+
+def test_grid_pages_by_row_and_revalidates_with_an_etag():
+    """getEvaluation — one page of the grid, conditional.
+
+    The two claims the contract makes and the polling UI leans on: a page
+    number means the same ROWS throughout (the row set is written once at
+    creation, only cells change), and an unchanged page answers 304 with no
+    body so a poll over a finished grid costs nothing but the round trip."""
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=3)  # 3 assistant turns
+            acc = (await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "x"}, {"model": "y"}],
+            })).json()
+            await wait_task(c, acc["task_id"])
+            url = f"/agenttrees/agent1/evaluations/{acc['evaluation_id']}"
+
+            whole = (await c.get(url)).json()
+            assert whole["rows"]["total"] == 3
+            assert len(whole["columns"]) == 3  # baseline + 2 configs, never paged
+
+            first = await c.get(url, params={"page": 1, "page_size": 2})
+            page1 = first.json()
+            assert [r["source"]["turn_id"] for r in page1["rows"]["items"]] == [
+                r["source"]["turn_id"] for r in whole["rows"]["items"][:2]]
+            second = (await c.get(url, params={"page": 2, "page_size": 2})).json()
+            assert second["rows"]["page"] == 2 and len(second["rows"]["items"]) == 1
+
+            etag = first.headers["etag"]
+            again = await c.get(url, params={"page": 1, "page_size": 2},
+                                headers={"If-None-Match": etag})
+            assert again.status_code == 304
+            assert again.headers["etag"] == etag
+            assert again.content == b""
+            # The tag is scoped to the URL: another page is a different entity.
+            other = await c.get(url, params={"page": 2, "page_size": 2},
+                                headers={"If-None-Match": etag})
+            assert other.status_code == 200
+
+            # A judgment changes a cell, so the validator must change with it.
+            rubric = (await c.post("/eval/rubrics", json={
+                "name": "Grid", "prompt": "Score 0-1."})).json()
+            judge = (await c.post("/eval/judge", json={
+                "evaluation_id": acc["evaluation_id"], "judge_model": "m",
+                "rubric_id": rubric["id"]})).json()
+            await wait_task(c, judge["task_id"])
+            moved = await c.get(url, params={"page": 1, "page_size": 2},
+                                headers={"If-None-Match": etag})
+            assert moved.status_code == 200
+            assert moved.headers["etag"] != etag
     run(case())
 
 

@@ -552,6 +552,25 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(turns.parameters.map((p) => p.name)).toContain("turn_ids");
   });
 
+  it("the evaluation grid is paged by row and revalidates with an ETag (item 7 stage F3)", () => {
+    const op = doc.paths["/agenttrees/{tree}/evaluations/{evaluationId}"].get;
+    const params = op.parameters.map((p) => p.name);
+    expect(params).toEqual(expect.arrayContaining(["page", "page_size", "If-None-Match"]));
+    // Rows are a page; columns deliberately are not — they are the caller's
+    // own configs and every row needs all of them to be readable.
+    const evaluation = doc.components.schemas.Evaluation;
+    expect(evaluation.properties.rows.allOf[0].$ref).toBe(
+      "#/components/schemas/EvaluationRowPage",
+    );
+    expect(evaluation.properties.columns.type).toBe("array");
+    // The 304 is the point of the ETag: an unchanged grid must cost no body.
+    expect(op.responses["304"]).toBeTruthy();
+    expect(op.responses["304"].content, "304 must carry no body").toBeUndefined();
+    for (const status of ["200", "304"]) {
+      expect(op.responses[status].headers.ETag, `${status} must return the validator`).toBeTruthy();
+    }
+  });
+
   it("every *Page schema is the same four-key envelope", () => {
     const pages = Object.entries(doc.components.schemas).filter(([n]) => n.endsWith("Page"));
     expect(pages.length, "no page schemas found — did they get renamed?").toBeGreaterThan(5);

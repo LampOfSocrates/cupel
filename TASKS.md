@@ -146,6 +146,30 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    contract through `cupel-ready --json` and fails on any drift, which is cheaper than
    bundling `openapi.yaml` plus a YAML parser into the runtime image for a value that only
    moves when the contract does.
+   Stage F (payload cluster) DONE 2026-08-10 — **one collection shape, transcripts off the
+   conversation, and a conditional grid.** F1 `4bec493`, F2 `80d91b5`, F3 (this commit).
+   **The shape is OFFSET `{items, page, page_size, total}`, not the cursors the review asked
+   for**, and the reason is `total`: every consuming surface here offers "load more" or a page
+   jump, and both need a count a cursor page does not carry — "showing 20 of 143" is the whole
+   difference between paging and silently truncating. `LIMIT`/`OFFSET` also ports to whatever
+   store an adopter implements this contract over, where a keyset cursor is per-database work
+   with an encoding each implementor would invent. Newly paged: users, evaluations, tasks
+   (its bare `limit` is gone), rubrics, eval sets, judgments. **Four bare arrays stay**, each
+   saying why at its own response — `/models` and `…/endpoints` (backend-configured
+   enumerations a dropdown needs whole), `/agenttrees` (the scope selector every path hangs
+   off) and `…/agents` (a hierarchy: a page of it orphans nodes). **The last two are a
+   refusal, not an omission**: paging them needs a searchable tree picker and a lazy-expand
+   traversal, which is item 17's work, not a parameter. F2 removed `Conversation.turns`,
+   added `turn_count`, and made the transcript the contract's 67th operation
+   (`…/conversations/{id}/turns`, family `conversations` 4 → 5) — chronological, so page 1 is
+   immutable while a conversation grows, and an omitted `page` means the LAST page, because
+   that is where a reader starts; `?turn_ids=` is what keeps the eval-set reference preview
+   from becoming a lie. F3 made `Evaluation.rows` a page and `getEvaluation` conditional
+   (`ETag` + 304): the body is rows × columns × cells and the page POLLS it, and row paging
+   is safe precisely because an evaluation's rows are fixed at creation while only its cells
+   change. Found and NOT fixed: **(viii)** cross-conversation batch turn fetch (bucket C10)
+   is still absent — `?turn_ids=` narrows within ONE conversation, so the eval-set preview
+   still issues one request per referenced conversation.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

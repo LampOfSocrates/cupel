@@ -6,6 +6,7 @@ import type {
   ReplayTurnAccepted,
   ReplayTurnRequest,
   Evaluation,
+  EvaluationRow,
   Variant,
   EvaluationSummaryItem,
 } from "../../../api/types";
@@ -37,7 +38,33 @@ export const replayTurnRequests: Array<{ tree: string; body: ReplayTurnRequest }
 // not) — the detail handler strips it. Fixtures are MUTABLE: live-fill tests
 // mark cells done / flip status, then poke the /tasks/stream rig;
 // resetHandlerState reseeds.
-type StoredEvaluation = Evaluation & { label?: string | null };
+// Fixtures keep rows as a plain ARRAY — tests reach into `evaluation.rows[0]`
+// to fill a cell, and that is the whole grid, not a page of it. The handler
+// below is what turns it into the wire shape (EvaluationRowPage) and stamps
+// the ETag, so the two cannot drift.
+type StoredEvaluation = Omit<Evaluation, "rows"> & {
+  rows: EvaluationRow[];
+  label?: string | null;
+};
+
+/** A short, stable digest — jsdom has no crypto.subtle sync API and the fake
+ * only needs "different body ⇒ different tag". */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/** Conditional-read log for getEvaluation — tests assert that the polling
+ * page revalidates (sends If-None-Match) and that an unchanged grid 304s. */
+export const evaluationReads: Array<{
+  page: string | null;
+  ifNoneMatch: string | null;
+  status: number;
+}> = [];
 
 function seedEvaluations(): StoredEvaluation[] {
   return [
@@ -136,7 +163,7 @@ function configLabel(cfg: Variant, index: number): string {
 // (mirrors mock/main.py:144-157 assistant_rows + :570-577 cell insert).
 function evaluationRowsFromSelection(selection: ReplayRequest["selection"], configCount: number) {
   const all = allConversations();
-  const rows: Evaluation["rows"] = [];
+  const rows: EvaluationRow[] = [];
   for (const item of selection) {
     const found = all.find((c) => c.id === item.conversation_id);
     for (const turn of found?.turns ?? []) {
@@ -311,8 +338,12 @@ export const evaluationHandlers = [
     return HttpResponse.json(pageOf(items, new URL(request.url)));
   }),
 
-  // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — full grid.
-  http.get(`${BASE}/agenttrees/:tree/evaluations/:evaluationId`, ({ params }) => {
+  // GET /agenttrees/{tree}/evaluations/{evaluationId} (getEvaluation) — ONE
+  // PAGE of the grid, with an ETag. The tag is a digest of the body exactly as
+  // mock/main.py computes it, so it moves when and only when a cell, the
+  // status or a column label moves; If-None-Match on an unchanged page answers
+  // 304 with no body, which is what makes the page's poll cheap.
+  http.get(`${BASE}/agenttrees/:tree/evaluations/:evaluationId`, ({ params, request }) => {
     evaluationDetailRequests.push(params.evaluationId as string);
     const denied = treeGate(params.tree as string);
     if (denied) return denied;
@@ -320,12 +351,22 @@ export const evaluationHandlers = [
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
     }
-    const { label: _label, ...evaluation } = found; // label is summary-only (openapi.yaml:1605 vs :1607-1618)
-    return HttpResponse.json(evaluation);
+    const url = new URL(request.url);
+    const { label: _label, rows, ...rest } = found; // label is summary-only
+    const body = { ...rest, rows: pageOf(rows, url, 50) };
+    const etag = `"${fnv1a(JSON.stringify(body))}"`;
+    const ifNoneMatch = request.headers.get("If-None-Match");
+    const status = ifNoneMatch === etag ? 304 : 200;
+    evaluationReads.push({ page: url.searchParams.get("page"), ifNoneMatch, status });
+    if (status === 304) {
+      return new HttpResponse(null, { status: 304, headers: { ETag: etag } });
+    }
+    return HttpResponse.json(body, { headers: { ETag: etag } });
   }),
 ];
 
 export function resetEvaluations() {
+  evaluationReads.length = 0;
   replayRequests.length = 0;
   replayTurnRequests.length = 0;
   mockEvaluations.length = 0;

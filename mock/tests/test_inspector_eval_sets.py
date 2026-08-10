@@ -764,12 +764,12 @@ def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
                     f"/agenttrees/{evaluation['tree_id']}/evaluations/{evaluation['evaluation_id']}")
                 assert got.status_code == 200, got.text
                 grids[evaluation["tree_id"]] = got.json()
-            assert len(grids["agent1"]["rows"]) == 2
-            assert len(grids["agent2"]["rows"]) == 1
+            assert grids["agent1"]["rows"]["total"] == 2
+            assert grids["agent2"]["rows"]["total"] == 1
             # baseline + one config column
             assert [col["label"] for col in grids["agent1"]["columns"]] == [
                 "baseline", "deepseek-v3"]
-            assert grids["agent1"]["rows"][0]["cells"][0]["status"] == "done"
+            assert grids["agent1"]["rows"]["items"][0]["cells"][0]["status"] == "done"
     run(case())
 
 
@@ -796,7 +796,7 @@ def test_replay_finishes_and_fills_both_evaluations():
                 grid = (await c.get(
                     f"/agenttrees/{evaluation['tree_id']}/evaluations/{evaluation['evaluation_id']}")).json()
                 assert grid["status"] == "done"
-                for row in grid["rows"]:
+                for row in grid["rows"]["items"]:
                     assert [cell["status"] for cell in row["cells"]] == ["done", "done"]
                     assert row["cells"][1]["content"]
     run(case())
@@ -819,7 +819,7 @@ def test_replay_skips_frozen_items():
             assert r.status_code == 202, r.text
             grid = (await c.get(
                 f"/agenttrees/agent1/evaluations/{r.json()['evaluations'][0]['evaluation_id']}")).json()
-            assert len(grid["rows"]) == 1  # the frozen case contributed no row
+            assert len(grid["rows"]["items"]) == 1  # the frozen case contributed no row
     run(case())
 
 
@@ -866,6 +866,6 @@ def test_replay_accepts_a_user_turn_reference_by_replaying_its_answer():
                                      json={"configs": [{}]})).json()
             grid = (await c.get(
                 f"/agenttrees/agent1/evaluations/{accepted['evaluations'][0]['evaluation_id']}")).json()
-            assert len(grid["rows"]) == 1
-            assert grid["rows"][0]["source"]["turn_id"] == conv["turn"]["id"]
+            assert len(grid["rows"]["items"]) == 1
+            assert grid["rows"]["items"][0]["source"]["turn_id"] == conv["turn"]["id"]
     run(case())

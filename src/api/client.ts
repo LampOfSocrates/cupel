@@ -496,11 +496,37 @@ export const api = {
       query: params as Query,
     }),
 
-  // GET /agenttrees/{tree}/evaluations/{evaluationId} (openapi.yaml:671-693) — "Full evaluation
-  // with columns and per-turn cells" (:689); "Cells fill incrementally as
-  // child tasks finish; live fill arrives via GET /tasks/stream" (:679-680).
-  evaluation: (tree: string, evaluationId: string) =>
-    request<Evaluation>(`/agenttrees/${tree}/evaluations/${evaluationId}`),
+  // GET /agenttrees/{tree}/evaluations/{evaluationId} (getEvaluation) — ONE
+  // PAGE of the grid ("Cells fill incrementally as child tasks finish; live
+  // fill arrives via GET /tasks/stream"), and the one conditional read in this
+  // client.
+  //
+  // Why it does not go through request(): this is the endpoint the evaluation
+  // page POLLS, so the interesting answer is 304 — "nothing you have is
+  // stale" — which request() cannot express (it returns a body or throws).
+  // `evaluation: null` IS that answer; the caller keeps what it already
+  // rendered. `cache: "no-store"` is load-bearing: with the default policy the
+  // browser may service the revalidation from its own HTTP cache and hand back
+  // a synthesised 200, which would make the 304 path unobservable and the
+  // saving imaginary.
+  evaluation: async (
+    tree: string,
+    evaluationId: string,
+    opts: PageParams & { etag?: string | null } = {},
+  ): Promise<{ evaluation: Evaluation | null; etag: string | null }> => {
+    const { etag, ...page } = opts;
+    const path = `/agenttrees/${tree}/evaluations/${evaluationId}`;
+    const res = await fetch(buildUrl(path, page as Query), {
+      cache: "no-store",
+      headers: {
+        ...authHeaders(),
+        ...(etag ? { "If-None-Match": etag } : {}),
+      },
+    });
+    if (res.status === 304) return { evaluation: null, etag: etag ?? null };
+    if (!res.ok) throw await errorFromResponse(res, path);
+    return { evaluation: (await res.json()) as Evaluation, etag: res.headers.get("ETag") };
+  },
 
   // GET /tasks/stream (openapi.yaml:777-813) — SSE read off a fetch body via
   // the shared parser (sse.ts works for GET too); abort the signal to

@@ -107,7 +107,7 @@ def test_seed_twice_same_seed_is_idempotent():
                         continue
                     detail = (await c.get(f"/agenttrees/{tree}/evaluations/{r['id']}")).json()
                     judged_cells += sum(
-                        1 for row in detail["rows"] for cell in row["cells"]
+                        1 for row in detail["rows"]["items"] for cell in row["cells"]
                         if cell["latest_score"] is not None)
             assert judged_cells >= 1
             llm = [x for x in (await c.get("/eval/judgments",

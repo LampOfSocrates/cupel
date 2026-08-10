@@ -24,6 +24,8 @@ export interface ApiCall {
   /** Path only — query strings are kept separately so patterns stay short. */
   path: string;
   query: string;
+  /** Request headers, lowercased by Playwright — conditional reads (If-None-Match). */
+  headers: Record<string, string>;
 }
 
 function toMatcher(pattern: string): (call: ApiCall) => boolean {
@@ -52,6 +54,7 @@ export class ApiRecorder {
         method: request.method(),
         path: url.pathname,
         query: url.search,
+        headers: request.headers(),
       });
     });
   }

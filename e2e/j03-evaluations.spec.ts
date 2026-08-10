@@ -95,6 +95,18 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
     expect(early, "cells must arrive incrementally").toBeLessThan(9);
     await api.expectCalled("GET /tasks/stream");
     await expect(page.getByText("done", { exact: true })).toBeVisible();
+
+    // The grid is polled while it fills, so those reads must be CONDITIONAL
+    // (item 7 stage F3): after the first, every refetch carries the ETag the
+    // previous one returned, and a grid that has not moved answers 304 with no
+    // body. Asserted on the request side because that is the half the client
+    // owns — the mock's 304 itself is pinned by test_mock.py.
+    const reads = api.matching("GET /agenttrees/{tree}/evaluations/{evaluation}");
+    expect(reads.length, "the filling grid is polled").toBeGreaterThan(1);
+    expect(
+      reads.some((r) => r.headers["if-none-match"]),
+      "refetches must revalidate rather than re-download",
+    ).toBe(true);
   });
 
   await step("the finished evaluation is listed and re-openable", async () => {

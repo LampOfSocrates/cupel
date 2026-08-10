@@ -239,7 +239,25 @@ batching. UI: ChatPage gained "Load earlier turns" (a prepend — pages are cont
 de-duplication); the Inspector reader and both turn pickers fetch on demand and state when
 they are showing a prefix.
 
-C3 run-grid pagination + ETag · C4 `POST …/versions` replacing non-idempotent PUTs (mock
+
+**C3 grid pagination + ETag — DONE 2026-08-10** (item 7 stage F3). `Evaluation.rows` is an
+`EvaluationRowPage`; `getEvaluation` takes `?page`/`?page_size` and answers an `ETag`, and an
+`If-None-Match` that still matches gets a 304 with no body. That combination is the point:
+the body is a product (rows × columns × cells) and the page POLLS it while the evaluation
+fills, so most reads should cost a round trip and nothing else. Paging is safe here in a way
+it is not for a newest-first listing — an evaluation's ROW SET is written when the evaluation
+is created and only its CELLS change, so page N means the same turns before, during and after
+the run. Columns are deliberately NOT paged: they are the configs the caller chose, small and
+needed whole to read any row. The tag is a digest of the response body, so it moves exactly
+when a cell, the derived status or a column label moves, and it is scoped to (evaluation,
+page, page_size) as an entity tag must be. `api.evaluation` is the one client method that
+bypasses `request()` — it needs to return "nothing you have is stale" (`evaluation: null`),
+and it sets `cache: "no-store"` so the browser cannot service the revalidation from its own
+cache and hand back a synthesised 200. UI: the grid gained a Previous/Next row pager that
+appears only when the rows do not fit, mirroring the Inspector's; `CompareView` revalidates
+on the same channel.
+
+C4 `POST …/versions` replacing non-idempotent PUTs (mock
 still `PUT /eval/rubrics/{id}`:1454, `/eval/cases/{id}`:1669, `/eval/sets/{id}`:1731, all 201) ·
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this
 is why the workbench cannot show history today · C6 `Idempotency-Key` on 202s — **also the

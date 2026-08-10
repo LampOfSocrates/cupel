@@ -14,6 +14,7 @@ import {
   pushLlmJudgment,
   replayTurnRequests,
   evaluationDetailRequests,
+  evaluationReads,
   taskStreamRig,
 } from "../test/msw/handlers";
 import { EvaluationPage } from "./EvaluationPage";
@@ -655,4 +656,78 @@ describe("EvaluationPage — auto-judge (UX phase)", () => {
       expect(priorJudgmentProbes()).toHaveLength(0);
     },
   );
+});
+
+// getEvaluation is paged by ROW and conditional (item 7 stage F3). This page
+// POLLS it while the grid fills, which is exactly why both matter: the body
+// is rows × columns × cells, and most polls find nothing changed.
+describe("EvaluationPage grid paging + ETag", () => {
+  function seedWideEvaluation(rowCount: number) {
+    mockEvaluations.unshift({
+      id: "evaluation-wide",
+      tree_id: "agent1",
+      status: "done",
+      created_at: "2026-08-04T10:00:00Z",
+      task_id: "task-wide",
+      label: "Replay · 1 config(s)",
+      columns: [
+        { label: "baseline", config: {} },
+        { label: "v2", config: { instruction_version: 2 } },
+      ],
+      rows: Array.from({ length: rowCount }, (_, i) => ({
+        source: { conversation_id: "c1", turn_id: `wt${i}` },
+        cells: [
+          { status: "done" as const, content: `baseline row ${i}` },
+          { status: "done" as const, content: `variant row ${i}` },
+        ],
+      })),
+    });
+  }
+
+  it("revalidates with If-None-Match and keeps the grid on a 304", async () => {
+    const evaluation = seedRunningEvaluation();
+    renderDetail("evaluation-live");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    await waitFor(() => expect(evaluationReads.length).toBeGreaterThan(0));
+    expect(evaluationReads[0].ifNoneMatch, "the first read has nothing to validate").toBeNull();
+
+    // A stream frame for this evaluation's task makes the page refetch. Nothing
+    // about the grid changed, so the server answers 304 — and the grid already
+    // on screen must survive that, not blank out.
+    taskStreamRig.emit("task", { ...mockTasks[0], id: evaluation.task_id, status: "running" });
+    await waitFor(() => expect(evaluationReads.some((r) => r.status === 304)).toBe(true));
+    const revalidation = evaluationReads.find((r) => r.status === 304)!;
+    expect(revalidation.ifNoneMatch, "a 304 can only come from a validator").toBeTruthy();
+    expect(screen.getByText("Approved refunds land in 3-5 days.")).toBeInTheDocument();
+  });
+
+  it("pages the rows, and says which page it is showing", async () => {
+    const user = userEvent.setup();
+    seedWideEvaluation(120); // page_size 50 → three pages
+    renderDetail("evaluation-wide");
+
+    await screen.findByText("baseline row 0");
+    expect(screen.queryByText("baseline row 60")).not.toBeInTheDocument();
+    const pager = await screen.findByTestId("grid-pager");
+    expect(pager).toHaveTextContent("120 rows · page 1 of 3");
+
+    await user.click(within(pager).getByRole("button", { name: "Next" }));
+    await screen.findByText("baseline row 50");
+    expect(screen.queryByText("baseline row 0")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("grid-pager")).toHaveTextContent("page 2 of 3"),
+    );
+    // A different page is a different entity — it must not be validated
+    // against the previous page's tag.
+    const secondPageRead = evaluationReads.filter((r) => r.page === "2").at(0)!;
+    expect(secondPageRead.ifNoneMatch).toBeNull();
+    expect(secondPageRead.status).toBe(200);
+  });
+
+  it("a grid that fits on one page shows no pager at all", async () => {
+    seedRunningEvaluation();
+    renderDetail("evaluation-live");
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    expect(screen.queryByTestId("grid-pager")).not.toBeInTheDocument();
+  });
 });

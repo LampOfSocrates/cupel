@@ -28,22 +28,29 @@ const evaluation: Evaluation = {
     { label: "Baseline", config: {} },
     { label: "prod · v15", config: { instruction_version: 15, endpoint_ids: ["prod"] } },
   ],
-  rows: [
-    {
-      source: { conversation_id: "c1", turn_id: "t2" },
-      cells: [
-        { status: "done", content: "Refunds land in **3-5 days**.", latest_score: 6.1 },
-        { status: "running" },
-      ],
-    },
-    {
-      source: { conversation_id: "c2", turn_id: "t9" },
-      cells: [
-        { status: "pending" },
-        { status: "failed", error: "endpoint timeout" },
-      ],
-    },
-  ],
+  // Evaluation.rows is a PAGE (EvaluationRowPage) — the grid renders one page
+  // of rows and every column of them.
+  rows: {
+    items: [
+      {
+        source: { conversation_id: "c1", turn_id: "t2" },
+        cells: [
+          { status: "done", content: "Refunds land in **3-5 days**.", latest_score: 6.1 },
+          { status: "running" },
+        ],
+      },
+      {
+        source: { conversation_id: "c2", turn_id: "t9" },
+        cells: [
+          { status: "pending" },
+          { status: "failed", error: "endpoint timeout" },
+        ],
+      },
+    ],
+    page: 1,
+    page_size: 50,
+    total: 2,
+  },
 };
 
 function renderView(renderAnnotation?: (cell: Result) => React.ReactNode) {
@@ -102,13 +109,19 @@ describe("ComparisonView", () => {
     const { rerender } = renderView();
     const filled: Evaluation = {
       ...evaluation,
-      rows: [
-        evaluation.rows[0],
-        {
-          ...evaluation.rows[1],
-          cells: [{ status: "done", content: "Escalation offered." }, evaluation.rows[1].cells[1]],
-        },
-      ],
+      rows: {
+        ...evaluation.rows,
+        items: [
+          evaluation.rows.items[0],
+          {
+            ...evaluation.rows.items[1],
+            cells: [
+              { status: "done", content: "Escalation offered." },
+              evaluation.rows.items[1].cells[1],
+            ],
+          },
+        ],
+      },
     };
     rerender(
       <MantineProvider env="test">
@@ -148,7 +161,7 @@ describe("ComparisonView", () => {
 
     // …but a cell that actually filled still updates.
     const filled: Evaluation = structuredClone(evaluation);
-    filled.rows[1].cells[0] = { status: "done", content: "Escalation offered." };
+    filled.rows.items[1].cells[0] = { status: "done", content: "Escalation offered." };
     rerender(view(filled));
     expect(vi.mocked(marked).mock.calls.length).toBe(parsesAfterMount + 1);
     expect(annotations).toHaveBeenCalledTimes(2);

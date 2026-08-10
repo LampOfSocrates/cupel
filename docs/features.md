@@ -34,6 +34,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Replay real conversations — or a single turn — under a different version or model |
 | ✅ | **Compare side by side**, cells filling in live as each result lands |
 | ✅ | A comparison that lost a cell says so — it reads *failed* until you retry the failures, so a half-filled grid is never mistaken for a finished one |
+| ✅ | Big comparisons stay fast — the grid loads a page of rows at a time and refreshes only what actually changed |
 | ✅ | Re-fire one turn at several deployments at once; each result becomes a real conversation you can continue |
 | ✅ | **Score with an LLM judge and read its reasoning.** Every past score is kept |
 | ✅ | Hand-craft expected answers, or import a spreadsheet of them, and score against those |

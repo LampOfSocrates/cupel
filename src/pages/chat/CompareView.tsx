@@ -142,10 +142,16 @@ export function CompareView({
     [],
   );
 
+  // The ETag from the last read, so the poll below revalidates instead of
+  // re-downloading. A 304 answers `evaluation: null` — nothing changed, keep
+  // what is on screen.
+  const etagRef = useRef<string | null>(null);
   const loadEvaluation = useCallback(async () => {
     if (!evaluationId) return;
     try {
-      setEvaluation(await api.evaluation(tree, evaluationId));
+      const got = await api.evaluation(tree, evaluationId, { etag: etagRef.current });
+      etagRef.current = got.etag;
+      if (got.evaluation) setEvaluation(got.evaluation);
     } catch {
       // Non-critical: the columns keep their last state and the
       // "See the comparison" link still opens the grid.
@@ -153,12 +159,11 @@ export function CompareView({
   }, [tree, evaluationId]);
 
   useEffect(() => {
-    // KEPT, and a FALSE POSITIVE at that: `loadEvaluation` awaits the GET before it
-    // touches state, so nothing is set synchronously in this effect body — the
-    // rule is following the call into the async function. Not a useAsync read
-    // either: `send` clears the evaluation to null before a new one exists, which the
-    // hook's setData deliberately cannot do.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Not a useAsync read: `send` clears the evaluation to null before a new
+    // one exists, which the hook's setData deliberately cannot do. (The
+    // set-state-in-effect suppression this used to carry is gone — the
+    // conditional load only assigns behind a 200, so the rule no longer sees a
+    // synchronous set here.)
     void loadEvaluation();
   }, [loadEvaluation]);
 
@@ -293,7 +298,9 @@ export function CompareView({
   };
 
   const columnCount = 1 + selected.length;
-  const cells = evaluation?.rows[0]?.cells ?? [];
+  // A compare evaluation is a single-row grid (one turn, one column per
+  // endpoint), so page 1 always holds it.
+  const cells = evaluation?.rows.items[0]?.cells ?? [];
   const nameOf = (id: string) => endpoints.find((e) => e.id === id)?.name ?? id;
   const atCap = selected.length >= MAX_COMPARE_COLUMNS - 1;
 

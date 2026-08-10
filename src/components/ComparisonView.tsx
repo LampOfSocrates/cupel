@@ -124,7 +124,10 @@ export function ComparisonView({ evaluation, renderAnnotation, renderCellAction 
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {evaluation.rows.map((row, rowIndex) => (
+          {/* One PAGE of rows (Evaluation.rows is an EvaluationRowPage). The
+              row index is page-local, which is what the cell testids and the
+              ctx passed to the render slots have always meant. */}
+          {evaluation.rows.items.map((row, rowIndex) => (
             <Table.Tr key={row.source.turn_id}>
               <Table.Td>
                 <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
