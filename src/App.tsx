@@ -6,6 +6,7 @@ import { agenticConfig } from "../agentic.config";
 import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api/target";
 import { onAuthRequired, useAuthToken } from "./api/auth";
 import { loginPath, RETURN_TO_PARAM, sanitizeReturnTo } from "./lib/returnTo";
+import { isRouteHidden, landingRoute } from "./lib/families";
 import type { Model } from "./api/types";
 import { useAsync } from "./hooks/useAsync";
 import { AppContext } from "./AppContext";
@@ -26,6 +27,12 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
 const DEFAULT_TREE = "agent1";
+
+// A family answered `hide` in agentic.config.ts has no routes at all — the
+// same treatment the Inspector's role gate gives an unpermitted screen, and
+// for the same reason: a page whose whole API surface is absent must not
+// render. The sidebar hides the matching doors (shell/Sidebar.tsx).
+const visible = (route: string) => !isRouteHidden(route);
 
 // Mid-session 401s (expired token during use). The client clears the
 // token and emits auth-required (client.ts); this listener navigates to
@@ -214,47 +221,67 @@ export function App() {
             race) bounces to the validated return_to. */}
         <Route path="/login" element={<LoginBounce />} />
         <Route element={<Shell />}>
-          <Route index element={<Navigate to="/chat" replace />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:conversationId" element={<ChatPage />} />
-          <Route path="/evaluations" element={<EvaluationsPage />} />
-          {/* Step 3 Results — also the detail route for stored evaluations. */}
-          <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+          {/* /chat unless chat is hidden — see lib/families landingRoute. */}
+          <Route index element={<Navigate to={landingRoute()} replace />} />
+          {visible("/chat") && (
+            <>
+              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/chat/:conversationId" element={<ChatPage />} />
+            </>
+          )}
+          {visible("/evaluations") && (
+            <>
+              <Route path="/evaluations" element={<EvaluationsPage />} />
+              {/* Step 3 Results — also the detail route for stored evaluations. */}
+              <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+            </>
+          )}
           {/* Pre-rename paths, still live in shared links (see above). */}
           <Route path="/runs" element={<LegacyRunsRedirect />} />
           <Route path="/runs/:evaluationId" element={<LegacyRunsRedirect />} />
           {/* Sibling fork comparison — "compare forks of the same turn
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}
-          <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
+          {visible("/forks") && (
+            <Route path="/forks/:parentId/:turnId" element={<ForkComparePage />} />
+          )}
           {/* Trace — one route for every ⌁ entry ("Works on originals,
               forks, and replays alike", feature-spec.md:141); tree from
               context like all pages. */}
-          <Route path="/trace/:turnId" element={<TracePage />} />
+          {visible("/trace") && <Route path="/trace/:turnId" element={<TracePage />} />}
           {/* Eval workbench (sketch 10) — "manage the eval domain
               directly: case editor …, set manager …, rubric editor"
               (feature-spec.md:63). Global, not tree-scoped
               (feature-spec.md:111), so the route carries no tree. */}
           {/* Its Sets tab is also where collected turns land: Casebook and
               EvalSet are one noun now, so there is no second route. */}
-          <Route path="/eval" element={<EvalPage />} />
+          {visible("/eval") && <Route path="/eval" element={<EvalPage />} />}
           {/* Inspector — ROLE-gated, never mode-gated: the route
               exists only when /me.roles includes `inspect` (openapi.yaml:308
               "Requires the inspect role"). Without it the path falls through
               to the index redirect, so a hand-typed /inspector cannot render
-              a screen whose every request would 403. */}
-          {me.roles?.includes("inspect") && (
+              a screen whose every request would 403. A hidden `admin` family
+              closes it the same way, for the same reason. */}
+          {me.roles?.includes("inspect") && visible("/inspector") && (
             <Route path="/inspector" element={<InspectorPage />} />
           )}
-          <Route path="/queue" element={<QueuePage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          {/* Editor route target for node click / "Edit instructions"
-              (feature-spec.md:26). */}
-          <Route path="/agents/:agentId/editor" element={<EditorPage />} />
-          <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
+          {visible("/queue") && <Route path="/queue" element={<QueuePage />} />}
+          {visible("/agents") && (
+            <>
+              <Route path="/agents" element={<AgentsPage />} />
+              {/* Editor route target for node click / "Edit instructions"
+                  (feature-spec.md:26). */}
+              <Route path="/agents/:agentId/editor" element={<EditorPage />} />
+              <Route path="/agents/:agentId/conversations" element={<AgentConversationsPage />} />
+            </>
+          )}
           {/* Settings — Backend section first (sketch 09); generator and
               memory sections come later. */}
-          <Route path="/settings" element={<SettingsPage />} />
+          {visible("/settings") && <Route path="/settings" element={<SettingsPage />} />}
+          {/* Anything unmatched — a hidden family's path typed by hand, a
+              stale bookmark, a legacy redirect whose destination is hidden —
+              lands on the app's front door rather than on a blank frame. */}
+          <Route path="*" element={<Navigate to={landingRoute()} replace />} />
         </Route>
       </Routes>
       </QueueProvider>

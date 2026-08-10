@@ -69,3 +69,55 @@ export function hasMockedFamilies(): boolean {
 export function mockTargetId(): string {
   return agenticConfig.mockTarget ?? "mock";
 }
+
+// ------------------------------------------------------------------ the doors
+// Which family each top-level screen belongs to. `hide` removes BOTH the nav
+// entry and the route (App.tsx), the same shape the Inspector's role gate
+// already uses: a hand-typed path for a hidden family must not render a screen
+// whose every request would go nowhere.
+//
+// Sub-routes follow their parent: /agents/:id/editor is `agents`, /chat/:id is
+// `chat`. routeFamily() takes the first segment, so they need no entries.
+const ROUTE_FAMILY: Record<string, Family> = {
+  "/chat": "chat",
+  "/evaluations": "evaluations",
+  "/eval": "eval",
+  "/inspector": "admin",
+  "/queue": "tasks",
+  "/agents": "agents",
+  "/trace": "trace",
+  "/forks": "evaluations",
+  "/settings": "settings",
+};
+
+/** The family a UI path belongs to, or null when it belongs to none. */
+export function routeFamily(path: string): Family | null {
+  const [, first = ""] = path.split("/");
+  return ROUTE_FAMILY[`/${first}`] ?? null;
+}
+
+/** Whether a UI path must not render at all. */
+export function isRouteHidden(path: string): boolean {
+  const family = routeFamily(path);
+  return family !== null && isHidden(family);
+}
+
+/**
+ * The family of a UI path IF the bundled mock is what answers it — what the
+ * chrome badge names, per screen (shell/MockBadge.tsx). null when the page is
+ * the adopter's own backend, which is the normal case.
+ */
+export function mockedFamilyOfRoute(path: string): Family | null {
+  const family = routeFamily(path);
+  return family && familyAnswer(family) === "mock" ? family : null;
+}
+
+/**
+ * Where "/" goes. Normally /chat; when chat is hidden, the first door that is
+ * not — an adopter who hid chat lands in the studio instead of on a redirect
+ * to a route that does not exist.
+ */
+export function landingRoute(): string {
+  const doors = ["/chat", "/evaluations", "/eval", "/agents", "/queue", "/settings"];
+  return doors.find((route) => !isRouteHidden(route)) ?? "/settings";
+}

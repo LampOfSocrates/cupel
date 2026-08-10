@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { clearAuthToken, useAuthToken } from "../api/auth";
 import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
+import { familyAnswer, isRouteHidden } from "../lib/families";
 import { ConversationList } from "./ConversationList";
 
 // Two doors: Chat (talk to the agent) and Evaluate (the studio loop).
@@ -59,9 +60,25 @@ function QueueIndicator() {
   );
 }
 
+// A generated app answers `hide` for the families it does not want (agentic.
+// config.ts families) — those doors are gone from here and their routes are
+// gone from App.tsx. A group whose children all hid disappears with them
+// rather than opening onto nothing.
+function visibleNav(): (NavLeaf | NavGroup)[] {
+  return NAV.flatMap<NavLeaf | NavGroup>((entry) => {
+    if (!("children" in entry)) return isRouteHidden(entry.to) ? [] : [entry];
+    const children = entry.children.filter((child) => !isRouteHidden(child.to));
+    return children.length > 0 ? [{ ...entry, children }] : [];
+  });
+}
+
 export function Sidebar() {
   const { tree, me } = useApp();
   const navigate = useNavigate();
+  const nav = visibleNav();
+  // The recent list is conversation history; hiding that family hides the
+  // list, and hiding chat hides the button that starts one.
+  const showRecent = !isRouteHidden("/chat") && familyAnswer("conversations") !== "hide";
 
   // Session row: user name from /me; "Sign out" shows EXACTLY when a
   // login token exists for the active target (the no-branch rule from the
@@ -87,10 +104,12 @@ export function Sidebar() {
         <Stack gap={4}>
           {/* New chat button at top (feature-spec.md:5) — opens the empty
               chat page. */}
-          <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
-            + New chat
-          </Button>
-          {NAV.map((entry) =>
+          {!isRouteHidden("/chat") && (
+            <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
+              + New chat
+            </Button>
+          )}
+          {nav.map((entry) =>
             "children" in entry ? (
               <NavLink
                 key={entry.label}
@@ -119,19 +138,25 @@ export function Sidebar() {
             ) : null,
           )}
         </Stack>
-        <Divider my="xs" />
-        <Text size="xs" c="dimmed" fw={600} tt="uppercase" px={4}>
-          {tree} · Recent
-        </Text>
+        {showRecent && (
+          <>
+            <Divider my="xs" />
+            <Text size="xs" c="dimmed" fw={600} tt="uppercase" px={4}>
+              {tree} · Recent
+            </Text>
+          </>
+        )}
       </AppShell.Section>
       <AppShell.Section grow style={{ overflowY: "auto" }} mt={4}>
-        <ConversationList tree={tree} />
+        {showRecent && <ConversationList tree={tree} />}
       </AppShell.Section>
       {/* Settings pinned at the bottom, below the recent list.
           First section: Settings → Backend (sketch 09). */}
       <AppShell.Section>
         <Divider my="xs" />
-        <NavLink component={RouterNavLink} to="/settings" label="Settings" />
+        {!isRouteHidden("/settings") && (
+          <NavLink component={RouterNavLink} to="/settings" label="Settings" />
+        )}
         <Group justify="space-between" wrap="nowrap" px={8} py={4}>
           <Text size="xs" c="dimmed" truncate title={me.user.email ?? me.user.name}>
             {me.user.name}

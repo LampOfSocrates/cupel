@@ -4,7 +4,9 @@ import { AppShell, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useBackendTarget } from "../api/target";
 import { product } from "../lib/product";
+import { mockedFamilyOfRoute } from "../lib/families";
 import { EnvBanner, ENV_BANNER_HEIGHT, resolveBanner } from "./EnvBanner";
+import { MockBadge } from "./MockBadge";
 import { Sidebar } from "./Sidebar";
 
 // The navbar breakpoint is load-bearing, not cosmetic:
@@ -45,12 +47,16 @@ export function Shell() {
   // already on /chat — same pathname — still closes the overlay. Desktop is
   // unaffected either way: `opened` only feeds collapsed.mobile, which Mantine
   // applies below the breakpoint only.
-  const { key: locationKey } = useLocation();
+  const { key: locationKey, pathname } = useLocation();
   useEffect(() => {
     closeNav();
   }, [locationKey, closeNav]);
 
-  const headerHeight = (banner ? ENV_BANNER_HEIGHT : 0) + (isMobile ? MOBILE_BAR_HEIGHT : 0);
+  // The mock badge shares the mobile bar rather than claiming a strip of its
+  // own: on a page the bundled mock answers, that bar exists on every width.
+  const mockedFamily = mockedFamilyOfRoute(pathname);
+  const barHeight = isMobile || mockedFamily ? MOBILE_BAR_HEIGHT : 0;
+  const headerHeight = (banner ? ENV_BANNER_HEIGHT : 0) + barHeight;
 
   return (
     <AppShell
@@ -59,21 +65,26 @@ export function Shell() {
       padding="md"
     >
       {headerHeight > 0 && (
-        <AppShell.Header withBorder={isMobile}>
+        <AppShell.Header withBorder={barHeight > 0}>
           {banner && <EnvBanner />}
-          {isMobile && (
+          {barHeight > 0 && (
             <Group h={MOBILE_BAR_HEIGHT} px="xs" gap="sm" wrap="nowrap">
-              <Burger
-                opened={navOpened}
-                onClick={toggleNav}
-                size="sm"
-                aria-label="Toggle navigation"
-                aria-expanded={navOpened}
-                aria-controls="cupel-navbar"
-              />
-              <Text fw={600} size="sm">
-                {product.label}
-              </Text>
+              {isMobile && (
+                <>
+                  <Burger
+                    opened={navOpened}
+                    onClick={toggleNav}
+                    size="sm"
+                    aria-label="Toggle navigation"
+                    aria-expanded={navOpened}
+                    aria-controls="cupel-navbar"
+                  />
+                  <Text fw={600} size="sm">
+                    {product.label}
+                  </Text>
+                </>
+              )}
+              {mockedFamily && <MockBadge family={mockedFamily} />}
             </Group>
           )}
         </AppShell.Header>
