@@ -61,6 +61,8 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | **Point it at your own backend by editing one file.** Turn the bundled one off and your backend holds all persistence — Cupel stores nothing server-side |
 | ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape — **grouped into families**, so "implement chat first, evaluations later" is a plan you can measure |
 | ✅ | A backend can say what it implements: its health check reports the contract version and which families it serves, so nothing has to guess |
+| ✅ | **Every error is traceable.** Anything that goes wrong carries a reference id you can quote in a bug report, and the same id is on the response header for your logs — an id your own gateway sent is kept, not replaced |
+| ✅ | An error that rejects something you typed **names the field**, so the app can point at it instead of showing you a sentence |
 | ✅ | **Generate your config from your own OpenAPI file** — base URL, route prefix and auth scheme detected for you |
 | ✅ | Switch between mock, local, staging and prod live from Settings, with health checks |
 | ✅ | **Turn login on or off with one environment variable** — real tokens and a login screen, or straight in as a dev user. Same UI either way |

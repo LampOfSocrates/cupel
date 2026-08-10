@@ -3,6 +3,7 @@
 import { http, HttpResponse } from "msw";
 import type { ConversationFixture } from "../state";
 import {
+  apiError,
   BASE,
   conv,
   enabledTreeGate,
@@ -233,7 +234,7 @@ export const conversationHandlers = [
     if (denied) return denied;
     const found = allConversations().find((c) => c.id === params.id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+      return apiError("not_found", "conversation not found", 404);
     }
     return HttpResponse.json(wireConversation(found));
   }),
@@ -245,7 +246,7 @@ export const conversationHandlers = [
     if (denied) return denied;
     const found = allConversations().find((c) => c.id === params.id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+      return apiError("not_found", "conversation not found", 404);
     }
     const url = new URL(request.url);
     turnRequests.push(url);
@@ -272,13 +273,10 @@ export const conversationHandlers = [
     if (denied) return denied;
     const found = allConversations().find((c) => c.id === params.id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+      return apiError("not_found", "conversation not found", 404);
     }
     if (found.deleted) {
-      return HttpResponse.json(
-        { code: "conversation_deleted", message: "conversation is deleted" },
-        { status: 409 },
-      );
+      return apiError("conversation_deleted", "conversation is deleted", 409);
     }
     return HttpResponse.json(wireConversation({ ...found, title: body.title ?? found.title }));
   }),
@@ -290,7 +288,7 @@ export const conversationHandlers = [
     if (denied) return denied;
     const found = allConversations().find((c) => c.id === params.id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+      return apiError("not_found", "conversation not found", 404);
     }
     found.deleted = true;
     return new HttpResponse(null, { status: 204 });

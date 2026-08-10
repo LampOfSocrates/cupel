@@ -246,11 +246,27 @@ export interface AdminConversationListParams extends PageParams {
   score_max?: number;
 }
 
-// openapi.yaml:1061 Error — {code, message}; also the SSE `error` event payload
-// (openapi.yaml:476 "event: error — data: Error").
+// openapi.yaml ErrorDetail — one specific complaint about one piece of input.
+// `field` and `row` are two coordinates on the same input and either may be
+// absent: a bad JSON body has a field and no row, a spreadsheet cell has both.
+export interface ErrorDetail {
+  /** "items[2].kind", "input.prompt", a query parameter name, or a column. */
+  field?: string | null;
+  /** 1-based data-row number, for row-oriented input. */
+  row?: number | null;
+  message: string;
+}
+
+// openapi.yaml Error — the ONE error body, on every non-2xx of every
+// operation; also the SSE `error` event payload ("event: error — data:
+// Error"). `code` is the only part a client may branch on. `request_id` is
+// echoed on the X-Request-Id header of every response and is what a user
+// quotes in a support ticket; src/api/client.ts surfaces it on ApiError.
 export interface ErrorBody {
   code: string;
   message: string;
+  request_id: string;
+  details?: ErrorDetail[];
 }
 
 // openapi.yaml:1391 ChatRequest — ":1398 Omit [conversation_id] to start a new
@@ -510,22 +526,18 @@ export interface EvalCaseUpdate {
   reference?: string | null;
 }
 
-// openapi.yaml:3373 EvalCaseImportReport — ":3376-3379 "Per-row error report
-// … valid rows import even when others fail"". The identical shape arrives
-// inline (200) or as Task.result.import_report (202) — openapi.yaml:1386-1389.
-export interface EvalImportRowError {
-  /** ":3396 1-based data-row number in the uploaded file." */
-  row: number;
-  column?: string | null;
-  message: string;
-}
-
+// openapi.yaml EvalCaseImportReport — "Per-row error report … valid rows
+// import even when others fail". The identical shape arrives inline (200) or
+// as Task.result.import_report (202). Its `errors` are plain ErrorDetail: the
+// report used to declare a private near-copy ({row, column?, message}), so a
+// client rendered "which bit of my input was rejected" twice.
 export interface EvalCaseImportReport {
   set_id?: string | null;
   rows_total: number;
   rows_imported: number;
   created_case_ids: string[];
-  errors: EvalImportRowError[];
+  /** row is always set here; field carries the spreadsheet COLUMN name. */
+  errors: ErrorDetail[];
 }
 
 // openapi.yaml EvalSetItem — the merged noun's member. "kind is the whole

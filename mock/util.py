@@ -13,6 +13,22 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:10]}"
 
 
+# An inbound correlation id is HONOURED, not replaced (openapi.yaml Error
+# .request_id): an adopter behind a gateway already stamped a trace id, and
+# minting a second one here would make the id printed in the error body
+# unjoinable to the logs a support ticket needs. It is untrusted input that
+# ends up in log lines and in a response header, so it is admitted only if it
+# is short and boring — anything else (control characters, CR/LF that would
+# split a header, a 4 KB essay) is dropped and a fresh id generated instead.
+SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:/+=@-]{1,128}$")
+
+
+def request_id(inbound: str | None) -> str:
+    if inbound and SAFE_REQUEST_ID.match(inbound):
+        return inbound
+    return new_id("req")
+
+
 def det_hash(*parts) -> int:
     h = hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
     return int(h, 16)

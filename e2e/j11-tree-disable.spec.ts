@@ -140,6 +140,47 @@ test(
       expect(rename.status()).toBe(409);
     });
 
+    // The five writes whose 409 the contract did not declare until item 7
+    // stage F7. They always behaved this way; only openapi.yaml was silent,
+    // so an adopter reading the contract would have built a client that
+    // treated any of these as an unexpected failure.
+    await step("the rest of the blocked write set 409s too, as now declared", async () => {
+      const agentId = (
+        await (await request.get(`${API_ORIGIN}/agenttrees/agent2/agents`, { headers: adminAuth }))
+          .json()
+      )[0].id;
+      const blocked = [
+        request.post(`${API_ORIGIN}/agenttrees/agent2/agents`, {
+          data: { name: "New node" },
+          headers: adminAuth,
+        }),
+        request.post(
+          `${API_ORIGIN}/agenttrees/agent2/agents/${agentId}/instructions/versions`,
+          { data: { content: "nope" }, headers: adminAuth },
+        ),
+        request.post(`${API_ORIGIN}/agenttrees/agent2/agents/${agentId}/snapshots`, {
+          data: { content: "nope" },
+          headers: adminAuth,
+        }),
+        request.put(`${API_ORIGIN}/agenttrees/agent2/agents/${agentId}/last-selection`, {
+          data: { items: [] },
+          headers: adminAuth,
+        }),
+        request.delete(
+          `${API_ORIGIN}/agenttrees/agent2/conversations/${history.conversationId}`,
+          { headers: adminAuth },
+        ),
+      ];
+      for (const response of await Promise.all(blocked)) {
+        expect(response.status(), response.url()).toBe(409);
+        const body = await response.json();
+        expect(body.code).toBe("tree_disabled");
+        // Every error body is traceable, and the header agrees with it —
+        // src/api/client.ts reads the header first.
+        expect(body.request_id).toBe(response.headers()["x-request-id"]);
+      }
+    });
+
     await step("hidden for the non-admin, still listed for the admin", async () => {
       const forRestricted = await request.get(`${API_ORIGIN}/agenttrees`, {
         headers: restrictedAuth,

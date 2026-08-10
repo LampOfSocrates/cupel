@@ -1,7 +1,12 @@
 // Span trees and their lazily-loaded payloads.
 import { http, HttpResponse } from "msw";
 import type { SpanPayload, Trace } from "../../../api/types";
-import { BASE, envelope, treeGate } from "../state";
+import {
+  apiError,
+  BASE,
+  envelope,
+  treeGate,
+} from "../state";
 
 // --------------------------------------------------------------- trace state
 // GET /agenttrees/{tree}/turns/{turnId}/trace (openapi.yaml:696-721) + GET
@@ -117,7 +122,7 @@ export const traceHandlers = [
     if (denied) return denied;
     const found = mockTraces[id];
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "turn not found" }, { status: 404 });
+      return apiError("not_found", "turn not found", 404);
     }
     return HttpResponse.json(found);
   }),
@@ -129,7 +134,7 @@ export const traceHandlers = [
     spanPayloadRequests.push(id);
     const found = mockSpanPayloads[id];
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "span not found" }, { status: 404 });
+      return apiError("not_found", "span not found", 404);
     }
     return HttpResponse.json(found);
   }),

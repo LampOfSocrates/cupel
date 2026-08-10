@@ -15,3 +15,6 @@ export { JudgmentDrawer } from "./JudgmentDrawer";
 // action row, the Inspector's reader).
 export { CollectModal } from "./CollectModal";
 export { STATUS_COLOR, type LifecycleStatus } from "./status";
+// The machine-readable half of an ApiError — the fields it rejected and the
+// correlation id a support ticket quotes.
+export { ApiErrorNote, errorMessage } from "./ApiErrorNote";

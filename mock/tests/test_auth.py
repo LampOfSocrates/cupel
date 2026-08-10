@@ -212,7 +212,8 @@ def test_restricted_user_tree_filtering_and_404(monkeypatch):
             r = await c.get("/agenttrees/agent2/agents", headers=bearer(restricted))
             assert r.status_code == 404
             assert r.json() == {"code": "not_found",
-                                "message": "Agent tree 'agent2' not found."}
+                                "message": "Agent tree 'agent2' not found.",
+                                "request_id": r.headers["X-Request-Id"]}
             r = await c.post("/agenttrees/agent2/chat", headers=bearer(restricted),
                              json={"message": "hi", "stream": False})
             assert r.status_code == 404
@@ -341,7 +342,8 @@ def test_span_payload_requires_view_on_the_spans_tree(monkeypatch):
             r = await c.get(f"/spans/{secret}/payload", headers=bearer(limited))
             assert r.status_code == 404
             assert r.json() == {"code": "not_found",
-                                "message": f"Span '{secret}' not found."}
+                                "message": f"Span '{secret}' not found.",
+                                "request_id": r.headers["X-Request-Id"]}
             assert (await c.get(f"/spans/{secret}/payload",
                                 headers=bearer(admin))).status_code == 200
             r = await c.get(f"/spans/{shared}/payload", headers=bearer(limited))

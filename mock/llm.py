@@ -8,8 +8,21 @@ header values, so they are safe to persist in span notes.
 
 Cost control (docs/deployment.md:29-30): max_tokens is capped server-side
 (config.LIVE_MAX_TOKENS) and a simple in-memory sliding window per key hash
-limits generations; over-limit raises LiveUnavailable so callers serve canned
-content (flows stay alive — no 429 to the client).
+limits generations.
+
+Two ways out of that window, and the split is deliberate. At the DOOR — a
+request that has just arrived carrying X-LLM-Key — `retry_after()` reports the
+limit without consuming it and the route answers 429 rate_limited with
+Retry-After (openapi.yaml responses.TooManyRequests). That is honest: the
+caller asked for LIVE generation, cannot have it yet, and can retry the same
+request unchanged. It used to serve canned content and say nothing, so a BYOK
+user was silently handed mock text under their own API key.
+
+Once work is DETACHED — replay and judge children run server-side long after
+the 202 — there is no request left to fail, so `check_rate_limit()` inside
+complete()/stream() still raises LiveUnavailable and the caller falls back to
+canned content with a note on the llm span. A half-finished grid is worse than
+a grid with a noted cell.
 """
 
 import hashlib
@@ -41,14 +54,31 @@ def _key_hash(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def check_rate_limit(key: str) -> None:
+def _trim(key: str) -> deque:
     now = time.monotonic()
     window = _windows.setdefault(_key_hash(key), deque())
     while window and now - window[0] > config.LIVE_RATE_WINDOW_S:
         window.popleft()
+    return window
+
+
+def retry_after(key: str) -> int | None:
+    """Seconds until the window frees, or None if the caller is under the
+    limit. NON-CONSUMING: this is the DOOR check, called once per request
+    before any work is created, so it must not itself count as a generation.
+    """
+    window = _trim(key)
+    if len(window) < config.LIVE_RATE_LIMIT:
+        return None
+    free_at = window[0] + config.LIVE_RATE_WINDOW_S
+    return max(1, int(free_at - time.monotonic()) + 1)
+
+
+def check_rate_limit(key: str) -> None:
+    window = _trim(key)
     if len(window) >= config.LIVE_RATE_LIMIT:
         raise LiveUnavailable("rate_limited")
-    window.append(now)
+    window.append(time.monotonic())
 
 
 def reset_rate_limit() -> None:

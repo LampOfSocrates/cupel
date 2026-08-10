@@ -53,8 +53,11 @@ def test_gate_blocks_api_without_token(monkeypatch):
         async with make_client() as c:
             r = await c.get("/me")
             assert r.status_code == 401
+            # Even a request the gate refuses before it reaches a route is
+            # traceable — that is why RequestId is the outermost middleware.
             assert r.json() == {"code": "unauthorized",
-                                "message": "Missing or invalid demo token."}
+                                "message": "Missing or invalid demo token.",
+                                "request_id": r.headers["X-Request-Id"]}
             # wrong token is also refused, via every channel
             assert (await c.get("/me", params={"token": "wrong"})).status_code == 401
             assert (await c.get("/me", headers={"X-Demo-Token": "wrong"})).status_code == 401

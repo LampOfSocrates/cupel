@@ -105,8 +105,23 @@ measure, and a backend can *declare* the same thing about itself in
 unit the project scaffolder will ask about, one question each — your endpoints,
 the bundled mock, or hide that part of the UI.
 
-One shape you implement once and reuse: every operation that returns a
-collection of user data answers `{items, page, page_size, total}` and takes
+One error shape you implement once too: every non-2xx of every operation
+answers `{code, message, request_id, details?}`. `code` is the stable string a
+client branches on; `message` is prose you may reword whenever you like;
+`details[]` is `{field?, row?, message}` naming the input you rejected, so a
+form can mark the control instead of printing a sentence. `request_id` is a
+correlation id — echo it on the `X-Request-Id` header of **every** response,
+success included, and honour an inbound one when a caller or your gateway
+already sent a sane value, so the id in the error body is the id in your logs.
+It is deliberately not `application/problem+json` (RFC 9457): that format's
+`type` URI is its point and there is no namespace here for it to dereference,
+so every adopter would invent a private one. The statuses declared per
+operation are the ones an operation produces by design — `404`, `409`, `413`,
+`422`, `429` — while `401` is implied by the top-level security block and no
+`5xx` is declared anywhere, because a server fault is not a specified outcome.
+
+One collection shape you implement once and reuse: every operation that returns
+a collection of user data answers `{items, page, page_size, total}` and takes
 `?page`/`?page_size` — offset paging, because `total` is what lets a screen say
 "showing 20 of 143" instead of quietly truncating, and because `LIMIT`/`OFFSET`
 ports to any store. Four operations deliberately return a bare array and say so

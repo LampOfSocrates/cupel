@@ -10,7 +10,7 @@
 import { HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
-import type { AgentTree, Conversation, Me, Page, Turn } from "../../api/types";
+import type { AgentTree, Conversation, ErrorDetail, Me, Page, Turn } from "../../api/types";
 
 // The test rig registers handlers at the MOCK target's baseUrl, resolved
 // through the same store the client uses — vitest is a dev build,
@@ -38,6 +38,7 @@ export const counters = {
   attachment: 0,
   replay: 0,
   newConversation: 0,
+  requestId: 0,
 };
 
 export const mockMe: Me = {
@@ -68,6 +69,31 @@ function seedTrees(): AgentTree[] {
 }
 export const mockTrees: AgentTree[] = seedTrees();
 
+// ------------------------------------------------------------------ errors
+/**
+ * THE error response, built the way the reference mock builds it
+ * (mock/main.py error_body + the RequestId middleware): `request_id` in the
+ * body AND on the X-Request-Id header, because src/api/client.ts reads the
+ * header first so a non-JSON failure is still traceable. Every 4xx in these
+ * handlers goes through here — a hand-rolled `{code, message}` would be
+ * missing a required key and parity.test.ts would fail it.
+ *
+ * Ids are deterministic per test (counters.requestId) rather than random: a
+ * test that asserts on a rendered request id must be able to name it.
+ */
+export function apiError(
+  code: string,
+  message: string,
+  status: number,
+  details?: ErrorDetail[],
+): Response {
+  const requestId = `req_msw${++counters.requestId}`;
+  return HttpResponse.json(
+    { code, message, request_id: requestId, ...(details ? { details } : {}) },
+    { status, headers: { "X-Request-Id": requestId } },
+  );
+}
+
 // ------------------------------------------------------- tree access gates
 // The two tree rules the real backend centralises in middleware
 // (mock/main.py AuthGate + need_tree/need_enabled_tree). MSW enforced neither
@@ -82,10 +108,7 @@ export function treeGate(tree: string): Response | null {
   const known = mockTrees.some((t) => t.id === tree);
   const permitted = (mockMe.permissions[tree] ?? []).includes("view");
   if (known && permitted) return null;
-  return HttpResponse.json(
-    { code: "not_found", message: `Agent tree '${tree}' not found.` },
-    { status: 404 },
-  );
+  return apiError("not_found", `Agent tree '${tree}' not found.`, 404);
 }
 
 // enabledTreeGate: treeGate, then the disable gate for NEW WORK — a
@@ -109,13 +132,7 @@ export function enabledTreeGate(tree: string): Response | null {
   const missing = treeGate(tree);
   if (missing) return missing;
   if (mockTrees.find((t) => t.id === tree)?.enabled === false) {
-    return HttpResponse.json(
-      {
-        code: "tree_disabled",
-        message: `Agent tree '${tree}' is disabled — history is read-only.`,
-      },
-      { status: 409 },
-    );
+    return apiError("tree_disabled", `Agent tree '${tree}' is disabled — history is read-only.`, 409);
   }
   return null;
 }

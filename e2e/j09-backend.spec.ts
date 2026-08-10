@@ -12,8 +12,10 @@ import { filmed } from "./helpers/hud";
 test("backend switcher: mock → custom URL → a dead target and back, with healthz + banners", async ({
   page,
   api,
+  request,
 }) => {
-  const step = filmed(page, "Journey 9", 5);
+  const step = filmed(page, "Journey 9", 6);
+
   await step("the mock target is active and announces itself in the chrome", async () => {
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
@@ -65,5 +67,37 @@ test("backend switcher: mock → custom URL → a dead target and back, with hea
     await expect(page.getByRole("radio", { name: "Mock" })).toBeChecked();
     await expect(page.getByTestId("env-banner")).toContainText("MOCK BACKEND");
     await expect(page.getByText("Target is device-local")).toBeVisible();
+  });
+
+  // Not the switcher, but the same question a user asks it: "is this backend
+  // answering, and what do I quote when it is not?" (openapi.yaml Error).
+  await step("every answer is traceable, and an error says which field it rejected", async () => {
+    const ok = await request.get("http://localhost:4010/agenttrees");
+    expect(ok.status()).toBe(200);
+    // On a SUCCESS too — a client logs the id beside a request that has not
+    // failed yet, which is the only way to have it when the complaint is
+    // "the answer was wrong" rather than "the answer was an error".
+    expect(ok.headers()["x-request-id"]).toMatch(/^req_/);
+
+    // A gateway's id survives instead of being replaced by an unrelated one.
+    const traced = await request.get("http://localhost:4010/agenttrees", {
+      headers: { "X-Request-Id": "gw-e2e-0451" },
+    });
+    expect(traced.headers()["x-request-id"]).toBe("gw-e2e-0451");
+
+    const missing = await request.get("http://localhost:4010/agenttrees/nope/agents");
+    expect(missing.status()).toBe(404);
+    const notFound = await missing.json();
+    expect(notFound.request_id).toBe(missing.headers()["x-request-id"]);
+    expect(notFound.details).toBeUndefined(); // nothing to point at
+
+    const invalid = await request.post("http://localhost:4010/agenttrees/agent1/chat", {
+      data: { stream: false },
+    });
+    expect(invalid.status()).toBe(422);
+    const rejected = await invalid.json();
+    expect(rejected.code).toBe("invalid");
+    expect(rejected.details[0].field).toBe("message");
+    expect(rejected.request_id).toBe(invalid.headers()["x-request-id"]);
   });
 });

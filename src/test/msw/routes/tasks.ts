@@ -2,7 +2,14 @@
 // (which doubles as chat stop-generation).
 import { http, HttpResponse } from "msw";
 import type { Task } from "../../../api/types";
-import { BASE, cancelledTasks, pageOf, sseEncoder, taskStreamClients } from "../state";
+import {
+  apiError,
+  BASE,
+  cancelledTasks,
+  pageOf,
+  sseEncoder,
+  taskStreamClients,
+} from "../state";
 
 // ---------------------------------------------------------------- task state
 // GET /tasks + /tasks/{id} + retry-failed fixtures (openapi.yaml:747-865).
@@ -121,7 +128,7 @@ export const taskHandlers = [
     taskDetailRequests.push(id);
     const found = mockTasks.find((t) => t.id === id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "task not found" }, { status: 404 });
+      return apiError("not_found", "task not found", 404);
     }
     return HttpResponse.json({ ...found, children: found.children ?? [] });
   }),
@@ -133,7 +140,7 @@ export const taskHandlers = [
     retryFailedRequests.push(id);
     const found = mockTasks.find((t) => t.id === id);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "task not found" }, { status: 404 });
+      return apiError("not_found", "task not found", 404);
     }
     let requeued = 0;
     for (const child of found.children ?? []) {

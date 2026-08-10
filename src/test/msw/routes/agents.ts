@@ -11,7 +11,13 @@ import type {
   Snapshot,
   SnapshotCreate,
 } from "../../../api/types";
-import { BASE, counters, enabledTreeGate, treeGate } from "../state";
+import {
+  apiError,
+  BASE,
+  counters,
+  enabledTreeGate,
+  treeGate,
+} from "../state";
 
 // GET/POST /agenttrees/{tree}/agents (openapi.yaml:175-219, Agent :1141-1164).
 // Fixtures mirror the real mock's bootstrap hierarchy (mock/seed.py:19-34):
@@ -141,7 +147,7 @@ export const agentHandlers = [
     if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
-      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+      return apiError("not_found", "agent not found", 404);
     }
     const history = mockInstructions[agent.id] ?? {
       agent_id: agent.id,
@@ -162,7 +168,7 @@ export const agentHandlers = [
       if (denied) return denied;
       const agent = findAgent(params.tree as string, params.agentId as string);
       if (!agent) {
-        return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+        return apiError("not_found", "agent not found", 404);
       }
       const body = (await request.json()) as InstructionSave;
       instructionSaveRequests.push({ agentId: agent.id, body });
@@ -196,7 +202,7 @@ export const agentHandlers = [
     if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
-      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+      return apiError("not_found", "agent not found", 404);
     }
     const body = (await request.json()) as SnapshotCreate;
     snapshotRequests.push({ agentId: agent.id, body });
@@ -218,7 +224,7 @@ export const agentHandlers = [
     if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
-      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+      return apiError("not_found", "agent not found", 404);
     }
     return HttpResponse.json({ items: mockLastSelections[agent.id] ?? [] } satisfies Selection);
   }),
@@ -230,7 +236,7 @@ export const agentHandlers = [
     if (denied) return denied;
     const agent = findAgent(params.tree as string, params.agentId as string);
     if (!agent) {
-      return HttpResponse.json({ code: "not_found", message: "agent not found" }, { status: 404 });
+      return apiError("not_found", "agent not found", 404);
     }
     const body = (await request.json()) as Selection;
     lastSelectionPuts.push({ agentId: agent.id, items: body.items });

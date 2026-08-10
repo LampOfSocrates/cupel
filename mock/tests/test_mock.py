@@ -132,6 +132,68 @@ def parse_sse(chunks: str):
     return events
 
 
+# ----------------------------------------------------------------- errors
+def test_request_id_on_every_response_and_in_every_error_body():
+    """openapi.yaml components.headers.XRequestId + Error.request_id.
+
+    On a 200 as well as a 404: a client logs the id beside a request that has
+    not failed yet, which is the only way the id is available when the failure
+    is "the answer was wrong", not "the answer was an error"."""
+    async def case():
+        async with client_pair() as c:
+            ok = await c.get("/agenttrees")
+            assert ok.status_code == 200
+            assert ok.headers["X-Request-Id"].startswith("req_")
+
+            bad = await c.get("/agenttrees/nope/agents")
+            assert bad.status_code == 404
+            assert bad.json()["request_id"] == bad.headers["X-Request-Id"]
+            # Nothing to point at, so no details — an empty array on every 404
+            # would be noise.
+            assert "details" not in bad.json()
+
+            # Two requests never share an id.
+            assert ok.headers["X-Request-Id"] != bad.headers["X-Request-Id"]
+    run(case())
+
+
+def test_inbound_request_id_is_honoured_but_only_when_it_is_sane():
+    """An adopter behind a gateway already stamped a trace id; replacing it
+    would make the id in the error body unjoinable to their logs. It is still
+    untrusted input that lands in a response header and a log line, so a
+    header-splitting or oversized value is dropped for a fresh one."""
+    async def case():
+        async with client_pair() as c:
+            r = await c.get("/agenttrees", headers={"X-Request-Id": "trace-abc.123"})
+            assert r.headers["X-Request-Id"] == "trace-abc.123"
+
+            for hostile in ("x" * 200, "has spaces", "semi;colon"):
+                r = await c.get("/agenttrees", headers={"X-Request-Id": hostile})
+                assert r.headers["X-Request-Id"].startswith("req_")
+    run(case())
+
+
+def test_422_names_the_field_it_rejected():
+    """Error.details[] is what makes a 422 actionable: a form can mark the
+    control instead of printing a sentence."""
+    async def case():
+        async with client_pair() as c:
+            # FastAPI's own validation — a typed query parameter out of shape.
+            r = await c.get("/tasks", params={"page": "abc"})
+            assert r.status_code == 422
+            body = r.json()
+            assert body["code"] == "invalid"
+            assert body["request_id"] == r.headers["X-Request-Id"]
+            assert any(d["field"] == "page" for d in body["details"])
+
+            # A hand-written 422 with no field to blame still carries the id.
+            r = await c.post("/agenttrees/agent1/chat", json={"stream": False})
+            assert r.status_code == 422
+            assert r.json()["code"] == "invalid"
+            assert r.json()["request_id"]
+    run(case())
+
+
 # ---------------------------------------------------------------- identity/meta
 def test_me_healthz_models_trees():
     async def case():

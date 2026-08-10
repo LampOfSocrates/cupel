@@ -31,7 +31,7 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 import SwaggerParser from "@apidevtools/swagger-parser";
-import { api } from "../../api/client";
+import { ApiError, api } from "../../api/client";
 import { server } from "./server";
 import {
   BASE,
@@ -642,14 +642,14 @@ const ERROR_EXERCISES: ErrorExercise[] = [
 ];
 
 /**
- * 422 is the one status MSW answers that openapi.yaml v0.3.0 declares on a
- * single operation (POST /eval/cases/import). mock/main.py returns it just as
- * freely — err(422, "invalid", …) guards every malformed body — so MSW agrees
- * with the reference implementation, and it is the CONTRACT that is behind.
- * Already tracked: TASKS.md P3-T00 v0.4.0, "Error.details[]/request_id + 422/
- * 429/503". Listed here so the exception is explicit rather than tolerated.
+ * Empty, and it must stay empty. It used to hold 422 — returned freely by
+ * both implementations and declared on ONE operation — which item 7 stage F7
+ * closed by declaring 422 on all 38 operations that can answer it, plus 409
+ * on the five writes a disabled tree refuses, 429 on the five live-generation
+ * paths, and 404/413 on the import. An entry here now means the fake answers
+ * a status the contract does not specify, which is a bug in one of them.
  */
-const UNDECLARED_ERROR_STATUSES = new Set([422]);
+const UNDECLARED_ERROR_STATUSES = new Set<number>();
 
 // --------------------------------------------------------------- allowlists
 /**
@@ -1051,35 +1051,51 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     await expect(api.conversations("agent-nope")).rejects.toMatchObject({ status: 404 });
   });
 
-  // Found while building this guard: the reference
-  // implementation emits 409 tree_disabled from SIX operations whose contract
-  // entries declare only 2xx/404. mock/main.py is right (feature-spec.md:20
-  // "history is read-only"); openapi.yaml under-declares. Nothing is changed
-  // here — openapi.yaml is read-only for this task and the mock's behaviour is
-  // the specified one — but the gap is pinned so a v0.4.0 fix retires the note
-  // in handlers.ts rather than leaving it to rot.
-  it("pins the contract's undeclared-409 gap (retire when v0.4.0 adds them)", () => {
-    const undeclared = [
-      "POST /agenttrees/{tree}/agents",
-      "POST /agenttrees/{tree}/agents/{agentId}/instructions/versions",
-      "POST /agenttrees/{tree}/agents/{agentId}/snapshots",
-      "PUT /agenttrees/{tree}/agents/{agentId}/last-selection",
-      "DELETE /agenttrees/{tree}/conversations/{conversationId}",
-    ];
-    expect(undeclared.filter((op) => declaredStatuses(op).includes("409"))).toEqual([]);
-    // The six that DO declare it must keep declaring it. PATCH conversation
-    // joined the list in item 7 stage F6: it declares 409 for the new
-    // conversation_deleted code, and the same response covers tree_disabled.
+  // Was: a pinned GAP. The reference implementation emitted 409 tree_disabled
+  // from five operations whose contract entries declared only 2xx/404, and
+  // this test asserted the gap so it could not be forgotten. Item 7 stage F7
+  // closed it, so the test flipped: the WHOLE write set a disabled tree
+  // refuses must declare 409, and a new blocked write that forgets to is a
+  // failure here rather than a silent divergence.
+  it("every write a disabled tree refuses declares 409", () => {
     for (const op of [
       "POST /agenttrees/{tree}/chat",
       "POST /agenttrees/{tree}/replay",
       "POST /agenttrees/{tree}/replay/turn",
+      "POST /agenttrees/{tree}/agents",
+      "POST /agenttrees/{tree}/agents/{agentId}/instructions/versions",
+      "POST /agenttrees/{tree}/agents/{agentId}/snapshots",
+      "PUT /agenttrees/{tree}/agents/{agentId}/last-selection",
       "PATCH /agenttrees/{tree}/conversations/{conversationId}",
+      "DELETE /agenttrees/{tree}/conversations/{conversationId}",
       "POST /eval/judge",
       "POST /eval/sets/{setId}/replay",
     ]) {
       expect(declaredStatuses(op), op).toContain("409");
     }
+  });
+
+  // The error BODY, end to end through the real client. The three 4xx-shape
+  // promises a caller actually leans on: a stable code, a correlation id it
+  // can quote, and — for input it can fix — the field that was rejected.
+  it("ApiError carries the correlation id and the rejected field", async () => {
+    const notFound: ApiError = await api
+      .conversation("agent1", "nope")
+      .then(() => { throw new Error("expected a 404"); }, (e) => e as ApiError);
+    expect(notFound).toBeInstanceOf(ApiError);
+    expect(notFound.requestId).toMatch(/^req_/);
+    // Nothing to point at on a 404 — details is empty, not invented.
+    expect(notFound.details).toEqual([]);
+
+    const invalid: ApiError = await api
+      .judge({ judge_model: "claude-haiku-4-5", rubric_id: "rub-help" })
+      .then(() => { throw new Error("expected a 422"); }, (e) => e as ApiError);
+    expect(invalid.status).toBe(422);
+    expect(invalid.requestId).toMatch(/^req_/);
+    expect(invalid.details[0]?.field).toBeTruthy();
+
+    // Two failures never share an id.
+    expect(notFound.requestId).not.toBe(invalid.requestId);
   });
 
   it("a disabled tree 409s the documented write set and keeps reads working", async () => {

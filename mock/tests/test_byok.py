@@ -2,7 +2,8 @@
 
 Hard rules proven here: the key is used in-memory for the request only —
 NEVER persisted (sqlite scan), NEVER logged (log/stdout capture); provider
-errors and the rate limit fall back to canned content; MOCK_LIVE_DISABLED=1
+errors fall back to canned content and the rate limit answers 429 at the
+door; MOCK_LIVE_DISABLED=1
 kills the feature. The provider is ALWAYS a fake httpx.MockTransport —
 these tests never call the real OpenRouter.
 """
@@ -209,7 +210,15 @@ def test_provider_401_falls_back_to_canned_with_span_note():
     run(case())
 
 
-def test_rate_limit_over_window_serves_canned(monkeypatch):
+def test_rate_limit_answers_429_at_the_door(monkeypatch):
+    """The over-limit request is REFUSED, not quietly served canned content.
+
+    It used to answer 200 with mock text under the caller's own API key and
+    say so only in a span note nobody reads. Now the door answers 429
+    rate_limited with Retry-After (openapi.yaml responses.TooManyRequests),
+    and — the point of doing it at the door — no conversation, turn or task is
+    created for a request that got nothing.
+    """
     monkeypatch.setattr(config, "LIVE_RATE_LIMIT", 1)
     llm.TRANSPORT, calls = fake_provider()
 
@@ -217,16 +226,81 @@ def test_rate_limit_over_window_serves_canned(monkeypatch):
         app, c = make_app()
         async with c:
             first = await chat(c, "One", stream=False, headers=HEADERS)
-            second = await chat(c, "Two", stream=False, headers=HEADERS)
             conv1 = await with_turns(c, f"/agenttrees/agent1/conversations/{first['conversation_id']}")
-            conv2 = await with_turns(c, f"/agenttrees/agent1/conversations/{second['conversation_id']}")
             assert conv1["turns"][1]["content"] == "LIVE reply."
-            assert conv2["turns"][1]["content"] != "LIVE reply."  # canned
-            assert len(calls) == 1  # over-limit request never reached the provider
-            trace = (await c.get(
-                f"/agenttrees/agent1/turns/{conv2['turns'][1]['id']}/trace")).json()
-            llm_span = next(s for s in trace["spans"] if s["type"] == "llm")
-            assert "rate_limited" in llm_span["error"]
+
+            before = (await c.get("/agenttrees/agent1/conversations")).json()["total"]
+            r = await c.post("/agenttrees/agent1/chat", headers=HEADERS,
+                             json={"message": "Two", "stream": False})
+            assert r.status_code == 429
+            assert r.json()["code"] == "rate_limited"
+            assert r.json()["request_id"] == r.headers["X-Request-Id"]
+            assert int(r.headers["Retry-After"]) >= 1
+            assert len(calls) == 1  # the refused request never reached the provider
+            after = (await c.get("/agenttrees/agent1/conversations")).json()["total"]
+            assert after == before  # nothing was created for it
+
+            # Asking is free: the refusal did not consume the caller's budget,
+            # so the window frees on its own schedule.
+            assert (await c.post("/agenttrees/agent1/chat", headers=HEADERS,
+                                 json={"message": "Three", "stream": False})).status_code == 429
+
+    run(case())
+
+
+def test_rate_limit_without_a_key_is_never_charged(monkeypatch):
+    """Canned generation costs nothing, so it is not limited — a 429 for a
+    caller who never asked for live output would be a limit on nothing."""
+    monkeypatch.setattr(config, "LIVE_RATE_LIMIT", 1)
+    llm.TRANSPORT, calls = fake_provider()
+
+    async def case():
+        app, c = make_app()
+        async with c:
+            await chat(c, "One", stream=False, headers=HEADERS)  # consumes the window
+            for _ in range(3):
+                r = await c.post("/agenttrees/agent1/chat",
+                                 json={"message": "canned", "stream": False})
+                assert r.status_code == 200
+
+    run(case())
+
+
+def test_detached_children_still_fall_back_to_canned(monkeypatch):
+    """The deliberate other half of the split: replay/judge children run long
+    after their 202, so there is no request left to answer 429 with. They keep
+    the canned fallback and the span note — a half-finished grid is worse than
+    a grid with a noted cell."""
+    monkeypatch.setattr(config, "LIVE_RATE_LIMIT", 1)
+    llm.TRANSPORT, calls = fake_provider()
+
+    async def case():
+        app, c = make_app()
+        async with c:
+            body = await chat(c, "Seed a turn", stream=False, headers=HEADERS)
+            conv = await with_turns(
+                c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
+            # The window is now full, so every child generation is over-limit.
+            r = await c.post("/agenttrees/agent1/replay", headers=HEADERS, json={
+                "selection": [{"conversation_id": conv["id"],
+                               "turn_ids": [conv["turns"][1]["id"]]}],
+                "configs": [{}]})
+            # The DOOR refuses this one too — it carries a key and the window
+            # is full. Drain the window instead and prove the child path.
+            assert r.status_code == 429
+            llm.reset_rate_limit()
+            r = await c.post("/agenttrees/agent1/replay", headers=HEADERS, json={
+                "selection": [{"conversation_id": conv["id"],
+                               "turn_ids": [conv["turns"][1]["id"]]}],
+                "configs": [{}, {}]})
+            assert r.status_code == 202
+            await wait_task(c, r.json()["task_id"])
+            evaluation = (await c.get(
+                f"/agenttrees/agent1/evaluations/{r.json()['evaluation_id']}")).json()
+            # Two columns of children against a limit of 1: the batch still
+            # completes rather than erroring out.
+            cells = [cell for row in evaluation["rows"]["items"] for cell in row["cells"]]
+            assert cells and all(cell["status"] == "done" for cell in cells)
 
     run(case())
 

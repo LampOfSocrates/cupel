@@ -281,11 +281,84 @@ history remains unreadable — the POST-only sub-collection is where that GET wi
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this
 is why the workbench cannot show history today · C6 `Idempotency-Key` on 202s — **also the
 only way to close the two-tab double-judge residual** · C7 SSE event ids + `Last-Event-ID` ·
-C8 per-operation permission semantics + 403s · C9 `Error.details[]` / `request_id` + 422/429/503 ·
+C8 per-operation permission semantics + 403s ·
 C10 batch turn fetch · **C11 `Health.contract_version` + capabilities — DONE 2026-08-09**
 (item 7 stage E; delivered early because it is additive and it is where the declared families
 land) ·
 C13 search semantics · C14 span retention · C15 close the mock's implementation gap.
+
+**C9 structured errors — DONE 2026-08-10** (item 7 stage F7). The error body is now
+`{code, message, request_id, details?}` on every non-2xx of every operation, and a new contract
+test proves that "every non-2xx" literally — there is one `Error` schema and nothing else
+answers a 4xx. `details[]` is `ErrorDetail {field?, row?, message}`, and it is deliberately the
+SAME schema the spreadsheet import already returned per row: that report declared a private
+near-copy (`{row, column?, message}`), so a client had to render "which bit of my input was
+rejected" twice. `column` became `field`, which also carries a dotted body path
+(`items[2].kind`) or a query-parameter name. `details` stays OPTIONAL — most 404s have nothing
+to point at, and a required empty array would be noise on the commonest failure there is. Where
+exactly one field is at fault the entry repeats `message` verbatim; the contract says so rather
+than pretending a second wording adds anything, because what the entry adds is the `field`.
+
+**RFC 9457 (`application/problem+json`) was considered and DECLINED**, and the reasoning is in
+`info.description` so an adopter meets it before asking. Its `type` URI is the point of the
+format, and this contract has no documentation namespace to dereference — every adopter would
+invent a private URI space, which is precisely the fragmentation a shared contract exists to
+prevent; a short stable `code` is easier to branch on and easier to keep identical across
+implementations. `status` restates the status line and `instance` restates the path. Its
+extension members — the genuinely useful idea — are shapeless in the RFC, so adopting it would
+still leave a client with nothing typed to point at a field with, which is exactly what
+`details[]` is for. And it would put a second media type on every error response that every
+conformance tool here and in every adopter's stack would have to learn, for no gain.
+
+`request_id` is **honoured from an inbound `X-Request-Id` and generated only when absent**. An
+adopter behind a gateway or a load balancer already stamped a trace id; minting a second one
+would make the id printed in the error body unjoinable to the logs a support ticket actually
+needs. It is untrusted input that ends up in a response header and in log lines, so it is
+admitted only if it matches `^[A-Za-z0-9._:/+=@-]{1,128}$` — a CR/LF value that would split a
+header, or a 4 KB essay, is dropped for a fresh `req_…`. The id is on the `X-Request-Id` header
+of **every** response, 2xx included: a client that only ever sees it on failures cannot quote
+anything when the complaint is "the answer was wrong" rather than "the answer was an error".
+In the mock this is a pure-ASGI `RequestId` middleware registered OUTERMOST, so even a
+demo-token or auth-gate 401 that never reaches a route is traceable; `X-Request-Id` joined
+`ETag` in `expose_headers`, without which a browser could not read it cross-origin at all.
+`ApiError` in `src/api/client.ts` grew `requestId` and `details`, reading the header FIRST so a
+non-JSON failure (a proxy's own 502 page) still yields something traceable.
+
+**Undeclared statuses, swept and closed.** The audit was mechanical — every route in
+`mock/main.py` was paired with its contract entry and every `err(…)`/helper-raised status
+compared — and it found **26 operations short**. Fixed: **422 on 38 operations** (every one that
+takes a request body, plus every one with a non-string typed query parameter, since `?page=abc`
+really is a 422 from the validator); **409 on the five remaining writes a disabled tree
+refuses** — `POST …/agents`, `POST …/instructions/versions`, `POST …/snapshots`,
+`PUT …/last-selection`, `DELETE …/conversations/{id}` (the "six" in the earlier note counted
+`PATCH …/conversations/{id}`, which stage F6 had already declared); **404 and 413 on
+`POST /eval/cases/import`**; and `/upload`'s and the freeze's hand-rolled refs retargeted at
+named `PayloadTooLarge` / `UnprocessableEntity` responses. `401` was deliberately NOT swept:
+the contract has always stated that it is spelled out on `/me`, `/auth/logout` and `/admin/*`
+and implied elsewhere by the top-level security block. 403s were out of scope (C8).
+
+**503 was declared NOWHERE, and that is the decision, not an omission.** No implementation
+here produces one: the BYOK fallback path degrades to canned content rather than failing, and
+the mock has no upstream it can report as down at request time. More decisively, this contract
+declares no `5xx` at all — enumerating 503 without 500 and 502 would be arbitrary, and a server
+fault, a cold start or a provider outage is an infrastructure state rather than an outcome an
+operation is specified to produce. A client treats any 5xx as retryable-and-unspecified; a
+backend that is degraded rather than broken says so through `GET /healthz` and its
+`capabilities` map. A contract test pins the absence.
+
+**429 became real rather than declared.** The BYOK sliding window (`mock/llm.py`,
+`LIVE_RATE_LIMIT` per key hash per 60s) used to answer an over-limit request with **200 and
+canned mock content**, noting `rate_limited` on the llm span and nothing else — a BYOK user was
+silently handed mock text under their own API key. It could not do better where it was: chat
+generation happens after the response is committed (a 200 SSE stream, or a 202 with a task id),
+so the deep call site cannot answer 429. The fix is a DOOR check — `llm.retry_after()`, which
+reports the window without consuming it — called first by the five operations that can start
+live generation, so an over-limit request is refused with `429 rate_limited` + `Retry-After`
+before a conversation, turn or task exists. Only a request actually carrying `X-LLM-Key` is
+limited: canned generation costs nothing and limiting it would be a limit on nothing. The
+DETACHED half is deliberately unchanged — replay and judge children run long after their 202,
+where there is no request left to fail, so they keep the canned fallback and the span note,
+because a half-finished grid is worse than a grid with a noted cell.
 
 **C12 visible soft delete — DONE 2026-08-10** (item 7 stage F6). Every delete in the store was
 classified first. There are exactly TWO resource deletes, and they stay different on purpose.

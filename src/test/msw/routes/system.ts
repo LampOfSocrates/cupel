@@ -4,10 +4,11 @@
 import { http, HttpResponse } from "msw";
 import type { Endpoint, Health, Model } from "../../../api/types";
 import {
+  apiError,
   BASE,
+  captureLlmHeaders,
   LOCAL_BASE,
   MOCK_JWT,
-  captureLlmHeaders,
   mockAdminMe,
   mockMe,
   mockTrees,
@@ -69,10 +70,7 @@ export const systemHandlers = [
     const body = (await request.json()) as { email: string; password: string };
     authTokenRequests.push(body);
     if (body.email !== "admin@demo" || body.password !== "demo") {
-      return HttpResponse.json(
-        { code: "invalid_credentials", message: "Invalid email or password." },
-        { status: 401 },
-      );
+      return apiError("invalid_credentials", "Invalid email or password.", 401);
     }
     return HttpResponse.json({
       access_token: MOCK_JWT,
@@ -94,10 +92,7 @@ export const systemHandlers = [
   http.get(`${BASE}/healthz`, () => {
     healthzRequests.push("mock");
     if (healthConfig.status !== 200) {
-      return HttpResponse.json(
-        { code: "unavailable", message: "backend down" },
-        { status: healthConfig.status },
-      );
+      return apiError("unavailable", "backend down", healthConfig.status);
     }
     return HttpResponse.json(healthConfig.body);
   }),

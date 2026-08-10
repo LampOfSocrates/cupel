@@ -192,6 +192,14 @@ when a key is present.
   - Sent per request: X-LLM-Key + X-LLM-Model headers.
   - Server uses it in-memory for that request; NEVER persisted, NEVER logged.
   - No /settings endpoint involved (deferred to Phase 2 — no build-ahead).
-- Cost control: server-side max_tokens cap + simple rate limit so drip/replay
-  can't burn the client's credit.
+- Cost control: server-side max_tokens cap + a sliding-window rate limit per
+  key hash, so drip/replay can't burn the client's credit.
+- Over the limit → **429 `rate_limited` with `Retry-After`**, answered at the
+  door before a conversation, turn or task is created. It used to answer 200
+  with canned content and note `rate_limited` on the llm span, which meant a
+  BYOK caller was handed mock text under their own key with no signal. Only a
+  request carrying X-LLM-Key is limited — canned generation costs nothing.
+  Replay/judge CHILDREN are the deliberate exception: they run long after
+  their 202, so there is no request left to fail and they keep the canned
+  fallback plus the span note.
 - No key present → canned mock responses as before (default).

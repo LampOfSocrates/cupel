@@ -513,8 +513,8 @@ def test_import_reports_bad_rows_per_line_and_still_lands_the_good_ones():
             assert report["rows_imported"] == 2
             assert len(report["created_case_ids"]) == 2
             assert [e["row"] for e in report["errors"]] == [2, 3]
-            assert report["errors"][0]["column"] == "question"
-            assert report["errors"][1]["column"] == "answer"
+            assert report["errors"][0]["field"] == "question"
+            assert report["errors"][1]["field"] == "answer"
             assert all(e["message"] for e in report["errors"])
             assert report["set_id"] is None  # no set requested
     run(case())

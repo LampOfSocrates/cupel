@@ -26,6 +26,7 @@ import type {
   ConversationPage,
   Endpoint,
   ErrorBody,
+  ErrorDetail,
   EvalCase,
   EvalCaseCreate,
   EvalCaseImportReport,
@@ -83,12 +84,22 @@ import type {
 
 export type Query = Record<string, string | number | undefined>;
 
-// Error schema: {code, message} (openapi.yaml:1061)
+// Error schema: {code, message, request_id, details?} (openapi.yaml Error).
+//
+// `code` is the only part to branch on — `message` is prose the backend may
+// reword. `details` is what lets a form mark the control that was rejected
+// rather than printing a sentence. `requestId` is the correlation id: a UI
+// shows it so a user can quote it, a log line prints it so an operator can
+// grep for it. It is read from the body first and from the X-Request-Id
+// response header second, so even a non-JSON failure (a gateway's own error
+// page) still yields something traceable.
 export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
+    public requestId: string = "",
+    public details: ErrorDetail[] = [],
   ) {
     super(message);
     this.name = "ApiError";
@@ -119,11 +130,17 @@ export function buildUrl(path: string, query?: Query): string {
 async function errorFromResponse(res: Response, path: string): Promise<ApiError> {
   let code = "unknown";
   let message = `${res.status} ${res.statusText}`;
+  // Header first so it survives a body that is not JSON at all — a proxy's
+  // 502 page is exactly when a correlation id is worth having.
+  let requestId = res.headers.get("X-Request-Id") ?? "";
+  let details: ErrorDetail[] = [];
   try {
     const err = await res.json();
     if (err && typeof err === "object") {
       code = err.code ?? code;
       message = err.message ?? message;
+      requestId = err.request_id ?? requestId;
+      details = Array.isArray(err.details) ? err.details : [];
     }
   } catch {
     // non-JSON error body — keep the status fallback
@@ -140,7 +157,7 @@ async function errorFromResponse(res: Response, path: string): Promise<ApiError>
   if (code === "tree_disabled") {
     message = `This ${product.tree.one} is disabled — history is read-only.`;
   }
-  return new ApiError(res.status, code, message);
+  return new ApiError(res.status, code, message, requestId, details);
 }
 
 // BYOK headers attach CENTRALLY here, and only on the calls whose

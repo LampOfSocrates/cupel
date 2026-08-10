@@ -22,7 +22,15 @@ import type {
   RubricUpdate,
   EvaluationScoreSummary,
 } from "../../../api/types";
-import { BASE, captureLlmHeaders, counters, enabledTreeGate, envelope, pageOf } from "../state";
+import {
+  apiError,
+  BASE,
+  captureLlmHeaders,
+  counters,
+  enabledTreeGate,
+  envelope,
+  pageOf,
+} from "../state";
 import { mockEvaluations } from "./evaluations";
 import { mockTasks } from "./tasks";
 
@@ -175,7 +183,7 @@ export const importConfig: {
     rows_total: 3,
     rows_imported: 2,
     created_case_ids: ["case-imp-1", "case-imp-2"],
-    errors: [{ row: 2, column: "answer", message: "output is empty — a case needs a candidate response." }],
+    errors: [{ row: 2, field: "answer", message: "output is empty — a case needs a candidate response." }],
   },
 };
 
@@ -197,7 +205,7 @@ export const evalHandlers = [
     const body = (await request.json()) as RubricCreate;
     rubricCreates.push(body);
     if (!body?.name || !body?.prompt) {
-      return HttpResponse.json({ code: "invalid", message: "name and prompt are required." }, { status: 422 });
+      return apiError("invalid", "name and prompt are required.", 422);
     }
     const existing = mockRubrics.find((r) => r.name === body.name);
     const created: Rubric = {
@@ -221,10 +229,10 @@ export const evalHandlers = [
     rubricVersionPosts.push({ rubricId, body });
     const existing = mockRubrics.find((r) => r.id === rubricId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "rubric not found" }, { status: 404 });
+      return apiError("not_found", "rubric not found", 404);
     }
     if (!body?.prompt) {
-      return HttpResponse.json({ code: "invalid", message: "prompt is required." }, { status: 422 });
+      return apiError("invalid", "prompt is required.", 422);
     }
     existing.version += 1;
     existing.prompt = body.prompt;
@@ -258,10 +266,7 @@ export const evalHandlers = [
     const sourced = "source" in body && Boolean(body.source);
     const handcrafted = "input" in body && Boolean(body.input);
     if (sourced === handcrafted) {
-      return HttpResponse.json(
-        { code: "invalid", message: "Exactly one of (input + output) / source is required." },
-        { status: 422 },
-      );
+      return apiError("invalid", "Exactly one of (input + output) / source is required.", 422);
     }
     const id = `case-new-${++counters.evalCase}`;
     const created: EvalCase = sourced
@@ -297,7 +302,7 @@ export const evalHandlers = [
     const body = (await request.json()) as EvalSetCreate;
     evalSetCreates.push(body);
     if (!body?.name) {
-      return HttpResponse.json({ code: "invalid", message: "name is required." }, { status: 422 });
+      return apiError("invalid", "name is required.", 422);
     }
     const created: EvalSet = {
       id: `set-new-${++counters.evalSet}`,
@@ -320,7 +325,7 @@ export const evalHandlers = [
     evalSetItemPosts.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     const item = toItem(body);
     if (existing.items.some((i) => referent(i) === referent(item))) {
@@ -339,17 +344,14 @@ export const evalHandlers = [
     evalSetFreezes.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     const wanted = body?.item_ids ?? null;
     const targets = existing.items.filter(
       (i) => i.kind === "reference" && (wanted === null || wanted.includes(i.id)),
     );
     if (targets.length === 0) {
-      return HttpResponse.json(
-        { code: "invalid", message: "No reference items to freeze." },
-        { status: 422 },
-      );
+      return apiError("invalid", "No reference items to freeze.", 422);
     }
     existing.version += 1;
     existing.items = existing.items.map((i) =>
@@ -369,7 +371,7 @@ export const evalHandlers = [
     evalSetReplays.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     counters.replay += 1;
     const trees = [
@@ -378,10 +380,7 @@ export const evalHandlers = [
       ),
     ];
     if (trees.length === 0) {
-      return HttpResponse.json(
-        { code: "invalid", message: "This set has no turn references to replay." },
-        { status: 422 },
-      );
+      return apiError("invalid", "This set has no turn references to replay.", 422);
     }
     return HttpResponse.json(
       {
@@ -399,7 +398,7 @@ export const evalHandlers = [
   http.get(`${BASE}/eval/sets/:setId`, ({ params }) => {
     const found = mockEvalSets.find((s) => s.id === params.setId);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     return HttpResponse.json(found);
   }),
@@ -411,7 +410,7 @@ export const evalHandlers = [
     evalSetPatches.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     if (body.name) existing.name = body.name;
     if (body.description !== undefined) existing.description = body.description;
@@ -427,10 +426,10 @@ export const evalHandlers = [
     evalSetVersionPosts.push({ setId, body });
     const existing = mockEvalSets.find((s) => s.id === setId);
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     if (!body || body.items == null) {
-      return HttpResponse.json({ code: "invalid", message: "items is required." }, { status: 422 });
+      return apiError("invalid", "items is required.", 422);
     }
     existing.version += 1;
     existing.items = body.items.map((input) => {
@@ -447,7 +446,7 @@ export const evalHandlers = [
     evalSetDeletes.push(setId);
     const index = mockEvalSets.findIndex((s) => s.id === setId);
     if (index < 0) {
-      return HttpResponse.json({ code: "not_found", message: "set not found" }, { status: 404 });
+      return apiError("not_found", "set not found", 404);
     }
     mockEvalSets.splice(index, 1);
     return new HttpResponse(null, { status: 204 });
@@ -459,7 +458,7 @@ export const evalHandlers = [
     evalCaseRequests.push(id);
     const found = mockEvalCases[id];
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
+      return apiError("not_found", "case not found", 404);
     }
     return HttpResponse.json(found);
   }),
@@ -473,13 +472,10 @@ export const evalHandlers = [
     evalCaseVersionPosts.push({ caseId, body });
     const existing = mockEvalCases[caseId];
     if (!existing) {
-      return HttpResponse.json({ code: "not_found", message: "case not found" }, { status: 404 });
+      return apiError("not_found", "case not found", 404);
     }
     if (!body?.input?.prompt || body.output == null) {
-      return HttpResponse.json(
-        { code: "invalid", message: "input.prompt and output are required." },
-        { status: 422 },
-      );
+      return apiError("invalid", "input.prompt and output are required.", 422);
     }
     const next: EvalCase = {
       ...existing,
@@ -501,21 +497,21 @@ export const evalHandlers = [
     const body = (await request.json()) as JudgeRequest;
     judgeRequests.push(body);
     if (!body.judge_model || !body.rubric_id) {
-      return HttpResponse.json(
-        { code: "invalid", message: "judge_model and rubric_id are required." },
-        { status: 422 },
-      );
+      return apiError("invalid", "judge_model and rubric_id are required.", 422, [
+        { field: "rubric_id", message: "judge_model and rubric_id are required." },
+      ]);
     }
     // v0.3.0 widened the oneOf to evaluation_id | case_ids | set_id
     // (openapi.yaml:2926-2929), matching mock/main.py's judge handler.
     const selectors = [body.evaluation_id, body.case_ids, body.set_id].filter(Boolean).length;
     if (selectors !== 1) {
-      return HttpResponse.json(
-        {
-          code: "invalid",
-          message: "Exactly one of evaluation_id / case_ids / set_id is required (openapi.yaml:2926-2929).",
-        },
-        { status: 422 },
+      return apiError(
+        "invalid",
+        "Exactly one of evaluation_id / case_ids / set_id is required (openapi.yaml:2926-2929).",
+        422,
+        // mock/main.py names the same field on the same complaint — details is
+        // the machine half of "which selector", not a second sentence.
+        [{ field: "evaluation_id", message: "Exactly one selector is required." }],
       );
     }
     // Disable rule for judge, mirroring mock/main.py:1798-1805 exactly:
@@ -524,7 +520,7 @@ export const evalHandlers = [
     if (body.evaluation_id) {
       const evaluation = mockEvaluations.find((r) => r.id === body.evaluation_id);
       if (!evaluation) {
-        return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
+        return apiError("not_found", "evaluation not found", 404);
       }
       const denied = enabledTreeGate(evaluation.tree_id);
       if (denied) return denied;
@@ -551,7 +547,7 @@ export const evalHandlers = [
     const id = params.evaluationId as string;
     summaryRequests.push(id);
     if (!mockEvaluations.some((r) => r.id === id)) {
-      return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
+      return apiError("not_found", "evaluation not found", 404);
     }
     return HttpResponse.json(mockEvaluationSummaries[id] ?? { evaluation_id: id, scorers: [] });
   }),
@@ -586,7 +582,7 @@ export function resetEvalWorkbench() {
     rows_imported: 2,
     created_case_ids: ["case-imp-1", "case-imp-2"],
     errors: [
-      { row: 2, column: "answer", message: "output is empty — a case needs a candidate response." },
+      { row: 2, field: "answer", message: "output is empty — a case needs a candidate response." },
     ],
   };
   for (const key of Object.keys(mockEvaluationSummaries)) delete mockEvaluationSummaries[key];

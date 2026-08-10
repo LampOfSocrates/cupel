@@ -73,6 +73,59 @@ info:
     operations it is implied by the top-level security block rather than
     repeated per path.
 
+    Errors (ONE body, everywhere): every non-2xx response of every operation
+    is the `Error` schema — `{code, message, request_id, details?}`. `code` is
+    the stable machine discriminator and the ONLY part a client may branch on;
+    `message` is prose that may be reworded without notice. `details[]` is an
+    array of `ErrorDetail` `{field?, row?, message}` naming the specific input
+    that was rejected, so a form can mark the offending control instead of
+    printing a sentence; it is absent when there is nothing to point at, which
+    is most 404s. The same `ErrorDetail` is what the spreadsheet import report
+    returns per row, so "which bit of my input, and why" has one shape in this
+    contract rather than two.
+
+    `request_id` is a correlation id, echoed on the `X-Request-Id` header of
+    EVERY response (2xx included, so a client can log it before anything goes
+    wrong) and repeated in the body of every error, where a user can read and
+    quote it. A backend HONOURS an inbound `X-Request-Id` when the caller
+    sends a sane one (opaque, ≤128 chars, no control characters) and generates
+    one otherwise: an adopter behind a gateway or a load balancer already
+    stamps a trace id, and minting a second unrelated id there would make the
+    id in the error body unjoinable to the logs a support ticket actually
+    needs. Browser clients can only READ the header if it is in
+    Access-Control-Expose-Headers.
+
+    NOT application/problem+json (RFC 9457) — considered and declined, because
+    the parts of it that carry weight are already here and the rest is
+    ceremony. Its `type` URI is the point of the format, and this contract has
+    no documentation namespace to dereference, so every adopter would invent a
+    private URI space — precisely the fragmentation a shared contract exists to
+    prevent; a short stable `code` is both easier to branch on and easier to
+    keep identical across implementations. `status` restates the HTTP status
+    line and `instance` restates the request path. Its extension members, the
+    genuinely useful idea, are deliberately shapeless in the RFC, so adopting
+    it would still leave a client with nothing typed to point at a field
+    with — which is exactly what `details[]` is defined for. Adopting it would
+    also mean a second media type on every error response, which every
+    conformance tool here (and every adopter's own) would have to learn for no
+    gain. Keep `application/json`.
+
+    Which statuses are declared: the ones an operation produces BY DESIGN.
+    404, 409, 413, 422 and 429 are therefore written on the operations that
+    can answer them — notably 422 (`invalid`), which appears on every
+    operation taking a request body and on every operation with a non-string
+    typed query parameter, and 429 (`rate_limited`), which appears on the five
+    operations that can start live model generation. 401 is the one deliberate
+    exception, spelled out only on /me, /auth/logout and /admin/*, and implied
+    elsewhere by the top-level security block (see the auth model above). No
+    5xx is declared anywhere, and that is a rule rather than an oversight: a
+    server fault, a cold start or an upstream model provider outage is an
+    infrastructure state, not an outcome an operation is specified to produce,
+    and enumerating 503 without 500 and 502 would be arbitrary. A client
+    treats any 5xx as retryable-and-unspecified; a backend that is degraded
+    rather than broken says so through GET /healthz and its
+    `capabilities` map.
+
     Invariants encoded in this contract: instruction versions, judgments and
     snapshots are append-only — no endpoint updates or deletes them
     (cupel-phases.md:160). Phase 2 adds more versioned stores under the same
@@ -199,10 +252,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AuthTokenResponse" }
         "401":
-          description: Bad credentials (code invalid_credentials).
+          description: >
+            Bad credentials — code invalid_credentials, deliberately a
+            DIFFERENT code from the shared Unauthorized response, whose
+            unauthorized means the token is missing or expired. A login form
+            must tell those apart: one is a wrong password, the other is a
+            session that ended.
+          headers:
+            X-Request-Id: { $ref: "#/components/headers/XRequestId" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /auth/logout:
     post:
@@ -270,6 +331,7 @@ paths:
               schema: { $ref: "#/components/schemas/AdminUserPage" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     put:
       tags: [admin]
       operationId: putUsers
@@ -302,6 +364,7 @@ paths:
                 items: { $ref: "#/components/schemas/AdminUser" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /admin/users/{userId}/permissions:
     get:
@@ -349,6 +412,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /admin/agenttrees/{treeId}:
     patch:
@@ -380,6 +444,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /admin/conversations:
     get:
@@ -433,6 +498,7 @@ paths:
               schema: { $ref: "#/components/schemas/AdminConversationPage" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /admin/generator:
     post:
@@ -463,6 +529,7 @@ paths:
               schema: { $ref: "#/components/schemas/GeneratorStatus" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /admin/generator/status:
     get:
@@ -568,6 +635,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AgentTree" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/endpoints:
     get:
@@ -644,6 +712,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Agent" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/agents/{agentId}/instructions:
     get:
@@ -698,6 +768,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/InstructionVersion" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/agents/{agentId}/snapshots:
     post:
@@ -725,6 +797,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Snapshot" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/agents/{agentId}/last-selection:
     get:
@@ -764,6 +838,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Selection" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   # ----------------------------------------------------------- conversations
   /agenttrees/{tree}/conversations:
@@ -829,6 +905,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConversationPage" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/conversations/{conversationId}:
     get:
@@ -890,6 +967,7 @@ paths:
               schema: { $ref: "#/components/schemas/Conversation" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
       tags: [conversations]
       operationId: deleteConversation
@@ -920,6 +998,7 @@ paths:
       responses:
         "204": { description: "Deleted, or already deleted — the operation is idempotent." }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /agenttrees/{tree}/conversations/{conversationId}/turns:
     get:
@@ -981,6 +1060,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TurnPage" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   # ------------------------------------------------------------------ memory
   /agenttrees/{tree}/memory:
@@ -1025,6 +1105,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Memory" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
       tags: [memory]
       operationId: clearMemory
@@ -1134,6 +1215,8 @@ paths:
               schema: { $ref: "#/components/schemas/ChatResponse" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /upload:
     post:
@@ -1166,7 +1249,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Attachment" }
-        "413": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /feedback:
     post:
@@ -1198,6 +1282,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Judgment" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   # ------------------------------------------------------------- evaluations
   /agenttrees/{tree}/replay:
@@ -1237,6 +1322,8 @@ paths:
               schema: { $ref: "#/components/schemas/ReplayAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /agenttrees/{tree}/replay/turn:
     post:
@@ -1269,6 +1356,8 @@ paths:
               schema: { $ref: "#/components/schemas/ReplayTurnAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /agenttrees/{tree}/evaluations:
     get:
@@ -1293,6 +1382,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvaluationSummaryPage" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /agenttrees/{tree}/evaluations/{evaluationId}:
     get:
@@ -1358,6 +1448,7 @@ paths:
               description: The same validator, so the caller can keep using it.
               schema: { type: string }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   # ------------------------------------------------------------------- trace
   /agenttrees/{tree}/turns/{turnId}/trace:
@@ -1444,6 +1535,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TaskPage" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /tasks/stream:
     get:
@@ -1564,6 +1656,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RubricPage" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
       tags: [eval]
       operationId: createRubric
@@ -1583,6 +1676,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Rubric" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/rubrics/{rubricId}/versions:
     post:
@@ -1612,6 +1706,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Rubric" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/cases:
     post:
@@ -1642,6 +1737,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalCase" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/cases/import:
     post:
@@ -1698,11 +1794,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TaskRef" }
-        "422":
-          description: Unparseable file or invalid mapping (whole-file failure, distinct from per-row errors).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/cases/{caseId}:
     get:
@@ -1760,6 +1854,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalCase" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   # THE MERGED NOUN (v0.4.0). Casebook and EvalSet were the same concept
   # modelled twice — "a named collection of turn REFERENCES" and "a named
@@ -1806,6 +1901,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSetPage" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
       tags: [eval]
       operationId: createEvalSet
@@ -1828,6 +1924,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/sets/{setId}:
     get:
@@ -1872,6 +1969,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
       tags: [eval]
       operationId: deleteEvalSet
@@ -1921,6 +2019,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/sets/{setId}/items:
     post:
@@ -1959,6 +2058,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/sets/{setId}/freeze:
     post:
@@ -1991,7 +2091,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EvalSet" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "422": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/sets/{setId}/replay:
     post:
@@ -2022,6 +2122,8 @@ paths:
               schema: { $ref: "#/components/schemas/EvalSetReplayAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /eval/judge:
     post:
@@ -2058,6 +2160,8 @@ paths:
               schema: { $ref: "#/components/schemas/TaskRef" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /eval/judgments:
     get:
@@ -2113,6 +2217,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/JudgmentPage" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /eval/evaluations/{evaluationId}/summary:
     get:
@@ -2181,6 +2286,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Settings" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
 components:
   securitySchemes:
@@ -2241,14 +2347,68 @@ components:
       required: true
       schema: { type: string }
 
+  headers:
+    XRequestId:
+      description: >
+        The correlation id for this request — the same value as Error.request_id.
+        Present on EVERY response, success or failure, so a client can log it
+        beside a request that has not failed yet. Honoured from an inbound
+        X-Request-Id when the caller sends a sane one, generated otherwise.
+      schema: { type: string }
+
   responses:
     NotFound:
       description: Resource not found (or tree not permitted — unpermitted trees never render, feature-spec.md:32).
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Error:
       description: Request error.
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnprocessableEntity:
+      description: >
+        The request was understood but its content is not usable (code
+        invalid): unparseable JSON, a body that is not an object, a missing
+        or wrong-typed required field, a mutually-exclusive pair supplied
+        together, or a query parameter outside its declared type/range.
+        `details[]` names the fields — that is the whole reason this status is
+        declared rather than left implicit. Declared on every operation that
+        takes a request body and on every operation with a non-string typed
+        query parameter, because those are exactly the operations an
+        implementation can answer this way; retrying the same request
+        unchanged always fails again.
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: >
+        A rate limit was reached (code rate_limited) — declared on the five
+        operations that can start LIVE model generation, which is the work
+        worth limiting. The reference implementation limits per BYOK key over
+        a sliding window and answers at the DOOR, before any turn is created
+        or any task is enqueued, so a caller is never charged for work it did
+        not get. Retry-After carries the seconds until the window frees; the
+        request is retryable unchanged, which is what separates this from 422.
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PayloadTooLarge:
+      description: The uploaded file exceeds the backend's size limit (code too_large).
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2258,6 +2418,8 @@ components:
         AUTH_MODE=on only — an off-mode backend does not enforce the scheme.
         Clients route any 401 back to the login screen
         (feature-spec.md:18); they never branch on the mode.
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2266,6 +2428,8 @@ components:
         Authenticated but lacking the required role (code forbidden): admin
         for /admin/* management, inspect for the Inspector
         (cupel-phases.md:78 "requires the inspect role").
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2281,6 +2445,8 @@ components:
         pointing at it stay honest, but it takes no rename, no message, no
         replay and no fork. Neither is recoverable by retrying; both are
         deliberate states, not transient failures.
+      headers:
+        X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2288,9 +2454,70 @@ components:
   schemas:
     Error:
       type: object
-      required: [code, message]
+      required: [code, message, request_id]
+      description: >
+        The ONE error body, on every non-2xx response of every operation.
+        `code` is the stable machine discriminator a client branches on
+        (not_found, tree_disabled, conversation_deleted, invalid,
+        rate_limited, …); `message` is human prose and may be reworded at
+        any time, so nothing should parse it. `details` points at the
+        offending part of the request; `request_id` is what a user quotes in
+        a support ticket and an operator greps for. Deliberately NOT
+        application/problem+json (RFC 9457) — see the "Errors" note in
+        info.description for the reasoning.
       properties:
         code: { type: string, example: not_found }
+        message: { type: string }
+        request_id:
+          type: string
+          description: >
+            Correlation id for this request, echoed on the X-Request-Id
+            response header of EVERY response (2xx included). Honoured from
+            an inbound X-Request-Id header when the caller supplies a sane
+            one, generated otherwise — so an id minted by a gateway or a
+            client retry loop survives into the backend's logs instead of
+            being replaced by a second, unrelated one.
+          example: req_9f2c1ab47e
+        details:
+          type: array
+          description: >
+            Zero or more machine-readable specifics. Absent or empty means
+            the code and message are the whole story — a 404 has nothing to
+            point at. Present for input the caller can fix: a 422 names the
+            fields it rejected. NOT a stack trace and not a nested error tree.
+            When exactly one field is at fault the entry's `message` will
+            usually repeat `message` verbatim, and that is fine: what the
+            entry adds is the `field`, not a second wording of the same
+            sentence.
+          items: { $ref: "#/components/schemas/ErrorDetail" }
+
+    ErrorDetail:
+      type: object
+      required: [message]
+      description: >
+        One specific complaint about one piece of input. The shape follows
+        the per-row import report this contract already had (feature-spec.md:63
+        "row errors reported per line, not all-or-nothing") — which now uses
+        THIS schema rather than a near-identical private copy, so a client
+        renders "which bit of my input, and why" once. `field` and `row` are
+        two coordinates on the same input and either may be absent: a bad
+        JSON body has a field and no row, a spreadsheet cell has both, and a
+        complaint about the request as a whole has neither.
+      properties:
+        field:
+          type: string
+          nullable: true
+          description: >
+            Dotted/bracketed path to the offending input, relative to the
+            request body — "items[2].kind", "input.prompt" — or the name of a
+            query parameter ("page_size"), or, for row-oriented input, the
+            spreadsheet COLUMN name. Null when the complaint is not about one
+            named field.
+          example: items[2].kind
+        row:
+          type: integer
+          nullable: true
+          description: 1-based data-row number, for row-oriented input (spreadsheet import). Null otherwise.
         message: { type: string }
 
     # ---------------------------------------------------------- identity/meta
@@ -3857,13 +4084,13 @@ components:
           items: { type: string }
         errors:
           type: array
-          items:
-            type: object
-            required: [row, message]
-            properties:
-              row: { type: integer, description: 1-based data-row number in the uploaded file. }
-              column: { type: string, nullable: true }
-              message: { type: string }
+          description: >
+            The SAME ErrorDetail the Error body carries — this report used to
+            declare a private near-copy ({row, column?, message}), and a
+            client had to render "which bit of my input was rejected" twice.
+            Here `row` is always set and `field` carries the spreadsheet
+            COLUMN name when the complaint is about one.
+          items: { $ref: "#/components/schemas/ErrorDetail" }
 
     EvalSet:
       type: object

@@ -105,7 +105,7 @@ export function ImportReportView({ report }: { report: EvalCaseImportReport }) {
               {report.errors.map((e, i) => (
                 <Table.Tr key={`${e.row}-${i}`}>
                   <Table.Td>{e.row}</Table.Td>
-                  <Table.Td>{e.column ?? "—"}</Table.Td>
+                  <Table.Td>{e.field ?? "—"}</Table.Td>
                   <Table.Td>{e.message}</Table.Td>
                 </Table.Tr>
               ))}

@@ -20,6 +20,7 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import { useApp } from "../AppContext";
+import { ApiErrorNote, errorMessage } from "../components/ApiErrorNote";
 import { EvalImportModal } from "../components/EvalImportModal";
 import { TurnSourceModal } from "../components/TurnSourceModal";
 import { product } from "../lib/product";
@@ -83,7 +84,10 @@ export function EvalPage() {
   // first fetch lands.
   const [setsPage, setSetsPage] = useState({ page: 1, total: 0 });
   const [rubricsPage, setRubricsPage] = useState({ page: 1, total: 0 });
-  const [error, setError] = useState<string | null>(null);
+  // The thrown VALUE, not its message: an ApiError carries the rejected
+  // fields and the correlation id, and flattening it to a string here threw
+  // both away before the Alert could show them.
+  const [error, setError] = useState<unknown>(null);
 
   // Cases known to this screen, keyed by id (loaded per set, plus whatever was
   // created/imported here — see honesty note 1).
@@ -146,7 +150,7 @@ export function EvalPage() {
         setRubricId((id) => id ?? rubricPage.items[0]?.id ?? null);
       })
       .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) setError(e);
       });
     return () => {
       cancelled = true;
@@ -249,7 +253,7 @@ export function EvalPage() {
         setNotice("Case created (version 1).");
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
     } finally {
       setSaving(false);
     }
@@ -263,7 +267,7 @@ export function EvalPage() {
       await api.judge({ case_ids: [draftId], rubric_id: rubricId, judge_model: judgeModel });
       setNotice("Judging queued — the score lands in the judgment history.");
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
     } finally {
       setJudging(false);
     }
@@ -290,9 +294,10 @@ export function EvalPage() {
           Cases, sets and rubrics are global — they are not scoped to a single {product.tree.one}.
         </Text>
       </Group>
-      {error && (
+      {error != null && (
         <Alert color="red" title="Something went wrong" withCloseButton onClose={() => setError(null)}>
-          {error}
+          {errorMessage(error)}
+          <ApiErrorNote error={error} />
         </Alert>
       )}
 
@@ -589,7 +594,7 @@ export function EvalPage() {
             openCase(created);
             setNotice("Case created from a conversation turn (version 1).");
           } catch (e) {
-            setError((e as Error).message);
+            setError(e);
           }
         }}
       />

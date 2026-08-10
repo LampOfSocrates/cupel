@@ -155,9 +155,15 @@ describe("P1-T00 OpenAPI contract", () => {
     // Writes against it conflict; the code is named in the shared response.
     expect(path.patch.responses["409"]).toBeDefined();
     expect(doc.components.responses.Conflict.description).toMatch(/conversation_deleted/);
-    // Delete stays idempotent (204, no 409) and there is no restore verb.
+    // Delete stays idempotent and there is no restore verb. It DOES declare
+    // 409 — not for re-deleting a tombstone (that is 204 again, which is what
+    // idempotent means here) but because a disabled tree makes its history
+    // read-only, so a delete against one is tree_disabled like every other
+    // write. The reference implementation has always answered that; only the
+    // contract was silent (item 7 stage F7).
     expect(Object.keys(path).sort()).toEqual(["delete", "get", "patch"]);
-    expect(path.delete.responses["409"]).toBeUndefined();
+    expect(path.delete.responses["204"]).toBeDefined();
+    expect(path.delete.responses["409"]).toBeDefined();
     expect(doc.paths["/agenttrees/{tree}/conversations/{conversationId}/restore"]).toBeUndefined();
     // And no include_deleted listing: nothing could act on the result.
     const listParams = doc.paths["/agenttrees/{tree}/conversations"].get.parameters.map((p) => p.name);
@@ -468,7 +474,13 @@ describe("P2-T00 contract v0.3.0", () => {
     expect(imp.responses["202"]).toBeDefined(); // queued for large files
     const report = doc.components.schemas.EvalCaseImportReport;
     expect(report.required).toEqual(expect.arrayContaining(["rows_total", "rows_imported", "errors"]));
-    expect(report.properties.errors.items.required).toEqual(["row", "message"]);
+    // The per-row report and Error.details are the SAME schema — one shape for
+    // "which bit of your input, and why" (item 7 stage F7). The old private
+    // copy was {row, column?, message}; column became ErrorDetail.field.
+    expect(report.properties.errors.items.$ref).toBe("#/components/schemas/ErrorDetail");
+    const detail = doc.components.schemas.ErrorDetail;
+    expect(detail.required).toEqual(["message"]);
+    expect(Object.keys(detail.properties).sort()).toEqual(["field", "message", "row"]);
   });
 
   it("context policy widened to frozen/current/custom, Phase-1 defaults preserved (feature-spec.md:77-82)", () => {
@@ -682,6 +694,102 @@ describe("P2-T00 contract v0.3.0", () => {
       const op = doc.paths[path][method.toLowerCase()];
       const text = JSON.stringify(op.responses["200"].description ?? "");
       expect(text, `${id} must say why it is not paged`).toMatch(/NOT paged|write ECHO/);
+    }
+  });
+
+  // ------------------------------------------------------- errors (F7)
+  // The defect these close: an error was {code, message} and nothing else —
+  // no machine-readable detail, no correlation id — and several statuses the
+  // implementations return freely (422 above all, plus 409 tree_disabled on
+  // six write operations) were declared nowhere, so a client could not know
+  // they existed and cupel-ready could not check them.
+  const resolveResponse = (res) => {
+    if (!res?.$ref) return res;
+    return doc.components.responses[res.$ref.replace("#/components/responses/", "")];
+  };
+
+  it("every non-2xx response is the ONE Error schema", () => {
+    for (const { id, op } of contractOperations()) {
+      for (const [status, raw] of Object.entries(op.responses ?? {})) {
+        if (status.startsWith("2") || status === "304") continue;
+        const schema = resolveResponse(raw)?.content?.["application/json"]?.schema;
+        expect(schema?.$ref, `${id} ${status} must answer the Error schema`).toBe(
+          "#/components/schemas/Error",
+        );
+      }
+    }
+  });
+
+  it("Error carries a request_id and optional details[]; details is ErrorDetail", () => {
+    const error = doc.components.schemas.Error;
+    expect(error.required).toEqual(["code", "message", "request_id"]);
+    expect(error.properties.request_id.type).toBe("string");
+    // details is OPTIONAL — a 404 has nothing to point at, and a required
+    // empty array would be noise on every such body.
+    expect(error.required).not.toContain("details");
+    expect(error.properties.details.items.$ref).toBe("#/components/schemas/ErrorDetail");
+    // Deliberately NOT RFC 9457: no problem+json media type anywhere, and no
+    // type/title/instance members (see the Errors note in info.description).
+    for (const name of ["type", "title", "instance", "status"]) {
+      expect(error.properties[name], `Error.${name} is RFC 9457 ceremony`).toBeUndefined();
+    }
+    const mediaTypes = new Set();
+    for (const { op } of contractOperations()) {
+      for (const raw of Object.values(op.responses ?? {})) {
+        for (const type of Object.keys(resolveResponse(raw)?.content ?? {})) mediaTypes.add(type);
+      }
+    }
+    expect([...mediaTypes]).not.toContain("application/problem+json");
+  });
+
+  it("every shared error response exposes X-Request-Id", () => {
+    for (const [name, res] of Object.entries(doc.components.responses)) {
+      const schema = res.content?.["application/json"]?.schema;
+      if (schema?.$ref !== "#/components/schemas/Error") continue;
+      expect(res.headers?.["X-Request-Id"], `${name} must expose X-Request-Id`).toBeDefined();
+    }
+  });
+
+  it("422 is declared wherever a body or a typed query parameter can be rejected", () => {
+    for (const [path, item] of Object.entries(doc.paths)) {
+      for (const method of HTTP_METHODS) {
+        const op = item[method];
+        if (!op) continue;
+        const params = [...(item.parameters ?? []), ...(op.parameters ?? [])].map((p) =>
+          p.$ref ? doc.components.parameters[p.$ref.replace("#/components/parameters/", "")] : p,
+        );
+        // A path parameter is part of the URL — a bad one is a 404, not a 422.
+        const typedQuery = params.some(
+          (p) => p.in === "query" && ["integer", "number", "boolean"].includes(p.schema?.type),
+        );
+        const declared = "422" in (op.responses ?? {});
+        const expected = Boolean(op.requestBody) || typedQuery;
+        expect(declared, `${method.toUpperCase()} ${path} 422 declared=${declared}`).toBe(expected);
+      }
+    }
+  });
+
+  it("429 is declared exactly on the operations that can start live generation", () => {
+    const live = contractOperations()
+      .filter(({ op }) => "429" in (op.responses ?? {}))
+      .map(({ id }) => id)
+      .sort();
+    expect(live).toEqual([
+      "POST /agenttrees/{tree}/chat",
+      "POST /agenttrees/{tree}/replay",
+      "POST /agenttrees/{tree}/replay/turn",
+      "POST /eval/judge",
+      "POST /eval/sets/{setId}/replay",
+    ]);
+    const res = doc.components.responses.TooManyRequests;
+    expect(res.headers["Retry-After"]).toBeDefined();
+  });
+
+  it("no 5xx is declared anywhere — a server fault is not a specified outcome", () => {
+    for (const { id, op } of contractOperations()) {
+      for (const status of Object.keys(op.responses ?? {})) {
+        expect(status.startsWith("5"), `${id} declares ${status}`).toBe(false);
+      }
     }
   });
 

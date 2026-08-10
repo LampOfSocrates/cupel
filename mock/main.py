@@ -14,19 +14,96 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
-from . import auth, capabilities, config, storage, tabular
+from . import auth, capabilities, config, llm, storage, tabular
 from .db import Db, j, unj
 from .engine import Broker, Engine, judgment_dict, span_dict, task_dict, turn_dict
 from .seed import bootstrap
 from .static import mount_spa, resolve_static_dir
-from .util import canned_title, clamp_page, new_id, now_iso, page_of, sse, stamp_envelope
+from .util import (canned_title, clamp_page, new_id, now_iso, page_of, request_id, sse,
+                   stamp_envelope)
 
 
-def err(status: int, code: str, message: str):
-    raise HTTPException(status, {"code": code, "message": message})
+def err(status: int, code: str, message: str, details: list[dict] | None = None):
+    """Raise the ONE error body (openapi.yaml Error).
 
+    `request_id` is NOT set here: this function has no request in scope, and
+    threading one through every call site would be forty arguments to say the
+    same thing. The exception handlers below stamp it from the scope the
+    RequestId middleware put it on, so every error body carries it whether it
+    came from a route, a validator or a gate.
+
+    `details` is the machine-readable half — a list of ErrorDetail
+    {field?, row?, message}. Omitted when there is nothing to point at (most
+    404s); supplied when the caller can fix the input, which is what makes a
+    422 actionable instead of a sentence.
+    """
+    body = {"code": code, "message": message}
+    if details:
+        body["details"] = details
+    raise HTTPException(status, body)
+
+
+def field_error(field: str, message: str) -> list[dict]:
+    """The common case: one complaint about one named field."""
+    return [{"field": field, "message": message}]
+
+
+REQUEST_ID_HEADER = "x-request-id"
 
 DEMO_COOKIE = "cupel_demo_token"
+
+
+class RequestId:
+    """Correlation id on EVERY response (openapi.yaml components.headers
+    .XRequestId), and on every error body.
+
+    Outermost middleware on purpose: the demo-token gate and the auth gate
+    both answer requests without ever reaching a route, and a 401 is exactly
+    the response a user is most likely to be reporting. The id is put on the
+    ASGI scope so those gates and the exception handlers can read it without
+    a request object being passed around.
+
+    Pure ASGI, not BaseHTTPMiddleware, for the same reason the demo gate is:
+    BaseHTTPMiddleware buffers, which would break the two SSE endpoints.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        inbound = dict(scope["headers"]).get(REQUEST_ID_HEADER.encode(), b"").decode(
+            "latin-1", "ignore")
+        rid = request_id(inbound or None)
+        scope.setdefault("state", {})["request_id"] = rid
+
+        async def send_with_id(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-Id"] = rid
+            await send(message)
+
+        return await self.app(scope, receive, send_with_id)
+
+
+def scope_request_id(scope) -> str:
+    return (scope.get("state") or {}).get("request_id", "")
+
+
+def error_body(scope, body: dict) -> dict:
+    """Stamp request_id onto an error body. Key order is deliberate — code,
+    message, request_id, details — so a human reading raw JSON in a terminal
+    sees the two things they need first."""
+    out = {"code": body.get("code", "error"), "message": body.get("message", ""),
+           "request_id": scope_request_id(scope)}
+    if body.get("details"):
+        out["details"] = body["details"]
+    return out
+
+
+def error_response(request, status: int, body: dict, headers: dict | None = None) -> JSONResponse:
+    return JSONResponse(error_body(request.scope, body), status_code=status, headers=headers)
 
 DENIED_PAGE = (
     "<!doctype html><html><head><title>Cupel demo</title></head><body>"
@@ -73,7 +150,8 @@ class DemoTokenGate:
                 response = HTMLResponse(DENIED_PAGE, status_code=401)
             else:
                 response = JSONResponse(
-                    {"code": "unauthorized", "message": "Missing or invalid demo token."},
+                    error_body(scope, {"code": "unauthorized",
+                                       "message": "Missing or invalid demo token."}),
                     status_code=401)
             return await response(scope, receive, send)
 
@@ -134,7 +212,7 @@ class AuthGate:
         self.db = db
 
     async def _reject(self, scope, receive, send, status, code, message):
-        response = JSONResponse({"code": code, "message": message},
+        response = JSONResponse(error_body(scope, {"code": code, "message": message}),
                                 status_code=status)
         await response(scope, receive, send)
 
@@ -193,18 +271,21 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                   openapi_url="/openapi.json", docs_url=None, redoc_url=None)
     db = Db(db_path or config.DB_PATH)
     # add_middleware PREPENDS, so registration order is inner→outer. Final
-    # stack: CORS (outermost — preflight answered first; every 401 still
-    # carries CORS headers) → DemoTokenGate (deployment shared token) →
-    # AuthGate (per-user JWT when AUTH_MODE=on) → app. Both gates can
-    # be active at once; the demo gate runs first (see AuthGate docstring).
+    # stack: RequestId (outermost — so even a gate's 401 is traceable) → CORS
+    # (preflight answered early; every 401 still carries CORS headers) →
+    # DemoTokenGate (deployment shared token) → AuthGate (per-user JWT when
+    # AUTH_MODE=on) → app. Both gates can be active at once; the demo gate
+    # runs first (see AuthGate docstring).
     app.add_middleware(AuthGate, db=db)
     app.add_middleware(DemoTokenGate)
-    # expose_headers: without it a browser cannot READ ETag off a cross-origin
-    # response, so the evaluation grid's conditional poll would never send an
-    # If-None-Match and the 304 path would be dead in the one deployment (UI on
-    # :5173, API on :4010) that this mock exists for.
+    # expose_headers: without it a browser cannot READ ETag or X-Request-Id off
+    # a cross-origin response, so the evaluation grid's conditional poll would
+    # never send an If-None-Match (the 304 path dead), and the request id a
+    # user is meant to quote would be invisible to the UI — in the one
+    # deployment (UI on :5173, API on :4010) that this mock exists for.
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
-                       allow_headers=["*"], expose_headers=["ETag"])
+                       allow_headers=["*"], expose_headers=["ETag", "X-Request-Id"])
+    app.add_middleware(RequestId)
 
     seed_label = bootstrap(db)
     broker = Broker()
@@ -214,11 +295,28 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.exception_handler(HTTPException)
     async def http_exc(request, exc):
         detail = exc.detail if isinstance(exc.detail, dict) else {"code": "error", "message": str(exc.detail)}
-        return JSONResponse(detail, status_code=exc.status_code)
+        # exc.headers survives: the 429 door carries Retry-After, which is the
+        # only actionable half of a rate-limit answer.
+        return error_response(request, exc.status_code, detail, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exc(request, exc):
-        return JSONResponse({"code": "invalid", "message": str(exc)}, status_code=422)
+        """FastAPI's own 422 — a query parameter outside its declared type
+        (?page=abc), or a missing multipart field. Its errors carry a `loc`
+        tuple, which is exactly ErrorDetail.field once flattened, so the
+        machine-readable half comes for free rather than being thrown away
+        into str(exc)."""
+        details = []
+        for e in exc.errors():
+            loc = [str(p) for p in e.get("loc", []) if p not in ("query", "body", "path", "header")]
+            details.append({"field": ".".join(loc) or None, "message": e.get("msg", "invalid")})
+        summary = "; ".join(
+            f"{d['field']}: {d['message']}" if d["field"] else d["message"] for d in details)
+        return error_response(request, 422, {
+            "code": "invalid",
+            "message": summary or "Request could not be validated.",
+            "details": details,
+        })
 
     # ------------------------------------------------------------- helpers
     def live_headers(request: Request) -> tuple[str | None, str | None]:
@@ -232,6 +330,33 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return None, None
         return (request.headers.get("x-llm-key") or None,
                 request.headers.get("x-llm-model") or None)
+
+    def need_live_budget(request: Request) -> None:
+        """The 429 DOOR (openapi.yaml responses.TooManyRequests).
+
+        Called first by the five operations that can start live generation,
+        before a turn row, a task or an evaluation exists. Only a request
+        actually carrying a BYOK key is limited — a canned-content request
+        costs nothing and has never been limited. The check does not consume
+        budget, so asking is free and a 429 leaves the caller's allowance
+        exactly where it was.
+
+        Why at the door rather than where the limit is enforced: generation
+        happens after the response has been committed (a 200 SSE stream, or a
+        202 with a task id), so the deep call site CANNOT answer 429 — which
+        is why it used to serve canned content instead and tell the caller
+        nothing. Retry-After is advisory and derived from the oldest entry in
+        the window."""
+        key, _ = live_headers(request)
+        if not key:
+            return
+        seconds = llm.retry_after(key)
+        if seconds is None:
+            return
+        raise HTTPException(429, {
+            "code": "rate_limited",
+            "message": f"Live generation rate limit reached — retry in {seconds}s.",
+        }, headers={"Retry-After": str(seconds)})
 
     def register_live(parent_id: str, request: Request) -> None:
         """Replay/judge children run server-side, detached from this request,
@@ -500,7 +625,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         email, password = body.get("email"), body.get("password")
         if not email or not password:
-            err(422, "invalid", "email and password are required.")
+            err(422, "invalid", "email and password are required.",
+                field_error("email", "email and password are required."))
         # First-auth-request seeding for pre-existing DBs (mock/auth.py).
         auth.ensure_users(db)
         user = auth.find_user(db, email)
@@ -592,7 +718,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def create_tree(request: Request):
         body = await body_json(request)
         if not body.get("name"):
-            err(422, "invalid", "name is required.")
+            err(422, "invalid", "name is required.",
+                field_error("name", "name is required."))
         tid = body.get("id") or new_id("tree")
         if db.one("SELECT 1 AS x FROM trees WHERE id = ?", (tid,)):
             err(422, "invalid", f"Tree '{tid}' already exists.")
@@ -718,7 +845,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         enabled = body.get("enabled")
         if not isinstance(enabled, bool):
-            err(422, "invalid", "enabled (boolean) is required.")
+            err(422, "invalid", "enabled (boolean) is required.",
+                field_error("enabled", "enabled (boolean) is required."))
         db.run("UPDATE trees SET enabled = ? WHERE id = ?",
                (1 if enabled else 0, treeId))
         if not enabled:
@@ -847,7 +975,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         need_enabled_tree(tree)  # write — blocked on a disabled tree
         body = await body_json(request)
         if not body.get("name"):
-            err(422, "invalid", "name is required.")
+            err(422, "invalid", "name is required.",
+                field_error("name", "name is required."))
         parent_id = body.get("parent_id")
         if parent_id:
             need_agent(tree, parent_id)
@@ -883,7 +1012,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         agent = need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
-            err(422, "invalid", "content is required.")
+            err(422, "invalid", "content is required.",
+                field_error("content", "content is required."))
         snapshot_id = body.get("snapshot_id")
         if snapshot_id:
             snap = db.one("SELECT * FROM snapshots WHERE snapshot_id = ? AND agent_id = ?",
@@ -915,7 +1045,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         need_agent(tree, agentId)
         body = await body_json(request)
         if body.get("content") is None:
-            err(422, "invalid", "content is required.")
+            err(422, "invalid", "content is required.",
+                field_error("content", "content is required."))
         sid = new_id("snap")[-4:]
         base = body.get("base_version")
         base = live_version(agentId) if base is None else base
@@ -940,7 +1071,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         items = body.get("items")
         if not isinstance(items, list):
-            err(422, "invalid", "items must be an array.")
+            err(422, "invalid", "items must be an array.",
+                field_error("items", "items must be an array."))
         db.run("INSERT INTO selections (agent_id, items) VALUES (?, ?)"
                " ON CONFLICT(agent_id) DO UPDATE SET items = excluded.items",
                (agentId, j(items)))
@@ -1042,10 +1174,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         # "new chat ... against it return 409 tree_disabled" (feature-spec.md:20;
         # contract wires Conflict on chat, openapi.yaml:925).
         need_enabled_tree(tree)
+        need_live_budget(request)  # 429 before a turn row exists
         body = await body_json(request)
         message = body.get("message")
         if not message:
-            err(422, "invalid", "message is required.")
+            err(422, "invalid", "message is required.",
+                field_error("message", "message is required."))
         stream = body.get("stream", True)
 
         # Idempotent retries for machine callers (openapi.yaml:1400-1407).
@@ -1153,7 +1287,12 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                     else:
                         yield sse("done", {"turn": data[0], "status": data[1]})
             except Exception as exc:
-                yield sse("error", {"code": "generation_failed", "message": str(exc)})
+                # The SSE error frame is the same Error schema as an error
+                # BODY (openapi.yaml x-sse-events), so it carries the same
+                # request id — a stream that dies half-way is the case where a
+                # user most needs something to quote.
+                yield sse("error", error_body(request.scope, {
+                    "code": "generation_failed", "message": str(exc)}))
 
         return StreamingResponse(stream_gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1178,7 +1317,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         rating = body.get("rating")
         if rating not in ("up", "down") or not body.get("message_id"):
-            err(422, "invalid", "message_id and rating (up|down) are required.")
+            err(422, "invalid", "message_id and rating (up|down) are required.",
+                field_error("rating", "message_id and rating (up|down) are required."))
         turn = db.one("SELECT * FROM turns WHERE id = ?", (body["message_id"],))
         if not turn:
             err(404, "not_found", f"Turn '{body['message_id']}' not found.")
@@ -1217,12 +1357,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.post("/agenttrees/{tree}/replay", status_code=202)
     async def replay(tree: str, request: Request):
         need_enabled_tree(tree)  # 409 on a disabled tree (openapi.yaml:1026)
+        need_live_budget(request)  # 429 before the batch is enqueued
         body = await body_json(request)
         selection, configs = body.get("selection"), body.get("configs")
         if not selection or not isinstance(selection, list):
-            err(422, "invalid", "selection must be a non-empty array.")
+            err(422, "invalid", "selection must be a non-empty array.",
+                field_error("selection", "selection must be a non-empty array."))
         if not configs or not isinstance(configs, list):
-            err(422, "invalid", "configs must be a non-empty array.")
+            err(422, "invalid", "configs must be a non-empty array.",
+                field_error("configs", "configs must be a non-empty array."))
         if body.get("context_policy", "frozen") != "frozen":
             err(422, "invalid", "Phase 1 replays always run frozen (openapi.yaml:1540-1546).")
 
@@ -1295,12 +1438,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.post("/agenttrees/{tree}/replay/turn", status_code=202)
     async def replay_turn(tree: str, request: Request):
         need_enabled_tree(tree)  # 409 on a disabled tree (openapi.yaml:1058)
+        need_live_budget(request)  # 429 before the batch is enqueued
         body = await body_json(request)
         endpoints = body.get("endpoints")
         if not body.get("conversation_id") or not body.get("turn_id"):
-            err(422, "invalid", "conversation_id and turn_id are required.")
+            err(422, "invalid", "conversation_id and turn_id are required.",
+                field_error("turn_id", "conversation_id and turn_id are required."))
         if not endpoints or not isinstance(endpoints, list):
-            err(422, "invalid", "endpoints must be a non-empty array.")
+            err(422, "invalid", "endpoints must be a non-empty array.",
+                field_error("endpoints", "endpoints must be a non-empty array."))
         if body.get("context_policy", "frozen") != "frozen":
             err(422, "invalid", "Phase 1 replays always run frozen (openapi.yaml:1570-1574).")
         conv = need_live_conversation(tree, body["conversation_id"])
@@ -1566,7 +1712,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     async def create_rubric(request: Request):
         body = await body_json(request)
         if not body.get("name") or not body.get("prompt"):
-            err(422, "invalid", "name and prompt are required.")
+            err(422, "invalid", "name and prompt are required.",
+                field_error("prompt", "name and prompt are required."))
         existing = db.one(
             "SELECT id, MAX(version) AS v FROM rubrics WHERE name = ? GROUP BY id",
             (body["name"],))
@@ -1587,7 +1734,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         prompt = body.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            err(422, "invalid", "prompt is required (openapi.yaml:3444-3450).")
+            err(422, "invalid", "prompt is required (openapi.yaml:3444-3450).",
+                field_error("prompt", "prompt is required (openapi.yaml:3444-3450)."))
         latest = db.one("SELECT * FROM rubrics WHERE id = ? ORDER BY version DESC LIMIT 1",
                         (rubricId,))
         if not latest:
@@ -1664,7 +1812,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 "(openapi.yaml:3328-3330).")
         if source:
             if not isinstance(source, dict):
-                err(422, "invalid", "source must be an object.")
+                err(422, "invalid", "source must be an object.",
+                    field_error("source", "source must be an object."))
             prompt, envelope, output = case_from_source(source)
             source_json = j({"tree": source["tree"],
                              "conversation_id": source["conversation_id"],
@@ -1673,14 +1822,17 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             data = body.get("input")
             if not isinstance(data, dict) or not isinstance(data.get("prompt"), str) \
                     or not data["prompt"].strip():
-                err(422, "invalid", "input.prompt is required (openapi.yaml:3334-3341).")
+                err(422, "invalid", "input.prompt is required (openapi.yaml:3334-3341).",
+                    field_error("input.prompt", "input.prompt is required (openapi.yaml:3334-3341)."))
             if not isinstance(body.get("output"), str):
-                err(422, "invalid", "output is required (openapi.yaml:3328-3329).")
+                err(422, "invalid", "output is required (openapi.yaml:3328-3329).",
+                    field_error("output", "output is required (openapi.yaml:3328-3329)."))
             prompt, envelope, output = data["prompt"], j(data.get("envelope")), body["output"]
             source_json = None
         reference = body.get("reference")
         if reference is not None and not isinstance(reference, str):
-            err(422, "invalid", "reference must be a string or null.")
+            err(422, "invalid", "reference must be a string or null.",
+                field_error("reference", "reference must be a string or null."))
         return insert_case(new_id("case"), 1, prompt, envelope, output,
                            reference, source_json)
 
@@ -1746,12 +1898,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 idx = columns.get(spec.get(field) or "")
                 return (row[idx].strip() if idx is not None and idx < len(row) else "")
             prompt, output, reference = cell("input"), cell("output"), cell("reference")
+            # ErrorDetail {field?, row?, message} — the SAME shape Error
+            # .details carries (openapi.yaml ErrorDetail). `field` is the
+            # spreadsheet column here; the old private `column` key is gone.
             if not prompt:
-                errors.append({"row": number, "column": spec["input"],
+                errors.append({"row": number, "field": spec["input"],
                                "message": "input is empty — a case needs a prompt."})
                 continue
             if not output:
-                errors.append({"row": number, "column": spec["output"],
+                errors.append({"row": number, "field": spec["output"],
                                "message": "output is empty — a case needs a candidate response."})
                 continue
             case = insert_case(new_id("case"), 1, prompt, None, output,
@@ -1814,12 +1969,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         data = body.get("input")
         if not isinstance(data, dict) or not isinstance(data.get("prompt"), str) \
                 or not data["prompt"].strip():
-            err(422, "invalid", "input.prompt is required (openapi.yaml:3354-3372).")
+            err(422, "invalid", "input.prompt is required (openapi.yaml:3354-3372).",
+                field_error("input.prompt", "input.prompt is required (openapi.yaml:3354-3372)."))
         if not isinstance(body.get("output"), str):
-            err(422, "invalid", "output is required (openapi.yaml:3356).")
+            err(422, "invalid", "output is required (openapi.yaml:3356).",
+                field_error("output", "output is required (openapi.yaml:3356)."))
         reference = body.get("reference")
         if reference is not None and not isinstance(reference, str):
-            err(422, "invalid", "reference must be a string or null.")
+            err(422, "invalid", "reference must be a string or null.",
+                field_error("reference", "reference must be a string or null."))
         return insert_case(caseId, latest["version"] + 1, data["prompt"],
                            j(data.get("envelope")), body["output"], reference,
                            latest["source"])
@@ -1914,7 +2072,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         """Membership inputs -> stored items, carrying an id forward whenever
         the previous version already held the same referent."""
         if not isinstance(inputs, list):
-            err(422, "invalid", "items must be an array (openapi.yaml EvalSetUpdate).")
+            err(422, "invalid", "items must be an array (openapi.yaml EvalSetUpdate).",
+                field_error("items", "items must be an array (openapi.yaml EvalSetUpdate)."))
         by_referent = {referent(i): i for i in previous}
         built, seen = [], set()
         for raw in inputs:
@@ -1970,7 +2129,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         name = body.get("name")
         if not isinstance(name, str) or not name.strip():
-            err(422, "invalid", "name is required (openapi.yaml EvalSetCreate).")
+            err(422, "invalid", "name is required (openapi.yaml EvalSetCreate).",
+                field_error("name", "name is required (openapi.yaml EvalSetCreate)."))
         sid, user = new_id("set"), request_user(request)
         items = build_items(body.get("items") or [], [], request)
         db.run("INSERT INTO eval_sets (id, name, description, created_by, created_at)"
@@ -1993,7 +2153,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         name = body.get("name")
         if name is not None and (not isinstance(name, str) or not name.strip()):
-            err(422, "invalid", "name must be a non-empty string when supplied.")
+            err(422, "invalid", "name must be a non-empty string when supplied.",
+                field_error("name", "name must be a non-empty string when supplied."))
         description = body.get("description") if "description" in body else row["description"]
         db.run("UPDATE eval_sets SET name = ?, description = ? WHERE id = ?",
                (name.strip() if name else row["name"], description, setId))
@@ -2075,7 +2236,8 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         wanted = body.get("item_ids")
         if wanted is not None and (not isinstance(wanted, list)
                                    or any(not isinstance(i, str) for i in wanted)):
-            err(422, "invalid", "item_ids must be an array of item ids when supplied.")
+            err(422, "invalid", "item_ids must be an array of item ids when supplied.",
+                field_error("item_ids", "item_ids must be an array of item ids when supplied."))
         version = latest_version(setId)
         previous = set_items(setId, version)
         allowed = visible_trees(request)
@@ -2120,11 +2282,13 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         baseline + one per config, and one replay_unit child per (tree,
         config) — the same children mock/engine.py already drives for
         /agenttrees/{tree}/replay, so there is no second replay path."""
+        need_live_budget(request)  # 429 before the batch is enqueued
         need_set(setId)
         body = await body_json(request)
         configs = body.get("configs")
         if not configs or not isinstance(configs, list):
-            err(422, "invalid", "configs must be a non-empty array.")
+            err(422, "invalid", "configs must be a non-empty array.",
+                field_error("configs", "configs must be a non-empty array."))
         if body.get("context_policy", "frozen") != "frozen":
             # Widening the policy is Phase 3; the tree-scoped replay pins the
             # same way (see /agenttrees/{tree}/replay above).
@@ -2214,9 +2378,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/eval/judge", status_code=202)
     async def judge(request: Request):
+        need_live_budget(request)  # 429 before any judging is enqueued
         body = await body_json(request)
         if not body.get("judge_model") or not body.get("rubric_id"):
-            err(422, "invalid", "judge_model and rubric_id are required.")
+            err(422, "invalid", "judge_model and rubric_id are required.",
+                field_error("rubric_id", "judge_model and rubric_id are required."))
         evaluation_id, case_ids, set_id = body.get("evaluation_id"), body.get("case_ids"), body.get("set_id")
         # v0.3.0 widened the oneOf to evaluation_id | case_ids | set_id
         # (openapi.yaml:2926-2929).

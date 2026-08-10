@@ -11,6 +11,7 @@ import type {
   EvaluationSummaryItem,
 } from "../../../api/types";
 import {
+  apiError,
   BASE,
   captureLlmHeaders,
   conv,
@@ -193,10 +194,7 @@ export const evaluationHandlers = [
     const denied = enabledTreeGate(params.tree as string);
     if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
-      return HttpResponse.json(
-        { code: "invalid", message: "Phase 1 replays always evaluation frozen (openapi.yaml:1570-1574)." },
-        { status: 422 },
-      );
+      return apiError("invalid", "Phase 1 replays always evaluation frozen (openapi.yaml:1570-1574).", 422);
     }
     const n = ++counters.replay;
     const accepted: ReplayTurnAccepted = {
@@ -288,10 +286,7 @@ export const evaluationHandlers = [
     const denied = enabledTreeGate(params.tree as string);
     if (denied) return denied;
     if ((body.context_policy ?? "frozen") !== "frozen") {
-      return HttpResponse.json(
-        { code: "invalid", message: "Phase 1 replays always evaluation frozen (openapi.yaml:1540-1546)." },
-        { status: 422 },
-      );
+      return apiError("invalid", "Phase 1 replays always evaluation frozen (openapi.yaml:1540-1546).", 422);
     }
     const n = ++counters.replay;
     const accepted: ReplayAccepted = { task_id: `task-replay-${n}`, evaluation_id: `evaluation-${n}` };
@@ -349,7 +344,7 @@ export const evaluationHandlers = [
     if (denied) return denied;
     const found = mockEvaluations.find((r) => r.id === params.evaluationId);
     if (!found) {
-      return HttpResponse.json({ code: "not_found", message: "evaluation not found" }, { status: 404 });
+      return apiError("not_found", "evaluation not found", 404);
     }
     const url = new URL(request.url);
     const { label: _label, rows, ...rest } = found; // label is summary-only

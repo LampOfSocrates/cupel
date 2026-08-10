@@ -4,6 +4,7 @@
 import { http, HttpResponse } from "msw";
 import type { Attachment, ChatRequest, ChatResponse, Turn } from "../../../api/types";
 import {
+  apiError,
   BASE,
   cancelledTasks,
   captureLlmHeaders,
@@ -106,7 +107,14 @@ export const chatHandlers = [
             return;
           }
           if (chatConfig.errorAfter !== null && count >= chatConfig.errorAfter) {
-            frame("error", { code: "generation_failed", message: "model exploded" });
+            // The SSE error frame IS the Error schema (openapi.yaml
+            // x-sse-events), request_id included — a stream that dies
+            // half-way is exactly when a user needs something to quote.
+            frame("error", {
+              code: "generation_failed",
+              message: "model exploded",
+              request_id: `req_msw${++counters.requestId}`,
+            });
             controller.close();
             return;
           }
@@ -136,21 +144,12 @@ export const chatHandlers = [
     // No instanceof File: the parsed value is undici's File while the jsdom
     // test env's global File is jsdom's — different classes.
     if (!file || typeof file === "string") {
-      return HttpResponse.json(
-        { code: "bad_request", message: "multipart field 'file' is required" },
-        { status: 400 },
-      );
+      return apiError("bad_request", "multipart field 'file' is required", 400);
     }
     uploadRequests.push({ filename: file.name, size: file.size });
     await uploadConfig.gate?.();
     if (file.size > uploadConfig.maxBytes) {
-      return HttpResponse.json(
-        {
-          code: "too_large",
-          message: `File exceeds the ${Math.floor(uploadConfig.maxBytes / (1024 * 1024))} MB upload limit.`,
-        },
-        { status: 413 },
-      );
+      return apiError("too_large", `File exceeds the ${Math.floor(uploadConfig.maxBytes / (1024 * 1024))} MB upload limit.`, 413);
     }
     const attachment: Attachment = {
       id: `att-${++counters.attachment}`,

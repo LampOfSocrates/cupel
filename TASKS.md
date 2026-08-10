@@ -209,7 +209,42 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    flag now; a tombstone opens read-only with a banner instead of a composer that would
    409 on every send; and fork compare's baseline card SHOWS the original turn where it
    used to say "unavailable". Journey 4 pins the live behaviour end to end.
-
+   Stage F7 DONE 2026-08-10 — **an error is `{code, message, request_id, details?}`, and the
+   contract declares the statuses the implementations actually return.** `details[]` is
+   `ErrorDetail {field?, row?, message}` — deliberately the SAME schema the spreadsheet
+   import already returned per row, whose private near-copy (`{row, column?, message}`) is
+   gone; `column` became `field`, which also carries a dotted body path (`items[2].kind`) or
+   a query-parameter name. **RFC 9457 was considered and DECLINED**: its `type` URI is the
+   point of the format and there is no namespace here to dereference, so every adopter would
+   invent a private one; `status`/`instance` restate the status line and the path; its
+   extension members are shapeless, so it would still give a client nothing typed to point
+   at a field with; and it would put a second media type on every error response for no
+   gain. `request_id` is **honoured from an inbound `X-Request-Id`** (opaque, <=128 chars —
+   anything else is dropped for a fresh one) and generated otherwise, because an adopter
+   behind a gateway already stamped a trace id and a second one would be unjoinable to their
+   logs. It rides the `X-Request-Id` header on EVERY response, 2xx included, via a pure-ASGI
+   middleware registered OUTERMOST so even a gate's 401 is traceable; it joined `ETag` in
+   `expose_headers` or a browser could not read it. `ApiError` gained `requestId` +
+   `details` (header read FIRST, so a proxy's non-JSON 502 still yields one) and the new
+   `ApiErrorNote` renders both. **The status sweep was mechanical** — every mock route
+   paired with its contract entry — and found **26 operations short**: 422 now on **38
+   operations** (every request body, plus every non-string typed query param, since
+   `?page=abc` really is a 422), 409 on the **five** remaining writes a disabled tree
+   refuses (the old "six" counted `PATCH …/conversations/{id}`, already declared in F6),
+   and 404 + 413 on `POST /eval/cases/import`. 401 was NOT swept — the contract has always
+   said it is implied by the top-level security block outside `/me`, `/auth/logout` and
+   `/admin/*`; 403s belong to F5. **503 is declared NOWHERE and that is the decision**: no
+   implementation produces one, and this contract declares no 5xx at all, so adding 503
+   without 500 and 502 would be arbitrary — a server fault is an infrastructure state, not a
+   specified outcome, and `Health.capabilities` is where a degraded backend says so. A
+   contract test pins the absence. **429 became real**: the BYOK sliding window used to
+   answer over-limit with 200 + canned content (a user handed mock text under their own
+   key), which it could not avoid because generation happens after the response is
+   committed — so the check moved to a non-consuming DOOR (`llm.retry_after()`) on the five
+   live-generation operations, answering `429 rate_limited` + `Retry-After` before any turn
+   or task exists. Only a request carrying `X-LLM-Key` is limited. Detached replay/judge
+   children deliberately keep the canned fallback: there is no request left to fail, and a
+   half-finished grid is worse than a noted cell.
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,
    soft delete, search semantics, span retention…) **plus** the domain tighten: `Run`→

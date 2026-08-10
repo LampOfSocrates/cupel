@@ -172,10 +172,15 @@ bare array reports the four as missing. `page`/`page_size` are optional query
 params, so a target that ignores them is conformant but will answer its whole
 collection to a caller expecting a page.
 
-Response HEADERS are not checked either, which matters for exactly one
-operation: `GET …/evaluations/{id}` declares an `ETag` and a `304`, and a
-target that omits both is reported conformant. Clients degrade cleanly — no
-validator means no `If-None-Match`, so the grid simply re-downloads.
+Response HEADERS are not checked either, which now matters for two things.
+`GET …/evaluations/{id}` declares an `ETag` and a `304`, and a target that
+omits both is reported conformant — clients degrade cleanly, since no
+validator means no `If-None-Match` and the grid simply re-downloads. And every
+error response declares `X-Request-Id`, so a target that never emits one still
+reports conformant; the client falls back to `Error.request_id` in the body,
+which the schema rule does not reach either (error responses are not checked
+at all — see below). Both are gaps a reader should know about rather than
+discover: correlation ids are a promise this tool cannot verify.
 
 Deliberately **not** checked: deep JSON-Schema diffing (types, enums, nested
 required, formats), error responses, header/cookie params, security

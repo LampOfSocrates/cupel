@@ -7,7 +7,14 @@ import type {
   AdminUserUpsert,
   TreePermission,
 } from "../../../api/types";
-import { BASE, conv, counters, mockTrees, pageOf } from "../state";
+import {
+  apiError,
+  BASE,
+  conv,
+  counters,
+  mockTrees,
+  pageOf,
+} from "../state";
 import { mockRoots } from "./conversations";
 
 // Admin fixtures — GET/PUT /admin/users (openapi.yaml:169-218),
@@ -133,7 +140,7 @@ export const adminHandlers = [
   http.get(`${BASE}/admin/users/:userId/permissions`, ({ params }) => {
     const userId = params.userId as string;
     if (!mockAdminUsers.some((u) => u.id === userId)) {
-      return HttpResponse.json({ code: "not_found", message: "user not found" }, { status: 404 });
+      return apiError("not_found", "user not found", 404);
     }
     return HttpResponse.json({
       user_id: userId,
@@ -148,7 +155,7 @@ export const adminHandlers = [
     };
     permissionPuts.push({ userId, permissions: body.permissions });
     if (!mockAdminUsers.some((u) => u.id === userId)) {
-      return HttpResponse.json({ code: "not_found", message: "user not found" }, { status: 404 });
+      return apiError("not_found", "user not found", 404);
     }
     mockPermissionMatrices[userId] = body.permissions;
     return HttpResponse.json({ user_id: userId, permissions: body.permissions });
@@ -162,7 +169,7 @@ export const adminHandlers = [
     treeTogglePatches.push({ treeId, enabled: body.enabled });
     const tree = mockTrees.find((t) => t.id === treeId);
     if (!tree) {
-      return HttpResponse.json({ code: "not_found", message: "tree not found" }, { status: 404 });
+      return apiError("not_found", "tree not found", 404);
     }
     tree.enabled = body.enabled;
     return HttpResponse.json(tree);
@@ -173,10 +180,7 @@ export const adminHandlers = [
     const url = new URL(request.url);
     adminConversationRequests.push(url);
     if (adminConversationConfig.forbidden) {
-      return HttpResponse.json(
-        { code: "forbidden", message: "The inspect role is required." },
-        { status: 403 },
-      );
+      return apiError("forbidden", "The inspect role is required.", 403);
     }
     const q = url.searchParams;
     let items = [...mockAdminConversations];

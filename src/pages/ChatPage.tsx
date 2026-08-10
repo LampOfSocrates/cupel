@@ -10,7 +10,7 @@ import type {
   Lineage,
   Turn,
 } from "../api/types";
-import { ForkModal } from "../components";
+import { ApiErrorNote, ForkModal } from "../components";
 import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useAsync } from "../hooks/useAsync";
@@ -433,7 +433,12 @@ export function ChatPage() {
         </Stack>
       );
     }
-    return <Alert color="red" title="Could not load conversation">{loadError.message}</Alert>;
+    return (
+      <Alert color="red" title="Could not load conversation">
+        {loadError.message}
+        <ApiErrorNote error={loadError} />
+      </Alert>
+    );
   }
 
   return (
