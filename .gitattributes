@@ -1,0 +1,17 @@
+# LF in the working tree, always — on every machine, whatever core.autocrlf
+# says locally. This is not a style preference: with autocrlf=true a Windows
+# clone gets CRLF, and vitest's transform then fails to parse the script
+# modules whose templates emit regex literals (tests/families.test.js and four
+# others die with "Invalid or unexpected token"). A fresh clone must be able to
+# run `npm test` and pass.
+* text=auto eol=lf
+
+# Binaries — never touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webm binary
+*.zip binary
+*.sqlite binary
