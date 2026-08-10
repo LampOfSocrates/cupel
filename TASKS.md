@@ -106,7 +106,8 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     developer meeting an unannounced pip install is the exact bounce this flow exists to prevent;
     if the dependency cannot be removed it must at least be declared up front.
 
-11. **DONE 2026-08-10 — `npm run create` writes a folder the adopter owns.** Four commits.
+11. **DONE 2026-08-10 — `npm run create` writes a folder the adopter owns.** Seven commits
+    (`7b5f43f` … `e7d0b5d`), the last two the persona-facing landing page and its bookkeeping.
     The family question needed a runtime that could answer it, so first: the path→family
     table is DERIVED from the contract's tags (`scripts/gen-families.mjs` →
     `src/api/families.generated.ts`, drift-tested), `agentic.config.ts` gained
