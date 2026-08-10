@@ -902,12 +902,25 @@ describe("Turn forks (P1-T13)", () => {
   });
 
   it("deleted parent: lineage survives, link renders disabled as 'parent deleted'", async () => {
-    renderChat("/chat/c-orphan"); // fixture parent c-gone → GET 404s
+    renderChat("/chat/c-orphan"); // fixture parent c-gone is a tombstone
 
     const banner = await screen.findByTestId("lineage-banner");
     await screen.findByText("parent deleted");
     expect(banner).toHaveTextContent("fork of c-gone"); // id fallback, no title
     expect(screen.queryByText("Open parent")).not.toBeInTheDocument();
+  });
+
+  it("a deleted conversation opens read-only: history renders, the composer does not", async () => {
+    // Soft delete is VISIBLE (Conversation.deleted), so this page can open a
+    // tombstone at all — and having opened it, it must not offer a message box
+    // whose every send would 409 conversation_deleted.
+    renderChat("/chat/c-gone");
+
+    await screen.findByText("This conversation was deleted.");
+    await screen.findByTestId("deleted-conversation-banner");
+    expect(screen.queryByPlaceholderText("Message…")).not.toBeInTheDocument();
+    // Not the unavailable state: a tombstone is deleted, not absent.
+    expect(screen.queryByTestId("conversation-unavailable")).not.toBeInTheDocument();
   });
 
   // Fork-side entry into the sibling comparison: lineage alone

@@ -111,17 +111,21 @@ describe("ForkComparePage", () => {
     expect(card).toHaveTextContent("generating…");
   });
 
-  it("deleted parent: siblings still compare, baseline marked unavailable", async () => {
-    // Fixture c-orphan's parent c-gone 404s ("forks keep their lineage — the
-    // parent link renders as deleted", openapi.yaml:441-443).
+  it("deleted parent: siblings still compare, and the baseline turn still reads", async () => {
+    // Fixture c-orphan's parent c-gone is a TOMBSTONE: it answers 200 with
+    // deleted true, and its transcript still reads — so "parent deleted" comes
+    // off the flag, not off a 404, and the baseline shows the original turn
+    // rather than claiming it is unavailable. That is what the soft delete is
+    // FOR: forks keep their lineage and the thing they forked from.
     renderCompare("/forks/c-gone/t1");
 
     await screen.findByText("parent deleted");
     const orphan = await screen.findByTestId("sibling-c-orphan");
     expect(orphan).toHaveTextContent("generating…"); // no turns stored
     expect(screen.getByTestId("sibling-baseline")).toHaveTextContent(
-      "original turn unavailable",
+      "This conversation was deleted.",
     );
+    // Deleted takes no new work, so there is nothing to open it FOR.
     expect(screen.queryByText("Open parent")).not.toBeInTheDocument();
   });
 });

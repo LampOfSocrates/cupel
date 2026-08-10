@@ -164,6 +164,15 @@ export interface Conversation {
    * decide whether to fetch at all.
    */
   turn_count: number;
+  /**
+   * True iff this conversation is a TOMBSTONE. Deletion is soft and now says
+   * so on the wire: the row keeps reading (getConversation, turns) because
+   * forks, eval-set items, eval cases and judgments all point into it, while
+   * it leaves every listing and refuses new work with 409
+   * conversation_deleted. Read this instead of inferring deletion from a 404,
+   * which cannot tell "deleted" from "absent" or "not yours".
+   */
+  deleted: boolean;
 }
 
 // THE collection shape — every operation that returns a collection of user

@@ -293,15 +293,34 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             "origin": c["origin"], "channel": c["channel"], "agent_id": c["agent_id"],
             "created_at": c["created_at"], "last_activity_at": c["last_activity_at"],
             "lineage": unj(c["lineage"]), "fork_count": fork_count(c["id"]),
-            "turn_count": turn_count(c["id"]),
+            "turn_count": turn_count(c["id"]), "deleted": bool(c["deleted"]),
         }
 
     def need_conversation(tree: str, conversation_id: str) -> dict:
+        """A conversation INCLUDING a tombstone — the READ path.
+
+        Deletion is soft and the tombstone answers: Conversation.deleted says
+        so, and the row keeps answering because a fork's lineage, an eval-set
+        reference item, an eval case's source and a judgment's subject all
+        point INTO it. 404 keeps meaning what it says — no such conversation,
+        or not in this tree. Writers call need_live_conversation instead."""
         row = db.one(
-            "SELECT * FROM conversations WHERE id = ? AND tree_id = ? AND deleted = 0",
+            "SELECT * FROM conversations WHERE id = ? AND tree_id = ?",
             (conversation_id, tree))
         if not row:
             err(404, "not_found", f"Conversation '{conversation_id}' not found.")
+        return row
+
+    def need_live_conversation(tree: str, conversation_id: str) -> dict:
+        """need_conversation + the tombstone gate for WRITE work: a deleted
+        conversation answers 409 conversation_deleted on rename, chat, replay
+        and fork, exactly as a disabled tree answers 409 tree_disabled. 404
+        (absent) wins over 409 (deleted), the same precedence need_enabled_tree
+        uses."""
+        row = need_conversation(tree, conversation_id)
+        if row["deleted"]:
+            err(409, "conversation_deleted",
+                f"Conversation '{conversation_id}' is deleted — it reads, but takes no new work.")
         return row
 
     def config_label(cfg: dict, index: int) -> str:
@@ -992,7 +1011,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.patch("/agenttrees/{tree}/conversations/{conversationId}")
     async def rename_conversation(tree: str, conversationId: str, request: Request):
         need_enabled_tree(tree)  # history is read-only on a disabled tree
-        conv = need_conversation(tree, conversationId)
+        conv = need_live_conversation(tree, conversationId)  # 409 on a tombstone
         body = await body_json(request)
         if body.get("title"):
             db.run("UPDATE conversations SET title = ? WHERE id = ?", (body["title"], conv["id"]))
@@ -1000,9 +1019,14 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.delete("/agenttrees/{tree}/conversations/{conversationId}", status_code=204)
     async def delete_conversation(tree: str, conversationId: str):
+        """deleteConversation — soft, visible and IDEMPOTENT.
+
+        The row is tombstoned, never removed: judgments, eval cases and fork
+        lineage all point into it and survive. Deleting a tombstone is a no-op
+        answering 204 again — the promise ("this conversation is deleted") is
+        already kept, so need_conversation, not need_live_conversation."""
         need_enabled_tree(tree)  # history is read-only on a disabled tree
         conv = need_conversation(tree, conversationId)
-        # Tombstone: judgments, eval cases and fork lineage survive (openapi.yaml:438-443).
         db.run("UPDATE conversations SET deleted = 1 WHERE id = ?", (conv["id"],))
         return Response(status_code=204)
 
@@ -1054,7 +1078,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         conversation_id = body.get("conversation_id")
         if conversation_id:
-            conv = need_conversation(tree, conversation_id)
+            conv = need_live_conversation(tree, conversation_id)  # 409 on a tombstone
         else:
             conv_id = new_id("conv")
             root = root_agent(tree)
@@ -1204,7 +1228,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
         units, all_rows = [], []
         for item in selection:
-            conv = need_conversation(tree, item.get("conversation_id"))
+            conv = need_live_conversation(tree, item.get("conversation_id"))
             rows = assistant_rows(conv, item.get("turn_ids"))
             if not rows:
                 continue
@@ -1279,7 +1303,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             err(422, "invalid", "endpoints must be a non-empty array.")
         if body.get("context_policy", "frozen") != "frozen":
             err(422, "invalid", "Phase 1 replays always run frozen (openapi.yaml:1570-1574).")
-        conv = need_conversation(tree, body["conversation_id"])
+        conv = need_live_conversation(tree, body["conversation_id"])
         turns = conv_turns(conv["id"])
         fork_turn = next((t for t in turns if t["id"] == body["turn_id"]), None)
         if not fork_turn:
@@ -2121,6 +2145,10 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             source = item["source"]
             turn = need_visible_turn(request, source["tree"], source["conversation_id"],
                                      source["turn_id"])
+            # need_conversation, not need_live_conversation: a reference item is
+            # EVIDENCE, and replaying it writes new conversations rather than
+            # into the referenced one, so a tombstoned source still replays —
+            # which is the promise "eval cases keep their source refs".
             conv = need_conversation(source["tree"], source["conversation_id"])
             target = turn["id"]
             if turn["role"] != "assistant":

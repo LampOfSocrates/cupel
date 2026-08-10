@@ -284,8 +284,43 @@ only way to close the two-tab double-judge residual** · C7 SSE event ids + `Las
 C8 per-operation permission semantics + 403s · C9 `Error.details[]` / `request_id` + 422/429/503 ·
 C10 batch turn fetch · **C11 `Health.contract_version` + capabilities — DONE 2026-08-09**
 (item 7 stage E; delivered early because it is additive and it is where the declared families
-land) · C12 visible soft-delete ·
+land) ·
 C13 search semantics · C14 span retention · C15 close the mock's implementation gap.
+
+**C12 visible soft delete — DONE 2026-08-10** (item 7 stage F6). Every delete in the store was
+classified first. There are exactly TWO resource deletes, and they stay different on purpose.
+`DELETE /agenttrees/{tree}/conversations/{id}` is SOFT (`conversations.deleted`), because four
+things point INTO a conversation and must not become dangling pointers: a fork's lineage, an
+eval-set reference item, an eval case's `source`, and a judgment's subject.
+`DELETE /eval/sets/{id}` is HARD, and correctly so — a set is a named SELECTION over other
+resources, nothing on the wire holds a reference to a set (a judgment carries `evaluation_id`,
+never a set id), and the evidence it pointed at (cases, judgments, evaluations, turns) all
+survives the row. `DELETE /agenttrees/{tree}/memory` is not a delete at all (it resets the
+document's content) and `DELETE /tasks/{id}` is a cancel; users have no delete by design.
+
+What the soft delete became on the wire, and no more: `Conversation.deleted`, required and
+readOnly. The tombstone READS — GET on the id keeps answering 200, and so does its `…/turns`,
+which is what the kept row is FOR — while it leaves every listing and refuses new work with
+409 `conversation_deleted` (rename, chat, replay, fork). DELETE is idempotent: deleting a
+tombstone answers 204 again. A BOOLEAN, not `deleted_at`: nothing has ever recorded when a
+conversation was deleted, so a timestamp would be invented for existing rows or null for them,
+and a nullable `deleted_at` whose null means both "live" and "deleted, time unknown" is worse
+than no field. **No migration** — the `deleted` column has always existed; only the serialiser
+and the read path changed.
+
+Deliberately NOT built. **No restore**: undelete is not an endpoint, it is a place to find the
+tombstone, a rule for its forks, and an answer for a conversation restored into a
+since-disabled tree — real UX, and UX is item 17. **No `?include_deleted=`**: with no restore
+and no purge, nothing could act on the result, and every caller that must reach a tombstone
+arrives by following a reference, which is a read by id. Both refusals are stated at the
+operations themselves so the next reader does not re-litigate them.
+
+UI, and this is the part that was actually broken: `ChatPage` and `ForkComparePage` were both
+inferring "parent deleted" from a 404 — the same 404 an unknown id and an unpermitted tree
+answer, so the banner was a guess that happened to be right. Both now read the flag. A
+tombstone opened in Chat renders read-only with a banner instead of a composer whose every
+send would 409, and fork compare's baseline card now SHOWS the original turn (the tombstone's
+transcript reads) where it used to say "unavailable".
 
 **Also fold in (found by PAB-1, 2026-08-08):** `ReplayTurnRequest.configs[]` — a `RunConfig`
 per entry in `endpoints[]`, or a combined `variants[]` of `{endpoint_id, config}` — so one

@@ -164,6 +164,9 @@ export function conv(
     created_at: "2026-08-01T10:00:00Z",
     last_activity_at: "2026-08-03T10:00:00Z",
     fork_count: 0,
+    // Live unless a fixture says otherwise — soft delete is VISIBLE now, so
+    // the flag is on every conversation rather than implied by absence.
+    deleted: false,
     ...partial,
     turns,
     // Derived, never set by a fixture — a count that could disagree with the

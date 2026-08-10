@@ -411,8 +411,78 @@ def test_conversation_list_search_rename_delete():
 
             r = await c.delete(f"/agenttrees/agent1/conversations/{a}")
             assert r.status_code == 204
-            assert (await c.get(f"/agenttrees/agent1/conversations/{a}")).status_code == 404
+            # The tombstone READS — it is deleted, not absent — but it is gone
+            # from the listing.
+            got = await c.get(f"/agenttrees/agent1/conversations/{a}")
+            assert got.status_code == 200 and got.json()["deleted"] is True
             assert (await c.get("/agenttrees/agent1/conversations")).json()["total"] == 1
+    run(case())
+
+
+def test_soft_delete_is_visible_idempotent_and_read_only():
+    """The soft delete a client can SEE (openapi.yaml Conversation.deleted): a
+    tombstone answers GET and /turns, is absent from listings, takes no new
+    work (409 conversation_deleted), and deleting it again is a no-op 204.
+    An id that never existed still 404s — 404 keeps meaning absent."""
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=2)
+            live = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            assert live["deleted"] is False
+            assert (await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")).status_code == 204
+
+            tomb = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            assert tomb["deleted"] is True and tomb["turn_count"] == 4
+            turns = (await c.get(
+                f"/agenttrees/agent1/conversations/{conv_id}/turns")).json()
+            assert turns["total"] == 4  # the transcript other resources point at
+
+            # Writes: rename, chat and fork all refuse, and say WHY.
+            r = await c.patch(f"/agenttrees/agent1/conversations/{conv_id}",
+                              json={"title": "nope"})
+            assert r.status_code == 409 and r.json()["code"] == "conversation_deleted"
+            r = await c.post("/agenttrees/agent1/chat", json={
+                "message": "still there?", "conversation_id": conv_id, "stream": False})
+            assert r.status_code == 409 and r.json()["code"] == "conversation_deleted"
+            r = await c.post("/agenttrees/agent1/replay", json={
+                "selection": [{"conversation_id": conv_id}],
+                "configs": [{"model": "deepseek-v3"}]})
+            assert r.status_code == 409 and r.json()["code"] == "conversation_deleted"
+
+            # Idempotent: the promise is already kept.
+            assert (await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")).status_code == 204
+            assert (await c.get("/agenttrees/agent1/conversations/conv_nope")).status_code == 404
+    run(case())
+
+
+def test_a_deleted_parent_keeps_its_forks_and_their_lineage():
+    """The live behaviour the tombstone exists for: forks outlive their parent,
+    keep their lineage, and the parent resolves to a tombstone rather than to a
+    404 that a client would have to guess at."""
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=2)
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
+            fork_turn = conv["turns"][3]  # second assistant turn
+            r = await c.post("/agenttrees/agent1/replay/turn", json={
+                "conversation_id": conv_id, "turn_id": fork_turn["id"],
+                "endpoints": ["ep_agent1_staging"]})
+            assert r.status_code == 202
+            for res in r.json()["results"]:
+                await wait_task(c, res["task_id"])
+            forks = (await c.get("/agenttrees/agent1/conversations",
+                                 params={"forks_of": conv_id})).json()
+            assert forks["total"] >= 1
+
+            await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")
+            after = (await c.get("/agenttrees/agent1/conversations",
+                                 params={"forks_of": conv_id})).json()
+            assert after["total"] == forks["total"]  # no cascade
+            fork = after["items"][0]
+            assert fork["deleted"] is False
+            assert fork["lineage"]["parent_conversation_id"] == conv_id
+            parent = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            assert parent["deleted"] is True  # renders as "parent deleted", not broken
     run(case())
 
 

@@ -136,6 +136,34 @@ describe("P1-T00 OpenAPI contract", () => {
     ).toEqual(["post"]);
   });
 
+  it("soft delete is VISIBLE: a tombstone reads, and there is no restore", () => {
+    // The defect this closes: delete was soft in the store and invisible on
+    // the wire, so a client could not tell a deleted conversation from an
+    // absent one — and the UI was inferring "deleted" from a 404, which is
+    // also what an unknown id and an unpermitted tree answer.
+    const conv = doc.components.schemas.Conversation;
+    expect(conv.required).toContain("deleted");
+    expect(conv.properties.deleted.type).toBe("boolean");
+    expect(conv.properties.deleted.readOnly).toBe(true);
+    // No deleted_at: nothing records WHEN, so a timestamp would be invented.
+    expect(conv.properties.deleted_at).toBeUndefined();
+
+    const path = doc.paths["/agenttrees/{tree}/conversations/{conversationId}"];
+    // The tombstone reads — GET keeps a 200, and never learned a 410.
+    expect(path.get.responses["200"]).toBeDefined();
+    expect(path.get.responses["410"]).toBeUndefined();
+    // Writes against it conflict; the code is named in the shared response.
+    expect(path.patch.responses["409"]).toBeDefined();
+    expect(doc.components.responses.Conflict.description).toMatch(/conversation_deleted/);
+    // Delete stays idempotent (204, no 409) and there is no restore verb.
+    expect(Object.keys(path).sort()).toEqual(["delete", "get", "patch"]);
+    expect(path.delete.responses["409"]).toBeUndefined();
+    expect(doc.paths["/agenttrees/{tree}/conversations/{conversationId}/restore"]).toBeUndefined();
+    // And no include_deleted listing: nothing could act on the result.
+    const listParams = doc.paths["/agenttrees/{tree}/conversations"].get.parameters.map((p) => p.name);
+    expect(listParams).not.toContain("include_deleted");
+  });
+
   it("/me is defined — always called, both auth modes (feature-spec.md:116)", () => {
     expect(doc.paths["/me"].get).toBeDefined();
   });

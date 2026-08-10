@@ -391,7 +391,11 @@ export const api = {
       body: { title },
     }),
 
-  // DELETE — soft delete (openapi.yaml:434; feature-spec.md:6)
+  // DELETE (deleteConversation) — SOFT and idempotent: the conversation
+  // becomes a tombstone (Conversation.deleted true), still readable here and
+  // through api.turns so that forks, eval-set items and judgments pointing at
+  // it stay honest, absent from every listing, and 409 conversation_deleted on
+  // any further write. Deleting a tombstone answers 204 again.
   deleteConversation: (tree: string, id: string) =>
     request<void>(`/agenttrees/${tree}/conversations/${id}`, {
       method: "DELETE",

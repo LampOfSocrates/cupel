@@ -79,6 +79,10 @@ export function ChatPage() {
   // conversation is a fork" (openapi.yaml:1369) and drives the header banner;
   // agent_id seeds the fork modal's optional version select.
   const [lineage, setLineage] = useState<Lineage | null>(null);
+  // Tombstone state: a deleted conversation still READS (Conversation.deleted),
+  // so this page can open one — but it takes no new turns, so the composer is
+  // replaced by a banner rather than left to fail with a 409.
+  const [deleted, setDeleted] = useState(false);
   const [agentId, setAgentId] = useState<string | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
@@ -194,6 +198,7 @@ export function ChatPage() {
     }
     setTurns(null);
     setTitle(null);
+    setDeleted(false);
     setThumbs({});
     setEarliestPage(1);
     // Arriving on a ?turn= deep link, do NOT pin to the bottom for this load —
@@ -213,6 +218,7 @@ export function ChatPage() {
         setTurns(page.items);
         setEarliestPage(page.page);
         setTitle(data.title);
+        setDeleted(data.deleted);
         setLineage(data.lineage ?? null);
         setAgentId(data.agent_id ?? null);
       })
@@ -247,20 +253,22 @@ export function ChatPage() {
   );
 
   // Resolve the parent's title for the lineage banner. Delete is a tombstone
-  // (openapi.yaml:438-443) — a 404 here means the parent was deleted; the link
-  // renders disabled as "parent deleted", never broken. Any OTHER failure is
-  // swallowed to `null`, which renders exactly as "still loading": a banner
-  // that cannot name its parent is not worth an error state.
+  // and the tombstone READS: the parent answers 200 with Conversation.deleted
+  // true, so the link renders disabled as "parent deleted" on the flag, not on
+  // a guess. A 404 no longer means deleted — it means absent or not permitted,
+  // which is the same nothing-to-show as any other failure and is swallowed to
+  // `null`, rendering exactly as "still loading". A banner that cannot name
+  // its parent is not worth an error state.
   const parentId = lineage?.parent_conversation_id;
   const { data: parent } = useAsync<{ title: string } | "deleted" | null>(
     parentId
       ? () =>
           api
             .conversation(tree, parentId)
-            .then((data) => ({ title: data.title }) as { title: string } | "deleted" | null)
-            .catch((e: unknown) =>
-              e instanceof ApiError && e.status === 404 ? "deleted" : null,
+            .then((data) =>
+              data.deleted ? ("deleted" as const) : { title: data.title },
             )
+            .catch(() => null)
       : null,
     [tree, parentId],
   );
@@ -407,11 +415,12 @@ export function ChatPage() {
   };
 
   if (loadError) {
-    // No-access state. The contract makes "deleted" and "you may not see this
-    // conversation" INDISTINGUISHABLE — both answer 404 (openapi.yaml:1948
-    // NotFound) — so one friendly state covers both and deliberately says
-    // nothing about which. Any other failure keeps the existing red error
-    // surface carrying the backend's message.
+    // No-access state. A 404 is "no such conversation, or not yours" — the
+    // contract still keeps those two indistinguishable on purpose, and one
+    // friendly state covers both. It no longer covers DELETED: a tombstone
+    // answers 200 and opens as a conversation, so this branch is not where a
+    // deleted conversation lands. Any other failure keeps the existing red
+    // error surface carrying the backend's message.
     if (loadError instanceof ApiError && loadError.status === 404) {
       return (
         <Stack gap="sm" maw={420} mx="auto" mt="xl" data-testid="conversation-unavailable">
@@ -573,13 +582,20 @@ export function ChatPage() {
           sharedFlash={sharedFlash}
           sharedRef={sharedRef}
         />
-        <Composer
-          streaming={streaming}
-          canStop={stream?.taskId != null}
-          onStop={stop}
-          onSend={(text, attachments) => void send(text, attachments)}
-          resetToken={composerReset}
-        />
+        {deleted ? (
+          <Alert color="gray" py={6} data-testid="deleted-conversation-banner">
+            This conversation was deleted — history stays readable, and nothing
+            new can be added to it.
+          </Alert>
+        ) : (
+          <Composer
+            streaming={streaming}
+            canStop={stream?.taskId != null}
+            onStop={stop}
+            onSend={(text, attachments) => void send(text, attachments)}
+            resetToken={composerReset}
+          />
+        )}
         </>
       )}
       {/* "🔀 fork action on any turn in Chat itself" (feature-spec.md:72);

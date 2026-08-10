@@ -816,7 +816,15 @@ paths:
           schema: { type: string, enum: [interactive, machine] }
       responses:
         "200":
-          description: Page of conversations, most recent activity first.
+          description: >-
+            Page of conversations, most recent activity first. Tombstones are
+            never included and there is deliberately no include_deleted
+            parameter: nothing in this contract can act on a list of deleted
+            conversations — there is no restore and no purge — and every
+            caller that must reach one arrives by following a reference (a
+            fork's lineage, an eval-set item's source, a judgment's subject),
+            which is a read BY ID. A filter whose results support no action
+            would be surface pretending to be a feature.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConversationPage" }
@@ -839,12 +847,19 @@ paths:
         response body and no way for a caller to ask for less. Fetch the
         transcript from …/turns, which is paged; `turn_count` here is how a
         caller sizes that fetch without making it.
+
+        A DELETED conversation still answers 200 here, with `deleted: true` —
+        it is a tombstone, not an absence, and 404 would make the two
+        indistinguishable to the one caller who most needs to tell them apart:
+        a fork resolving its parent, which must render "parent deleted" rather
+        than a broken link. 404 keeps its own meaning — no such conversation,
+        or not in this tree.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/conversationId" }
       responses:
         "200":
-          description: The conversation (metadata only).
+          description: The conversation (metadata only); `deleted` says whether it is a tombstone.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Conversation" }
@@ -874,6 +889,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Conversation" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
     delete:
       tags: [conversations]
       operationId: deleteConversation
@@ -884,11 +900,25 @@ paths:
         overwritten" (feature-spec.md:59; invariant cupel-phases.md:160), eval
         cases keep their source refs, and forks keep their lineage (the parent
         link renders as deleted). No cascade to judgments, cases, or forks.
+
+        The tombstone is VISIBLE, not implied: `Conversation.deleted` reads
+        true afterwards, GET on this id keeps answering 200, its /turns keep
+        answering, and every write against it answers 409
+        conversation_deleted. IDEMPOTENT — deleting a tombstone is a no-op
+        and answers 204 again, because the operation's promise ("this
+        conversation is deleted") is already kept.
+
+        There is NO restore. Undelete is not one endpoint: it is a place to
+        find the tombstone, a decision about what happens to its forks, and a
+        story for a conversation restored into a tree that has since been
+        disabled — real UX, and UX is item 17. Making the tombstone visible is
+        what a restore would need first, and that is what this operation now
+        provides.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/conversationId" }
       responses:
-        "204": { description: Deleted. }
+        "204": { description: "Deleted, or already deleted — the operation is idempotent." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /agenttrees/{tree}/conversations/{conversationId}/turns:
@@ -919,6 +949,11 @@ paths:
         know which turns they want (an eval set's reference items, a fork's
         lineage turn): with it the page is those turns, in the same
         chronological order, and paging applies to that subset.
+
+        A DELETED conversation's transcript still reads here. That is the
+        point of a soft delete: an eval-set reference item, an eval case's
+        source and a judgment's subject all name a turn, and every one of them
+        would become a dangling pointer if the tombstone stopped answering.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/conversationId" }
@@ -2236,10 +2271,16 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
       description: >
-        The target tree is disabled (code tree_disabled): "new
-        chat/replay/judge against it return 409 tree_disabled"
-        (feature-spec.md:20). Existing conversations stay readable; re-enable
-        via PATCH /admin/agenttrees/{id} restores everything.
+        The target is unavailable for new work, in one of two ways. code
+        tree_disabled: the tree is disabled — "new chat/replay/judge against
+        it return 409 tree_disabled" (feature-spec.md:20); existing
+        conversations stay readable and re-enabling via
+        PATCH /admin/agenttrees/{id} restores everything. code
+        conversation_deleted: the named conversation is a TOMBSTONE — it still
+        reads (GET, /turns) so that forks, eval-set items and judgments
+        pointing at it stay honest, but it takes no rename, no message, no
+        replay and no fork. Neither is recoverable by retrying; both are
+        deliberate states, not transient failures.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2610,7 +2651,7 @@ components:
 
     Conversation:
       type: object
-      required: [id, tree_id, title, origin, created_at, last_activity_at, fork_count, turn_count]
+      required: [id, tree_id, title, origin, created_at, last_activity_at, fork_count, turn_count, deleted]
       properties:
         id: { type: string }
         tree_id: { type: string }
@@ -2650,6 +2691,28 @@ components:
             fetch at all, and size its page — without a request per row. The
             turns themselves are at
             GET /agenttrees/{tree}/conversations/{id}/turns.
+        deleted:
+          type: boolean
+          readOnly: true
+          default: false
+          description: >-
+            True iff this conversation is a TOMBSTONE — DELETE was called on
+            it. Required, and the only way a client can tell a deleted
+            conversation from an absent one: a tombstone still reads (this
+            operation and its /turns), because the row is kept precisely so
+            that the things pointing INTO it stay honest — a fork's lineage,
+            an eval-set reference item, an eval case's source, a judgment's
+            subject. What deletion changes is that it leaves the listings
+            (GET /conversations never returns one) and accepts no further
+            work (409 conversation_deleted on rename, chat, replay and fork).
+
+            A BOOLEAN, not a deleted_at timestamp, and the reason is honesty:
+            no store here has ever recorded WHEN a conversation was deleted,
+            so a timestamp would be either invented for existing tombstones or
+            null for them — and a nullable deleted_at whose null means both
+            "live" and "deleted, time unknown" is worse than no field. If a
+            retention or purge feature ever needs the time, that feature adds
+            the column and the field together.
 
     # THE collection shape. Every `<Thing>Page` in this document is exactly
     # this object with a different `items` type — same four keys, all four

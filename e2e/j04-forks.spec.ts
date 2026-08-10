@@ -91,4 +91,27 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
       expect(fork.lineage.fork_turn_id).toBe(chat.turnId);
     }
   });
+
+  await step("delete the parent: the forks outlive it and it reads as a tombstone", async () => {
+    // Soft delete, made VISIBLE (item 7 stage F6). The claim is the live one:
+    // deleting a parent cascades to nothing, and the fork's banner says
+    // "parent deleted" because the parent ANSWERS with deleted true — not
+    // because a 404 was guessed at.
+    const gone = await request.delete(
+      `${API_ORIGIN}/agenttrees/agent1/conversations/${chat.conversationId}`,
+    );
+    expect(gone.status()).toBe(204);
+    const tomb = await request.get(
+      `${API_ORIGIN}/agenttrees/agent1/conversations/${chat.conversationId}`,
+    );
+    expect(tomb.status()).toBe(200);
+    expect((await tomb.json()).deleted).toBe(true);
+    const forks = await request.get(
+      `${API_ORIGIN}/agenttrees/agent1/conversations?forks_of=${chat.conversationId}`,
+    );
+    expect((await forks.json()).items).toHaveLength(2);
+
+    await page.reload();
+    await expect(page.getByText("parent deleted")).toBeVisible();
+  });
 });

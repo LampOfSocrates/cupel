@@ -962,6 +962,26 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(rubricAfter.version).toBe(3); // fixture is v2
   });
 
+  it("a deleted conversation is a visible tombstone, not an absence", async () => {
+    // mock/main.py need_conversation / need_live_conversation: the row keeps
+    // reading with deleted true, leaves the listing, refuses writes with 409
+    // conversation_deleted, and a second DELETE is a no-op 204.
+    expect((await api.conversation("agent1", "c1")).deleted).toBe(false);
+    await api.deleteConversation("agent1", "c1");
+
+    const tomb = await api.conversation("agent1", "c1");
+    expect(tomb.deleted).toBe(true);
+    expect((await api.turns("agent1", "c1")).total).toBeGreaterThan(0);
+    expect((await api.conversations("agent1")).items.map((c) => c.id)).not.toContain("c1");
+    await expect(api.renameConversation("agent1", "c1", "nope")).rejects.toMatchObject({
+      status: 409,
+      code: "conversation_deleted",
+    });
+    await expect(api.deleteConversation("agent1", "c1")).resolves.toBeUndefined();
+    // 404 keeps its own meaning: no such conversation.
+    await expect(api.conversation("agent1", "c-nope")).rejects.toMatchObject({ status: 404 });
+  });
+
   it("collections come back in the order the server would sort them", async () => {
     // Judgments (listJudgments) + tasks + evaluations: newest first.
     await api.postFeedback({ message_id: "t2", rating: "up" });
@@ -1044,15 +1064,17 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
       "POST /agenttrees/{tree}/agents/{agentId}/instructions/versions",
       "POST /agenttrees/{tree}/agents/{agentId}/snapshots",
       "PUT /agenttrees/{tree}/agents/{agentId}/last-selection",
-      "PATCH /agenttrees/{tree}/conversations/{conversationId}",
       "DELETE /agenttrees/{tree}/conversations/{conversationId}",
     ];
     expect(undeclared.filter((op) => declaredStatuses(op).includes("409"))).toEqual([]);
-    // The five that DO declare it must keep declaring it.
+    // The six that DO declare it must keep declaring it. PATCH conversation
+    // joined the list in item 7 stage F6: it declares 409 for the new
+    // conversation_deleted code, and the same response covers tree_disabled.
     for (const op of [
       "POST /agenttrees/{tree}/chat",
       "POST /agenttrees/{tree}/replay",
       "POST /agenttrees/{tree}/replay/turn",
+      "PATCH /agenttrees/{tree}/conversations/{conversationId}",
       "POST /eval/judge",
       "POST /eval/sets/{setId}/replay",
     ]) {
@@ -1063,8 +1085,9 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
   it("a disabled tree 409s the documented write set and keeps reads working", async () => {
     mockTrees.find((t) => t.id === "agent1")!.enabled = false;
     // mock/main.py need_enabled_tree: chat, replay, replay/turn, create agent,
-    // PUT instructions, POST snapshots, PUT last-selection, conversation
-    // rename/delete. Feedback is NOT in the set — a thumb annotates history.
+    // POST instruction versions, POST snapshots, PUT last-selection,
+    // conversation rename/delete. Feedback is NOT in the set — a thumb
+    // annotates history.
     await expect(api.chat("agent1", { message: "x" })).rejects.toMatchObject({ code: "tree_disabled" });
     await expect(
       api.replay("agent1", { selection: [{ conversation_id: "c1" }], configs: [{}] }),

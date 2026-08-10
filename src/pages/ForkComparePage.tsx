@@ -44,14 +44,15 @@ export function ForkComparePage() {
   const { parentId = "", turnId = "" } = useParams();
   const navigate = useNavigate();
 
-  // Parent tombstone (openapi.yaml:438-443): a 404 renders "parent deleted"
-  // while the sibling cards still load — lineage survives deletion.
+  // Parent tombstone: a deleted parent answers 200 with Conversation.deleted
+  // true, so "parent deleted" is read off the flag while the sibling cards
+  // load — lineage survives deletion. A 404 is a real failure again (absent,
+  // or a tree the caller may not view) and surfaces as one.
   const { data: parent, error: parentError } = useAsync(
     () =>
-      api.conversation(tree, parentId).catch((e: unknown) => {
-        if (e instanceof ApiError && e.status === 404) return "deleted" as const;
-        throw e;
-      }),
+      api
+        .conversation(tree, parentId)
+        .then((c) => (c.deleted ? ("deleted" as const) : c)),
     [tree, parentId],
   );
   const { data: siblings, error: siblingsError } = useAsync(
@@ -66,9 +67,10 @@ export function ForkComparePage() {
   // each fork's result is the last turn of that fork — which is exactly what an
   // omitted `page` asks listTurns for, at page_size 1. One small request per
   // card instead of one whole conversation per card.
-  // Unconditional: a deleted parent 404s here exactly as it does above, and
-  // the catch renders the same "original turn unavailable" the page already
-  // shows — gating on `parent` would only delay this by a round trip.
+  // Unconditional, and it now SUCCEEDS against a deleted parent: a tombstone's
+  // transcript still reads, so the baseline card shows the original turn
+  // instead of "unavailable" — the whole point of keeping the row. The catch
+  // stays for the genuinely unreachable cases.
   const { data: originalTurn } = useAsync(
     () =>
       api

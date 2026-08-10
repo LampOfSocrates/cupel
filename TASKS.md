@@ -186,6 +186,29 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
    seven in-place substitutions, no line-count change. Found and NOT fixed: **(ix)** there is
    still no GET on any `…/versions` collection, so version history stays unreadable (bucket-C
    C5); the sub-collection these POSTs created is exactly where that GET belongs.
+   Stage F6 DONE 2026-08-10 — **the soft delete is visible.** Every delete in the store was
+   classified first, and there are exactly TWO resource deletes, deliberately different:
+   a conversation is SOFT (four things point into it — a fork's lineage, an eval-set
+   reference item, an eval case's source, a judgment's subject), an eval SET is HARD and
+   right to be (a set is a named selection; nothing on the wire references a set id, and
+   the cases/judgments/evaluations it pointed at all survive). `DELETE …/memory` is a
+   content reset, `DELETE /tasks/{id}` is a cancel, and there is no user delete at all.
+   On the wire that became ONE required readOnly field, `Conversation.deleted`: the
+   tombstone READS (GET and `…/turns` both keep answering — that is what the kept row is
+   for), leaves every listing, and refuses new work with 409 `conversation_deleted`;
+   DELETE is idempotent. A boolean, not `deleted_at` — nothing has ever recorded WHEN, so
+   a timestamp would be invented for old rows, and a null meaning both "live" and
+   "deleted, time unknown" is worse than no field. **No migration: the `deleted` column
+   has always existed**, only the serialiser and the read path changed. Deliberately left
+   out: **restore** (not an endpoint — a place to find tombstones, a rule for their forks,
+   an answer for restoring into a disabled tree; that is item 17's UX) and
+   **`?include_deleted=`** (with no restore and no purge nothing could act on the list, and
+   every real caller arrives by reference, i.e. by id). The UI half was the actual bug:
+   `ChatPage` and `ForkComparePage` inferred "parent deleted" from a 404 — the same 404 an
+   unknown id and an unpermitted tree answer — so the banner was a guess. Both read the
+   flag now; a tombstone opens read-only with a banner instead of a composer that would
+   409 on every send; and fork compare's baseline card SHOWS the original turn where it
+   used to say "unavailable". Journey 4 pins the live behaviour end to end.
 
 7. **Contract v0.4.0.** Fifteen correctness fixes (paging, readable version history,
    idempotency keys, SSE resume, permission semantics, structured errors, batch turn fetch,

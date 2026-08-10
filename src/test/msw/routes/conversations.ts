@@ -149,9 +149,9 @@ function seedForks(): Record<string, ConversationFixture[]> {
       ],
     }),
   ],
-  // Orphan: parent c-gone was soft-deleted — lineage survives and "the parent
-  // link renders as deleted" (openapi.yaml:441-443). GET /conversations/c-gone
-  // 404s; the fork itself still loads.
+  // Orphan: parent c-gone is a TOMBSTONE — lineage survives and the parent
+  // link renders as deleted. GET /conversations/c-gone answers 200 with
+  // deleted: true (it is deleted, not absent); the fork itself still loads.
   "c-gone": [
     conv({
       id: "c-orphan",
@@ -174,8 +174,34 @@ export const turnRequests: URL[] = [];
 
 /** Roots and forks as one list — the "find a conversation by id" lookup. */
 export function allConversations(): ConversationFixture[] {
-  return [...mockRoots, ...Object.values(mockForks).flat()];
+  return [...mockRoots, ...mockTombstones, ...Object.values(mockForks).flat()];
 }
+
+// Tombstones: deleted conversations that still resolve BY ID and never appear
+// in a listing — the mirror of the store's `deleted` column. c-gone is the
+// parent of the orphan fork above, and it is what lets a UI test tell
+// "deleted" apart from "absent" (which is still a 404).
+function seedTombstones(): ConversationFixture[] {
+  return [
+    conv({
+      id: "c-gone",
+      title: "Deleted conversation",
+      deleted: true,
+      last_activity_at: "2026-08-02T10:00:00Z",
+      turns: [
+        {
+          id: "t1",
+          role: "user",
+          author: "user",
+          content: "This conversation was deleted.",
+          created_at: "2026-08-02T10:00:00Z",
+          envelope,
+        },
+      ],
+    }),
+  ];
+}
+export const mockTombstones: ConversationFixture[] = seedTombstones();
 
 export const conversationHandlers = [
   http.get(`${BASE}/agenttrees/:tree/conversations`, ({ params, request }) => {
@@ -185,7 +211,9 @@ export const conversationHandlers = [
     if (denied) return denied;
     const forksOf = url.searchParams.get("forks_of");
     const search = url.searchParams.get("search")?.toLowerCase();
-    let items = forksOf ? (mockForks[forksOf] ?? []) : mockRoots;
+    // Tombstones are never listed (openapi.yaml listConversations: no
+    // include_deleted, deliberately) — they are reached by id only.
+    let items = (forksOf ? (mockForks[forksOf] ?? []) : mockRoots).filter((c) => !c.deleted);
     // ?agent_id= — "view recent conversations for this agent"
     // (openapi.yaml:365-371).
     const agentId = url.searchParams.get("agent_id");
@@ -242,16 +270,29 @@ export const conversationHandlers = [
     const body = (await request.json()) as { title?: string };
     const denied = enabledTreeGate(params.tree as string);
     if (denied) return denied;
-    const found = mockRoots.find((c) => c.id === params.id);
+    const found = allConversations().find((c) => c.id === params.id);
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+    }
+    if (found.deleted) {
+      return HttpResponse.json(
+        { code: "conversation_deleted", message: "conversation is deleted" },
+        { status: 409 },
+      );
     }
     return HttpResponse.json(wireConversation({ ...found, title: body.title ?? found.title }));
   }),
 
+  // DELETE — soft and idempotent: the row becomes a tombstone (still readable
+  // by id, gone from listings) and deleting it again answers 204 again.
   http.delete(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {
     const denied = enabledTreeGate(params.tree as string);
     if (denied) return denied;
+    const found = allConversations().find((c) => c.id === params.id);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+    }
+    found.deleted = true;
     return new HttpResponse(null, { status: 204 });
   }),
 ];
@@ -261,6 +302,8 @@ export function resetConversations() {
   turnRequests.length = 0;
   mockRoots.length = 0;
   mockRoots.push(...seedRoots());
+  mockTombstones.length = 0;
+  mockTombstones.push(...seedTombstones());
   for (const key of Object.keys(mockForks)) delete mockForks[key];
   Object.assign(mockForks, seedForks());
 }
