@@ -12,6 +12,18 @@ import {
   Textarea,
   Tooltip,
 } from "@mantine/core";
+import {
+  IconActivity,
+  IconCheck,
+  IconCopy,
+  IconGitFork,
+  IconLayoutGrid,
+  IconLink,
+  IconThumbDown,
+  IconThumbDownFilled,
+  IconThumbUp,
+  IconThumbUpFilled,
+} from "@tabler/icons-react";
 import type { Turn } from "../../api/types";
 import { EnvelopeChip } from "../../components";
 import { Markdown } from "../../lib/markdown";
@@ -111,7 +123,7 @@ export function TurnBubble({
           (👍👎⧉⑂⌁). "Per assistant turn: 👍 / 👎 / copy buttons"
           (feature-spec.md:11) — user turns carry no row. */}
       {turn.role === "assistant" && (
-        <Group gap={2} justify="flex-end" mt={4}>
+        <Group gap={4} justify="flex-end" mt={6}>
           <ActionIcon
             size="sm"
             variant={thumb === "up" ? "light" : "subtle"}
@@ -120,7 +132,11 @@ export function TurnBubble({
             aria-pressed={thumb === "up"}
             onClick={() => onRate("up")}
           >
-            &#x1F44D;
+            {thumb === "up" ? (
+              <IconThumbUpFilled size={16} stroke={1.5} />
+            ) : (
+              <IconThumbUp size={16} stroke={1.5} />
+            )}
           </ActionIcon>
           <ActionIcon
             size="sm"
@@ -130,7 +146,11 @@ export function TurnBubble({
             aria-pressed={thumb === "down"}
             onClick={() => onRate("down")}
           >
-            &#x1F44E;
+            {thumb === "down" ? (
+              <IconThumbDownFilled size={16} stroke={1.5} />
+            ) : (
+              <IconThumbDown size={16} stroke={1.5} />
+            )}
           </ActionIcon>
           {/* "copy copies raw markdown" (feature-spec.md:272) — Turn.content,
               not the rendered HTML. */}
@@ -143,13 +163,13 @@ export function TurnBubble({
                 aria-label={copied ? "Copied" : "Copy message"}
                 onClick={copy}
               >
-                {copied ? "✓" : "⧉"}
+                {copied ? <IconCheck size={16} stroke={1.5} /> : <IconCopy size={16} stroke={1.5} />}
               </ActionIcon>
             )}
           </CopyButton>
-          {/* 🔗 sits next to ⧉ because it is the same gesture (put something on
-              the clipboard), keeping the row's copy affordances together and
-              its density unchanged. */}
+          {/* Link-copy sits next to copy because it is the same gesture (put
+              something on the clipboard), keeping the row's copy affordances
+              together and its density unchanged. */}
           {shareUrl && (
             <CopyButton value={shareUrl} timeout={1500}>
               {({ copied, copy }) => (
@@ -160,12 +180,12 @@ export function TurnBubble({
                   aria-label={copied ? "Link copied" : "Copy link to turn"}
                   onClick={copy}
                 >
-                  {copied ? "✓" : "🔗"}
+                  {copied ? <IconCheck size={16} stroke={1.5} /> : <IconLink size={16} stroke={1.5} />}
                 </ActionIcon>
               )}
             </CopyButton>
           )}
-          {/* ⑂ — sketch 01 tags the fork glyph "POST …/replay/turn". */}
+          {/* Fork — sketch 01 tags this icon "POST …/replay/turn". */}
           {onFork && (
             <ActionIcon
               size="sm"
@@ -174,10 +194,10 @@ export function TurnBubble({
               aria-label="Fork turn"
               onClick={onFork}
             >
-              ⑂
+              <IconGitFork size={16} stroke={1.5} />
             </ActionIcon>
           )}
-          {/* ⊞ collect. One glyph in the existing row (same size, same subtle
+          {/* Collect. One icon in the existing row (same size, same subtle
               variant), which is the whole point of "one keystroke"
               (cupel-phases.md:79). */}
           {onCollect && (
@@ -188,10 +208,10 @@ export function TurnBubble({
               aria-label="Collect into eval set"
               onClick={onCollect}
             >
-              ⊞
+              <IconLayoutGrid size={16} stroke={1.5} />
             </ActionIcon>
           )}
-          {/* ⌁ — "trace icon on every turn — in Chat, results grid cells, and
+          {/* "trace icon on every turn — in Chat, results grid cells, and
               drill-in" (feature-spec.md:141); routes to the trace view. */}
           {onTrace && (
             <ActionIcon
@@ -201,7 +221,7 @@ export function TurnBubble({
               aria-label="Open trace"
               onClick={onTrace}
             >
-              ⌁
+              <IconActivity size={16} stroke={1.5} />
             </ActionIcon>
           )}
         </Group>
