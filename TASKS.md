@@ -141,8 +141,20 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     generated README must not point at a document that does not exist — so add the link to
     `scripts/generated-readme.mjs` as part of this item.
 
-14. **DECIDE — go public.** Both repos are private. This is the launch, and it closes the
-    no-backward-compatibility window, so item 7 must be done and the README/site ready.
+14. **DONE 2026-08-10 — `github.com/LampOfSocrates/cupel` is public.** The
+    no-backward-compatibility window is closed: the contract is v0.4.0 in the open, and a
+    breaking change now costs somebody something. What the launch actually took, none of it
+    the flip itself: `master` was 74 commits behind (`origin/master` at `eb0aa39`, Aug 7 —
+    no v0.4.0, no scaffolder), so it was fast-forwarded to `evaluations-rename` and pushed;
+    the repo was already NAMED cupel and only its description still said Skein; a secret
+    scan of the tree and the whole history found nothing, and `.env` is now ignored anyway.
+    **The launch blocker nobody had seen: `core.autocrlf=true` — the Git for Windows default
+    — gave the checkout CRLF, and vitest cannot parse the CRLF form of the script modules
+    whose templates emit regex literals. Five suites died, including the family-table drift
+    test. `git clone && npm test` was a false instruction for every Windows adopter.**
+    `.gitattributes` pins the working tree to LF; proved by cloning the public repo fresh
+    (`i/lf w/lf`, 737 tests green). The local folder is `Code\2026\cupel` now, and the second
+    repo item 14 used to mention stays private (user, 2026-08-10).
 
 15. **DECIDE — the Render hostname.** The service is named `cupel-demo` but its hostname is
     still `skein.onrender.com`. Live with it, recreate the service (**carry `DEMO_TOKEN` over
