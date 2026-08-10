@@ -2,6 +2,13 @@
 // anywhere else (feature-spec.md:154). URLs are built from the ACTIVE backend
 // target (agentic.config.ts via src/api/target.ts).
 import { getTargetForPath } from "./target";
+import {
+  bareAgent,
+  bareAgentChat,
+  bareAgentConversation,
+  bareAgentOwns,
+  bareAgentTurns,
+} from "./bareAgent";
 import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
@@ -387,8 +394,16 @@ export const api = {
     }),
 
   // GET /agenttrees/{tree}/conversations/{conversationId} (openapi.yaml:387)
-  conversation: (tree: string, id: string) =>
-    request<Conversation>(`/agenttrees/${tree}/conversations/${id}`),
+  //
+  // A conversation the bare-agent shim started is read back from the shim: no
+  // backend has ever heard of it, so asking one would 404 the transcript the
+  // user is looking at. Everything else goes to whoever serves the family.
+  conversation: (tree: string, id: string) => {
+    const local = bareAgentOwns(id) ? bareAgentConversation(id) : null;
+    return local
+      ? Promise.resolve(local)
+      : request<Conversation>(`/agenttrees/${tree}/conversations/${id}`);
+  },
 
   // GET /agenttrees/{tree}/conversations/{conversationId}/turns (listTurns) —
   // the transcript, paged and CHRONOLOGICAL. Omitting `page` asks for the LAST
@@ -397,6 +412,7 @@ export const api = {
   // turn_ids goes on the wire comma-separated (contract style: form,
   // explode: false).
   turns: (tree: string, id: string, params: TurnListParams = {}) => {
+    if (bareAgentOwns(id)) return Promise.resolve(bareAgentTurns(id));
     const { turn_ids, ...rest } = params;
     return request<TurnPage>(`/agenttrees/${tree}/conversations/${id}/turns`, {
       query: {
@@ -431,6 +447,11 @@ export const api = {
     req: ChatRequest,
     opts: { signal?: AbortSignal } = {},
   ): Promise<ChatSendResult> => {
+    // A bare agent endpoint (agentic.config.ts agentEndpoint) answers chat
+    // instead — persona B, whose framework agent speaks HTTP and nothing else.
+    // src/api/bareAgent.ts maps it onto these same events.
+    const endpoint = bareAgent();
+    if (endpoint) return bareAgentChat(endpoint, tree, req, opts);
     const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
       method: "POST",
       // llmHeaders(): BYOK X-LLM-Key/X-LLM-Model when a key is stored

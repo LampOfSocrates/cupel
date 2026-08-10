@@ -327,8 +327,8 @@ export function renderTsconfig(source) {
 
 const splice = (text, start, end, replacement) => text.slice(0, start) + replacement + text.slice(end);
 
-/** `families: { … }` + `mockTarget`, rendered for the config literal. */
-export function renderFamiliesBlock(answers, mockTargetId) {
+/** `families: { … }` + `mockTarget` + `agentEndpoint`, for the config literal. */
+export function renderFamiliesBlock(answers, mockTargetId, agentEndpoint = null) {
   const lines = [
     "",
     "  // Per-family wiring, written by `npm run create` from your answers.",
@@ -344,6 +344,15 @@ export function renderFamiliesBlock(answers, mockTargetId) {
   if (Object.values(answers).includes("mock")) {
     lines.push(`  mockTarget: ${JSON.stringify(mockTargetId)},`);
   }
+  if (agentEndpoint) {
+    lines.push(
+      "",
+      "  // Your agent, mapped onto the chat family by src/api/bareAgent.ts.",
+      "  // It covers chat only, and its conversations live in the tab's memory",
+      "  // until you implement the conversations family for real (stage 2).",
+      `  agentEndpoint: { url: ${JSON.stringify(agentEndpoint.url)}, stream: ${JSON.stringify(agentEndpoint.stream)} },`,
+    );
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -356,7 +365,10 @@ export function renderFamiliesBlock(answers, mockTargetId) {
  * answers `mock`, even though the app's default target is the adopter's
  * backend. That IS the split this generator exists to produce.
  */
-export function applyGeneration(source, { product, init = null, answers, mockTargetId = "mock" }) {
+export function applyGeneration(
+  source,
+  { product, init = null, answers, mockTargetId = "mock", agentEndpoint = null },
+) {
   const productRange = valueRange(source, "product");
   let out = splice(
     source,
@@ -407,7 +419,7 @@ export function applyGeneration(source, { product, init = null, answers, mockTar
   // The families block goes in after localMock's entry, which is where the
   // interface declares it.
   const after = out.indexOf("\n", valueRange(out, "localMock").end) + 1;
-  return splice(out, after, after, renderFamiliesBlock(answers, mockTargetId));
+  return splice(out, after, after, renderFamiliesBlock(answers, mockTargetId, agentEndpoint));
 }
 
 // ------------------------------------------------------------------- detect
@@ -663,6 +675,7 @@ export function generate({ outDir, product, init = null, answers, agentEndpoint 
     init,
     answers,
     mockTargetId: "mock",
+    agentEndpoint,
   });
   writeFileSync(path.join(outDir, "agentic.config.ts"), config, "utf8");
   written.push("agentic.config.ts");

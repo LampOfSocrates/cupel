@@ -218,6 +218,18 @@ describe("the generated config", () => {
     expect(withoutMock).not.toContain("mockTarget:");
   });
 
+  // Persona B: no spec to derive a target from, one endpoint to point at.
+  it("writes a bare agent endpoint for the shim to read", () => {
+    const out = applyGeneration(source, {
+      product,
+      answers: { ...answers, chat: "mine" },
+      agentEndpoint: { url: "http://localhost:9000/chat", stream: "sse" },
+    });
+    expect(out).toContain('agentEndpoint: { url: "http://localhost:9000/chat", stream: "sse" }');
+    expect(out).toContain("src/api/bareAgent.ts");
+    expect(applyGeneration(source, { product, answers })).not.toContain("agentEndpoint:");
+  });
+
   it("renders the answers sorted, so a regenerated config diffs cleanly", () => {
     const block = renderFamiliesBlock({ eval: "hide", chat: "mine" }, "mock");
     expect(block.indexOf('"chat"')).toBeLessThan(block.indexOf('"eval"'));
@@ -317,6 +329,37 @@ describe("a full generation", () => {
     expect(existsSync(path.join(out, "mock/requirements.txt"))).toBe(true);
     expect(existsSync(path.join(out, "mock/tests"))).toBe(false);
     expect(existsSync(path.join(out, "mock/cupel-mock.sqlite"))).toBe(false);
+  });
+});
+
+describe("a persona B generation", () => {
+  let out;
+  beforeAll(() => {
+    out = mkdtempSync(path.join(tmpdir(), "cupel-wedge-"));
+    generate({
+      outDir: out,
+      product: { name: "wedge", label: "Wedge", trees: { one: "agent", many: "agents" } },
+      answers: Object.fromEntries(FAMILIES.map((f) => [f, f === "chat" ? "mine" : "mock"])),
+      agentEndpoint: { url: "http://localhost:9000/chat", stream: "sse" },
+      contractVersion: contract.info.version,
+    });
+  });
+  afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+  it("carries the endpoint into the config and the shim that reads it", async () => {
+    const { agenticConfig } = await import(pathToFileURL(path.join(out, "agentic.config.ts")).href);
+    expect(agenticConfig.agentEndpoint).toEqual({
+      url: "http://localhost:9000/chat",
+      stream: "sse",
+    });
+    expect(agenticConfig.families.chat).toBe("mine");
+    expect(existsSync(path.join(out, "src/api/bareAgent.ts"))).toBe(true);
+  });
+
+  it("tells the adopter in the README where their agent is wired in", () => {
+    const readme = readFileSync(path.join(out, "README.md"), "utf8");
+    expect(readme).toContain("http://localhost:9000/chat");
+    expect(readme).toMatch(/sse streaming/);
   });
 });
 

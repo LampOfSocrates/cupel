@@ -221,6 +221,20 @@ export interface AgenticConfig {
    * target id (default "mock"). Only read when some family answers `mock`.
    */
   mockTarget?: string;
+  /**
+   * A BARE AGENT ENDPOINT — the common case of a framework agent (ADK,
+   * LangGraph, Mastra, CrewAI, PydanticAI…) that answers over HTTP and has no
+   * OpenAPI document to match against anything.
+   *
+   * Declared here, it is mapped onto the chat family by src/api/bareAgent.ts:
+   * the app POSTs {message, conversation_id, stream} and reads either an SSE
+   * token stream or a single JSON reply, in whatever shape your framework
+   * already emits. Only consulted while `families.chat` is `mine`.
+   *
+   * It covers chat and nothing else, and its conversations live in the tab's
+   * memory until you implement the conversations family for real.
+   */
+  agentEndpoint?: { url: string; stream: "sse" | "json" };
   /** Saved A/B comparisons offered by chat compare mode — see CompareSet. */
   compareSets?: CompareSet[];
 }
