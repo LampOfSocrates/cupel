@@ -18,6 +18,18 @@ Modes (feature-spec.md:183-184):
 Start the server first: npm run mock (http://localhost:4010). The generator
 never opens the SQLite file.
 
+Live-LLM (docs/deployment.md:232-254): --live-key sends X-LLM-Key (and
+optionally X-LLM-Model) as default headers on every request, same as the
+browser's ByokSection. Defaults to $OPENROUTER_API_KEY, falling back to
+$CUPEL_LLM_KEY. The key must be an OpenRouter key (sk-or-...) — the
+mock's only provider is OpenRouter (mock/config.py:60), which is how the
+default model, "deepseek/deepseek-chat", reaches DeepSeek. The five
+endpoints that read the header (chat, replay, replay/turn, eval/sets
+replay, eval/judge) then generate for real instead of canned text; every
+other call ignores the header harmlessly. Rate limit is server-side
+(mock/config.py:65-66, 20 generations/60s per key) — _post retries once on
+429 using the server's Retry-After.
+
 Idempotency of re-running seed with the same --seed:
   - chats dedupe server-side via deterministic client_message_id
     (openapi.yaml:1400-1407);
@@ -34,6 +46,7 @@ pure function of --seed even when the skip checks fire.
 
 import argparse
 import asyncio
+import os
 import random
 import signal
 import time
@@ -150,6 +163,14 @@ class Generator:
 
     async def _post(self, path: str, payload: dict):
         r = await self.c.post(path, json=payload)
+        if r.status_code == 429:
+            # Only reachable with --live-key (canned generation is never
+            # limited, mock/main.py need_live_budget). One retry, honoring
+            # the server's own Retry-After rather than guessing a backoff.
+            seconds = int(r.headers.get("retry-after", "5"))
+            self.log(f"[generator] rate limited on {path}, retrying in {seconds}s")
+            await asyncio.sleep(seconds)
+            r = await self.c.post(path, json=payload)
         r.raise_for_status()
         return r.json()
 
@@ -405,25 +426,28 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=42,
                     help="drives ALL content choices; same seed = same dataset "
                          "(default %(default)s)")
-    ap.add_argument("--token", default=None,
-                    help="demo token sent as X-Demo-Token on every request — "
-                         "required when the server runs with DEMO_TOKEN set "
-                         "(P1-TDEPLOY gate; docs/deployment.md:11-12)")
     ap.add_argument("--interval", type=float, default=8.0,
                     help="seconds between drip actions (default %(default)s)")
     ap.add_argument("--iterations", type=int, default=None,
                     help="stop drip after N actions (default: run until Ctrl+C)")
+    ap.add_argument("--live-key",
+                    default=os.environ.get("OPENROUTER_API_KEY") or os.environ.get("CUPEL_LLM_KEY"),
+                    help="OpenRouter key (sk-or-...) — sent as X-LLM-Key so chat/replay/"
+                         "judge generate for real instead of canned text (default: "
+                         "$OPENROUTER_API_KEY, then $CUPEL_LLM_KEY, unset = canned)")
+    ap.add_argument("--live-model", default=os.environ.get("CUPEL_LLM_MODEL"),
+                    help="X-LLM-Model override, e.g. deepseek/deepseek-chat (default: "
+                         "$CUPEL_LLM_MODEL, unset = server default)")
     return ap
 
 
-def auth_headers(token: str | None) -> dict:
-    """Headers for the demo token gate; {} when no token (open server)."""
-    return {"X-Demo-Token": token} if token else {}
-
-
 async def _amain(args) -> None:
-    async with httpx.AsyncClient(base_url=args.base, timeout=60.0,
-                                 headers=auth_headers(args.token)) as client:
+    headers = {}
+    if args.live_key:
+        headers["X-LLM-Key"] = args.live_key
+        if args.live_model:
+            headers["X-LLM-Model"] = args.live_model
+    async with httpx.AsyncClient(base_url=args.base, timeout=60.0, headers=headers) as client:
         try:
             (await client.get("/healthz")).raise_for_status()
         except httpx.HTTPError as exc:
@@ -431,6 +455,8 @@ async def _amain(args) -> None:
                 f"Cannot reach the mock at {args.base} ({exc!r}). "
                 "Start it first: npm run mock") from exc
         gen = Generator(client, seed=args.seed)
+        gen.log(f"[generator] live LLM ON via {args.live_model or 'server default model'}"
+                if args.live_key else "[generator] live LLM off — canned content")
         if args.mode in ("seed", "simulate"):
             gen.log(f"[generator] seeding {args.base} (seed={args.seed})")
             await gen.seed()

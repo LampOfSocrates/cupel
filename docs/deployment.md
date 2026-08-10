@@ -1,4 +1,4 @@
-# Phase-1 demo deployment (decided 2026-08-04)
+# Hosted deployment (decided 2026-08-04, merged to one origin 2026-08-10)
 
 ## The same mock, two roles (P2-DEVSTART, 2026-08-06)
 The FastAPI mock in `mock/` is used in two different ways — keep them apart
@@ -10,18 +10,48 @@ when reading this document:
   location at startup. Storage is a plain SQLite file on your filesystem
   (`mock/cupel-mock.sqlite`, git-ignored). See README.md.
 - **Deployed (this document)**: the mock IS the whole backend of the hosted
-  demo — it also serves the built bundle from the same origin. Everything
-  below is about that role. It runs on a free tier with no persistent disk,
-  so its SQLite file is replicated to object storage instead (see
-  **Storage modes**).
+  demo. It runs on a free tier with no persistent disk, so its SQLite file is
+  replicated to object storage instead (see **Storage modes**).
 
 Adopters connecting Cupel to their own backend set `localMock.enabled: false`
 and point `defaultTarget.dev` at their target; `npm start` then runs the UI
 only and their backend holds all persistence. `npm run dev` / `npm run mock`
 still exist for anyone who prefers two terminals.
 
+## One origin: the landing page AND the demo (mock/root.py)
+Everything public — the persona landing page and the running demo — is ONE
+Render service, ONE Docker container, ONE origin:
+
+- `GET /` serves `docs/index.html`, the landing page.
+- `/cupel-demo/*` is the whole demo (API + built Vite bundle), mounted there
+  by `mock/root.py` via Starlette's `Mount`. Mounting strips the
+  `/cupel-demo` prefix before routing into `mock/main.py`'s app, so every
+  route it declares (`/healthz`, `/me`, `/openapi.json`, the SPA catch-all,
+  ...) is written exactly as it always was and simply becomes reachable one
+  level down — no prefix threaded through the route table, the permission
+  gate's path-template regexes, or the SPA static serving. FastAPI's own
+  `root_path` handling does the rest: the demo's contract is served at
+  **`/cupel-demo/openapi.json`** for free (docs/readiness.md).
+- The SPA side carries the mirror-image change: `vite.config.ts` builds with
+  `base: "/cupel-demo/"` (build-only — the dev server stays at `/`), and
+  `src/main.tsx` mounts the router with `basename="/cupel-demo"` in
+  production only (`import.meta.env.PROD`), so the built bundle's own
+  asset/route URLs already carry the prefix the browser will request.
+- The demo's own sidebar carries a plain `<a href="/">Landing / FAQ</a>` back
+  to the landing page (not a router link — the landing page is a sibling
+  route on the same origin, not part of the SPA).
+
+**No access gate.** Phase-1 demo data is not sensitive (deterministic seed,
+reset on every restart under `CUPEL_STORAGE=local`), so there is no shared
+token to distribute — share `https://cupel-site.onrender.com/cupel-demo/`
+directly. (An earlier version of this deployment gated the whole origin
+behind a `DEMO_TOKEN` shared-token middleware; that gate, its cookie, and the
+`?token=` URL form are gone — removed 2026-08-10 along with the merge into one
+service.)
+
 ## Host: Render free tier
-- One Docker container: FastAPI mock serves the API AND the built Vite bundle.
+- One Docker container: FastAPI serves the landing page, the API, AND the
+  built Vite bundle.
 - Free tier constraints, accepted:
   - Spins down after 15 min idle, ~1 min cold start → warm the URL before
     sharing it with the client.
@@ -29,8 +59,6 @@ still exist for anyone who prefers two terminals.
     **Storage modes** below: `CUPEL_STORAGE=local` accepts that (every restart
     starts from the seed), `CUPEL_STORAGE=s3` replicates the SQLite file to a
     bucket so the demo's data survives.
-- Phase 1 has no auth → gate with an unguessable URL + shared token checked
-  by middleware (env var DEMO_TOKEN; ?token= or X-Demo-Token header).
 - Upgrade path: Fly.io ~$2/mo machine + volume when always-on is wanted.
   AWS only if the client's org requires it, or for the Phase-3 Helm/k8s story.
 
@@ -93,7 +121,7 @@ demo database comfortably.
    **Secret Access Key** (shown once).
 3. Note the S3 endpoint from the bucket's settings:
    `https://<account-id>.r2.cloudflarestorage.com`.
-4. Render dashboard → the `cupel-demo` service → **Environment** → add:
+4. Render dashboard → the `cupel-site` service → **Environment** → add:
 
    | Variable | Value | Required |
    | --- | --- | --- |
@@ -108,7 +136,7 @@ demo database comfortably.
    Keep `CUPEL_SEED_ON_BOOT=1` and `CUPEL_SEED=42` — they now mean *seed if
    empty* (below), so they are safe to leave on with a durable database.
    These are secrets: set them in the dashboard, **not** in `render.yaml`.
-5. Redeploy and check `GET /healthz`:
+5. Redeploy and check `GET /cupel-demo/healthz`:
    `{"status":"ok", ..., "storage":{"mode":"s3","restored":true}}`.
    `restored:false` on the very first boot is correct (the bucket was empty);
    `"mode":"local"` when you asked for `s3` means the boot degraded — read the
@@ -138,12 +166,12 @@ take it down to protect data that by definition was not there:
 | --- | --- |
 | Restore fails (bad credentials, unreachable endpoint, corrupt replica) | Logged as `WARNING: litestream restore failed`; the app starts on a **fresh empty database**, which the boot seed then fills. No crash loop. |
 | Bucket is empty (first boot) | Not an error — `-if-replica-exists`. Fresh database, seeded, and replication starts from there. |
-| A `CUPEL_S3_*` variable is missing | Logged with the exact variable names, and the container runs **local and unreplicated**. `/healthz` reports `mode:"local"`, so it never claims durability it does not have. |
+| A `CUPEL_S3_*` variable is missing | Logged with the exact variable names, and the container runs **local and unreplicated**. `/cupel-demo/healthz` reports `mode:"local"`, so it never claims durability it does not have. |
 | `litestream` binary missing | Same degradation, logged. (The image always ships it; this only bites a hand-rolled runtime.) |
 | Replication falls behind / errors mid-run | Litestream logs and retries; the app is unaffected. |
 
-`/healthz` is the fastest check — it reports the **effective** mode, not the
-requested one. `npm start` prints the same thing in its banner.
+`/cupel-demo/healthz` is the fastest check — it reports the **effective**
+mode, not the requested one. `npm start` prints the same thing in its banner.
 
 ### Running s3 mode on your machine (verification, not routine use)
 `CUPEL_STORAGE=s3` plus the `CUPEL_S3_*` variables makes `npm start` boot
@@ -152,33 +180,54 @@ replica. You need the `litestream` binary on `PATH`. **Use a different
 `CUPEL_S3_PATH` than the deployed demo** — see the single-writer rule.
 
 ## How to deploy (P1-TDEPLOY)
-Everything ships in-repo: `Dockerfile` (stage 1 builds the Vite bundle, stage 2
-supplies the pinned litestream binary, stage 3 runs the FastAPI mock serving
-API + bundle), `render.yaml` (blueprint), `mock/boot.py` (picks the storage
-mode), `mock/entrypoint.py` (boot: serve → wait /healthz → seed if empty).
+Everything ships in-repo: `Dockerfile` (stage 1 builds the Vite bundle with
+`base: "/cupel-demo/"`, stage 2 supplies the pinned litestream binary, stage 3
+runs `mock/root.py`'s merged app), `render.yaml` (blueprint), `mock/boot.py`
+(picks the storage mode), `mock/entrypoint.py` (boot: serve → wait
+`/cupel-demo/healthz` → seed if empty).
 
 1. Push the repo to GitHub, then either:
    - **Blueprint**: Render dashboard → New → Blueprint → pick the repo;
-     `render.yaml` creates one free Docker web service with health check
-     `/healthz`, `DEMO_TOKEN` auto-generated, `CUPEL_SEED_ON_BOOT=1`,
+     `render.yaml` creates one free Docker web service named `cupel-site`
+     with health check `/cupel-demo/healthz`, `CUPEL_SEED_ON_BOOT=1`,
      `CUPEL_SEED=42`; or
    - **Manual**: New → Web Service → Docker runtime → free plan, health check
-     path `/healthz`, and set those three env vars yourself.
+     path `/cupel-demo/healthz`, and set those two env vars yourself.
 2. On boot the container serves immediately and, **if the database comes up
    empty**, seeds itself deterministically through the public API (generator
    seed mode). A database restored from an s3 replica is left alone — see
    "Seed on boot = seed if empty".
-3. Token gate usage: copy `DEMO_TOKEN` from the service's env and share the
-   URL as `https://<app>.onrender.com/?token=<DEMO_TOKEN>`. The first
-   `?token=` visit sets an httpOnly `cupel_demo_token` cookie, so the SPA and
-   all subsequent same-origin API/asset requests pass without the query
-   param. Machine callers send `X-Demo-Token: <DEMO_TOKEN>` instead
-   (e.g. `python -m mock.generator drip --base https://<app>.onrender.com
-   --token <DEMO_TOKEN>`). `/healthz` stays ungated for Render's checks.
-   Unset `DEMO_TOKEN` = fully open (local dev default).
+3. Share the URL as-is — no token, no query param:
+   `https://cupel-site.onrender.com/cupel-demo/`. Machine callers hit
+   `https://cupel-site.onrender.com/cupel-demo/openapi.json` etc. directly
+   (e.g. `python -m mock.generator drip --base
+   https://cupel-site.onrender.com/cupel-demo`).
 4. Local smoke without Docker: `npm run build`, then
-   `DEMO_TOKEN=x CUPEL_SEED_ON_BOOT=1 python -m mock.entrypoint` and open
-   `http://localhost:4010/?token=x`.
+   `CUPEL_SEED_ON_BOOT=1 python -m mock.entrypoint` and open
+   `http://localhost:4010/` (landing page) or
+   `http://localhost:4010/cupel-demo/` (the demo).
+
+### Consolidating the two existing Render services into this one (manual, one-time)
+Before 2026-08-10 this was TWO separate Render services: a Docker service
+(`cupel-demo` in `render.yaml`, but Render minted the hostname
+`skein.onrender.com` at creation and never changed it) running the demo alone,
+and a standalone Static Site (`cupel-site`, dashboard-configured, not in this
+repo) serving only `docs/index.html`. This document and `render.yaml` now
+describe the END STATE — one Docker service, named `cupel-site`, serving both
+— but getting there needs Render dashboard actions this repo's code cannot
+perform:
+1. Delete the `skein.onrender.com` Docker service (old `cupel-demo`
+   blueprint). It dies instantly with no redirect.
+2. Delete the standalone `cupel-site` Static Site.
+3. Render dashboard → New → Blueprint → this repo → applies the `render.yaml`
+   above, creating a fresh Docker service named `cupel-site`. Render hostnames
+   are minted from the service name at creation and are usually available if
+   nothing else is using that exact name — but this is Render's behaviour, not
+   a guarantee this repo controls; if the name is taken, you get a suffixed
+   hostname instead and this doc's URLs need a one-line update to match.
+Steps 1–2 make step 3's data loss safe: with `CUPEL_STORAGE=local` (the
+default) the demo dataset is already just the deterministic seed, regenerated
+on first boot — there is nothing to carry over.
 
 ## Live-LLM BYOK mode (P1-T18c)
 Mock stays the backend of record (conversations, tasks, runs, SQLite, SSE);

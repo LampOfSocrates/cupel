@@ -275,6 +275,10 @@ export const agenticConfig: AgenticConfig = {
       id: "prod",
       label: "Prod",
       baseUrl: "",
+      // The hosted demo is mounted at /cupel-demo (mock/root.py) alongside
+      // the landing page at "/" on the same origin — see the `remap` doc
+      // comment above for the general mechanism this is an instance of.
+      remap: (path) => `/cupel-demo${path}`,
       requiresToken: true,
       banner: false,
     },

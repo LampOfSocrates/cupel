@@ -31,10 +31,11 @@ describe("bearer attach (P2-T07)", () => {
 
   it("attaches the static prod token (T17) on requiresToken targets; the login JWT wins", async () => {
     // prod's baseUrl is "" (same-origin) — in jsdom that resolves to the
-    // page origin, where we register the capture handler.
+    // page origin — and its remap prefixes every path with /cupel-demo (the
+    // hosted demo is mounted there, agentic.config.ts, mock/root.py).
     setActiveTarget("prod");
     const captured: Array<string | null> = [];
-    server.use(captureAuthHeader(window.location.origin, captured));
+    server.use(captureAuthHeader(`${window.location.origin}/cupel-demo`, captured));
 
     setProdToken("static-tok");
     await api.me();

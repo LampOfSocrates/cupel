@@ -4,7 +4,7 @@
 Off-mode (AUTH_MODE unset — the deployed demo's configuration) must behave
 exactly as it did before auth: /me answers the dev user, nothing enforced. On-mode:
 seeded admin@demo / restricted@demo (password "demo"), real-shaped HS256 JWTs,
-401s, permission filtering, DemoTokenGate stacking.
+401s, permission filtering.
 """
 
 import asyncio
@@ -36,7 +36,6 @@ def run(coro):
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     monkeypatch.delenv("AUTH_MODE", raising=False)
-    monkeypatch.delenv("DEMO_TOKEN", raising=False)
     monkeypatch.delenv("CUPEL_JWT_SECRET", raising=False)
 
 
@@ -394,37 +393,6 @@ def test_logout_204_with_valid_token_401_without(monkeypatch):
             assert (await c.post("/auth/logout",
                                  headers=bearer(token))).status_code == 204
             assert (await c.post("/auth/logout")).status_code == 401
-    run(case())
-
-
-# --------------------------------------------------- demo gate + auth stack
-def test_demo_gate_runs_before_auth_gate(monkeypatch):
-    """Both gates active: CORS → DemoTokenGate → AuthGate (mock/main.py
-    create_app ordering) — the shared demo token is checked first, then the
-    per-user JWT."""
-    monkeypatch.setenv("AUTH_MODE", "on")
-    monkeypatch.setenv("DEMO_TOKEN", "d3mo")
-
-    async def case():
-        async with make_client() as c:
-            # No demo token: demo gate rejects (its message, not the auth one).
-            r = await c.get("/me")
-            assert r.status_code == 401
-            assert r.json()["message"] == "Missing or invalid demo token."
-            # Demo token but no JWT: auth gate rejects.
-            r = await c.get("/me", headers={"X-Demo-Token": "d3mo"})
-            assert r.status_code == 401
-            assert r.json()["code"] == "unauthorized"
-            assert "bearer" in r.json()["message"].lower()
-            # Both: 200. (/auth/token is open in the AUTH gate but still
-            # behind the DEMO gate — pass X-Demo-Token to log in.)
-            r = await c.post("/auth/token", headers={"X-Demo-Token": "d3mo"},
-                             json={"email": "admin@demo", "password": "demo"})
-            assert r.status_code == 200
-            token = r.json()["access_token"]
-            r = await c.get("/me", headers={"X-Demo-Token": "d3mo", **bearer(token)})
-            assert r.status_code == 200
-            assert r.json()["user"]["id"] == "u_admin"
     run(case())
 
 

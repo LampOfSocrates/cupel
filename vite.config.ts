@@ -17,8 +17,15 @@ export function productTitle(label: string): Plugin {
   };
 }
 
-// Dev server on :5173 (cupel-phases.md:53 "npm run dev # studio on :5173")
-export default defineConfig({
+// Dev server on :5173 (cupel-phases.md:53 "npm run dev # studio on :5173").
+// base is BUILD-ONLY (command === "build"): the hosted demo lives at
+// /cupel-demo/ on the same origin as the landing page (mock/root.py mounts
+// the whole app there), so a production build's emitted asset/script URLs
+// need that prefix baked in. `base` also affects the dev server's own root
+// path if left unconditional, which would break `npm start` (UI expected at
+// http://localhost:5173/, not /cupel-demo/) — so dev keeps the default "/".
+export default defineConfig(({ command }) => ({
   plugins: [react(), productTitle(agenticConfig.product.label)],
+  base: command === "build" ? "/cupel-demo/" : "/",
   server: { port: 5173 },
-});
+}));

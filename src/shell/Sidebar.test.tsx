@@ -99,6 +99,17 @@ describe("Sidebar Settings entry", () => {
   });
 });
 
+// Landing / FAQ — a plain <a href="/"> back to the persona landing page
+// (docs/index.html, served at the domain root; mock/root.py mounts the whole
+// app at /cupel-demo alongside it), NOT a router route.
+describe("Sidebar Landing / FAQ entry", () => {
+  it("is a plain absolute link to the domain root, not a router link", () => {
+    renderShell();
+    const link = screen.getByRole("link", { name: "Landing / FAQ" });
+    expect(link).toHaveAttribute("href", "/");
+  });
+});
+
 // Session row — user name from /me; "Sign out" shows EXACTLY when a
 // login token exists for the active target (no auth-mode branch: an off-mode
 // backend issues no token, so the dev user shows without sign-out).

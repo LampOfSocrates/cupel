@@ -154,6 +154,11 @@ export function Sidebar() {
           First section: Settings → Backend (sketch 09). */}
       <AppShell.Section>
         <Divider my="xs" />
+        {/* Not a router route — an actual link back to the persona landing
+            page docs/index.html serves at the domain root (mock/root.py
+            mounts this whole app at /cupel-demo alongside it), hence a plain
+            <a href="/"> rather than RouterNavLink. */}
+        <NavLink component="a" href="/" label="Landing / FAQ" />
         {!isRouteHidden("/settings") && (
           <NavLink component={RouterNavLink} to="/settings" label="Settings" />
         )}

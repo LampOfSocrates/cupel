@@ -1,9 +1,9 @@
-"""Deployment tests: shared-token gate, same-origin static serving, generator
-gate passage (docs/deployment.md:3-12). Run: npm run test:mock.
+"""Deployment tests: same-origin static serving, and the single-service
+root mount that puts the landing page and the demo on one origin
+(docs/deployment.md, mock/root.py). Run: npm run test:mock.
 
-The gate defaults OFF (DEMO_TOKEN unset) so every other test file is
-unaffected; static serving is exercised via an explicit temp dist dir so the
-suite never depends on whether npm run build has produced a real dist/.
+Static serving is exercised via an explicit temp dist dir so the suite never
+depends on whether npm run build has produced a real dist/.
 """
 
 import asyncio
@@ -11,10 +11,8 @@ import asyncio
 import httpx
 import pytest
 
-from mock.generator import Generator, auth_headers, build_parser
-from mock.main import DEMO_COOKIE, create_app
-
-TOKEN = "t0k-demo-secret"
+from mock.main import create_app
+from mock.root import create_root_app
 
 
 def make_client(static_dir="__no_dist__", **kwargs):
@@ -26,108 +24,15 @@ def make_client(static_dir="__no_dist__", **kwargs):
                              base_url="http://t", **kwargs)
 
 
+def make_root_client(**kwargs):
+    app = create_root_app(db_path=":memory:", token_delay=0, step_delay=0,
+                          static_dir="__no_dist__")
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                             base_url="http://t", **kwargs)
+
+
 def run(coro):
     return asyncio.run(coro)
-
-
-@pytest.fixture(autouse=True)
-def _isolate(monkeypatch):
-    monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    monkeypatch.delenv("CUPEL_STATIC_DIR", raising=False)
-
-
-# ------------------------------------------------------------- token gate
-def test_no_demo_token_env_means_fully_open():
-    async def case():
-        async with make_client() as c:
-            assert (await c.get("/me")).status_code == 200
-            # dev 404 behavior unchanged when dist/ is absent
-            assert (await c.get("/no-such-path")).status_code == 404
-    run(case())
-
-
-def test_gate_blocks_api_without_token(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            r = await c.get("/me")
-            assert r.status_code == 401
-            # Even a request the gate refuses before it reaches a route is
-            # traceable — that is why RequestId is the outermost middleware.
-            assert r.json() == {"code": "unauthorized",
-                                "message": "Missing or invalid demo token.",
-                                "request_id": r.headers["X-Request-Id"]}
-            # wrong token is also refused, via every channel
-            assert (await c.get("/me", params={"token": "wrong"})).status_code == 401
-            assert (await c.get("/me", headers={"X-Demo-Token": "wrong"})).status_code == 401
-    run(case())
-
-
-def test_healthz_stays_open(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            assert (await c.get("/healthz")).status_code == 200
-    run(case())
-
-
-def test_query_token_passes_and_sets_cookie(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            r = await c.get("/me", params={"token": TOKEN})
-            assert r.status_code == 200
-            cookie = r.headers.get("set-cookie", "")
-            assert f"{DEMO_COOKIE}={TOKEN}" in cookie
-            assert "HttpOnly" in cookie and "SameSite=Lax" in cookie
-            assert "Secure" not in cookie  # plain http, no X-Forwarded-Proto
-            # the client stored the cookie -> subsequent bare requests pass
-            r2 = await c.get("/me")
-            assert r2.status_code == 200
-            assert "set-cookie" not in r2.headers  # only ?token= sets it
-    run(case())
-
-
-def test_cookie_secure_behind_https_proxy(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            r = await c.get("/me", params={"token": TOKEN},
-                            headers={"X-Forwarded-Proto": "https"})
-            assert r.status_code == 200
-            assert "Secure" in r.headers.get("set-cookie", "")
-    run(case())
-
-
-def test_header_token_passes(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            r = await c.get("/me", headers={"X-Demo-Token": TOKEN})
-            assert r.status_code == 200
-            assert "set-cookie" not in r.headers
-    run(case())
-
-
-def test_browser_paths_get_html_provide_token_page(monkeypatch):
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            r = await c.get("/", headers={"Accept": "text/html,*/*"})
-            assert r.status_code == 401
-            assert r.headers["content-type"].startswith("text/html")
-            assert "token" in r.text
-            # non-HTML clients on the same path still get the JSON error
-            r2 = await c.get("/", headers={"Accept": "application/json"})
-            assert r2.status_code == 401
-            assert r2.json()["code"] == "unauthorized"
-    run(case())
 
 
 # ---------------------------------------------------------- static serving
@@ -173,52 +78,44 @@ def test_api_routes_win_over_spa(dist):
     run(case())
 
 
-def test_gated_spa_flow_token_url_then_assets_via_cookie(dist, monkeypatch):
-    """The shared demo link: /?token=... serves the app AND plants the cookie,
-    after which asset + API requests pass with no client changes."""
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
+# --------------------------------------------------------------- root mount
+# mock/root.py: ONE service, ONE origin — landing page at "/", the whole demo
+# (unmodified create_app()) mounted at "/cupel-demo". Starlette's Mount
+# strips the prefix before routing into the demo app, so these prove that
+# mount does what it claims with zero changes to mock/main.py's routes.
+def test_landing_page_served_at_root():
     async def case():
-        async with make_client(static_dir=str(dist)) as c:
-            r = await c.get("/", params={"token": TOKEN},
-                            headers={"Accept": "text/html"})
-            assert r.status_code == 200 and "CUPEL-INDEX" in r.text
-            assert f"{DEMO_COOKIE}={TOKEN}" in r.headers.get("set-cookie", "")
-            assert (await c.get("/assets/app.js")).status_code == 200
-            assert (await c.get("/me")).status_code == 200
+        async with make_root_client() as c:
+            r = await c.get("/")
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("text/html")
+            assert "<html" in r.text.lower()
     run(case())
 
 
-# ------------------------------------------------------- generator + gate
-def test_generator_token_flag_and_header():
-    args = build_parser().parse_args(["seed", "--token", "abc"])
-    assert args.token == "abc"
-    assert build_parser().parse_args(["seed"]).token is None
-    assert auth_headers(None) == {}
-    assert auth_headers("abc") == {"X-Demo-Token": "abc"}
+def test_demo_mounted_under_cupel_demo_prefix():
+    async def case():
+        async with make_root_client() as c:
+            assert (await c.get("/cupel-demo/healthz")).status_code == 200
+            r = await c.get("/cupel-demo/me")
+            assert r.status_code == 200 and r.json()["user"]["id"] == "dev"
+            # the demo app's own root ("/", unprefixed dist-less 404) is not
+            # reachable at the mount root — only at the landing page's "/".
+    run(case())
 
 
-def test_generator_sends_x_demo_token(monkeypatch):
-    """--token must ride as X-Demo-Token on every generator request (fake
-    transport assert) and must satisfy the real gate."""
-    seen = []
-
-    def handler(request):
-        seen.append(request.headers.get("x-demo-token"))
-        return httpx.Response(200, json=[])
-
-    async def fake():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler),
-                                     base_url="http://t",
-                                     headers=auth_headers(TOKEN)) as c:
-            await Generator(c, seed=1, log=lambda *_: None)._get("/eval/rubrics")
-    run(fake())
-    assert seen == [TOKEN]
-
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def real_gate():
-        async with make_client(headers=auth_headers(TOKEN)) as c:
-            gen = Generator(c, seed=1, log=lambda *_: None)
-            assert (await gen._get("/me"))["user"]["id"] == "dev"
-    run(real_gate())
+def test_openapi_reachable_at_mount_prefix():
+    """The contract's own promise (docs/readiness.md): the hosted demo's spec
+    lives at /cupel-demo/openapi.json — Starlette's root_path handling makes
+    this true for free, no prefix threaded through mock/main.py."""
+    async def case():
+        async with make_root_client() as c:
+            r = await c.get("/cupel-demo/openapi.json")
+            assert r.status_code == 200
+            spec = r.json()
+            assert spec["info"]["title"] == "Cupel mock"
+            assert "/agenttrees/{tree}/chat" in spec["paths"]
+            # unprefixed, would 404 through the root app (only reachable
+            # under the mount)
+            assert (await c.get("/openapi.json")).status_code == 404
+    run(case())

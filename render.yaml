@@ -1,6 +1,15 @@
 # P1-TDEPLOY Render blueprint (docs/deployment.md "How to deploy").
-# One free-tier Docker web service: FastAPI mock + built Vite bundle,
-# seed-if-empty on boot, shared-token gate.
+# ONE free-tier Docker web service, ONE origin: FastAPI serves the persona
+# landing page at "/" and the whole demo (API + built Vite bundle) mounted at
+# "/cupel-demo" (mock/root.py) — seed-if-empty on boot, no auth gate (Phase 1
+# demo data is not sensitive; see docs/deployment.md).
+#
+# Named "cupel-site" so the hostname Render mints matches the public URL this
+# is meant to have (cupel-site.onrender.com) — replaces BOTH the old
+# Docker-only "cupel-demo" service (hostname drifted to skein.onrender.com)
+# and the old standalone static-site "cupel-site" that served only
+# docs/index.html. Deleting those two and applying this blueprint fresh is a
+# manual Render-dashboard step; see docs/deployment.md.
 #
 # SINGLE WRITER — DO NOT SCALE (P2-PERSIST). With CUPEL_STORAGE=s3 this
 # service is one SQLite database replicated by Litestream. Two instances
@@ -8,16 +17,12 @@
 # raise numInstances, and never run a second service against the same bucket.
 services:
   - type: web
-    name: cupel-demo
+    name: cupel-site
     runtime: docker
     plan: free
     autoDeploy: true
-    healthCheckPath: /healthz
+    healthCheckPath: /cupel-demo/healthz
     envVars:
-      # Shared-token gate (docs/deployment.md:11-12). Render generates an
-      # unguessable value; share the URL as https://<app>.onrender.com/?token=<value>.
-      - key: DEMO_TOKEN
-        generateValue: true
       # Seed the demo dataset deterministically, but ONLY when the database
       # comes up empty (mock/entrypoint.py should_seed) — with CUPEL_STORAGE=s3
       # a restored database must not be seeded on top of.

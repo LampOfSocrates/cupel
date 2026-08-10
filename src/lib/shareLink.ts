@@ -18,9 +18,20 @@ function currentOrigin(): string {
   return typeof window === "undefined" ? "" : window.location.origin;
 }
 
+/**
+ * The production build is served under /cupel-demo (mock/root.py mounts it
+ * there, alongside the landing page at "/"; src/main.tsx's router basename is
+ * the same split) — a share link built without it would 404 on the demo.
+ * `isProd` is injectable ONLY so tests can exercise both sides — see
+ * src/api/target.ts's resolveDefaultTargetId, the same pattern.
+ */
+export function sharePathPrefix(isProd: boolean = import.meta.env.PROD): string {
+  return isProd ? "/cupel-demo" : "";
+}
+
 /** Absolute URL to a conversation: `https://host/chat/{conversationId}`. */
 export function conversationShareUrl(conversationId: string): string {
-  return `${currentOrigin()}/chat/${encodeURIComponent(conversationId)}`;
+  return `${currentOrigin()}${sharePathPrefix()}/chat/${encodeURIComponent(conversationId)}`;
 }
 
 /** Absolute URL to one turn: `https://host/chat/{conversationId}?turn={turnId}`. */

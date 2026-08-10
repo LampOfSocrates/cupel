@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conversationShareUrl, TURN_PARAM, turnShareUrl } from "./shareLink";
+import { conversationShareUrl, sharePathPrefix, TURN_PARAM, turnShareUrl } from "./shareLink";
 
 // Share links are the app's own routes made absolute against the
 // CURRENT origin (no configured share host, nothing to keep in sync) and add
@@ -26,5 +26,13 @@ describe("shareLink", () => {
     expect(url.pathname).toBe("/chat/c1%2F..%2Fevil");
     expect(url.searchParams.get(TURN_PARAM)).toBe("t2&admin=1");
     expect(url.searchParams.get("admin")).toBeNull();
+  });
+
+  // import.meta.env.PROD is statically replaced at `vite build` time — in
+  // vitest it is always false, so the production branch (the demo mounted at
+  // /cupel-demo, mock/root.py) is exercised via the injectable isProd param.
+  it("carries the /cupel-demo prefix in production builds only", () => {
+    expect(sharePathPrefix(false)).toBe("");
+    expect(sharePathPrefix(true)).toBe("/cupel-demo");
   });
 });

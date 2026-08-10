@@ -4,15 +4,17 @@ Run: python -m mock.entrypoint  (invoked by mock/boot.py, which picks the
 storage mode first; also works standalone and locally)
 
 Behavior:
-  1. uvicorn serves mock.main:app on 0.0.0.0:$PORT (Render injects PORT;
+  1. uvicorn serves mock.root:app on 0.0.0.0:$PORT (Render injects PORT;
      default 4010) in the MAIN thread, so SIGTERM handling stays uvicorn's.
-  2. A background thread polls /healthz on localhost until the server is up.
+     mock.root mounts the whole demo (mock.main:app, unprefixed) at
+     /cupel-demo and serves the landing page at "/" — one origin, one
+     container (docs/deployment.md).
+  2. A background thread polls /cupel-demo/healthz on localhost until the
+     server is up.
   3. It then seeds — but only when should_seed() says so (see below). Seeding
-     runs the generator's seed mode against localhost (--seed $CUPEL_SEED,
-     default 42; --token $DEMO_TOKEN when the gate is on — the generator
-     writes through the public API, so it must pass the gate like any other
-     client). Progress is logged; the server just keeps serving during and
-     after.
+     runs the generator's seed mode against localhost/cupel-demo (--seed
+     $CUPEL_SEED, default 42 — the generator writes through the public API).
+     Progress is logged; the server just keeps serving during and after.
 
 SEED ONLY IF EMPTY. CUPEL_SEED_ON_BOOT=1 used to mean "re-seed
 on every boot" — the mitigation for a disk that lost everything anyway
@@ -47,7 +49,7 @@ def wait_healthz(base: str, timeout: float = HEALTH_TIMEOUT_S) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            if httpx.get(f"{base}/healthz", timeout=5.0).status_code == 200:
+            if httpx.get(f"{base}/cupel-demo/healthz", timeout=5.0).status_code == 200:
                 return True
         except httpx.HTTPError:
             pass
@@ -67,8 +69,8 @@ def should_seed(env, db_path: str) -> tuple[bool, str]:
 
 
 def seed_when_ready(port: int) -> None:
-    base = f"http://127.0.0.1:{port}"
-    if not wait_healthz(base):
+    base = f"http://127.0.0.1:{port}/cupel-demo"
+    if not wait_healthz(f"http://127.0.0.1:{port}"):
         log(f"healthz never came up on {base}; skipping boot seed")
         return
     log(f"server healthy on {base}")
@@ -79,11 +81,8 @@ def seed_when_ready(port: int) -> None:
         return
     log(f"boot seed will run: {why}")
     seed = os.environ.get("CUPEL_SEED", "42")
-    token = os.environ.get("DEMO_TOKEN")
     argv = ["seed", "--base", base, "--seed", seed]
-    if token:
-        argv += ["--token", token]
-    log(f"seeding (seed={seed}, token={'set' if token else 'none'}) ...")
+    log(f"seeding (seed={seed}) ...")
     try:
         generator.main(argv)
         log("boot seed complete")
@@ -97,7 +96,7 @@ def main() -> None:
     port = int(os.environ.get("PORT", "4010"))
     threading.Thread(target=seed_when_ready, args=(port,), daemon=True).start()
     log(f"starting uvicorn on 0.0.0.0:{port}")
-    uvicorn.run("mock.main:app", host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run("mock.root:app", host="0.0.0.0", port=port, log_level="info")
 
 
 if __name__ == "__main__":

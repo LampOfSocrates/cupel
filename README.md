@@ -4,9 +4,10 @@ A chat client your users can actually use, and the studio you need to make the
 agent better: versioned instructions, replay and compare, an LLM judge, traces
 with cost. Self-hosted. Point it at your backend by editing one file.
 
-**[cupel-site.onrender.com](https://cupel-site.onrender.com)** · what it does:
-[docs/features.md](docs/features.md) · how it was built, phase by phase:
-[cupel-phases.md](cupel-phases.md)
+**[cupel-site.onrender.com](https://cupel-site.onrender.com)** · try the demo:
+[cupel-site.onrender.com/cupel-demo/](https://cupel-site.onrender.com/cupel-demo/)
+· what it does: [docs/features.md](docs/features.md) · how it was built, phase
+by phase: [cupel-phases.md](cupel-phases.md)
 
 ## Why it exists
 
@@ -269,8 +270,9 @@ CLI, hosted runs — was deliberately moved out to its own project
 
 ## Deployment
 
-The hosted demo runs the same mock as its whole backend, serving the built
-bundle from the same origin — see [docs/deployment.md](docs/deployment.md).
+One Render service, one origin: the landing page at `/`, the hosted demo
+(the same mock as its whole backend, serving the built bundle) mounted at
+`/cupel-demo` — see [docs/deployment.md](docs/deployment.md).
 
 ## Why "cupel"
 

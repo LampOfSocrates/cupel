@@ -156,10 +156,22 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     (`i/lf w/lf`, 737 tests green). The local folder is `Code\2026\cupel` now, and the second
     repo item 14 used to mention stays private (user, 2026-08-10).
 
-15. **DECIDE — the Render hostname.** The service is named `cupel-demo` but its hostname is
-    still `skein.onrender.com`. Live with it, recreate the service (**carry `DEMO_TOKEN` over
-    first** — a new service mints a different one and shared demo links die; the old hostname
-    dies instantly with no redirect), or put a real domain in front. `cupel.io`/`cupel.sh` free.
+15. **DONE 2026-08-10 (code) — merged the landing page and the demo into ONE Render service,
+    dropped the token gate; dashboard consolidation still pending (user).** Was two services:
+    a Docker demo whose hostname had drifted to `skein.onrender.com` (blueprint said
+    `cupel-demo`) and a standalone static-site landing page at `cupel-site.onrender.com`.
+    Now one origin: `mock/root.py` serves `docs/index.html` at `/` and mounts the whole demo
+    (API + built SPA, `mock/main.py` completely unmodified) at `/cupel-demo` via Starlette
+    `Mount` — the prefix strips automatically, so `/cupel-demo/openapi.json` works via FastAPI's
+    own `root_path` handling with no route table changes. `vite.config.ts` builds with
+    `base: "/cupel-demo/"` (build-only) and `src/main.tsx` sets the router `basename` to match
+    in production; the demo's sidebar carries a plain link back to the landing page.
+    `render.yaml`'s service renamed `cupel-demo` → `cupel-site` to target the surviving
+    hostname. The `DEMO_TOKEN` shared-token gate (middleware, cookie, `?token=` URLs) is
+    deleted entirely — Phase-1 demo data isn't sensitive, so there is nothing to gate.
+    **Remaining, dashboard-only**: delete the old `skein.onrender.com` Docker service and the
+    old standalone `cupel-site` static site, then apply the renamed blueprint fresh — see
+    docs/deployment.md "Consolidating the two existing Render services into this one".
 
 16. Turn on demo persistence — the code shipped but the demo still runs local storage, so a
     restart wipes it. Needs an R2/S3 bucket + scoped token. **That path has never once

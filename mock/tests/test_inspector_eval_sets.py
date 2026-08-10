@@ -47,7 +47,6 @@ def run(coro):
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     monkeypatch.delenv("AUTH_MODE", raising=False)
-    monkeypatch.delenv("DEMO_TOKEN", raising=False)
     monkeypatch.delenv("CUPEL_JWT_SECRET", raising=False)
 
 

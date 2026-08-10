@@ -23,7 +23,6 @@ from mock import capabilities as cap
 from mock.main import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
-TOKEN = "t0k-ready"
 
 
 def make_client(**kwargs):
@@ -35,11 +34,6 @@ def make_client(**kwargs):
 
 def run(coro):
     return asyncio.run(coro)
-
-
-@pytest.fixture(autouse=True)
-def _no_gate(monkeypatch):
-    monkeypatch.delenv("DEMO_TOKEN", raising=False)
 
 
 @pytest.fixture()
@@ -75,19 +69,6 @@ def test_openapi_served_docs_stay_off():
             # docs UIs remain disabled (openapi exposure only)
             assert (await c.get("/docs")).status_code == 404
             assert (await c.get("/redoc")).status_code == 404
-    run(case())
-
-
-def test_openapi_gated_like_other_endpoints(monkeypatch):
-    """DEMO_TOKEN set -> /openapi.json is behind the gate (only /healthz is
-    open); cupel-ready reaches it via --header X-Demo-Token."""
-    monkeypatch.setenv("DEMO_TOKEN", TOKEN)
-
-    async def case():
-        async with make_client() as c:
-            assert (await c.get("/openapi.json")).status_code == 401
-            r = await c.get("/openapi.json", headers={"X-Demo-Token": TOKEN})
-            assert r.status_code == 200 and "paths" in r.json()
     run(case())
 
 
@@ -212,10 +193,11 @@ def test_init_emits_target_block_from_real_mock(spec_path):
     """--init against the real mock's OpenAPI, fetched over HTTP so the
     fetched-origin baseUrl fallback is exercised end-to-end. Expectations
     match the FastAPI-generated spec's reality (verified via app.openapi()):
-    it declares NO `servers` and NO securitySchemes (the DEMO_TOKEN gate is
-    middleware, outside the spec), so baseUrl falls back to the fetch origin,
-    requiresToken is omitted, and — paths matching the contract 1:1 — no
-    prefix remap is detected."""
+    it declares NO `servers` and NO securitySchemes (AUTH_MODE's bearer JWT
+    check is ASGI middleware, outside FastAPI's Security system, so it is
+    never declared in the generated spec), so baseUrl falls back to the fetch
+    origin, requiresToken is omitted, and — paths matching the contract 1:1 —
+    no prefix remap is detected."""
     handler = functools.partial(http.server.SimpleHTTPRequestHandler,
                                 directory=str(spec_path.parent))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)

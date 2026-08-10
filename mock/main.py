@@ -6,12 +6,11 @@ Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 import asyncio
 import hashlib
 import json
-import os
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
 from . import auth, capabilities, config, llm, permissions, storage, tabular
@@ -50,20 +49,18 @@ def field_error(field: str, message: str) -> list[dict]:
 
 REQUEST_ID_HEADER = "x-request-id"
 
-DEMO_COOKIE = "cupel_demo_token"
-
 
 class RequestId:
     """Correlation id on EVERY response (openapi.yaml components.headers
     .XRequestId), and on every error body.
 
-    Outermost middleware on purpose: the demo-token gate and the auth gate
-    both answer requests without ever reaching a route, and a 401 is exactly
-    the response a user is most likely to be reporting. The id is put on the
-    ASGI scope so those gates and the exception handlers can read it without
-    a request object being passed around.
+    Outermost middleware on purpose: the auth gate answers requests without
+    ever reaching a route, and a 401 is exactly the response a user is most
+    likely to be reporting. The id is put on the ASGI scope so that gate and
+    the exception handlers can read it without a request object being passed
+    around.
 
-    Pure ASGI, not BaseHTTPMiddleware, for the same reason the demo gate is:
+    Pure ASGI, not BaseHTTPMiddleware, for the same reason the auth gate is:
     BaseHTTPMiddleware buffers, which would break the two SSE endpoints.
     """
 
@@ -105,74 +102,10 @@ def error_body(scope, body: dict) -> dict:
 def error_response(request, status: int, body: dict, headers: dict | None = None) -> JSONResponse:
     return JSONResponse(error_body(request.scope, body), status_code=status, headers=headers)
 
-DENIED_PAGE = (
-    "<!doctype html><html><head><title>Cupel demo</title></head><body>"
-    "<h1>Cupel demo</h1><p>This demo needs an access token. Open the exact "
-    "link you were given &mdash; it ends in <code>?token=&hellip;</code>. "
-    "The token is remembered in a cookie afterwards.</p></body></html>"
-)
-
-
-class DemoTokenGate:
-    """Shared-token gate (docs/deployment.md:11-12): "gate with an
-    unguessable URL + shared token checked by middleware (env var DEMO_TOKEN;
-    ?token= or X-Demo-Token header)". Transport-level like the BYOK headers —
-    deliberately OUTSIDE the openapi.yaml contract.
-
-    DEMO_TOKEN unset (local dev, tests) = fully open, zero behavior change.
-    When set, every request must carry the token via ?token= / X-Demo-Token /
-    the cupel_demo_token cookie; a valid ?token= request ALSO sets that cookie
-    (httpOnly, SameSite=Lax, Secure behind HTTPS — Render terminates TLS and
-    forwards X-Forwarded-Proto) so the SPA and all its same-origin API/asset
-    requests pass with no client changes. /healthz stays open for Render's
-    health checks; OPTIONS passes so CORS preflight (which cannot carry
-    credentials) is never blocked. Pure ASGI middleware, not BaseHTTPMiddleware,
-    so SSE streaming/cancellation semantics are untouched.
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        token = os.environ.get("DEMO_TOKEN")
-        if scope["type"] != "http" or not token:
-            return await self.app(scope, receive, send)
-        if scope["path"] == "/healthz" or scope["method"] == "OPTIONS":
-            return await self.app(scope, receive, send)
-
-        request = Request(scope)
-        query_token = request.query_params.get("token")
-        supplied = (query_token or request.headers.get("x-demo-token")
-                    or request.cookies.get(DEMO_COOKIE))
-        if supplied != token:
-            accepts_html = "text/html" in (request.headers.get("accept") or "")
-            if scope["method"] == "GET" and accepts_html:
-                response = HTMLResponse(DENIED_PAGE, status_code=401)
-            else:
-                response = JSONResponse(
-                    error_body(scope, {"code": "unauthorized",
-                                       "message": "Missing or invalid demo token."}),
-                    status_code=401)
-            return await response(scope, receive, send)
-
-        if query_token:
-            secure = (request.headers.get("x-forwarded-proto") == "https"
-                      or scope.get("scheme") == "https")
-            cookie = (f"{DEMO_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"
-                      + ("; Secure" if secure else ""))
-
-            async def send_with_cookie(message):
-                if message["type"] == "http.response.start":
-                    MutableHeaders(scope=message).append("set-cookie", cookie)
-                await send(message)
-
-            return await self.app(scope, receive, send_with_cookie)
-        return await self.app(scope, receive, send)
-
 
 class AuthGate:
-    """AUTH_MODE=on enforcement (openapi.yaml:21-36). Pure ASGI like
-    DemoTokenGate so SSE streaming/cancellation semantics are untouched.
+    """AUTH_MODE=on enforcement (openapi.yaml:21-36). Pure ASGI, not
+    BaseHTTPMiddleware, so SSE streaming/cancellation semantics are untouched.
 
     AUTH_MODE unset/"off" (the default — local dev, tests, the deployed
     Render demo): completely inert, zero behavior change. AUTH_MODE=on: a
@@ -188,19 +121,12 @@ class AuthGate:
     only two security:[] operations (openapi.yaml:23-25), plus OPTIONS (CORS
     preflight carries no credentials). /openapi.json is not an API root and
     thus open: it is the contract itself, probed by cupel-ready/switcher
-    tooling before login, and carries no data. (The DemoTokenGate DOES gate
-    /openapi.json — that gate protects a whole deployment, this one protects
-    data; both can be active, see stacking note below.)
+    tooling before login, and carries no data.
 
     Tree permission enforcement is centralized HERE: /agenttrees/{tree}/...
     without "view" on {tree} → 404 not_found — "unpermitted trees never
     render" (openapi.yaml:1948 NotFound: "Resource not found (or tree not
     permitted)"). Handlers keep their existing need_tree checks unchanged.
-
-    Stacking with DemoTokenGate (both env vars set): middleware order is
-    CORS → DemoTokenGate → AuthGate → app (add_middleware prepends; see
-    create_app), so the demo gate runs FIRST — a request must pass the
-    deployment's shared token before its JWT is even inspected.
     """
 
     OPEN_PATHS = {"/healthz", "/auth/token"}
@@ -320,23 +246,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # first conformance test". FastAPI auto-generates the spec from the
     # routes; handlers have no response_model, so schemas are loose ({}) and
     # conformance sees path/method/param presence (documented in
-    # docs/readiness.md). Docs UI stays off. When DEMO_TOKEN is set the gate
-    # covers /openapi.json like every other endpoint (only /healthz is open)
-    # — cupel-ready reaches it via --header "X-Demo-Token: ...".
+    # docs/readiness.md). Docs UI stays off.
     app = FastAPI(title="Cupel mock", version=config.VERSION,
                   openapi_url="/openapi.json", docs_url=None, redoc_url=None)
     db = Db(db_path or config.DB_PATH)
     # add_middleware PREPENDS, so registration order is inner→outer. Final
     # stack: RequestId (outermost — so even a gate's 401 is traceable) → CORS
     # (preflight answered early; every 401 still carries CORS headers) →
-    # DemoTokenGate (deployment shared token) → AuthGate (per-user JWT when
-    # AUTH_MODE=on) → PermissionGate (per-operation x-requires, BOTH modes) →
-    # app. Both token gates can be active at once; the demo gate runs first
-    # (see AuthGate docstring). PermissionGate is innermost because it reads
-    # the user the AuthGate resolved.
+    # AuthGate (per-user JWT when AUTH_MODE=on) → PermissionGate
+    # (per-operation x-requires, BOTH modes) → app. PermissionGate is
+    # innermost because it reads the user the AuthGate resolved. The hosted
+    # demo's own access control is a mount, not a gate — see mock/root.py.
     app.add_middleware(PermissionGate, db=db)
     app.add_middleware(AuthGate, db=db)
-    app.add_middleware(DemoTokenGate)
     # expose_headers: without it a browser cannot READ ETag or X-Request-Id off
     # a cross-origin response, so the evaluation grid's conditional poll would
     # never send an If-None-Match (the 304 path dead), and the request id a

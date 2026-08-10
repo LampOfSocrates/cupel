@@ -102,12 +102,18 @@ npm run ready -- https://nabu.example.com/openapi.json --prefix /nabu-service
 
 ### Gated targets
 
-Transport-level gates (like the demo deployment's shared token,
-docs/deployment.md) are outside the contract; pass whatever header the
+Transport-level gates are outside the contract; pass whatever header the
 gate needs — the script does no login flows:
 
 ```
-npm run ready -- https://cupel-demo.onrender.com/openapi.json --header "X-Demo-Token: <token>"
+npm run ready -- https://api.example.com/openapi.json --header "Authorization: Bearer <token>"
+```
+
+The hosted Cupel demo itself is NOT gated (docs/deployment.md — no shared
+token, no auth) — it's a plain fetch:
+
+```
+npm run ready -- https://cupel-site.onrender.com/cupel-demo/openapi.json
 ```
 
 ## `--init` — generate an `agentic.config.ts` target block (P2-INIT)
