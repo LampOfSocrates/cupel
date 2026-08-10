@@ -78,6 +78,11 @@ header::before {
   filter:blur(6px);
 }
 .mast { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+.brand { display:flex; align-items:flex-start; gap:16px; }
+.logo-photo {
+  width:56px; height:56px; border-radius:10px; object-fit:cover;
+  border:1px solid var(--rule); box-shadow:var(--shadow); flex:none;
+}
 .hallmark { display:flex; gap:7px; }
 .punch {
   width:34px; height:40px; border:1px solid var(--rule); border-radius:17px 17px 5px 5px;
@@ -222,19 +227,23 @@ footer p { max-width:60ch; margin:0; }
 <header>
   <div class="wrap">
     <div class="mast">
-      <div>
-        <div class="hallmark" role="img" aria-label="A struck hallmark: cupel, silver, assayed, and the year">
-          <span class="punch on" title="the cupel">
-            <svg width="17" height="13" viewBox="0 0 17 13" fill="none" aria-hidden="true">
-              <path d="M1.5 1.5h14l-2.6 9.5a1 1 0 0 1-1 .8H5.1a1 1 0 0 1-1-.8L1.5 1.5Z" stroke="currentColor" stroke-width="1.3"/>
-              <path d="M5 5.2h7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-            </svg>
-          </span>
-          <span class="punch" title="argentum — silver">Ag</span>
-          <span class="punch" title="assayed">✓</span>
-          <span class="punch" title="date letter">26</span>
+      <div class="brand">
+        <img class="logo-photo" src="/assets/cupel-photo.jpg" width="56" height="56"
+             alt="A real ceramic cupel — the bone-ash dish this project is named for">
+        <div>
+          <div class="hallmark" role="img" aria-label="A struck hallmark: cupel, silver, assayed, and the year">
+            <span class="punch on" title="the cupel">
+              <svg width="17" height="13" viewBox="0 0 17 13" fill="none" aria-hidden="true">
+                <path d="M1.5 1.5h14l-2.6 9.5a1 1 0 0 1-1 .8H5.1a1 1 0 0 1-1-.8L1.5 1.5Z" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M5 5.2h7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="punch" title="argentum — silver">Ag</span>
+            <span class="punch" title="assayed">✓</span>
+            <span class="punch" title="date letter">26</span>
+          </div>
+          <p class="hallmark-note">Assayed, then marked.</p>
         </div>
-        <p class="hallmark-note">Assayed, then marked.</p>
       </div>
       <button class="toggle" id="theme" type="button">Theme</button>
     </div>
@@ -247,7 +256,7 @@ footer p { max-width:60ch; margin:0; }
 <main class="main">
 
 <section class="wrap" id="what-is-it" style="padding-left:0;padding-right:0">
-  <p class="label">What is it</p>
+  <p class="label">What is Cupel?</p>
   <h1 class="serif">Bring your own agent. This is its console.</h1>
   <p class="lede">You built the agent. One command generates the app around it: a chat client your users can actually use, and the studio you need to make the agent better. Self-hosted, and the folder is yours.</p>
   <div class="halves" style="margin-top:24px">
@@ -277,7 +286,7 @@ footer p { max-width:60ch; margin:0; }
 </section>
 
 <section id="different">
-  <p class="label">What makes it different</p>
+  <p class="label">What makes Cupel different?</p>
   <h2 class="serif">One row has every box struck.</h2>
   <p class="prose">Chat interfaces talk to <em>models</em> and know nothing about your agent. Evaluation platforms are dashboards for engineers, and your conversations live on someone else's servers. You end up running both, and neither knows about the other.</p>
   <div class="scroller">
@@ -320,7 +329,7 @@ footer p { max-width:60ch; margin:0; }
 </section>
 
 <section id="demo">
-  <p class="label">Try the demo</p>
+  <p class="label">Open the live demo</p>
   <h2 class="serif">See it running before you build anything.</h2>
   <div class="demo-panel">
     <div class="copy">
@@ -395,7 +404,7 @@ npm <span class="a">start</span>
 </section>
 
 <section id="loop">
-  <p class="label">Day to day</p>
+  <p class="label">A typical day with Cupel</p>
   <h2 class="serif">Prove the change was an improvement.</h2>
   <ol class="loop">
     <li><div><h3>Talk to the agent</h3><p>Real conversations accumulate — from you, your users, or a headless client posting through the same public API.</p></div></li>
@@ -409,43 +418,21 @@ npm <span class="a">start</span>
 
 <aside class="rail">
   <figure>
-    <svg width="150" height="120" viewBox="0 0 150 120" aria-hidden="true">
-      <defs>
-        <linearGradient id="dish" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent3)"/>
-          <stop offset="100%" stop-color="var(--accent)"/>
-        </linearGradient>
-        <radialGradient id="melt" cx="50%" cy="35%" r="65%">
-          <stop offset="0%" stop-color="var(--accent-soft)"/>
-          <stop offset="55%" stop-color="var(--accent)"/>
-          <stop offset="100%" stop-color="var(--accent3)"/>
-        </radialGradient>
-      </defs>
-      <!-- rising heat lines -->
-      <g stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" opacity="0.6">
-        <path d="M55 34 C 50 24, 60 18, 55 6" fill="none"/>
-        <path d="M75 30 C 70 20, 80 14, 75 2" fill="none"/>
-        <path d="M95 34 C 90 24, 100 18, 95 6" fill="none"/>
-      </g>
-      <!-- the cupel dish -->
-      <path d="M20 40 H130 L108 100 a10 10 0 0 1 -9.5 7 H51.5 a10 10 0 0 1 -9.5 -7 Z"
-            fill="var(--paper)" stroke="url(#dish)" stroke-width="3" stroke-linejoin="round"/>
-      <!-- the molten pool where impurities are drawn off -->
-      <ellipse cx="75" cy="52" rx="30" ry="9" fill="url(#melt)"/>
-      <!-- rim highlight -->
-      <path d="M24 42 H126" stroke="var(--rule)" stroke-width="1.5"/>
-    </svg>
-    <figcaption>The cupel: heat drives the impurities out, and what is valuable stays behind.</figcaption>
+    <img src="/assets/cupel-photo.jpg" width="220" height="220"
+         style="width:100%;max-width:220px;border-radius:8px;border:1px solid var(--rule);box-shadow:var(--shadow)"
+         alt="A real fired ceramic cupel, the bone-ash dish used to assay silver">
+    <figcaption>The cupel: heat drives the impurities out, and what is valuable stays behind.<br>
+      <span style="opacity:.65">Photo: zen-ceramic.com</span></figcaption>
   </figure>
   <p class="rail-title">Why “cupel”</p>
   <p>A cupel is the shallow bone-ash dish used to assay silver. Molten metal is held in it under heat: the lead and impurities are absorbed into the dish, and what is actually valuable stays behind. It seemed like the right name for a tool whose job is telling you whether the change you just made was worth keeping.</p>
   <ul class="rail-nav">
-    <li><a href="#what-is-it">What is it</a></li>
-    <li><a href="#different">What makes it different</a></li>
-    <li><a href="#demo">Try the demo</a></li>
+    <li><a href="#what-is-it">What is Cupel?</a></li>
+    <li><a href="#different">What makes Cupel different?</a></li>
+    <li><a href="#demo">Open the live demo</a></li>
     <li><a href="#quickstart-local">Quick start · your machine</a></li>
     <li><a href="#quickstart-whitelabel">Quick start · make it yours</a></li>
-    <li><a href="#loop">Day to day</a></li>
+    <li><a href="#loop">A typical day with Cupel</a></li>
   </ul>
 </aside>
 
@@ -454,7 +441,7 @@ npm <span class="a">start</span>
 
 <footer>
   <div class="wrap">
-    <p>Free and open source. Self-hosted. <a href="#what-is-it">Back to top</a> · <a href="/cupel-demo/">Try the demo</a>.</p>
+    <p>Free and open source. Self-hosted. <a href="#what-is-it">Back to top</a> · <a href="/cupel-demo/">Open the live demo</a>.</p>
   </div>
 </footer>
 

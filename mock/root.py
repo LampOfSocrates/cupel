@@ -2,6 +2,9 @@
 deploy") — ONE Render service serving BOTH the landing page and the demo:
 
   GET /             docs/index.html, the persona-facing landing page
+  /assets/*         docs/assets/ — images the landing page embeds (the cupel
+                     photo used as its logo/illustration) — NOT the SPA's own
+                     /cupel-demo/assets/*, a completely separate mount below
   /cupel-demo/*      the whole demo app (API + built SPA) — mock/main.py's
                      create_app(), completely unmodified, MOUNTED here
 
@@ -30,10 +33,13 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from .main import create_app
 
-LANDING_PAGE = Path(__file__).resolve().parent.parent / "docs" / "index.html"
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+LANDING_PAGE = DOCS_DIR / "index.html"
+LANDING_ASSETS = DOCS_DIR / "assets"
 
 
 def create_root_app(**demo_kwargs) -> FastAPI:
@@ -46,6 +52,9 @@ def create_root_app(**demo_kwargs) -> FastAPI:
         # Missing in a dev checkout that never pulled docs/ — the demo
         # mount below still works, this is just the front door.
         return PlainTextResponse("Cupel — see /cupel-demo/", status_code=200)
+
+    if LANDING_ASSETS.is_dir():
+        root.mount("/assets", StaticFiles(directory=LANDING_ASSETS), name="landing-assets")
 
     root.mount("/cupel-demo", create_app(**demo_kwargs))
     return root

@@ -119,3 +119,17 @@ def test_openapi_reachable_at_mount_prefix():
             # under the mount)
             assert (await c.get("/openapi.json")).status_code == 404
     run(case())
+
+
+def test_landing_assets_served_at_root_not_under_demo_mount():
+    """docs/assets/ (the landing page's own images, e.g. its logo photo) is a
+    separate mount from the SPA's /cupel-demo/assets/* — proves they cannot
+    collide even though both are named "assets"."""
+    async def case():
+        async with make_root_client() as c:
+            r = await c.get("/assets/cupel-photo.jpg")
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("image/")
+            # not reachable through the demo mount's own (unrelated) assets dir
+            assert (await c.get("/cupel-demo/assets/cupel-photo.jpg")).status_code == 404
+    run(case())
