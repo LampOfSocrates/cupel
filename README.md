@@ -73,7 +73,7 @@ desktop-first by design.
 Everything about where the API lives is declared in ONE file,
 [`agentic.config.ts`](agentic.config.ts):
 
-1. Add your backend to `targets` (`npx cupel-ready <your-openapi> --init`
+1. Add your backend to `targets` (`npm run ready -- <your-openapi> --init`
    writes the block for you — see [docs/readiness.md](docs/readiness.md)).
 2. Point `defaultTarget.dev` at it.
 3. Set `localMock.enabled: false`.
