@@ -14,3 +14,9 @@ blob-report/
 # `npm run init` keeps the pre-rewrite config next to it
 agentic.config.ts.bak
 agentic.config.ts.tmp
+# Nothing in this repo reads a .env — every secret is an env var set by the
+# deploy (docs/deployment.md) — but the repo is public, so the file that would
+# hold one must never be committable by accident.
+.env
+.env.*
+!.env.example
