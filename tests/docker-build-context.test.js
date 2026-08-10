@@ -42,6 +42,15 @@ describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {
     expect(dockerfile).toMatch(/^COPY mock \.\/mock$/m);
   });
 
+  // Same failure shape again (2026-08-10): mock/root.py serves docs/index.html
+  // at "/" and mounts docs/assets/ at /assets, both read from disk relative to
+  // the mock package — invisible locally (docs/ already exists in a checkout),
+  // 404/plain-text-fallback in the image until the runtime stage COPYs them.
+  it("copies docs/index.html and docs/assets, which mock/root.py serves", () => {
+    expect(dockerfile).toMatch(/^COPY docs\/index\.html \.\/docs\/index\.html$/m);
+    expect(dockerfile).toMatch(/^COPY docs\/assets \.\/docs\/assets$/m);
+  });
+
   it("keeps the database out of the code tree and out of the build context", () => {
     expect(dockerfile).toMatch(/^ENV CUPEL_MOCK_DB=/m);
     // `*.sqlite` alone matches root level only — a nested dev database copied

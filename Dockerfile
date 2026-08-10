@@ -27,6 +27,11 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.115" "uvicorn[standard]>=0.30" "python-multipart>=0.0.9" "httpx>=0.27"
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY mock ./mock
+# mock/root.py serves docs/index.html (the landing page) at "/" and mounts
+# docs/assets/ at /assets — only these two paths, not the whole docs/ folder
+# (which also holds internal planning docs that don't belong in the image).
+COPY docs/index.html ./docs/index.html
+COPY docs/assets ./docs/assets
 COPY --from=frontend /app/dist ./dist
 ENV CUPEL_STATIC_DIR=/app/dist
 # The database lives outside the code tree so Litestream's sidecar files
