@@ -27,7 +27,7 @@ partial and `memory`/`settings` are `none` rather than quietly absent.
 
 # openapi.yaml info.version — the contract this backend was built against, NOT
 # config.VERSION, which is the server's own version.
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.4.0"
 
 CAPABILITIES: dict[str, dict] = {
     "auth": {"status": "full", "implemented": 2, "operations": 2},

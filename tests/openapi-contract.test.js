@@ -251,9 +251,9 @@ describe("P1-T00 OpenAPI contract", () => {
   });
 });
 
-describe("P2-T00 contract v0.3.0", () => {
-  it("version is 0.3.0", () => {
-    expect(doc.info.version).toBe("0.3.0");
+describe("contract v0.4.0", () => {
+  it("version is 0.4.0", () => {
+    expect(doc.info.version).toBe("0.4.0");
   });
 
   it("security model: bearer JWT gates everything by default (feature-spec.md:15-21)", () => {
