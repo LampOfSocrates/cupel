@@ -17,7 +17,11 @@ coverage/
 mock/tests/
 tests/
 sketches/
-docs/
+# NOT docs/ — the runtime stage COPYs docs/index.html and docs/assets
+# (mock/root.py serves them); .dockerignore only controls the build
+# CONTEXT, not the final image, so leaving the rest of docs/ (internal
+# planning notes) available here costs nothing — those paths are simply
+# never named in a Dockerfile COPY.
 autorun/
 .claude/
 cupel-starter.zip

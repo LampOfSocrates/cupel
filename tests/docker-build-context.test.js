@@ -51,6 +51,16 @@ describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {
     expect(dockerfile).toMatch(/^COPY docs\/assets \.\/docs\/assets$/m);
   });
 
+  // 2026-08-10 build_failed, live: the COPY above has nothing to read once
+  // .dockerignore excludes the whole docs/ folder from the build CONTEXT
+  // (a different thing from the final image, but Docker still needs the
+  // source to exist to satisfy a COPY). A bare "docs/" line here would
+  // silently break the COPY again.
+  it(".dockerignore does not blanket-exclude docs/ (the COPY above needs it in the build context)", () => {
+    const ignore = readFileSync(".dockerignore", "utf8");
+    expect(ignore).not.toMatch(/^docs\/?$/m);
+  });
+
   it("keeps the database out of the code tree and out of the build context", () => {
     expect(dockerfile).toMatch(/^ENV CUPEL_MOCK_DB=/m);
     // `*.sqlite` alone matches root level only — a nested dev database copied
