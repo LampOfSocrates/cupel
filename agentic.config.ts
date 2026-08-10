@@ -177,6 +177,22 @@ export interface CompareSet {
   variants: Array<string | CompareVariantSpec>;
 }
 
+/**
+ * What a family of the contract is wired to.
+ *
+ * A family is a top-level tag of openapi.yaml (chat, conversations, agents,
+ * eval, …) — the unit an adopter answers on, one question each, rather than
+ * once per operation (docs/plan-adopter-onboarding.md).
+ *
+ * - `mine` — your backend serves it, through the active target above.
+ * - `mock` — the bundled demo backend serves it, and the app SAYS SO in the
+ *   chrome. This is how a half-built backend still gets you a whole UI.
+ * - `hide` — the UI for that family is not rendered at all: no nav entry, no
+ *   route. What makes the app feel like your product rather than ours with
+ *   holes in it.
+ */
+export type FamilyAnswer = "mine" | "mock" | "hide";
+
 export interface AgenticConfig {
   /** Product identity — name for code/config, label for chrome/branding. */
   product: ProductConfig;
@@ -190,6 +206,21 @@ export interface AgenticConfig {
   defaultTarget: { dev: string; production: string };
   /** The bundled demo backend `npm start` boots — see LocalMockConfig. */
   localMock: LocalMockConfig;
+  /**
+   * Per-family wiring — see FamilyAnswer. Keys are the contract's own tags
+   * (openapi.yaml `tags`, listed in src/api/families.generated.ts); no list is
+   * restated here, and an unknown key is ignored with a warning rather than
+   * silently changing what is served. OMIT THE BLOCK for the default: every
+   * family is `mine`, which is this repo pointed at a conformant backend.
+   *
+   * `npm run create` writes it from the adopter's answers.
+   */
+  families?: Record<string, FamilyAnswer>;
+  /**
+   * Which target serves the `mock` families — the bundled demo backend, by
+   * target id (default "mock"). Only read when some family answers `mock`.
+   */
+  mockTarget?: string;
   /** Saved A/B comparisons offered by chat compare mode — see CompareSet. */
   compareSets?: CompareSet[];
 }

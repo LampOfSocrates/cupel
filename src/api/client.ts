@@ -1,7 +1,7 @@
 // Single typed client — all API calls go through here; no hardcoded hosts
 // anywhere else (feature-spec.md:154). URLs are built from the ACTIVE backend
 // target (agentic.config.ts via src/api/target.ts).
-import { getActiveTarget } from "./target";
+import { getTargetForPath } from "./target";
 import { authHeaders, clearAuthToken, emitAuthRequired } from "./auth";
 import { llmHeaders } from "./llmKey";
 import { parseSseStream } from "./sse";
@@ -111,7 +111,12 @@ export function buildUrl(path: string, query?: Query): string {
   // the target's baseUrl. The prod target's baseUrl is "" (same-origin) —
   // relative URLs need the page origin as base; absolute baseUrl values
   // ignore the second argument.
-  const { baseUrl, remap } = getActiveTarget();
+  //
+  // WHICH target is per-path, not per-app: a family answered `mock` in
+  // agentic.config.ts is served by the bundled demo backend while everything
+  // else goes to the active one (src/api/target.ts getTargetForPath). With no
+  // `families` block every path resolves to the active target, unchanged.
+  const { baseUrl, remap } = getTargetForPath(path);
   const url = new URL(baseUrl + (remap ? remap(path) : path), globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== "") {

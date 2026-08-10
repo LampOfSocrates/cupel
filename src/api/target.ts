@@ -5,6 +5,7 @@
 // stays the single source of truth for what targets exist.
 import { useSyncExternalStore } from "react";
 import { agenticConfig, type BackendTarget } from "../../agentic.config";
+import { answerForPath, mockTargetId } from "../lib/families";
 
 export const TARGET_STORAGE_KEY = "cupel.backend.target";
 
@@ -86,6 +87,26 @@ function storedId(): string | null {
 export function getActiveTarget(): BackendTarget {
   const id = storedId();
   return (id ? findTarget(id) : undefined) ?? findTarget(resolveDefaultTargetId())!;
+}
+
+/**
+ * The target a request on `path` goes to. Families answered `mock` are served
+ * by the bundled demo backend (agentic.config.ts `mockTarget`) while the rest
+ * go to the active target — that split is the whole of "the mock fills in
+ * whatever your backend doesn't do yet", and it is resolved per request
+ * because the active target can change under a live app.
+ *
+ * A `mock` answer with no such target in the config falls back to the active
+ * target and says so: a half-built backend answering 404 is a better failure
+ * than requests silently vanishing.
+ */
+export function getTargetForPath(path: string): BackendTarget {
+  if (answerForPath(path) !== "mock") return getActiveTarget();
+  const id = mockTargetId();
+  const target = findTarget(id);
+  if (target) return target;
+  console.warn(`agentic.config.ts mockTarget: no target "${id}" — serving ${path} from the active target`);
+  return getActiveTarget();
 }
 
 type Listener = () => void;

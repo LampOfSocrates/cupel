@@ -4,17 +4,17 @@ import { describe, expect, it, vi } from "vitest";
 // differently (e.g. /nabu-service/…) via remap" (cupel-phases.md:75). The
 // shipped config defines no remapped target, so the store is mocked to
 // resolve one; buildUrl must apply remap BEFORE prefixing baseUrl.
+// getTargetForPath is what the client asks (it routes mocked families
+// elsewhere); with no `families` block it is the active target for every path.
 vi.mock("./target", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./target")>();
-  return {
-    ...mod,
-    getActiveTarget: () => ({
-      id: "nabu",
-      label: "Nabu",
-      baseUrl: "http://localhost:9999",
-      remap: (path: string) => `/nabu-service${path}`,
-    }),
+  const nabu = {
+    id: "nabu",
+    label: "Nabu",
+    baseUrl: "http://localhost:9999",
+    remap: (path: string) => `/nabu-service${path}`,
   };
+  return { ...mod, getActiveTarget: () => nabu, getTargetForPath: () => nabu };
 });
 
 import { buildUrl } from "./client";
