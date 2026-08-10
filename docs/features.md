@@ -2,7 +2,7 @@
 
 Everything below is free and open source. There is no paid tier and nothing is held back.
 
-**✅ works today** (try it on the demo) · **🗓️ planned** ([TASKS.md](../TASKS.md) has the order)
+**✅ works today** (try it on the demo) · **🗓️ planned** ([TASKS.md](TASKS.md) has the order)
 
 ---
 

@@ -1,10 +1,10 @@
 # Cupel
 Read these before any work, in order:
-1. react-migration.md — evidence rules: quote spec lines, cite file:line, check lockfiles
-2. cupel-phases.md — we build phase by phase; NEVER build ahead of the current phase
-3. feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
+1. docs/react-migration.md — evidence rules: quote spec lines, cite file:line, check lockfiles
+2. docs/cupel-phases.md — we build phase by phase; NEVER build ahead of the current phase
+3. docs/feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
 
-Current phase: 2. Current task: Phase 2 COMPLETE — FULL STOP. Next: UX polish phase, planned with the user (see TASKS.md).
+Current phase: 2. Current task: Phase 2 COMPLETE — FULL STOP. Next: UX polish phase, planned with the user (see docs/TASKS.md).
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.
