@@ -271,16 +271,24 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     def conv_turns(conversation_id: str) -> list[dict]:
         return db.all("SELECT * FROM turns WHERE conversation_id = ? ORDER BY rowid", (conversation_id,))
 
-    def conversation_dict(c: dict, include_turns: bool = True) -> dict:
-        d = {
+    def turn_count(conversation_id: str) -> int:
+        return db.one("SELECT COUNT(*) AS n FROM turns WHERE conversation_id = ?",
+                      (conversation_id,))["n"]
+
+    def conversation_dict(c: dict) -> dict:
+        """The conversation RESOURCE — metadata only.
+
+        Turns are their own paged collection (listTurns). This function used
+        to take include_turns and default it True, which is why the sidebar
+        listing carried every turn of every row; the flag is gone rather than
+        flipped, so no caller can reintroduce the unbounded body."""
+        return {
             "id": c["id"], "tree_id": c["tree_id"], "title": c["title"],
             "origin": c["origin"], "channel": c["channel"], "agent_id": c["agent_id"],
             "created_at": c["created_at"], "last_activity_at": c["last_activity_at"],
             "lineage": unj(c["lineage"]), "fork_count": fork_count(c["id"]),
+            "turn_count": turn_count(c["id"]),
         }
-        if include_turns:
-            d["turns"] = [turn_dict(t) for t in conv_turns(c["id"])]
-        return d
 
     def need_conversation(tree: str, conversation_id: str) -> dict:
         row = db.one(
@@ -774,10 +782,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         emails = {u["id"]: u["email"] for u in db.all("SELECT id, email FROM users")}
         items = []
         for row in rows:
-            # include_turns=False: the Inspector table is a dense INDEX; the
-            # inline reader fetches the transcript for the selected row via
-            # GET /agenttrees/{tree}/conversations/{id}.
-            d = conversation_dict(row, include_turns=False)
+            # The Inspector table is a dense INDEX; the inline reader fetches
+            # the selected row's transcript from listTurns. That used to be a
+            # local include_turns=False; it is now the shape of every
+            # conversation row everywhere.
+            d = conversation_dict(row)
             d["user_id"] = row["user_id"] or "dev"
             d["user_email"] = emails.get(row["user_id"])
             d["latest_score"] = row["latest_score"]
@@ -933,6 +942,31 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         need_tree(tree)
         return conversation_dict(need_conversation(tree, conversationId))
 
+    @app.get("/agenttrees/{tree}/conversations/{conversationId}/turns")
+    async def list_turns(tree: str, conversationId: str, turn_ids: str | None = None,
+                         page: int | None = None, page_size: int = 50):
+        """listTurns — the transcript, oldest first, paged.
+
+        Two deliberate departures from the other collections, both from the
+        contract: rows are CHRONOLOGICAL (a transcript only grows at the tail,
+        so page 1 is immutable and offset paging cannot drift here), and an
+        OMITTED page means the LAST page — a reader opens a transcript at its
+        end, and defaulting to 1 would cost them a second request to get
+        there. turn_ids narrows to specific turns; unknown ids are ignored
+        rather than 404ing, so a stale reference degrades to a missing row."""
+        need_tree(tree)
+        conv = need_conversation(tree, conversationId)
+        rows = conv_turns(conv["id"])
+        if turn_ids is not None:
+            wanted = {t for t in turn_ids.split(",") if t}
+            rows = [t for t in rows if t["id"] in wanted]
+        total = len(rows)
+        _, page_size = clamp_page(1, page_size, 200)
+        last = max(1, -(-total // page_size))  # ceil; an empty transcript is page 1
+        page = last if page is None else min(max(1, page), last)
+        window = rows[(page - 1) * page_size:page * page_size]
+        return page_of([turn_dict(t) for t in window], page, page_size, total)
+
     @app.patch("/agenttrees/{tree}/conversations/{conversationId}")
     async def rename_conversation(tree: str, conversationId: str, request: Request):
         need_enabled_tree(tree)  # history is read-only on a disabled tree
@@ -940,8 +974,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         body = await body_json(request)
         if body.get("title"):
             db.run("UPDATE conversations SET title = ? WHERE id = ?", (body["title"], conv["id"]))
-        return conversation_dict(db.one("SELECT * FROM conversations WHERE id = ?", (conv["id"],)),
-                                 include_turns=False)
+        return conversation_dict(db.one("SELECT * FROM conversations WHERE id = ?", (conv["id"],)))
 
     @app.delete("/agenttrees/{tree}/conversations/{conversationId}", status_code=204)
     async def delete_conversation(tree: str, conversationId: str):

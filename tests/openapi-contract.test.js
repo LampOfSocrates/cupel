@@ -62,6 +62,9 @@ const PHASE2_PATHS = [
   "/eval/sets/{setId}/replay",
   "/eval/rubrics/{rubricId}",
   "/settings",
+  // The transcript, split off GET /conversations/{id} so opening a long
+  // conversation costs a bounded body (item 7 stage F2).
+  "/agenttrees/{tree}/conversations/{conversationId}/turns",
 ];
 
 describe("P1-T00 OpenAPI contract", () => {
@@ -531,6 +534,23 @@ describe("P2-T00 contract v0.3.0", () => {
     "GET /agenttrees/{tree}/agents", // a hierarchy — a page of it orphans nodes
     "PUT /admin/users", // write echo: exactly the rows the body named
   ]);
+
+  it("a conversation does not inline its transcript (item 7 stage F2)", () => {
+    const conversation = doc.components.schemas.Conversation;
+    expect(conversation.properties.turns, "turns must not be inlined").toBeUndefined();
+    // The count stays, so a caller can size or skip the transcript fetch.
+    expect(conversation.required).toContain("turn_count");
+    const turns = doc.paths["/agenttrees/{tree}/conversations/{conversationId}/turns"].get;
+    expect(turns.responses["200"].content["application/json"].schema.$ref).toBe(
+      "#/components/schemas/TurnPage",
+    );
+    // Chronological + no `page` default is what makes page 1 immutable here:
+    // a transcript only grows at the tail, and omitting page means the tail.
+    const page = turns.parameters.find((p) => p.name === "page");
+    expect(page.schema.default, "page must NOT default to 1 — omitted means last").toBeUndefined();
+    expect(turns.description).toMatch(/oldest first/);
+    expect(turns.parameters.map((p) => p.name)).toContain("turn_ids");
+  });
 
   it("every *Page schema is the same four-key envelope", () => {
     const pages = Object.entries(doc.components.schemas).filter(([n]) => n.endsWith("Page"));

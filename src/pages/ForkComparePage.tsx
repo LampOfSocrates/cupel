@@ -12,7 +12,7 @@ import {
   Title,
 } from "@mantine/core";
 import { api, ApiError } from "../api/client";
-import type { Endpoint } from "../api/types";
+import type { Endpoint, Turn } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { Markdown } from "../lib/markdown";
@@ -61,6 +61,42 @@ export function ForkComparePage() {
         .then((page) => page.items.filter((c) => c.lineage?.fork_turn_id === turnId)),
     [tree, parentId, turnId],
   );
+  // The compared texts, each fetched from listTurns rather than off an inlined
+  // transcript: the ORIGINAL is one named turn of the parent (?turn_ids=), and
+  // each fork's result is the last turn of that fork — which is exactly what an
+  // omitted `page` asks listTurns for, at page_size 1. One small request per
+  // card instead of one whole conversation per card.
+  // Unconditional: a deleted parent 404s here exactly as it does above, and
+  // the catch renders the same "original turn unavailable" the page already
+  // shows — gating on `parent` would only delay this by a round trip.
+  const { data: originalTurn } = useAsync(
+    () =>
+      api
+        .turns(tree, parentId, { turn_ids: [turnId] })
+        .then((page) => page.items[0] ?? null)
+        .catch(() => null),
+    [tree, parentId, turnId],
+  );
+  const siblingIds = (siblings ?? []).map((c) => c.id).join(",");
+  const { data: lastTurns } = useAsync<Record<string, Turn>>(
+    siblings != null
+      ? () =>
+          Promise.all(
+            (siblings ?? []).map((fork) =>
+              api
+                .turns(tree, fork.id, { page_size: 1 })
+                .then((page) => [fork.id, page.items[0]] as const)
+                .catch(() => null),
+            ),
+          ).then((pairs) =>
+            Object.fromEntries(
+              pairs.filter((p): p is readonly [string, Turn] => p != null && p[1] != null),
+            ),
+          )
+      : null,
+    [tree, siblingIds],
+  );
+
   // Label columns with endpoint NAMES like the re-fire evaluation grid does;
   // non-critical — ids render verbatim if this fails.
   const { data: endpoints } = useAsync(
@@ -82,10 +118,6 @@ export function ForkComparePage() {
 
   const endpointName = (id: string | null | undefined) =>
     id ? (endpoints?.find((e) => e.id === id)?.name ?? id) : "unknown endpoint";
-  const originalTurn =
-    parent !== "deleted" && parent != null
-      ? (parent.turns ?? []).find((t) => t.id === turnId)
-      : undefined;
 
   return (
     <Stack gap="sm" p="md">
@@ -142,7 +174,7 @@ export function ForkComparePage() {
           )}
         </Paper>
         {siblings.map((fork) => {
-          const last = fork.turns?.at(-1);
+          const last = lastTurns?.[fork.id];
           const result = last?.role === "assistant" ? last : undefined;
           return (
             <Paper p="sm" radius="md" withBorder key={fork.id} data-testid={`sibling-${fork.id}`}>

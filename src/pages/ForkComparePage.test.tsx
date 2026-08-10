@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes, useParams } from "react-router";
 import { renderApp } from "../test/render";
-import { conversationRequests, mockForks } from "../test/msw/handlers";
+import { conv, conversationRequests, mockForks } from "../test/msw/handlers";
 import { ForkComparePage } from "./ForkComparePage";
 
 // Contract under test — feature-spec.md:73: "Forked conversations appear in
@@ -32,16 +32,13 @@ function renderCompare(route: string) {
 describe("ForkComparePage", () => {
   it("lists sibling forks of the turn via ?forks_of=, endpoint-name labels, baseline = original", async () => {
     // A fork of a DIFFERENT turn must be filtered out (same parent, t5 ≠ t9).
-    mockForks.c2.push({
-      id: "c2f-other-turn",
-      tree_id: "agent1",
-      title: "Billing dispute",
-      origin: "interactive",
-      created_at: "2026-08-01T10:00:00Z",
-      last_activity_at: "2026-08-03T10:00:00Z",
-      fork_count: 0,
-      lineage: { parent_conversation_id: "c2", fork_turn_id: "t5", endpoint_id: "ep_agent1_prod" },
-    });
+    mockForks.c2.push(
+      conv({
+        id: "c2f-other-turn",
+        title: "Billing dispute",
+        lineage: { parent_conversation_id: "c2", fork_turn_id: "t5", endpoint_id: "ep_agent1_prod" },
+      }),
+    );
     renderCompare("/forks/c2/t9");
 
     // baseline card = the original t9 content off the parent conversation
@@ -85,14 +82,12 @@ describe("ForkComparePage", () => {
   it("a fork whose regenerated turn has not landed shows generating…", async () => {
     // Copied history only (ends on a user turn) — the regenerated assistant
     // turn is appended when the fork task completes (engine.py:354-363).
-    mockForks.c2.push({
+    mockForks.c2.push(
+      conv({
       id: "c2f-pending",
-      tree_id: "agent1",
-      title: "Billing dispute",
-      origin: "interactive",
       created_at: "2026-08-04T09:10:00Z",
       last_activity_at: "2026-08-04T09:10:00Z",
-      fork_count: 0,
+      title: "Billing dispute",
       lineage: {
         parent_conversation_id: "c2",
         fork_turn_id: "t9",
@@ -108,7 +103,8 @@ describe("ForkComparePage", () => {
           envelope: null,
         },
       ],
-    });
+      }),
+    );
     renderCompare("/forks/c2/t9");
 
     const card = await screen.findByTestId("sibling-c2f-pending");

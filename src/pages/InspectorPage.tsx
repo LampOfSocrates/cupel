@@ -136,8 +136,12 @@ export function InspectorPage() {
   const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1;
 
   // ------------------------------------------------------- inline reader
+  // The reader shows a conversation's turns, so it reads listTurns directly —
+  // the conversation resource no longer carries them. An omitted `page` asks
+  // for the LAST page, which is also what this panel wants ("open on the newest
+  // answer"); the header states it when there is more above.
   const { data: transcript, error: readerError } = useAsync(
-    selected ? () => api.conversation(selected.tree_id, selected.id) : null,
+    selected ? () => api.turns(selected.tree_id, selected.id) : null,
     [selected],
   );
 
@@ -147,7 +151,7 @@ export function InspectorPage() {
   // `useEffect(…, [transcript])` did, without the setState.
   const [focusPick, setFocusPick] = useState<{ of: unknown; turnId: string } | null>(null);
   const defaultFocusedTurnId = useMemo(() => {
-    const turns = transcript?.turns ?? [];
+    const turns = transcript?.items ?? [];
     const lastAssistant = [...turns].reverse().find((t) => t.role === "assistant");
     return lastAssistant?.id ?? turns[turns.length - 1]?.id ?? null;
   }, [transcript]);
@@ -433,10 +437,15 @@ export function InspectorPage() {
           </Group>
           {readerError && <Alert color="red">{readerError.message}</Alert>}
           {!transcript && !readerError && <Loader size="xs" />}
+          {transcript && transcript.total > transcript.items.length && (
+            <Text size="xs" c="dimmed" data-testid="reader-truncated">
+              Showing the last {transcript.items.length} of {transcript.total} turns.
+            </Text>
+          )}
           {transcript && (
             <ScrollArea.Autosize mah={340}>
               <Stack gap={4}>
-                {(transcript.turns ?? []).map((turn) => (
+                {transcript.items.map((turn) => (
                   <UnstyledButton
                     key={turn.id}
                     data-testid="reader-turn"

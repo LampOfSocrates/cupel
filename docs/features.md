@@ -17,6 +17,7 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Choose the model, temperature and system prompt for your session |
 | ✅ | **Use your own model key** — it stays in your browser and is never stored or logged on the server |
 | ✅ | Find any past conversation by search or recency; rename or delete it |
+| ✅ | Open a long conversation instantly — it loads the latest turns, with **Load earlier turns** for the rest |
 | ✅ | See forked conversations nested under the one they came from |
 | ✅ | **Send someone a link to one exact turn** — they land on it, signing in first if your instance requires it |
 | ✅ | Chat from your phone in portrait |

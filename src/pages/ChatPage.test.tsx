@@ -15,6 +15,8 @@ import {
   evalSetItemPosts,
   chatConfig,
   chatRequests,
+  conv,
+  mockRoots,
   feedbackRequests,
   judgmentRequests,
   llmHeaderCaptures,
@@ -22,6 +24,7 @@ import {
   pushHumanJudgment,
   pushLlmJudgment,
   replayTurnRequests,
+  turnRequests,
   uploadConfig,
   uploadRequests,
 } from "../test/msw/handlers";
@@ -176,6 +179,59 @@ describe("ChatPage streaming", () => {
     );
     // sidebar reflects the new conversation: "Hi there" as user bubble + list row
     await waitFor(() => expect(screen.getAllByText("Hi there")).toHaveLength(2));
+  });
+});
+
+// listTurns (item 7 stage F2): the transcript is a paged collection, opened on
+// its LAST page. A long conversation therefore renders its tail — and the page
+// must SAY so rather than presenting a prefix of the history as the whole of
+// it.
+describe("ChatPage paged transcript", () => {
+  const longConversation = () =>
+    conv({
+      id: "c-long",
+      title: "Long thread",
+      turns: Array.from({ length: 120 }, (_, i) => ({
+        id: `lt${i}`,
+        role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+        author: i % 2 === 0 ? "user" : "concierge",
+        content: `turn number ${i}`,
+        created_at: `2026-08-04T09:${String(i).padStart(2, "0")}:00Z`,
+        envelope: null,
+      })),
+    });
+
+  it("opens on the tail and loads earlier turns on demand, never silently truncating", async () => {
+    const user = userEvent.setup();
+    mockRoots.push(longConversation());
+    renderChat("/chat/c-long");
+
+    // Default page_size is 50, so 120 turns land on page 3 — the newest 20.
+    await screen.findByText("turn number 119");
+    expect(screen.queryByText("turn number 69")).not.toBeInTheDocument();
+    const asked = turnRequests.at(-1)!;
+    expect(asked.searchParams.get("page"), "the first load must not pin a page").toBeNull();
+
+    const earlier = await screen.findByTestId("load-earlier-turns");
+    await user.click(earlier);
+    // Page 2 PREPENDS: chronological order makes the older block contiguous
+    // with what is already on screen, so nothing is duplicated or reordered.
+    await screen.findByText("turn number 50");
+    expect(screen.getByText("turn number 119")).toBeInTheDocument();
+    expect(turnRequests.at(-1)!.searchParams.get("page")).toBe("2");
+
+    await user.click(screen.getByTestId("load-earlier-turns"));
+    await screen.findByText("turn number 0");
+    // Page 1 is on screen — there is nothing earlier, so the affordance goes.
+    await waitFor(() =>
+      expect(screen.queryByTestId("load-earlier-turns")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("a short conversation offers nothing to load — the first turn shown is the first turn", async () => {
+    renderChat("/chat/c1");
+    await screen.findByText("How do refunds work?");
+    expect(screen.queryByTestId("load-earlier-turns")).not.toBeInTheDocument();
   });
 });
 

@@ -72,8 +72,7 @@ function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
 // "assistant turns selectable per the Evaluations semantics" — the grid re-generates
 // assistant outputs ("row per turn" of regenerated output, feature-spec.md:49),
 // so only assistant turns carry checkboxes; user turns render as dimmed context.
-const assistantTurns = (conv: Conversation): Turn[] =>
-  (conv.turns ?? []).filter((t) => t.role === "assistant");
+const assistantTurns = (turns: Turn[]): Turn[] => turns.filter((t) => t.role === "assistant");
 
 export function ConversationPicker({ tree, onSelectionChange, initialSelection }: Props) {
   const [search, setSearch] = useState("");
@@ -86,6 +85,11 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Transcripts are no longer inlined in the listing (listTurns is its own
+  // paged collection), so a row's turns are fetched when it is expanded —
+  // which is also the only moment they are needed. `total` per conversation
+  // rides along so a row can say when it is showing a prefix.
+  const [turnsById, setTurnsById] = useState<Record<string, { items: Turn[]; total: number }>>({});
   const [selected, setSelected] = useState<Map<string, ConvSelection>>(() =>
     fromItems(initialSelection ?? []),
   );
@@ -150,7 +154,7 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
         // an explicit turn list (all assistant turns minus this one).
         const set =
           current === "all"
-            ? new Set(assistantTurns(conv).map((t) => t.id))
+            ? new Set(assistantTurns(turnsById[conv.id]?.items ?? []).map((t) => t.id))
             : new Set(current ?? []);
         if (checked) set.add(turnId);
         else set.delete(turnId);
@@ -158,17 +162,29 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
         else next.set(conv.id, set);
       });
     },
-    [update],
+    [update, turnsById],
   );
 
-  const toggleExpanded = useCallback((id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const toggleExpanded = useCallback(
+    (id: string) => {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      // page 1 + the operation's maximum: the picker reads a transcript from
+      // the START (unlike chat, which opens on the tail), and one request
+      // covers any conversation anyone actually picks from. A longer one
+      // renders the prefix and says so.
+      if (turnsById[id]) return;
+      void api
+        .turns(tree, id, { page: 1, page_size: 200 })
+        .then((page) => setTurnsById((prev) => ({ ...prev, [id]: { items: page.items, total: page.total } })))
+        .catch(() => {});
+    },
+    [tree, turnsById],
+  );
 
   // Footer summary (sketch 02: "2 conversations · 1 turn").
   let wholeCount = 0;
@@ -192,6 +208,7 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
           conv={conv}
           selection={selected.get(conv.id)}
           expanded={expanded.has(conv.id)}
+          loaded={turnsById[conv.id]}
           onToggleConversation={toggleConversation}
           onToggleTurn={toggleTurn}
           onToggleExpanded={toggleExpanded}
@@ -220,6 +237,7 @@ const PickerRow = memo(function PickerRow({
   conv,
   selection,
   expanded,
+  loaded,
   onToggleConversation,
   onToggleTurn,
   onToggleExpanded,
@@ -227,12 +245,14 @@ const PickerRow = memo(function PickerRow({
   conv: Conversation;
   selection: ConvSelection | undefined;
   expanded: boolean;
+  /** This row's transcript page, once expanding fetched it. */
+  loaded: { items: Turn[]; total: number } | undefined;
   onToggleConversation: (conv: Conversation, checked: boolean) => void;
   onToggleTurn: (conv: Conversation, turnId: string, checked: boolean) => void;
   onToggleExpanded: (id: string) => void;
 }) {
   const partial = selection instanceof Set && selection.size > 0;
-  const turns = conv.turns ?? [];
+  const turns = loaded?.items ?? [];
 
   return (
     <div data-testid={`picker-conv-${conv.id}`}>
@@ -245,7 +265,7 @@ const PickerRow = memo(function PickerRow({
           onChange={(e) => onToggleConversation(conv, e.currentTarget.checked)}
         />
         <UnstyledButton
-          onClick={() => turns.length > 0 && onToggleExpanded(conv.id)}
+          onClick={() => conv.turn_count > 0 && onToggleExpanded(conv.id)}
           style={{ flex: 1, minWidth: 0 }}
           aria-label={`Toggle turns of ${conv.title}`}
         >
@@ -254,13 +274,21 @@ const PickerRow = memo(function PickerRow({
               {conv.title}
             </Text>
             <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-              {turns.length > 0 ? `${turns.length}t ${expanded ? "▴" : "▸"}` : ""}
+              {/* turn_count, not the loaded page: the row can label itself
+                  before anything is fetched. */}
+              {conv.turn_count > 0 ? `${conv.turn_count}t ${expanded ? "▴" : "▸"}` : ""}
             </Text>
           </Group>
         </UnstyledButton>
       </Group>
       {expanded && (
         <Stack gap={2} ml="lg" my={2}>
+          {loaded == null && <Loader size="xs" />}
+          {loaded != null && loaded.total > turns.length && (
+            <Text size="xs" c="dimmed">
+              Showing the first {turns.length} of {loaded.total} turns.
+            </Text>
+          )}
           {turns.map((turn) =>
             turn.role === "assistant" ? (
               <Checkbox

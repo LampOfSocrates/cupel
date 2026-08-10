@@ -23,6 +23,11 @@ test("forks: re-fire one turn at 2 endpoints → open a fork in Chat → continu
   const chat = await seedChat(request, MSG);
   await page.goto(`/chat/${chat.conversationId}`);
   await expect(page.getByTestId("transcript")).toContainText(MSG);
+  // The transcript is its OWN collection now (item 7 stage F2): opening a
+  // conversation fetches the resource and a page of its turns, never one
+  // response carrying every turn ever written into it.
+  await api.expectCalled("GET /agenttrees/{tree}/conversations/{id}");
+  await api.expectCalled("GET /agenttrees/{tree}/conversations/{id}/turns");
 
   await step("⑂ a turn against prod + staging", async () => {
     await page.getByRole("button", { name: "Fork turn" }).click();

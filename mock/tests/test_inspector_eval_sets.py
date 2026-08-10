@@ -426,7 +426,10 @@ def test_reference_items_are_references_only_and_removal_appends_a_version():
             got = await c.get(
                 f"/agenttrees/agent1/conversations/{conv['conversation_id']}")
             assert got.status_code == 200
-            assert any(t["id"] == conv["turn"]["id"] for t in got.json()["turns"])
+            turns = (await c.get(
+                f"/agenttrees/agent1/conversations/{conv['conversation_id']}/turns"
+            )).json()["items"]
+            assert any(t["id"] == conv["turn"]["id"] for t in turns)
     run(case())
 
 

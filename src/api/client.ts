@@ -76,6 +76,8 @@ import type {
   TaskRef,
   TokenEvent,
   Trace,
+  TurnListParams,
+  TurnPage,
   TreePermission,
 } from "./types";
 
@@ -364,6 +366,22 @@ export const api = {
   // GET /agenttrees/{tree}/conversations/{conversationId} (openapi.yaml:387)
   conversation: (tree: string, id: string) =>
     request<Conversation>(`/agenttrees/${tree}/conversations/${id}`),
+
+  // GET /agenttrees/{tree}/conversations/{conversationId}/turns (listTurns) —
+  // the transcript, paged and CHRONOLOGICAL. Omitting `page` asks for the LAST
+  // page: a reader opens a conversation at its end, and the response's own
+  // `page` says where that landed, so "load earlier" is page - 1.
+  // turn_ids goes on the wire comma-separated (contract style: form,
+  // explode: false).
+  turns: (tree: string, id: string, params: TurnListParams = {}) => {
+    const { turn_ids, ...rest } = params;
+    return request<TurnPage>(`/agenttrees/${tree}/conversations/${id}/turns`, {
+      query: {
+        ...(rest as Query),
+        ...(turn_ids?.length ? { turn_ids: turn_ids.join(",") } : {}),
+      },
+    });
+  },
 
   // PATCH — rename (openapi.yaml:409; feature-spec.md:6)
   renameConversation: (tree: string, id: string, title: string) =>

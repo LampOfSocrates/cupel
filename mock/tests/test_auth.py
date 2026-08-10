@@ -18,6 +18,7 @@ import pytest
 
 from mock import auth
 from mock.main import create_app
+from mock.tests import with_turns
 from mock.tests.test_mock import StreamingASGITransport, parse_sse
 
 
@@ -301,8 +302,8 @@ def test_tasks_stream_only_emits_events_of_permitted_trees(monkeypatch):
             limited_tasks = ({d["id"] for ev, d in seen_limited if ev == "task"}
                              | {d["task_id"] for ev, d in seen_limited if ev == "progress"})
             assert limited_tasks == {ids["agent1_task"]}
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{ids['agent1_conv']}",
-                                headers=bearer(limited))).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{ids['agent1_conv']}",
+                                headers=bearer(limited))
             agent1_turns = {t["id"] for t in conv["turns"]}
             assert {d["turn_id"] for ev, d in seen_limited if ev == "span"} <= agent1_turns
             # …while a holder of both trees still receives both.

@@ -94,7 +94,7 @@ server-side state of its own; the only things it stores are device-local
 browser values (which target is selected, your auth token, a BYOK LLM key).
 You can also switch targets live in Settings → Backend without restarting.
 
-You do not have to implement all of it at once. The contract's 66 operations
+You do not have to implement all of it at once. The contract's 67 operations
 are grouped into **families** — its top-level `tags` in
 [`openapi.yaml`](openapi.yaml), one per operation: `chat`, `conversations`,
 `agents`, `evaluations`, `trace`, `tasks`, `eval`, `memory`, `settings`,

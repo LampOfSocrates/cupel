@@ -65,6 +65,15 @@ export function ChatPage() {
   const sharedTurnId = searchParams.get(TURN_PARAM);
 
   const [turns, setTurns] = useState<Turn[] | null>(conversationId ? null : []);
+  // The transcript is a PAGED collection (listTurns), opened on its last page:
+  // a conversation has no length limit, so loading all of it was an unbounded
+  // request that got slower the more the conversation was used. This is the
+  // lowest page number currently on screen — 1 means the first turn shown is
+  // the first turn there is, and anything higher means the view starts partway
+  // in and must say so. It is the right guard rather than comparing against
+  // `total` because the stream APPENDS to `turns` after the fetch, so the
+  // loaded length stops matching any total the server gave us.
+  const [earliestPage, setEarliestPage] = useState(1);
   const [title, setTitle] = useState<string | null>(null);
   // Lineage + agent off the loaded Conversation. Lineage is "Present iff this
   // conversation is a fork" (openapi.yaml:1369) and drives the header banner;
@@ -186,17 +195,23 @@ export function ChatPage() {
     setTurns(null);
     setTitle(null);
     setThumbs({});
+    setEarliestPage(1);
     // Arriving on a ?turn= deep link, do NOT pin to the bottom for this load —
     // the highlight effect above places the viewport instead.
     pinUnlessSharedTarget();
     sharedHandledRef.current = null;
     let cancelled = false;
-    api
-      .conversation(tree, conversationId)
-      .then((data) => {
+    // Two requests where there used to be one: the conversation resource and
+    // the tail of its transcript. Omitting `page` asks listTurns for the LAST
+    // page, so this is still one round trip to the part a reader wants —
+    // Promise.all keeps it one wait, and a 404 on either is the same
+    // "unavailable" state.
+    Promise.all([api.conversation(tree, conversationId), api.turns(tree, conversationId)])
+      .then(([data, page]) => {
         if (cancelled) return;
         attachedConvRef.current = conversationId;
-        setTurns(data.turns ?? []);
+        setTurns(page.items);
+        setEarliestPage(page.page);
         setTitle(data.title);
         setLineage(data.lineage ?? null);
         setAgentId(data.agent_id ?? null);
@@ -512,6 +527,24 @@ export function ChatPage() {
         <>
         <Transcript
           turns={turns}
+          // Chronological order makes this a safe PREPEND: pages are stable
+          // (a transcript only grows at the tail), so page n-1 is exactly the
+          // block before what is already on screen — no de-duplication, and
+          // nothing the live stream appended is disturbed.
+          onLoadEarlier={
+            conversationId && earliestPage > 1
+              ? () => {
+                  const want = earliestPage - 1;
+                  void api
+                    .turns(tree, conversationId, { page: want })
+                    .then((page) => {
+                      setTurns((prev) => [...page.items, ...(prev ?? [])]);
+                      setEarliestPage(page.page);
+                    })
+                    .catch(() => {});
+                }
+              : undefined
+          }
           stream={stream}
           draft={draft}
           scrollRef={scrollRef}

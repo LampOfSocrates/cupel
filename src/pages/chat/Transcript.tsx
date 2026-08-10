@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore, type RefObject } from "react";
-import { Alert, Center, Loader, Paper, Stack, Text } from "@mantine/core";
+import { Alert, Button, Center, Loader, Paper, Stack, Text } from "@mantine/core";
 import type { Turn } from "../../api/types";
 import { Markdown } from "../../lib/markdown";
 import type { DraftStore } from "./draftStore";
@@ -12,6 +12,7 @@ import type { Rating, StreamState, ThumbState } from "./types";
 // page, which also aims them at a shared ?turn= target on arrival.
 export function Transcript({
   turns,
+  onLoadEarlier,
   stream,
   draft,
   scrollRef,
@@ -32,6 +33,12 @@ export function Transcript({
   sharedRef,
 }: {
   turns: Turn[] | null;
+  /**
+   * Present when the transcript on screen starts partway in — listTurns is
+   * paged and opens on the LAST page, so a long conversation renders its tail
+   * first. Absent means the first turn shown really is the first turn.
+   */
+  onLoadEarlier?: () => void;
   stream: StreamState | null;
   draft: DraftStore;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -73,6 +80,16 @@ export function Transcript({
         </Center>
       ) : (
         <Stack gap="sm" data-testid="transcript">
+          {onLoadEarlier && (
+            <Button
+              variant="subtle"
+              size="compact-xs"
+              data-testid="load-earlier-turns"
+              onClick={onLoadEarlier}
+            >
+              Load earlier turns
+            </Button>
+          )}
           {turns.length === 0 && stream === null && (
             <Text c="dimmed" ta="center" mt="xl">
               Send a message to start the conversation.

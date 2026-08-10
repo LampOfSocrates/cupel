@@ -756,8 +756,12 @@ paths:
       description: |
         feature-spec.md:121: "GET /agenttrees/{tree}/conversations (paginated,
         ?search=, ?forks_of={id}, sorted by last activity; incl. turns; lineage
-        on forks)". Envelope rule (feature-spec.md:81): "envelope on turn
-        objects in GET …/conversations".
+        on forks)" — quoted as written; "incl. turns" no longer holds. A
+        conversation row is metadata plus `turn_count`; the transcript is its
+        own paged collection at
+        GET /agenttrees/{tree}/conversations/{id}/turns. A listing that
+        inlined every turn of every row made the sidebar's cost the product of
+        page size and conversation length.
 
         Default listing returns ROOT conversations only (lineage null) so the
         sidebar can nest forks under their parent without duplicates
@@ -804,20 +808,25 @@ paths:
     get:
       tags: [conversations]
       operationId: getConversation
-      summary: One conversation with full transcript
+      summary: One conversation (metadata; turns are a separate collection)
       description: |
         Single-resource fetch backing "Open in Chat: any fork can be opened in
         the main Chat page and continued there like any conversation"
         (feature-spec.md:70), "open parent (if fork)" (feature-spec.md:6), the
         queue panel's Open-in-Chat link, and deep links from search results —
-        none of which can rely on re-paging the list. Turns include envelopes
-        (feature-spec.md:81); lineage present iff fork.
+        none of which can rely on re-paging the list. Lineage present iff fork.
+
+        This returns the conversation, NOT its transcript: a conversation has
+        no length limit, so a resource that inlined every turn had an unbounded
+        response body and no way for a caller to ask for less. Fetch the
+        transcript from …/turns, which is paged; `turn_count` here is how a
+        caller sizes that fetch without making it.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/conversationId" }
       responses:
         "200":
-          description: The conversation, turns included.
+          description: The conversation (metadata only).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Conversation" }
@@ -842,7 +851,7 @@ paths:
                 title: { type: string }
       responses:
         "200":
-          description: Updated conversation (without turns).
+          description: Updated conversation.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Conversation" }
@@ -862,6 +871,62 @@ paths:
         - { $ref: "#/components/parameters/conversationId" }
       responses:
         "204": { description: Deleted. }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /agenttrees/{tree}/conversations/{conversationId}/turns:
+    get:
+      tags: [conversations]
+      operationId: listTurns
+      summary: A conversation's transcript, paged
+      description: |
+        The transcript, separated from the conversation resource so that
+        opening a long one costs a bounded response instead of every turn ever
+        written into it. Turns carry envelopes (feature-spec.md:81 "envelope on
+        turn objects").
+
+        ORDER IS CHRONOLOGICAL, oldest first — the domain order of a
+        transcript, and the one that makes offset paging STABLE here: a
+        conversation only ever grows at the tail, so page 1 names the same
+        turns forever no matter how much is appended while a reader is looking
+        at it. This is the exception to the drift warning in the Collections
+        rule, and it is deliberate.
+
+        `page` DEFAULTS TO THE LAST PAGE, not the first. A reader opens a
+        transcript at its end; defaulting to page 1 would land them at the
+        top of a long history and cost a second request to reach the part
+        they came for. The response's own `page` says which page that was, and
+        `total` says how much is earlier — page-1-onwards is "load earlier".
+
+        `turn_ids` is the escape hatch from paging for callers that already
+        know which turns they want (an eval set's reference items, a fork's
+        lineage turn): with it the page is those turns, in the same
+        chronological order, and paging applies to that subset.
+      parameters:
+        - { $ref: "#/components/parameters/tree" }
+        - { $ref: "#/components/parameters/conversationId" }
+        - name: turn_ids
+          in: query
+          description: >-
+            Comma-separated turn ids; unknown ids are ignored rather than
+            404ing, so a stale reference degrades to a missing row.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { type: string }
+        - name: page
+          in: query
+          description: Omit for the LAST page — the tail of the transcript.
+          schema: { type: integer, minimum: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Page of turns, oldest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TurnPage" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ------------------------------------------------------------------ memory
@@ -2474,7 +2539,7 @@ components:
 
     Conversation:
       type: object
-      required: [id, tree_id, title, origin, created_at, last_activity_at, fork_count]
+      required: [id, tree_id, title, origin, created_at, last_activity_at, fork_count, turn_count]
       properties:
         id: { type: string }
         tree_id: { type: string }
@@ -2505,10 +2570,15 @@ components:
           type: integer
           default: 0
           description: Number of direct forks — drives the "N forks" chip (feature-spec.md:5).
-        turns:
-          type: array
-          description: Included in listings (feature-spec.md:121 "incl. turns").
-          items: { $ref: "#/components/schemas/Turn" }
+        turn_count:
+          type: integer
+          default: 0
+          description: >-
+            Turns in the transcript. Sized like fork_count and for the same
+            reason: a caller can label a row ("14 turns"), decide whether to
+            fetch at all, and size its page — without a request per row. The
+            turns themselves are at
+            GET /agenttrees/{tree}/conversations/{id}/turns.
 
     # THE collection shape. Every `<Thing>Page` in this document is exactly
     # this object with a different `items` type — same four keys, all four
@@ -2539,6 +2609,17 @@ components:
             total" rather than truncating in silence.
 
     # ------------------------------------------------------------------- chat
+    TurnPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Turn" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
     ChatRequest:
       type: object
       required: [message]

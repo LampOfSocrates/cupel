@@ -308,6 +308,7 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "lastSelection", run: () => api.lastSelection("agent1", "ag_concierge") },
   { apiMethod: "conversations", run: () => api.conversations("agent1", { page: 1 }) },
   { apiMethod: "conversation", run: () => api.conversation("agent1", "c1") },
+  { apiMethod: "turns", run: () => api.turns("agent1", "c1") },
   { apiMethod: "evaluations", run: () => api.evaluations("agent1") },
   { apiMethod: "evaluation", run: () => api.evaluation("agent1", "evaluation-old-1") },
   { apiMethod: "trace", run: () => api.trace("agent1", "t2") },
@@ -334,6 +335,12 @@ const EXERCISES: Exercise[] = [
     apiMethod: "conversation",
     label: "conversation (fork, lineage)",
     run: () => api.conversation("agent1", "c2f1"),
+  },
+  {
+    // The other half of listTurns' surface: named ids rather than a window.
+    apiMethod: "turns",
+    label: "turns (?turn_ids=)",
+    run: () => api.turns("agent1", "c1", { turn_ids: ["t2"] }),
   },
   { apiMethod: "evaluation", label: "evaluation (turn re-fire pivot)", run: () => api.evaluation("agent1", "evaluation-refire-1") },
   { apiMethod: "task", label: "task (finished fork, result)", run: () => api.task("task-seed-fork") },

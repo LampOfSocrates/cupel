@@ -47,6 +47,19 @@ export function TurnSourceModal({ opened, tree, mode, onClose, onPick }: Props) 
   const [search, setSearch] = useState("");
   const [debounced] = useDebouncedValue(search, 250);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Transcripts are fetched on expand — the listing carries metadata only
+  // (listTurns is its own paged collection). page 1 + the operation's maximum:
+  // this picker reads from the start of a conversation, and a longer one shows
+  // its prefix and says so.
+  const [turns, setTurns] = useState<Record<string, { items: Turn[]; total: number }>>({});
+  const expand = (id: string) => {
+    setExpanded((open) => (open === id ? null : id));
+    if (turns[id]) return;
+    void api
+      .turns(tree, id, { page: 1, page_size: 200 })
+      .then((page) => setTurns((prev) => ({ ...prev, [id]: { items: page.items, total: page.total } })))
+      .catch(() => {});
+  };
 
   const { data: conversations, error } = useAsync(
     opened
@@ -91,7 +104,7 @@ export function TurnSourceModal({ opened, tree, mode, onClose, onPick }: Props) 
             {conversations?.map((conv) => (
               <div key={conv.id}>
                 <UnstyledButton
-                  onClick={() => setExpanded((id) => (id === conv.id ? null : conv.id))}
+                  onClick={() => expand(conv.id)}
                   style={{ width: "100%" }}
                 >
                   <Group gap={6} wrap="nowrap" px={4} py={4}>
@@ -110,12 +123,19 @@ export function TurnSourceModal({ opened, tree, mode, onClose, onPick }: Props) 
                 </UnstyledButton>
                 {expanded === conv.id && (
                   <Stack gap={2} pl="md">
-                    {(conv.turns ?? []).filter((t) => t.role === "assistant").length === 0 && (
+                    {turns[conv.id] == null && <Loader size="xs" />}
+                    {turns[conv.id] != null &&
+                      turns[conv.id].items.filter((t) => t.role === "assistant").length === 0 && (
+                        <Text size="xs" c="dimmed">
+                          No answered turns in this conversation.
+                        </Text>
+                      )}
+                    {turns[conv.id] != null && turns[conv.id].total > turns[conv.id].items.length && (
                       <Text size="xs" c="dimmed">
-                        No answered turns in this conversation.
+                        Showing the first {turns[conv.id].items.length} of {turns[conv.id].total} turns.
                       </Text>
                     )}
-                    {(conv.turns ?? [])
+                    {(turns[conv.id]?.items ?? [])
                       .filter((turn) => turn.role === "assistant")
                       .map((turn) => (
                         <Group key={turn.id} gap={6} wrap="nowrap">

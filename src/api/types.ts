@@ -156,7 +156,14 @@ export interface Conversation {
   last_activity_at: string;
   lineage?: Lineage | null;
   fork_count: number;
-  turns?: Turn[];
+  /**
+   * Turns in the transcript. The transcript ITSELF is not here: it is a paged
+   * collection at GET …/conversations/{id}/turns (api.turns), because a
+   * conversation has no length limit and this resource had no way to ask for
+   * less. The count is what lets a row label itself ("14 turns") and a caller
+   * decide whether to fetch at all.
+   */
+  turn_count: number;
 }
 
 // THE collection shape — every operation that returns a collection of user
@@ -181,6 +188,19 @@ export interface PageParams {
 
 // openapi.yaml ConversationPage
 export type ConversationPage = Page<Conversation>;
+
+// openapi.yaml TurnPage — GET …/conversations/{id}/turns.
+export type TurnPage = Page<Turn>;
+
+// openapi.yaml listTurns query params. Two things differ from every other
+// paged listing, both deliberate and both contract-level: rows are
+// CHRONOLOGICAL (a transcript grows only at the tail, so page 1 never
+// changes under a reader), and an omitted `page` means the LAST page — where
+// a reader of a transcript starts. Walking back is page-1-ward.
+export interface TurnListParams extends PageParams {
+  /** Fetch named turns instead of a window; unknown ids are ignored. */
+  turn_ids?: string[];
+}
 
 // openapi.yaml listConversations query params
 export interface ConversationListParams extends PageParams {

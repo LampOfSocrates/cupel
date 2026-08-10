@@ -21,7 +21,7 @@ guarantee.
 `partial` is expressed exactly as the contract defines it: `status` is the
 promise (full = every contract operation in the family is served), and
 implemented/operations/missing make the promise auditable. The mock is honest
-about being incomplete — 58 of the contract's 66 operations, so `admin` is
+about being incomplete — 59 of the contract's 67 operations, so `admin` is
 partial and `memory`/`settings` are `none` rather than quietly absent.
 """
 
@@ -41,7 +41,7 @@ CAPABILITIES: dict[str, dict] = {
     "meta": {"status": "full", "implemented": 2, "operations": 2},
     "trees": {"status": "full", "implemented": 3, "operations": 3},
     "agents": {"status": "full", "implemented": 7, "operations": 7},
-    "conversations": {"status": "full", "implemented": 4, "operations": 4},
+    "conversations": {"status": "full", "implemented": 5, "operations": 5},
     "memory": {
         "status": "none", "implemented": 0, "operations": 4,
         # The one family that is contracted and built nowhere (TASKS.md item 12).

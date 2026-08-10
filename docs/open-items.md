@@ -224,7 +224,21 @@ enumerations a dropdown needs whole), `GET /agenttrees` (the scope selector ever
 off) and `GET /agenttrees/{tree}/agents` (a hierarchy — a page of it orphans nodes). The last
 two are the honest gap: paging them needs a searchable tree picker and a lazy-expand
 traversal respectively, both real UX, both item 17. `GET /tasks` lost `limit` in the process.
-· C2 conversations without inlined turns ·
+
+**C2 conversations without inlined turns — DONE 2026-08-10** (item 7 stage F2). `Conversation`
+loses `turns` and gains `turn_count`; the transcript is
+`GET /agenttrees/{tree}/conversations/{id}/turns` (`TurnPage`), the contract's 67th operation
+and the `conversations` family's 5th. Two things there differ from every other listing, both
+deliberate: rows are CHRONOLOGICAL, which makes offset paging stable (a transcript grows only
+at the tail, so page 1 is immutable while a reader is on it), and an omitted `page` means the
+LAST page, because that is where a reader of a transcript starts — one round trip to the part
+they came for. `?turn_ids=` fetches named turns without walking pages; it keeps the eval-set
+reference preview honest now that whole conversations are no longer pulled to read one turn
+out of each, and it is a partial answer to C10, which still lacks CROSS-conversation
+batching. UI: ChatPage gained "Load earlier turns" (a prepend — pages are contiguous, so no
+de-duplication); the Inspector reader and both turn pickers fetch on demand and state when
+they are showing a prefix.
+
 C3 run-grid pagination + ETag · C4 `POST …/versions` replacing non-idempotent PUTs (mock
 still `PUT /eval/rubrics/{id}`:1454, `/eval/cases/{id}`:1669, `/eval/sets/{id}`:1731, all 201) ·
 C5 readable version history (GET + `?version=` + `…/versions`; also `GET /eval/cases`) — this

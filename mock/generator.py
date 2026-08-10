@@ -237,8 +237,10 @@ class Generator:
             if (await self._get("/agenttrees/agent1/conversations",
                                 forks_of=conv_id))["total"]:
                 continue
-            conv = await self._get(f"/agenttrees/agent1/conversations/{conv_id}")
-            turn = [t for t in conv["turns"] if t["role"] == "assistant"][-1]
+            turns = (await self._get(
+                f"/agenttrees/agent1/conversations/{conv_id}/turns",
+                page_size=200))["items"]
+            turn = [t for t in turns if t["role"] == "assistant"][-1]
             eps = [e["id"] for e in endpoints["agent1"][:f["n_endpoints"]]]
             acc = await self._post("/agenttrees/agent1/replay/turn", {
                 "conversation_id": conv_id, "turn_id": turn["id"], "endpoints": eps})
@@ -286,8 +288,10 @@ class Generator:
         for t in plan["thumbs"]:
             spec = plan["convs"][t["pick"]]
             conv_id = ids[(spec["tree"], spec["ci"])]
-            conv = await self._get(f"/agenttrees/{spec['tree']}/conversations/{conv_id}")
-            turn = [x for x in conv["turns"] if x["role"] == "assistant"][-1]
+            turns = (await self._get(
+                f"/agenttrees/{spec['tree']}/conversations/{conv_id}/turns",
+                page_size=200))["items"]
+            turn = [x for x in turns if x["role"] == "assistant"][-1]
             prior = await self._get("/eval/judgments",
                                     subject_kind="turn", subject_id=turn["id"])
             if any(x["scorer"]["kind"] == "human" for x in prior["items"]):
@@ -350,7 +354,12 @@ class Generator:
                             cmid=f"{nonce}-m1", conversation_id=recent["id"])
             return f"turn added to {recent['id']}"
         if action == "fork":
-            turns = [t for t in recent["turns"]
+            # Conversation rows no longer inline their turns (listTurns is its
+            # own paged collection), so the fork target is read from there.
+            recent_turns = (await self._get(
+                f"/agenttrees/{tree}/conversations/{recent['id']}/turns",
+                page_size=200))["items"]
+            turns = [t for t in recent_turns
                      if t["role"] == "assistant" and t["content"]]
             if not turns:
                 return f"fork skipped: {recent['id']} has no finished assistant turn"

@@ -1,13 +1,21 @@
 // Conversations + fork transcripts: the listing, the transcript read, and the
 // rename/delete pair that the tree-disable gate treats as writes.
 import { http, HttpResponse } from "msw";
-import type { Conversation } from "../../../api/types";
-import { BASE, conv, enabledTreeGate, envelope, pageOf, treeGate } from "../state";
+import type { ConversationFixture } from "../state";
+import {
+  BASE,
+  conv,
+  enabledTreeGate,
+  envelope,
+  pageOf,
+  treeGate,
+  wireConversation,
+} from "../state";
 
 // Roots (lineage null) — sorted by last activity, server-side (openapi.yaml:381).
 // Factory-seeded: the replay/turn handler mutates forks + fork_count, so
 // resetHandlerState must rebuild fresh objects, not restore references.
-function seedRoots(): Conversation[] {
+function seedRoots(): ConversationFixture[] {
   return [
   conv({
     id: "c1",
@@ -75,13 +83,13 @@ function seedRoots(): Conversation[] {
   conv({ id: "c3", title: "Onboarding help", agent_id: "ag_concierge", last_activity_at: "2026-08-01T10:00:00Z" }),
   ];
 }
-export const mockRoots: Conversation[] = seedRoots();
+export const mockRoots: ConversationFixture[] = seedRoots();
 
 // Fork transcripts: copied history strictly BEFORE the fork turn (fresh ids,
 // mirroring mock/main.py:664-673) + the regenerated assistant turn appended by
 // the fork task (engine.py:354-363). Endpoint ids use the ep_agent1_* form of
 // the endpoint fixtures.
-function seedForks(): Record<string, Conversation[]> {
+function seedForks(): Record<string, ConversationFixture[]> {
   return {
   c2: [
     conv({
@@ -157,13 +165,15 @@ function seedForks(): Record<string, Conversation[]> {
   ],
   };
 }
-export const mockForks: Record<string, Conversation[]> = seedForks();
+export const mockForks: Record<string, ConversationFixture[]> = seedForks();
 
 // Requests seen by the conversations handler — tests assert query params here.
 export const conversationRequests: URL[] = [];
+/** Full request URLs seen by listTurns — tests assert the paging the UI asks for. */
+export const turnRequests: URL[] = [];
 
 /** Roots and forks as one list — the "find a conversation by id" lookup. */
-export function allConversations(): Conversation[] {
+export function allConversations(): ConversationFixture[] {
   return [...mockRoots, ...Object.values(mockForks).flat()];
 }
 
@@ -184,7 +194,10 @@ export const conversationHandlers = [
     // Server-side sort (openapi.yaml:381; mock/main.py:754, :910
     // ORDER BY last_activity_at DESC) — not a property of the fixture order.
     items = items.slice().sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at));
-    return HttpResponse.json(pageOf(items, url));
+    // Rows are metadata only — the transcript is its own collection now
+    // (openapi.yaml listTurns), so a listing no longer costs page size ×
+    // conversation length.
+    return HttpResponse.json(pageOf(items.map(wireConversation), url));
   }),
 
   http.get(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {
@@ -194,7 +207,33 @@ export const conversationHandlers = [
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
     }
-    return HttpResponse.json(found);
+    return HttpResponse.json(wireConversation(found));
+  }),
+
+  // GET …/conversations/{id}/turns (listTurns) — chronological, and an
+  // omitted `page` means the LAST page, exactly as mock/main.py answers it.
+  http.get(`${BASE}/agenttrees/:tree/conversations/:id/turns`, ({ params, request }) => {
+    const denied = treeGate(params.tree as string);
+    if (denied) return denied;
+    const found = allConversations().find((c) => c.id === params.id);
+    if (!found) {
+      return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
+    }
+    const url = new URL(request.url);
+    turnRequests.push(url);
+    const ids = url.searchParams.get("turn_ids");
+    const wanted = ids ? new Set(ids.split(",").filter(Boolean)) : null;
+    const rows = wanted ? found.turns.filter((t) => wanted.has(t.id)) : found.turns;
+    const pageSize = Math.max(1, Math.min(Number(url.searchParams.get("page_size") ?? 50), 200));
+    const last = Math.max(1, Math.ceil(rows.length / pageSize));
+    const asked = url.searchParams.get("page");
+    const page = asked == null ? last : Math.min(Math.max(1, Number(asked)), last);
+    return HttpResponse.json({
+      items: rows.slice((page - 1) * pageSize, page * pageSize),
+      page,
+      page_size: pageSize,
+      total: rows.length,
+    });
   }),
 
   // PATCH/DELETE are in the disable gate's write set: "history is read-only,
@@ -207,9 +246,7 @@ export const conversationHandlers = [
     if (!found) {
       return HttpResponse.json({ code: "not_found", message: "conversation not found" }, { status: 404 });
     }
-    // `turns` is optional on Conversation (openapi.yaml Conversation.required)
-    // and PATCH answers metadata only — JSON.stringify drops the undefined.
-    return HttpResponse.json({ ...found, title: body.title ?? found.title, turns: undefined });
+    return HttpResponse.json(wireConversation({ ...found, title: body.title ?? found.title }));
   }),
 
   http.delete(`${BASE}/agenttrees/:tree/conversations/:id`, ({ params }) => {
@@ -221,6 +258,7 @@ export const conversationHandlers = [
 
 export function resetConversations() {
   conversationRequests.length = 0;
+  turnRequests.length = 0;
   mockRoots.length = 0;
   mockRoots.push(...seedRoots());
   for (const key of Object.keys(mockForks)) delete mockForks[key];

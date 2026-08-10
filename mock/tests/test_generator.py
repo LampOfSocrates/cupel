@@ -122,7 +122,10 @@ def test_seed_twice_same_seed_is_idempotent():
                 for item in page["items"]:
                     assert item["origin"] == "machine"
                     assert item["channel"] == "generator"
-                    user_turns = [t for t in item["turns"] if t["role"] == "user"]
+                    turns = (await c.get(
+                        f"/agenttrees/{tree}/conversations/{item['id']}/turns",
+                        params={"page_size": 200})).json()["items"]
+                    user_turns = [t for t in turns if t["role"] == "user"]
                     assert user_turns
                     assert all(t["author"].startswith("gen-persona-")
                                for t in user_turns)

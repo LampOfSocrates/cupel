@@ -24,6 +24,7 @@ import pytest
 
 from mock.config import IMPORT_SYNC_MAX_ROWS
 from mock.db import Db
+from mock.tests import with_turns
 from mock.tests.test_mock import client_pair, run, seed_conversation, wait_task
 
 CSV_HEADER = "question,answer,expected\n"
@@ -93,7 +94,7 @@ def test_create_case_sourced_from_a_real_turn():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             user_turn = next(t for t in conv["turns"] if t["role"] == "user")
             answer = next(t for t in conv["turns"] if t["role"] == "assistant")
 

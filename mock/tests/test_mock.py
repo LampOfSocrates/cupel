@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from mock.main import create_app
+from mock.tests import with_turns
 
 
 class StreamingASGITransport(httpx.AsyncBaseTransport):
@@ -220,8 +221,7 @@ def test_chat_nonstream_persists_conversation_turns_envelope():
             assert task["type"] == "chat"
             assert task["result"]["conversation_id"] == body["conversation_id"]
 
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{body['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
             assert conv["origin"] == "interactive"
             assert conv["agent_id"] == "ag_concierge"
             assert [t["role"] for t in conv["turns"]] == ["user", "assistant"]
@@ -276,8 +276,7 @@ def test_chat_stop_generation_persists_partial():
             done = [d for e, d in events if e == "done"]
             assert done and done[0]["status"] == "cancelled"
             partial = done[0]["turn"]
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{events[0][1]['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{events[0][1]['conversation_id']}")
             stored = next(t for t in conv["turns"] if t["id"] == partial["id"])
             assert stored["content"] == partial["content"]
             full_len = len(parse_sse(collected))
@@ -296,8 +295,7 @@ def test_chat_idempotent_client_message_id():
             second = (await c.post("/agenttrees/agent1/chat", json=req)).json()
             assert second["conversation_id"] == first["conversation_id"]
             assert second["turn"]["id"] == first["turn"]["id"]
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{first['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{first['conversation_id']}")
             assert len(conv["turns"]) == 2
             assert conv["origin"] == "machine"
             assert conv["turns"][0]["author"] == "mail-scanner"
@@ -318,8 +316,7 @@ def test_upload_and_attach():
 
             r = await c.post("/agenttrees/agent1/chat", json={
                 "message": "See attachment", "stream": False, "attachments": [att["id"]]})
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{r.json()['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{r.json()['conversation_id']}")
             assert conv["turns"][0]["attachments"][0]["id"] == att["id"]
     run(case())
 
@@ -328,7 +325,7 @@ def test_feedback_appends_human_judgment():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             turn_id = conv["turns"][1]["id"]
             r = await c.post("/feedback", json={"message_id": turn_id, "rating": "up"})
             assert r.status_code == 201
@@ -352,7 +349,7 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             turn_id = conv["turns"][1]["id"]
 
             # no comment → reasoning stays null, exactly as before
@@ -400,7 +397,11 @@ def test_conversation_list_search_rename_delete():
             page = (await c.get("/agenttrees/agent1/conversations")).json()
             assert page["total"] == 2
             assert page["items"][0]["id"] == b  # most recent first
-            assert page["items"][0]["turns"]
+            # Rows are metadata + a count; the transcript is its own
+            # collection, so a listing's size no longer scales with how much
+            # was said in each conversation.
+            assert "turns" not in page["items"][0]
+            assert page["items"][0]["turn_count"] == 2
 
             await c.patch(f"/agenttrees/agent1/conversations/{a}",
                           json={"title": "Zebra refunds"})
@@ -419,7 +420,7 @@ def test_soft_delete_preserves_judgments():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             turn_id = conv["turns"][1]["id"]
             await c.post("/feedback", json={"message_id": turn_id, "rating": "down"})
             await c.delete(f"/agenttrees/agent1/conversations/{conv_id}")
@@ -472,7 +473,7 @@ def test_replay_turn_forks_with_lineage():
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=2)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             fork_turn = conv["turns"][3]  # second assistant turn
             r = await c.post("/agenttrees/agent1/replay/turn", json={
                 "conversation_id": conv_id, "turn_id": fork_turn["id"],
@@ -483,8 +484,7 @@ def test_replay_turn_forks_with_lineage():
             assert len(acc["results"]) == 2
             for res in acc["results"]:
                 await wait_task(c, res["task_id"])
-                fork = (await c.get(
-                    f"/agenttrees/agent1/conversations/{res['conversation_id']}")).json()
+                fork = await with_turns(c, f"/agenttrees/agent1/conversations/{res['conversation_id']}")
                 assert fork["lineage"]["parent_conversation_id"] == conv_id
                 assert fork["lineage"]["fork_turn_id"] == fork_turn["id"]
                 assert fork["lineage"]["endpoint_id"] == res["endpoint_id"]
@@ -526,8 +526,7 @@ def test_machine_origin_inbound_turn_envelope_stamped_at_receipt():
                 "origin": "machine", "author": "mail-scanner"})
             body = r.json()
             await wait_task(c, body["task_id"])
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{body['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
             inbound = conv["turns"][0]
             assert inbound["author"] == "mail-scanner"
             env = inbound["envelope"]
@@ -540,7 +539,7 @@ def test_replay_cell_turn_reuses_source_envelope(monkeypatch):
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             source_env = conv["turns"][1]["envelope"]
 
             # Any fresh stamp during regeneration would now be the sentinel.
@@ -563,7 +562,7 @@ def test_replay_turn_fork_reuses_source_envelope(monkeypatch):
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             fork_turn = conv["turns"][1]
 
             monkeypatch.setattr("mock.engine.stamp_envelope", lambda: SENTINEL_ENVELOPE)
@@ -573,8 +572,7 @@ def test_replay_turn_fork_reuses_source_envelope(monkeypatch):
             })).json()
             res = acc["results"][0]
             await wait_task(c, res["task_id"])
-            fork = (await c.get(
-                f"/agenttrees/agent1/conversations/{res['conversation_id']}")).json()
+            fork = await with_turns(c, f"/agenttrees/agent1/conversations/{res['conversation_id']}")
             regenerated = fork["turns"][-1]
             assert regenerated["id"] != fork_turn["id"]
             assert regenerated["envelope"] == fork_turn["envelope"]  # frozen
@@ -592,7 +590,7 @@ def test_replay_rejects_non_frozen_context_policy():
                 "context_policy": "current",
             })
             assert r.status_code == 422
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             r = await c.post("/agenttrees/agent1/replay/turn", json={
                 "conversation_id": conv_id, "turn_id": conv["turns"][1]["id"],
                 "endpoints": ["ep_agent1_prod"], "context_policy": "custom",
@@ -778,6 +776,48 @@ def test_tasks_stream_emits_task_progress_span_events():
     run(case())
 
 
+def test_turns_are_a_paged_collection_defaulting_to_the_tail():
+    """listTurns — the transcript, split off the conversation resource.
+
+    Three properties the contract promises and the UI depends on: an omitted
+    page means the LAST page (a reader opens a transcript at its end), rows
+    are chronological so page 1 is immutable as the conversation grows, and
+    turn_ids fetches named turns without walking the pages."""
+    async def case():
+        async with client_pair() as c:
+            conv_id = await seed_conversation(c, n=3)  # 6 turns
+            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            assert "turns" not in conv and conv["turn_count"] == 6
+
+            tail = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}/turns",
+                                params={"page_size": 2})).json()
+            assert tail["total"] == 6 and tail["page"] == 3  # the LAST page
+            first = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}/turns",
+                                 params={"page_size": 2, "page": 1})).json()
+            assert [t["role"] for t in first["items"]] == ["user", "assistant"]
+            assert first["items"][0]["created_at"] <= tail["items"][0]["created_at"]
+
+            # Appending never moves page 1 — the whole point of ordering a
+            # transcript oldest-first under offset paging.
+            page1_ids = [t["id"] for t in first["items"]]
+            await seed_conversation(c, n=1)  # unrelated traffic
+            await c.post("/agenttrees/agent1/chat", json={
+                "message": "one more", "conversation_id": conv_id, "stream": False})
+            again = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}/turns",
+                                 params={"page_size": 2, "page": 1})).json()
+            assert [t["id"] for t in again["items"]] == page1_ids
+            assert again["total"] > 6
+
+            picked = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}/turns",
+                                  params={"turn_ids": f"{page1_ids[1]},nope"})).json()
+            assert [t["id"] for t in picked["items"]] == [page1_ids[1]]
+            assert picked["total"] == 1  # the unknown id is ignored, not a 404
+
+            assert (await c.get(
+                "/agenttrees/agent1/conversations/ghost/turns")).status_code == 404
+    run(case())
+
+
 def test_every_collection_answers_the_same_page_envelope():
     """One collection shape (openapi.yaml info.description, "Collections").
 
@@ -953,6 +993,6 @@ def test_persistence_across_app_restart(tmp_path):
         app2 = create_app(db_path=db_file, token_delay=0, step_delay=0)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app2),
                                      base_url="http://t") as c:
-            conv = (await c.get(f"/agenttrees/agent1/conversations/{conv_id}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             assert len(conv["turns"]) == 2  # SQLite survives restart
     run(case())

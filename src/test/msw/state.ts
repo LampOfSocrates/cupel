@@ -10,7 +10,7 @@
 import { HttpResponse } from "msw";
 import { agenticConfig } from "../../../agentic.config";
 import { getActiveTarget } from "../../api/target";
-import type { AgentTree, Conversation, Me, Page } from "../../api/types";
+import type { AgentTree, Conversation, Me, Page, Turn } from "../../api/types";
 
 // The test rig registers handlers at the MOCK target's baseUrl, resolved
 // through the same store the client uses — vitest is a dev build,
@@ -145,9 +145,19 @@ export const envelope = {
   locale: "en-GB",
 };
 
+/**
+ * A conversation FIXTURE: the wire resource plus the transcript that
+ * GET …/conversations/{id}/turns serves out of it. The wire itself no longer
+ * carries turns (openapi.yaml Conversation has `turn_count` and no `turns`),
+ * so the two live in one object here and are separated on the way out by
+ * wireConversation.
+ */
+export type ConversationFixture = Conversation & { turns: Turn[] };
+
 export function conv(
-  partial: Partial<Conversation> & Pick<Conversation, "id" | "title">,
-): Conversation {
+  partial: Partial<ConversationFixture> & Pick<Conversation, "id" | "title">,
+): ConversationFixture {
+  const turns = partial.turns ?? [];
   return {
     tree_id: "agent1",
     origin: "interactive",
@@ -155,7 +165,16 @@ export function conv(
     last_activity_at: "2026-08-03T10:00:00Z",
     fork_count: 0,
     ...partial,
+    turns,
+    // Derived, never set by a fixture — a count that could disagree with the
+    // transcript would let a UI test pass against an impossible server.
+    turn_count: turns.length,
   };
+}
+
+/** The wire shape of a conversation: everything except the transcript. */
+export function wireConversation({ turns: _turns, ...rest }: ConversationFixture): Conversation {
+  return rest;
 }
 
 // BYOK: X-LLM-Key/X-LLM-Model captures on the generation-adjacent

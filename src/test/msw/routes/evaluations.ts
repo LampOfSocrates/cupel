@@ -192,7 +192,7 @@ export const evaluationHandlers = [
     // frames here — never in the conversation fixtures.
     const parent = allConversations().find((c) => c.id === body.conversation_id);
     if (parent) {
-      const turns = parent.turns ?? [];
+      const turns = parent.turns;
       const forkIndex = turns.findIndex((t) => t.id === body.turn_id);
       const copied = forkIndex >= 0 ? turns.slice(0, forkIndex) : turns;
       const forks = (mockForks[parent.id] ??= []);

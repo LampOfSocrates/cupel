@@ -16,6 +16,7 @@ import pytest
 
 from mock import config, llm
 from mock.main import create_app
+from mock.tests import with_turns
 from mock.util import canned_reply
 from mock.tests.test_mock import StreamingASGITransport, parse_sse, run, wait_task
 
@@ -131,9 +132,7 @@ def test_chat_nonstream_live_generation():
         app, c = make_app()
         async with c:
             body = await chat(c, "Hello", stream=False, headers=HEADERS)
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{body['conversation_id']}",
-            )).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
             assert conv["turns"][1]["content"] == "Non-streaming LIVE."
             assert len(calls) == 1
             assert calls[0]["body"]["stream"] is False
@@ -148,9 +147,7 @@ def test_no_header_stays_canned_and_never_calls_provider():
         app, c = make_app()
         async with c:
             body = await chat(c, "Plain question", stream=False)
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{body['conversation_id']}",
-            )).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
             assert conv["turns"][1]["content"] == canned_reply(
                 "Plain question", "Concierge", None)
             assert calls == []
@@ -221,10 +218,8 @@ def test_rate_limit_over_window_serves_canned(monkeypatch):
         async with c:
             first = await chat(c, "One", stream=False, headers=HEADERS)
             second = await chat(c, "Two", stream=False, headers=HEADERS)
-            conv1 = (await c.get(
-                f"/agenttrees/agent1/conversations/{first['conversation_id']}")).json()
-            conv2 = (await c.get(
-                f"/agenttrees/agent1/conversations/{second['conversation_id']}")).json()
+            conv1 = await with_turns(c, f"/agenttrees/agent1/conversations/{first['conversation_id']}")
+            conv2 = await with_turns(c, f"/agenttrees/agent1/conversations/{second['conversation_id']}")
             assert conv1["turns"][1]["content"] == "LIVE reply."
             assert conv2["turns"][1]["content"] != "LIVE reply."  # canned
             assert len(calls) == 1  # over-limit request never reached the provider
@@ -258,8 +253,7 @@ def test_mock_live_disabled_ignores_header(monkeypatch):
         async with c:
             assert (await c.get("/models", headers=HEADERS)).json() == config.MODELS
             body = await chat(c, "Disabled", stream=False, headers=HEADERS)
-            conv = (await c.get(
-                f"/agenttrees/agent1/conversations/{body['conversation_id']}")).json()
+            conv = await with_turns(c, f"/agenttrees/agent1/conversations/{body['conversation_id']}")
             assert conv["turns"][1]["content"] == canned_reply("Disabled", "Concierge", None)
             assert calls == []
 

@@ -19,7 +19,7 @@ backend fill (#25). Written 2026-08-09 from the user's description of the intend
 
 **Ask per family, not per operation. APPROVED by the user 2026-08-09**, along with the
 three-answer shape **mine / mock / hide**. A stranger's backend will match almost nothing —
-the contract is 66 operations across 14 families, and the worked `cupel-ready --init`
+the contract is 67 operations across 14 families, and the worked `cupel-ready --init`
 example only reaches 37/66 because its remap was contrived for a backend already built to
 this shape. A real first run is closer to 0–5 matched operations, which means 60+ questions
 if we ask per endpoint.
@@ -107,7 +107,7 @@ accepts *an endpoint*, not a document: "where does your agent answer?" plus how 
 
 ## The adoption ladder — what "guided instructions" should say
 
-The generated app's README should not be a list of 66 operations. It should be four stages,
+The generated app's README should not be a list of 67 operations. It should be four stages,
 each independently useful, with the app fully working at every stage:
 
 1. **Chat only — one endpoint.** Implement the chat endpoint with token streaming. Everything

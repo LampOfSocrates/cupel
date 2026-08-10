@@ -118,7 +118,7 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 - Meta: `GET /models` (chat/run/judge model dropdowns), `GET /healthz` (backend switcher); Generator: `POST /admin/generator` (`{mode: seed|drip|stop, seed?, rates?}`), `GET /admin/generator/status`
 - Chat: `POST /agenttrees/{tree}/chat` (SSE; queued → returns task_id), stop = `DELETE /tasks/{task_id}`, `POST /feedback` (writes a `scorer: human` judgment — single store with /eval/judgments), `POST /upload`, `GET/PUT /settings`
 - Agents: `GET /agenttrees/{tree}/agents`, `GET/PUT /agenttrees/{tree}/agents/{id}/instructions` (versioned; carries `format`, YAML saves validated server-side too), `POST /agenttrees/{tree}/agents/{id}/snapshots` (immutable drafts), `GET/PUT /agenttrees/{tree}/agents/{id}/last-selection`
-- Conversations: `GET /agenttrees/{tree}/conversations` (paginated, `?search=`, `?forks_of={id}`, sorted by last activity; incl. turns; lineage on forks), `PATCH`/`DELETE /agenttrees/{tree}/conversations/{id}`
+- Conversations: `GET /agenttrees/{tree}/conversations` (paginated, `?search=`, `?forks_of={id}`, sorted by last activity; turns paged at `{id}/turns`; lineage on forks), `PATCH`/`DELETE /agenttrees/{tree}/conversations/{id}`
 - Runs: `POST /agenttrees/{tree}/replay`, `POST /agenttrees/{tree}/replay/turn` (`endpoints[]` → task + conversation per endpoint), `GET /agenttrees/{tree}/runs`, `GET /agenttrees/{tree}/runs/{id}`
 - Trace: `GET /agenttrees/{tree}/turns/{turn_id}/trace`, `GET /spans/{id}/payload`
 - **Evaluation domain** (global; cases reference tree-scoped sources):

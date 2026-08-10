@@ -24,7 +24,6 @@ import { EvalImportModal } from "../components/EvalImportModal";
 import { TurnSourceModal } from "../components/TurnSourceModal";
 import { product } from "../lib/product";
 import type {
-  Conversation,
   EvalCase,
   EvalCaseSource,
   EvalSet,
@@ -33,6 +32,7 @@ import type {
   EvalSetReplayAccepted,
   Judgment,
   Rubric,
+  Turn,
 } from "../api/types";
 
 // Eval workbench (sketch 10) — "Hand-craft expected answers and have
@@ -614,11 +614,14 @@ export function EvalPage() {
 // immediately, because each is a single deliberate act.
 //
 // REFERENCE-NOT-COPY, and its cost (carried over from the deleted Casebooks
-// page): rendering a reference means following its source, and the contract has
-// no batch turn fetch (review bucket C10). Two bounds keep that honest:
-// requests are DEDUPED by (tree, conversation_id), and at most
-// CONVERSATION_FETCH_LIMIT conversations are fetched per set — beyond that an
-// item renders as a bare reference with a visible "not previewed" note.
+// page): rendering a reference means following its source. Requests are DEDUPED
+// by (tree, conversation_id) and capped at CONVERSATION_FETCH_LIMIT
+// conversations per set — beyond that an item renders as a bare reference with
+// a visible "not previewed" note. Each request now asks listTurns for exactly
+// the referenced turn ids (?turn_ids=) instead of pulling whole conversations
+// to read one turn out of each: the referenced turn may be anywhere in a
+// transcript, so paging alone would have made this preview a lie. Cross-
+// conversation batching is still absent (review bucket C10).
 const CONVERSATION_FETCH_LIMIT = 25;
 
 function refKey(source: EvalCaseSource) {
@@ -673,20 +676,25 @@ function SetsTab({
   // Bounded reference following (see the header). Deduped per conversation,
   // capped at CONVERSATION_FETCH_LIMIT.
   const wanted = useMemo(() => {
-    const keys: string[] = [];
+    const byConversation = new Map<string, string[]>();
     for (const item of selected?.items ?? []) {
       if (item.kind !== "reference" || !item.source) continue;
       const key = refKey(item.source);
-      if (!keys.includes(key)) keys.push(key);
+      const ids = byConversation.get(key);
+      if (ids) ids.push(item.source.turn_id);
+      else if (byConversation.size < CONVERSATION_FETCH_LIMIT) {
+        byConversation.set(key, [item.source.turn_id]);
+      }
     }
-    return keys.slice(0, CONVERSATION_FETCH_LIMIT);
+    return [...byConversation];
   }, [selected]);
 
-  const [conversations, setConversations] = useState<Record<string, Conversation>>({});
+  // key = refKey(source) → the referenced turns of that conversation, by id.
+  const [referencedTurns, setReferencedTurns] = useState<Record<string, Record<string, Turn>>>({});
   const [loadingRefs, setLoadingRefs] = useState(false);
 
   useEffect(() => {
-    const missing = wanted.filter((key) => !conversations[key]);
+    const missing = wanted.filter(([key]) => !referencedTurns[key]);
     if (missing.length === 0) return;
     let cancelled = false;
     // KEPT: an incremental cache FILL, not a data/loading/error read — the
@@ -697,17 +705,17 @@ function SetsTab({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingRefs(true);
     Promise.all(
-      missing.map((key) => {
+      missing.map(([key, turnIds]) => {
         const [tree, id] = key.split("/");
         return api
-          .conversation(tree, id)
-          .then((conv) => [key, conv] as const)
+          .turns(tree, id, { turn_ids: turnIds, page_size: 200 })
+          .then((page) => [key, Object.fromEntries(page.items.map((t) => [t.id, t]))] as const)
           .catch(() => null);
       }),
     )
       .then((loaded) => {
         if (cancelled) return;
-        setConversations((prev) => {
+        setReferencedTurns((prev) => {
           const next = { ...prev };
           for (const entry of loaded) if (entry) next[entry[0]] = entry[1];
           return next;
@@ -719,8 +727,8 @@ function SetsTab({
     return () => {
       cancelled = true;
     };
-    // conversations intentionally omitted: the missing-set computation already
-    // reads it, and including it would re-run the effect on every fill.
+    // referencedTurns intentionally omitted: the missing-set computation
+    // already reads it, and including it would re-run the effect on every fill.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted]);
 
@@ -730,9 +738,9 @@ function SetsTab({
       return c ? shorten(c.input.prompt) : (item.case_id ?? "case");
     }
     const source = item.source!;
-    const turn = conversations[refKey(source)]?.turns?.find((t) => t.id === source.turn_id);
+    const turn = referencedTurns[refKey(source)]?.[source.turn_id];
     if (turn) return shorten(turn.content);
-    const previewable = wanted.includes(refKey(source));
+    const previewable = wanted.some(([key]) => key === refKey(source));
     return `${source.conversation_id} · ${source.turn_id}${previewable ? "" : " — not previewed"}`;
   }
 
