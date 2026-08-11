@@ -30,10 +30,10 @@ import { InspectorPage } from "./InspectorPage";
 import type {
   EvalCase,
   EvalCaseSource,
-  EvalSet,
-  EvalSetItem,
-  EvalSetItemCreate,
-  EvalSetReplayAccepted,
+  EvalBenchmark,
+  EvalBenchmarkItem,
+  EvalBenchmarkItemCreate,
+  EvalBenchmarkReplayAccepted,
   Judgment,
   Rubric,
   Turn,
@@ -44,18 +44,18 @@ import type {
 // turns or forks, or bulk-import a spreadsheet of input/expected pairs"
 // (cupel-phases.md:80). The workbench "manage[s] the eval domain directly:
 // case editor (input / output / reference fields; 'reference from turn'
-// picker), set manager (create/name/version sets, drag cases in), rubric
-// editor (prompt text, save = new version…)" (feature-spec.md:63).
+// picker), benchmark manager (create/name/version benchmarks, drag cases in),
+// rubric editor (prompt text, save = new version…)" (feature-spec.md:63).
 //
-// Two honesty notes, both forced by the contract as it stands (v0.3.0) and
+// Two honesty notes, both forced by the contract as it stands and
 // deliberately NOT worked around here:
 //
 // 1. There is no list-all-cases endpoint — /eval/cases has POST only
-//    (openapi.yaml:1340-1369) and cases are read one id at a time
-//    (:1431-1454). So the case list is SET-scoped, exactly as the annotated
-//    sketch tags it ("Set: refund-fails v3 / GET /eval/sets"), plus a
-//    "just created here" bucket for cases this session made that are not in a
-//    set yet. The screen says so rather than pretending to show everything.
+//    and cases are read one id at a time. So the case list is
+//    BENCHMARK-scoped, exactly as the annotated sketch tags it ("Benchmark:
+//    refund-fails v3 / GET /eval/benchmarks"), plus a "just created here"
+//    bucket for cases this session made that are not in a benchmark yet. The
+//    screen says so rather than pretending to show everything.
 // 2. GET /eval/cases/{id} "Returns the LATEST version" (openapi.yaml:1441-1442)
 //    and no endpoint returns earlier ones. The editor therefore shows the
 //    CURRENT version number and states that prior versions are not retrievable
@@ -79,7 +79,7 @@ function shorten(text: string, max = 64) {
 export function StudioPage() {
   const { tree, me, models, ensureModels } = useApp();
   const [searchParams] = useSearchParams();
-  // Cases/Sets/Rubrics share the "eval" family; Results is "evaluations";
+  // Cases/Benchmarks/Rubrics share the "eval" family; Results is "evaluations";
   // Inspector is role-gated AND the "admin" family (App.tsx's /inspector
   // gate, mirrored here since it is a tab now, not its own route).
   const casesHidden = familyAnswer("eval") === "hide";
@@ -99,13 +99,13 @@ export function StudioPage() {
     if (!resultsHidden) return "results";
     return inspectorAllowed ? "inspector" : null;
   });
-  const [sets, setSets] = useState<EvalSet[] | null>(null);
+  const [benchmarks, setBenchmarks] = useState<EvalBenchmark[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
-  // GET /eval/sets and GET /eval/rubrics are paged, so both lists here are
-  // prefixes. Holding the server's total is what lets each tab offer the rest
-  // instead of ending silently at the page boundary; both are 0 until the
-  // first fetch lands.
-  const [setsPage, setSetsPage] = useState({ page: 1, total: 0 });
+  // GET /eval/benchmarks and GET /eval/rubrics are paged, so both lists here
+  // are prefixes. Holding the server's total is what lets each tab offer the
+  // rest instead of ending silently at the page boundary; both are 0 until
+  // the first fetch lands.
+  const [benchmarksPage, setBenchmarksPage] = useState({ page: 1, total: 0 });
   const [rubricsPage, setRubricsPage] = useState({ page: 1, total: 0 });
   // The thrown VALUE, not its message: an ApiError carries the rejected
   // fields and the correlation id, and flattening it to a string here threw
@@ -122,7 +122,7 @@ export function StudioPage() {
 
   // Case editor buffer — also the "new case" form when draftId is null.
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ prompt: "", output: "", reference: "" });
+  const [draft, setDraft] = useState({ prompt: "", output: "", reference: "", agenttree: "" });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [judgments, setJudgments] = useState<Judgment[] | null>(null);
@@ -138,18 +138,18 @@ export function StudioPage() {
     ensureModels();
   }, [ensureModels]);
 
-  const loadSets = useCallback(async () => {
-    const page = await api.evalSets();
-    setSets(page.items);
-    setSetsPage({ page: page.page, total: page.total });
+  const loadBenchmarks = useCallback(async () => {
+    const page = await api.evalBenchmarks();
+    setBenchmarks(page.items);
+    setBenchmarksPage({ page: page.page, total: page.total });
     return page.items;
   }, []);
 
-  const loadMoreSets = useCallback(async () => {
-    const page = await api.evalSets({ page: setsPage.page + 1 });
-    setSets((prev) => [...(prev ?? []), ...page.items]);
-    setSetsPage({ page: page.page, total: page.total });
-  }, [setsPage.page]);
+  const loadMoreBenchmarks = useCallback(async () => {
+    const page = await api.evalBenchmarks({ page: benchmarksPage.page + 1 });
+    setBenchmarks((prev) => [...(prev ?? []), ...page.items]);
+    setBenchmarksPage({ page: page.page, total: page.total });
+  }, [benchmarksPage.page]);
 
   const loadMoreRubrics = useCallback(async () => {
     const page = await api.rubrics({ page: rubricsPage.page + 1 });
@@ -158,16 +158,16 @@ export function StudioPage() {
   }, [rubricsPage.page]);
 
   const handleImported = useCallback(() => {
-    loadSets().catch(() => undefined);
-  }, [loadSets]);
+    loadBenchmarks().catch(() => undefined);
+  }, [loadBenchmarks]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.evalSets(), api.rubrics()])
-      .then(([setPage, rubricPage]) => {
+    Promise.all([api.evalBenchmarks(), api.rubrics()])
+      .then(([benchmarkPage, rubricPage]) => {
         if (cancelled) return;
-        setSets(setPage.items);
-        setSetsPage({ page: setPage.page, total: setPage.total });
+        setBenchmarks(benchmarkPage.items);
+        setBenchmarksPage({ page: benchmarkPage.page, total: benchmarkPage.total });
         setRubrics(rubricPage.items);
         setRubricsPage({ page: rubricPage.page, total: rubricPage.total });
         setRubricId((id) => id ?? rubricPage.items[0]?.id ?? null);
@@ -183,18 +183,18 @@ export function StudioPage() {
   // Membership of the chosen bucket → one GET /eval/cases/{id} per member.
   const bucketCaseIds = useMemo(() => {
     if (bucket === SESSION_BUCKET) return sessionCaseIds;
-    // A bucket is a set's FROZEN members: a reference item has no case to
-    // read yet, so it appears here only once frozen.
-    return (sets?.find((s) => s.id === bucket)?.items ?? [])
+    // A bucket is a benchmark's FROZEN members: a reference item has no case
+    // to read yet, so it appears here only once frozen.
+    return (benchmarks?.find((b) => b.id === bucket)?.items ?? [])
       .filter((i) => i.kind === "frozen" && i.case_id)
       .map((i) => i.case_id as string);
-  }, [bucket, sessionCaseIds, sets]);
+  }, [bucket, sessionCaseIds, benchmarks]);
 
   useEffect(() => {
     const missing = bucketCaseIds.filter((id) => !cases[id]);
     if (missing.length === 0) return;
     let cancelled = false;
-    // KEPT: an incremental cache FILL, same shape as the Sets tab's — one GET
+    // KEPT: an incremental cache FILL, same shape as the Benchmarks tab's — one GET
     // per case id the cache is missing, merged in. A failed case is caught to
     // null and never lands, so "is anything still missing" is not an equivalent
     // derivation of the flag; it would never clear.
@@ -226,6 +226,7 @@ export function StudioPage() {
       prompt: c.input.prompt,
       output: c.output,
       reference: c.reference ?? "",
+      agenttree: c.agenttree,
     });
     setNotice(null);
     setJudgments(null);
@@ -238,7 +239,9 @@ export function StudioPage() {
   function newCase() {
     setSelectedCaseId(null);
     setDraftId(null);
-    setDraft({ prompt: "", output: "", reference: "" });
+    // Prefilled with the active tree — free text, so it stays editable for a
+    // case meant to evaluate a different tree/endpoint than the one open now.
+    setDraft({ prompt: "", output: "", reference: "", agenttree: tree });
     setNotice(null);
     setJudgments(null);
   }
@@ -254,8 +257,8 @@ export function StudioPage() {
     try {
       const reference = draft.reference.trim() ? draft.reference : null;
       if (draftId) {
-        // "each save appends the next version, never overwrites"
-        // (openapi.yaml:1459-1462).
+        // "each save appends the next version, never overwrites". agenttree
+        // is not sent here — it carries over unchanged, same as source.
         const saved = await api.createEvalCaseVersion(draftId, {
           input: { prompt: draft.prompt },
           output: draft.output,
@@ -266,6 +269,7 @@ export function StudioPage() {
         setNotice(`Saved as version ${saved.version ?? 1}.`);
       } else {
         const created = await api.createEvalCase({
+          agenttree: draft.agenttree.trim(),
           input: { prompt: draft.prompt },
           output: draft.output,
           reference,
@@ -303,9 +307,9 @@ export function StudioPage() {
   }));
   const bucketOptions = [
     { value: SESSION_BUCKET, label: `Created here (${sessionCaseIds.length})` },
-    ...(sets ?? []).map((s) => ({
-      value: s.id,
-      label: `${s.name} v${s.version} · ${s.items.length}`,
+    ...(benchmarks ?? []).map((b) => ({
+      value: b.id,
+      label: `${b.name} v${b.version} · ${b.items.length}`,
     })),
   ];
 
@@ -314,7 +318,7 @@ export function StudioPage() {
       <Group justify="space-between">
         <Title order={4}>Studio</Title>
         <Text size="xs" c="dimmed">
-          Cases, sets and rubrics are global — they are not scoped to a single {product.tree.one}.
+          Cases, benchmarks and rubrics are global — they are not scoped to a single {product.tree.one}.
         </Text>
       </Group>
       {error != null && (
@@ -329,7 +333,7 @@ export function StudioPage() {
           {!casesHidden && (
             <>
               <Tabs.Tab value="cases">Cases</Tabs.Tab>
-              <Tabs.Tab value="sets">Sets</Tabs.Tab>
+              <Tabs.Tab value="benchmarks">Benchmarks</Tabs.Tab>
               <Tabs.Tab value="rubrics">Rubrics</Tabs.Tab>
             </>
           )}
@@ -368,7 +372,7 @@ export function StudioPage() {
                   <Text size="xs" c="dimmed" data-testid="cases-empty">
                     {bucket === SESSION_BUCKET
                       ? "Nothing created here yet. Write a case by hand, pull one from a real conversation turn, or import a spreadsheet of input/expected pairs."
-                      : "This set has no cases yet — add some from the Sets tab."}
+                      : "This benchmark has no cases yet — add some from the Benchmarks tab."}
                   </Text>
                 )}
                 <ScrollArea.Autosize mah={420}>
@@ -434,6 +438,22 @@ export function StudioPage() {
                     </Text>
                   )}
                 </Group>
+                <TextInput
+                  size="xs"
+                  label="Target tree"
+                  description={
+                    draftId
+                      ? "Fixed at creation — not part of a version save."
+                      : `Which ${product.tree.one}/endpoint this case evaluates. Free text — not validated against known ${product.tree.many}.`
+                  }
+                  placeholder="e.g. agent1"
+                  disabled={draftId != null}
+                  value={draft.agenttree}
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setDraft((d) => ({ ...d, agenttree: value }));
+                  }}
+                />
                 <Textarea
                   size="xs"
                   label="Input (prompt)"
@@ -486,7 +506,11 @@ export function StudioPage() {
                     size="xs"
                     onClick={saveCase}
                     loading={saving}
-                    disabled={!draft.prompt.trim() || !draft.output.trim()}
+                    disabled={
+                      !draft.prompt.trim() ||
+                      !draft.output.trim() ||
+                      (!draftId && !draft.agenttree.trim())
+                    }
                   >
                     {draftId ? "Save as new version" : "Create case"}
                   </Button>
@@ -556,25 +580,25 @@ export function StudioPage() {
           </Group>
         </Tabs.Panel>
 
-        {/* -------------------------------------------------------- sets */}
-        <Tabs.Panel value="sets" pt="sm">
-          <SetsTab
-            sets={sets}
-            total={setsPage.total}
-            onLoadMore={loadMoreSets}
+        {/* --------------------------------------------------- benchmarks */}
+        <Tabs.Panel value="benchmarks" pt="sm">
+          <BenchmarksTab
+            benchmarks={benchmarks}
+            total={benchmarksPage.total}
+            onLoadMore={loadMoreBenchmarks}
             cases={cases}
             activeTree={tree}
             knownCaseIds={Array.from(
               new Set([
                 ...sessionCaseIds,
-                ...(sets ?? []).flatMap((s) =>
-                  s.items.filter((i) => i.case_id).map((i) => i.case_id as string),
+                ...(benchmarks ?? []).flatMap((b) =>
+                  b.items.filter((i) => i.case_id).map((i) => i.case_id as string),
                 ),
               ]),
             )}
             rubricOptions={rubricOptions}
             modelOptions={modelOptions}
-            onChanged={loadSets}
+            onChanged={loadBenchmarks}
             onError={setError}
           />
         </Tabs.Panel>
@@ -619,7 +643,7 @@ export function StudioPage() {
 
       <EvalImportModal
         opened={importOpen}
-        sets={sets ?? []}
+        benchmarks={benchmarks ?? []}
         onClose={() => setImportOpen(false)}
         onImported={handleImported}
       />
@@ -636,9 +660,11 @@ export function StudioPage() {
           }
           setTurnPicker(null);
           try {
-            // Sourced creation: the server derives input + output from the turn
-            // (openapi.yaml:3322-3326).
+            // Sourced creation: the server derives input + output from the
+            // turn. agenttree defaults to the same tree the turn was picked
+            // from — the active tree, already what source.tree carries.
             const created = await api.createEvalCase({
+              agenttree: tree,
               source: { tree, conversation_id: conversationId, turn_id: turn.id },
             });
             rememberCase(created);
@@ -654,40 +680,42 @@ export function StudioPage() {
   );
 }
 
-// ------------------------------------------------------------------- sets
-// THE MERGED SURFACE. Casebook and EvalSet are one noun, so the Casebooks page
-// is gone and its work happens here: a set holds turn REFERENCES (⊞ collect)
-// and FROZEN cases side by side, freezing replaces "turn this casebook into an
-// eval set", and replay/judge hang off the same selection. No new screen was
-// invented for the merge — the two panes are the set manager
-// (feature-spec.md:63) with the casebook's actions folded in.
+// -------------------------------------------------------------- benchmarks
+// THE MERGED SURFACE. Casebook and EvalBenchmark are one noun, so the
+// Casebooks page is gone and its work happens here: a benchmark holds turn
+// REFERENCES (⊞ collect) and FROZEN cases side by side, freezing replaces
+// "turn this casebook into an eval benchmark", and replay/judge hang off the
+// same selection. No new screen was invented for the merge — the two panes
+// are the benchmark manager (feature-spec.md:63) with the casebook's actions
+// folded in.
 //
 // VERSIONED MEMBERSHIP IS THE BEHAVIOUR CHANGE. Casebook editing used to
 // mutate freely; every membership change now appends a version. It is surfaced
-// three ways rather than hidden: the version badge next to the set name, the
-// line under it saying so, and the notice each mutation writes ("Membership
-// saved as version N"). Add/remove are STAGED into one Save so a session of
-// edits is one version rather than one per click; freeze and ⊞ collect apply
-// immediately, because each is a single deliberate act.
+// three ways rather than hidden: the version badge next to the benchmark
+// name, the line under it saying so, and the notice each mutation writes
+// ("Membership saved as version N"). Add/remove are STAGED into one Save so a
+// session of edits is one version rather than one per click; freeze and ⊞
+// collect apply immediately, because each is a single deliberate act.
 //
 // REFERENCE-NOT-COPY, and its cost (carried over from the deleted Casebooks
 // page): rendering a reference means following its source. Requests are DEDUPED
 // by (tree, conversation_id) and capped at CONVERSATION_FETCH_LIMIT
-// conversations per set — beyond that an item renders as a bare reference with
-// a visible "not previewed" note. Each request now asks listTurns for exactly
-// the referenced turn ids (?turn_ids=) instead of pulling whole conversations
-// to read one turn out of each: the referenced turn may be anywhere in a
-// transcript, so paging alone would have made this preview a lie. Cross-
-// conversation batching is still absent (review bucket C10).
+// conversations per benchmark — beyond that an item renders as a bare
+// reference with a visible "not previewed" note. Each request now asks
+// listTurns for exactly the referenced turn ids (?turn_ids=) instead of
+// pulling whole conversations to read one turn out of each: the referenced
+// turn may be anywhere in a transcript, so paging alone would have made this
+// preview a lie. Cross-conversation batching is still absent (review bucket
+// C10).
 const CONVERSATION_FETCH_LIMIT = 25;
 
 function refKey(source: EvalCaseSource) {
   return `${source.tree}/${source.conversation_id}`;
 }
 
-interface SetsTabProps {
-  sets: EvalSet[] | null;
-  /** Sets matching across all pages (EvalSetPage.total) — the list is a prefix. */
+interface BenchmarksTabProps {
+  benchmarks: EvalBenchmark[] | null;
+  /** Benchmarks matching across all pages (EvalBenchmarkPage.total) — the list is a prefix. */
   total: number;
   onLoadMore: () => Promise<void>;
   cases: Record<string, EvalCase>;
@@ -695,12 +723,12 @@ interface SetsTabProps {
   activeTree: string;
   rubricOptions: { value: string; label: string }[];
   modelOptions: { value: string; label: string }[];
-  onChanged: () => Promise<EvalSet[]>;
+  onChanged: () => Promise<EvalBenchmark[]>;
   onError: (message: string) => void;
 }
 
-function SetsTab({
-  sets,
+function BenchmarksTab({
+  benchmarks,
   total,
   onLoadMore,
   cases,
@@ -710,24 +738,25 @@ function SetsTab({
   modelOptions,
   onChanged,
   onError,
-}: SetsTabProps) {
+}: BenchmarksTabProps) {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [membership, setMembership] = useState<EvalSetItemCreate[]>([]);
+  const [membership, setMembership] = useState<EvalBenchmarkItemCreate[]>([]);
   const [busy, setBusy] = useState(false);
   const [pickedRubricId, setRubricId] = useState<string | null>(null);
   const [judgeModel, setJudgeModel] = useState<string | null>(null);
   const [replayModel, setReplayModel] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [replay, setReplay] = useState<EvalSetReplayAccepted | null>(null);
+  const [replay, setReplay] = useState<EvalBenchmarkReplayAccepted | null>(null);
 
-  const selected = sets?.find((s) => s.id === selectedId) ?? null;
+  const selected = benchmarks?.find((b) => b.id === selectedId) ?? null;
 
   // Default to the first rubric once they load, same as the case editor —
-  // "Judge set" is one click from a picked set, not three. Derived, not stored:
-  // an unpicked rubric simply reads as the first option, so the default appears
-  // the moment the options do rather than one effect-render later.
+  // "Judge benchmark" is one click from a picked benchmark, not three.
+  // Derived, not stored: an unpicked rubric simply reads as the first
+  // option, so the default appears the moment the options do rather than one
+  // effect-render later.
   const rubricId = pickedRubricId ?? rubricOptions[0]?.value ?? null;
 
   // Bounded reference following (see the header). Deduped per conversation,
@@ -789,7 +818,7 @@ function SetsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted]);
 
-  function itemLabel(item: EvalSetItem): string {
+  function itemLabel(item: EvalBenchmarkItem): string {
     if (item.kind === "frozen") {
       const c = item.case_id ? cases[item.case_id] : undefined;
       return c ? shorten(c.input.prompt) : (item.case_id ?? "case");
@@ -801,14 +830,14 @@ function SetsTab({
     return `${source.conversation_id} · ${source.turn_id}${previewable ? "" : " — not previewed"}`;
   }
 
-  function select(s: EvalSet) {
-    setSelectedId(s.id);
-    setMembership(s.items.map(toInput));
+  function select(b: EvalBenchmark) {
+    setSelectedId(b.id);
+    setMembership(b.items.map(toInput));
     setNotice(null);
     setReplay(null);
   }
 
-  function applied(saved: EvalSet, message: string) {
+  function applied(saved: EvalBenchmark, message: string) {
     setSelectedId(saved.id);
     setMembership(saved.items.map(toInput));
     setNotice(message);
@@ -817,7 +846,7 @@ function SetsTab({
   async function create() {
     setCreating(true);
     try {
-      await api.createEvalSet({ name });
+      await api.createEvalBenchmark({ name });
       setName("");
       await onChanged();
     } catch (e) {
@@ -832,8 +861,8 @@ function SetsTab({
     setBusy(true);
     try {
       // "The full membership for the NEW version" — items absent from this
-      // list leave the set.
-      const saved = await api.createEvalSetVersion(selected.id, { items: membership });
+      // list leave the benchmark.
+      const saved = await api.createEvalBenchmarkVersion(selected.id, { items: membership });
       await onChanged();
       applied(saved, `Membership saved as version ${saved.version}.`);
     } catch (e) {
@@ -847,9 +876,9 @@ function SetsTab({
     if (!selected) return;
     setBusy(true);
     try {
-      // What "turn a casebook into an eval set" became: the references become
-      // cases in place, keeping their id and their provenance.
-      const saved = await api.freezeEvalSetItems(selected.id);
+      // What "turn a casebook into an eval benchmark" became: the references
+      // become cases in place, keeping their id and their provenance.
+      const saved = await api.freezeEvalBenchmarkItems(selected.id);
       await onChanged();
       applied(saved, `Froze the live references into cases — now version ${saved.version}.`);
     } catch (e) {
@@ -863,7 +892,7 @@ function SetsTab({
     if (!selected) return;
     setBusy(true);
     try {
-      await api.deleteEvalSet(selected.id);
+      await api.deleteEvalBenchmark(selected.id);
       setSelectedId(null);
       setMembership([]);
       await onChanged();
@@ -880,7 +909,7 @@ function SetsTab({
     setReplay(null);
     try {
       setReplay(
-        await api.replayEvalSet(selected.id, {
+        await api.replayEvalBenchmark(selected.id, {
           configs: [replayModel ? { model: replayModel } : {}],
         }),
       );
@@ -891,15 +920,16 @@ function SetsTab({
     }
   }
 
-  async function judgeSet() {
+  async function judgeBenchmark() {
     if (!selected || !rubricId || !judgeModel) return;
     try {
-      // "set_id … judges the set's latest membership version unless
-      // set_version pins one" — the workbench pins the version it is showing,
-      // so the judgment is attributable to exactly that membership.
+      // "benchmark_id … judges the benchmark's latest membership version
+      // unless benchmark_version pins one" — the workbench pins the version
+      // it is showing, so the judgment is attributable to exactly that
+      // membership.
       const ref = await api.judge({
-        set_id: selected.id,
-        set_version: selected.version,
+        benchmark_id: selected.id,
+        benchmark_version: selected.version,
         rubric_id: rubricId,
         judge_model: judgeModel,
       });
@@ -925,51 +955,51 @@ function SetsTab({
         <Stack gap={6}>
           <TextInput
             size="xs"
-            label="New set"
+            label="New benchmark"
             placeholder="refund-fails"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
           <Button size="compact-xs" onClick={create} loading={creating} disabled={!name.trim()}>
-            Create set
+            Create benchmark
           </Button>
           <Divider my={2} />
-          {sets === null && <Loader size="xs" />}
-          {sets?.length === 0 && (
-            <Text size="xs" c="dimmed" data-testid="sets-empty">
-              No eval sets yet. A set is a named, versioned collection of noteworthy turns
-              and frozen cases — judge it, replay it, reuse it across models.
+          {benchmarks === null && <Loader size="xs" />}
+          {benchmarks?.length === 0 && (
+            <Text size="xs" c="dimmed" data-testid="benchmarks-empty">
+              No eval benchmarks yet. A benchmark is a named, versioned collection of
+              noteworthy turns and frozen cases — judge it, replay it, reuse it across models.
             </Text>
           )}
           <Stack gap={2}>
-            {(sets ?? []).map((s) => (
+            {(benchmarks ?? []).map((b) => (
               <UnstyledButton
-                key={s.id}
-                onClick={() => select(s)}
-                data-testid={`set-row-${s.id}`}
+                key={b.id}
+                onClick={() => select(b)}
+                data-testid={`benchmark-row-${b.id}`}
                 style={{ width: "100%" }}
               >
                 <Group gap={6} px={4} py={3} wrap="nowrap">
                   <Text size="xs" truncate style={{ flex: 1 }}>
-                    {s.name}
+                    {b.name}
                   </Text>
                   <Badge size="xs" variant="light">
-                    v{s.version}
+                    v{b.version}
                   </Badge>
                   <Text size="xs" c="dimmed">
-                    {s.items.length}
+                    {b.items.length}
                   </Text>
                 </Group>
               </UnstyledButton>
             ))}
-            {sets != null && total > sets.length && (
+            {benchmarks != null && total > benchmarks.length && (
               <Button
                 variant="subtle"
                 size="compact-xs"
-                data-testid="sets-load-more"
+                data-testid="benchmarks-load-more"
                 onClick={() => void onLoadMore()}
               >
-                Load more ({sets.length} of {total})
+                Load more ({benchmarks.length} of {total})
               </Button>
             )}
           </Stack>
@@ -979,7 +1009,7 @@ function SetsTab({
       <Paper withBorder p="xs" style={{ flex: 1 }}>
         {!selected ? (
           <Text size="xs" c="dimmed">
-            Pick a set to manage its membership, or create one on the left.
+            Pick a benchmark to manage its membership, or create one on the left.
           </Text>
         ) : (
           <Stack gap={6}>
@@ -994,7 +1024,7 @@ function SetsTab({
                 {loadingRefs && <Loader size={12} />}
               </Group>
               <Button size="compact-xs" variant="subtle" color="red" onClick={remove}>
-                Delete set
+                Delete benchmark
               </Button>
             </Group>
             <Text size="xs" c="dimmed">
@@ -1009,7 +1039,7 @@ function SetsTab({
               Members
             </Text>
             {selected.items.length === 0 && (
-              <Text size="xs" c="dimmed" data-testid="set-items-empty">
+              <Text size="xs" c="dimmed" data-testid="benchmark-items-empty">
                 Nothing collected yet. Press <strong>a</strong> on a turn in the Inspector —
                 or use ⊞ anywhere a turn is shown — to reference one here, or add a case
                 below.
@@ -1021,7 +1051,7 @@ function SetsTab({
                   const key = itemKey(item);
                   const inSet = memberKeys.includes(key);
                   return (
-                    <Group key={item.id} gap={6} wrap="nowrap" data-testid="set-item">
+                    <Group key={item.id} gap={6} wrap="nowrap" data-testid="benchmark-item">
                       <Button
                         size="compact-xs"
                         variant={inSet ? "light" : "subtle"}
@@ -1062,7 +1092,7 @@ function SetsTab({
             </ScrollArea.Autosize>
             {references.length > 0 &&
               new Set(references.map((i) => refKey(i.source!))).size > CONVERSATION_FETCH_LIMIT && (
-                <Text size="xs" c="dimmed" data-testid="set-preview-cap">
+                <Text size="xs" c="dimmed" data-testid="benchmark-preview-cap">
                   Previewing the first {CONVERSATION_FETCH_LIMIT} conversations only — items
                   are references and this API has no batch turn fetch, so previewing every
                   one would mean one request per conversation.
@@ -1123,8 +1153,8 @@ function SetsTab({
               </Button>
             </Group>
             <Text size="xs" c="dimmed">
-              Freezing copies each referenced turn into an eval case so the set can be judged
-              and re-judged against fixed content; the item keeps its place and its
+              Freezing copies each referenced turn into an eval case so the benchmark can be
+              judged and re-judged against fixed content; the item keeps its place and its
               provenance.
             </Text>
 
@@ -1148,10 +1178,10 @@ function SetsTab({
               />
               <Button
                 size="xs"
-                onClick={judgeSet}
+                onClick={judgeBenchmark}
                 disabled={!rubricId || !judgeModel || selected.items.length === 0}
               >
-                Judge set
+                Judge benchmark
               </Button>
             </Group>
 
@@ -1179,7 +1209,7 @@ function SetsTab({
               </Text>
             </Group>
             {replay && (
-              <Alert color="blue" data-testid="set-replay-accepted">
+              <Alert color="blue" data-testid="benchmark-replay-accepted">
                 <Stack gap={2}>
                   <Text size="xs">
                     Enqueued {replay.evaluations.length} evaluation
@@ -1203,7 +1233,7 @@ function SetsTab({
               </Alert>
             )}
             {notice && (
-              <Text size="xs" c="dimmed" data-testid="set-notice">
+              <Text size="xs" c="dimmed" data-testid="benchmark-notice">
                 {notice}
               </Text>
             )}
@@ -1216,19 +1246,19 @@ function SetsTab({
 
 // An item and a membership input are the same thing seen from two sides; both
 // reduce to the REFERENT the server keys item identity on.
-function toInput(item: EvalSetItem): EvalSetItemCreate {
+function toInput(item: EvalBenchmarkItem): EvalBenchmarkItemCreate {
   return item.kind === "frozen"
     ? { case_id: item.case_id!, note: item.note }
     : { source: item.source!, note: item.note };
 }
 
-function itemKey(item: EvalSetItem): string {
+function itemKey(item: EvalBenchmarkItem): string {
   return item.kind === "frozen"
     ? `case:${item.case_id}`
     : `turn:${item.source!.tree}/${item.source!.conversation_id}/${item.source!.turn_id}`;
 }
 
-function inputKey(input: EvalSetItemCreate): string {
+function inputKey(input: EvalBenchmarkItemCreate): string {
   return "case_id" in input
     ? `case:${input.case_id}`
     : `turn:${input.source.tree}/${input.source.conversation_id}/${input.source.turn_id}`;

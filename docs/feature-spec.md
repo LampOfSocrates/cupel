@@ -51,16 +51,17 @@ One engine: *take stored conversations **or individual turns**, re-execute them 
 ### Evaluation domain (first-class, judge optional)
 Evaluation is its own domain, not a bolt-on to runs:
 
-- **EvalCase** = `{input, output, reference?}`
+- **EvalCase** = `{input, output, reference?, agenttree}`
   - `input`: prompt + context (frozen)
   - `output`: candidate response (from a run, a fork, or pasted)
   - `reference`: expected answer — **handcrafted** in an editor, or **sourced from conversation history** (pick a turn → its response becomes the reference). Nullable (reference-free rubrics allowed).
-- **EvalSet**: named collection of cases (versioned, reusable across runs/models).
+  - `agenttree`: free-form label naming the agent tree/endpoint this case evaluates. Required on every case — a sourced case defaults it from the turn's tree, a handcrafted case has the author pick it (not validated against known trees, since a case may target an endpoint this backend does not itself run).
+- **EvalBenchmark**: named collection of cases (versioned, reusable across runs/models).
 - **Judgment** (persisted forever, never overwritten): `{subject: {kind, id}, scorer: {kind, ref, version, model}, evaluation_id?, score, reasoning, created_at}`. Re-judging appends a new judgment; history per case is queryable, so scores are comparable across time/judges/rubrics.
 - Judge off: pure replay, manual eyeball + thumbs (thumbs also persist as lightweight judgments, `scorer: human`).
 - **"Judge this evaluation"** on any finished run: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
 - Results grid: score column reads latest judgment per (case, rubric); history popover shows prior judgments.
-- **Eval workbench** (its own entry under **Evaluate** in the sidebar): manage the eval domain directly — case editor (input / output / reference fields; "reference from turn" picker), set manager (create/name/version sets, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference → creates/extends a set in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
+- **Eval workbench** (its own entry under **Evaluate** in the sidebar): manage the eval domain directly — case editor (input / output / reference / target-tree fields; "reference from turn" picker), benchmark manager (create/name/version benchmarks, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference, plus one target tree for the whole batch → creates/extends a benchmark in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
 - **Seeing results**: scores stream into the grid live as judging tasks finish (SSE), color-banded badges; summary header (mean + distribution) updates live. Tap a badge → **judgment drawer**: score, judge reasoning, rubric+version, judge model, input/output/reference side by side, and append-only history below. Conversation drill-in shows per-turn score chips with inline reasoning. Grid sortable/filterable by score (triage worst-first → re-run from the cell). Finished judging task in queue panel links "View results" to the sorted grid.
 
 ### Turn-level re-fire → forked conversations
@@ -93,7 +94,7 @@ The shortest path from intent to shipped agent: **describe → AI drafts → tes
 
 - **"New agent" from anywhere** (sidebar +, tree view): plain-language prompt ("a refunds agent that escalates over £250") → AI backend drafts the instructions, suggests placement in the tree and tools to attach → lands in the editor as a v1 draft. One screen, no blank page.
 - **AI assist inside the editor**: a copilot panel wired to the configured LLM. Actions: draft, refine ("stricter on disputes"), critique against best practices, and **generate eval cases + a rubric from the instructions themselves** — so a new agent is born with its test set. Suggestions arrive as diff hunks (accept/reject per hunk), reusing the editor's diff view; accepted hunks are just edits to the draft (normal snapshot/version rules apply).
-- **Test**: Test as evaluation as specced; if the agent has no conversation history yet, the generator synthesizes seed conversations for it (drip scoped to one agent), and the AI-generated eval set gives the judge something to score. New agents are testable at minute one.
+- **Test**: Test as evaluation as specced; if the agent has no conversation history yet, the generator synthesizes seed conversations for it (drip scoped to one agent), and the AI-generated eval benchmark gives the judge something to score. New agents are testable at minute one.
 - **Check into repo (agents-as-code)**: instructions live as files (`agents/{tree}/{agent}/instructions.md` + `meta.yaml`). Settings → Repo connects GitHub (App or token: repo, path, base branch). Editor gains **"Open PR"**: pushes the version as a branch + PR with the instruction diff as the PR diff; PR link shown on the version. **Merge = promote**: webhook receives the merge and marks that version live in the app; editing in the app and editing in the repo converge on the same files. Config chooses source of truth: `repo` (app is a UI over git) or `app` (git is export + review trail).
 - API: `POST /assist` (`{action: draft|refine|critique|gen_evals, agent?, prompt}` → queued task, streams), `POST /agenttrees/{tree}/agents/{id}/pr` (`{version}` → PR url), `GET/PUT /settings/repo`, `POST /webhooks/git` (merge events).
 - E2E: 13. Authoring: new agent from prompt → draft appears → accept a refine hunk → gen evals → Test as evaluation → Open PR (against mock git) → merge webhook promotes.
@@ -124,9 +125,9 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 - **Evaluation domain** (global; cases reference tree-scoped sources):
   - Import: `POST /eval/cases/import` (CSV/XLSX/pasted table, column mapping, per-row error report)
   - Cases: `POST /eval/cases` (handcrafted or `source: {tree, conversation_id, turn_id}`), `GET /eval/cases/{id}`, `POST /eval/cases/{id}/versions` (new version)
-  - Sets: `POST/GET /eval/sets`, `POST /eval/sets/{id}/versions` (versioned membership)
+  - Benchmarks: `POST/GET /eval/benchmarks`, `POST /eval/benchmarks/{id}/versions` (versioned membership)
   - Rubrics: `GET/POST /eval/rubrics`, `POST /eval/rubrics/{id}/versions` (save = new version)
-  - Judging: `POST /eval/judge` (`{set_id | case_ids | evaluation_id, judge_model, rubric_id}` → enqueued), judgments append-only
+  - Judging: `POST /eval/judge` (`{benchmark_id | case_ids | evaluation_id, judge_model, rubric_id}` → enqueued), judgments append-only
   - Scores: `GET /eval/judgments?subject_id=&evaluation_id=&scorer_ref=` (history), `GET /eval/evaluations/{evaluation_id}/summary` (aggregates)
 - Queue: `GET /tasks`, `GET /tasks/{id}` (incl. children), **`GET /tasks/stream`** (SSE: status + progress), `DELETE /tasks/{id}` (cancel, cascades), `POST /tasks/{id}/retry-failed`
 
@@ -227,7 +228,7 @@ The app should never look empty — a generator produces realistic synthetic dat
 | Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
 | Evaluations · 3 Results grid | `GET /agenttrees/{tree}/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
 | Judgment drawer | `GET /eval/judgments?subject_kind=case&subject_id=`, `GET /eval/cases/{id}` |
-| Eval workbench | `POST /eval/cases/import`, `POST /eval/cases` (+ `…/{id}/versions`), `POST/GET /eval/sets` (+ `…/{id}/versions`), `GET/POST /eval/rubrics` (+ `…/{id}/versions`), `POST /eval/judge` |
+| Eval workbench | `POST /eval/cases/import`, `POST /eval/cases` (+ `…/{id}/versions`), `POST/GET /eval/benchmarks` (+ `…/{id}/versions`), `GET/POST /eval/rubrics` (+ `…/{id}/versions`), `POST /eval/judge` |
 | Agent tree view | `GET /agenttrees/{tree}/agents` |
 | Instruction editor | `GET /agenttrees/{tree}/agents/{id}/instructions`, `POST …/instructions/versions`, `POST …/snapshots`, `GET/PUT …/last-selection` |
 | Editor · AI copilot | `POST /assist` (streams via task SSE) |
@@ -283,8 +284,8 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 11a. **Context envelope**: "Capture the envelope on every generated turn (mock+generator produce varied ones), show it in trace header/Inspector, replay frozen-by-default. Phase 2 adds: context policy control in Run Config with grid labels + mixed-policy warning, fallback envelope setting with env:fallback cell marks, tools playback from trace spans with per-call live/mock fallback logged. Quote the capture-at-generation rule first — envelopes are never reconstructed."
 11. **Evaluations page**: "Wire the 3-step Evaluations flow with shared components; `POST /replay` for conversations, `POST /replay/turn` for single turns; results in ComparisonView with thumbs."
 12a. **Inspector & Casebooks**: "Build the Inspector (virtualized cross-user table + filters as URL params, transcript reader, keyboard nav j/k/a) gated on the inspect role with audit logging, Casebooks as turn-reference collections with ⊞ everywhere, and the three casebook actions (to-eval-set, replay, examples block in editor). Quote the reference-not-copy rule and the keyboard map first."
-12. **Eval workbench**: "Build the eval workbench tab (sketch 10): case editor (handcrafted input/output/reference + reference-from-turn picker), set manager (versioned membership), rubric editor (save = new version, test-against-one-case). 'Add as eval case' action on turns; CSV/XLSX/paste bulk import with column mapping and per-row errors via POST /eval/cases/import. Quote the EvalCase model first."
-12b. **Evaluation domain**: "Build the eval domain: EvalCase (input/output/reference — handcrafted editor or sourced from a conversation turn), versioned EvalSets and rubrics, append-only Judgments with full history. Wire 'Score this run' (auto-create cases from turns), score column = latest judgment, history popover. Quote the domain model and API from the spec first — judgments are never overwritten."
+12. **Eval workbench**: "Build the eval workbench tab (sketch 10): case editor (handcrafted input/output/reference/target-tree + reference-from-turn picker), benchmark manager (versioned membership), rubric editor (save = new version, test-against-one-case). 'Add as eval case' action on turns; CSV/XLSX/paste bulk import with column mapping and per-row errors via POST /eval/cases/import. Quote the EvalCase model first."
+12b. **Evaluation domain**: "Build the eval domain: EvalCase (input/output/reference/agenttree — handcrafted editor or sourced from a conversation turn), versioned EvalBenchmarks and rubrics, append-only Judgments with full history. Wire 'Score this run' (auto-create cases from turns), score column = latest judgment, history popover. Quote the domain model and API from the spec first — judgments are never overwritten."
 13. **Turn forks**: "Implement turn re-fire as forks: `POST /replay/turn` with `endpoints[]` creates one new conversation per endpoint (history copied to fork point, lineage metadata). Entry points: Select-step turn checkboxes, results-cell 're-run with…', and 🔀 on any Chat turn. 'Open in Chat' on every fork. Cite the fork semantics from the spec."
 14. **Fork comparison**: "Add the fork pivot to ComparisonView: compare forks of one turn across endpoints, column per endpoint, baseline = original turn."
 16. **Turn trace**: "Build the trace view: ⌁ icon per turn opens call tree + waterfall from `GET /turns/{id}/trace`; nodes/bars badged with time and tokens in→out; span drawer lazy-loads payloads via `GET /spans/{id}/payload`; error spans red; spans stream live during generation. Quote the span model from the spec first."

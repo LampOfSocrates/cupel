@@ -8,17 +8,19 @@ import { filmed } from "./helpers/hud";
 // P4-REPO). NOT APPLICABLE as written.
 //
 // Its free-tier equivalent — the authoring loop this build actually ships — is
-// the eval workbench plus Inspector → eval set → replay: notice something in
-// real traffic, collect it, and make it a regression suite. Since Casebook and
-// EvalSet merged there is one noun for that, so the middle hop is gone: no
-// casebook to convert, just a set whose items start as live turn references.
+// the eval workbench plus Inspector → eval benchmark → replay: notice
+// something in real traffic, collect it, and make it a regression suite.
+// Since Casebook and EvalBenchmark (named EvalSet before the later
+// benchmark-flavored rename) merged there is one noun for that, so the middle
+// hop is gone: no casebook to convert, just a benchmark whose items start as
+// live turn references.
 // Endpoint tags (feature-spec.md:231, 241-242, sketch 10):
 //   POST /eval/rubrics · POST /eval/rubrics/{id}/versions
 //   POST /eval/cases · POST /eval/cases/{id}/versions
-//   POST /eval/sets · POST /eval/sets/{id}/versions
+//   POST /eval/benchmarks · POST /eval/benchmarks/{id}/versions
 //   POST /eval/cases/import · POST /eval/judge
-//   GET /admin/conversations · POST /eval/sets/{id}/items
-//   POST /eval/sets/{id}/replay · POST /eval/sets/{id}/freeze
+//   GET /admin/conversations · POST /eval/benchmarks/{id}/items
+//   POST /eval/benchmarks/{id}/replay · POST /eval/benchmarks/{id}/freeze
 
 const CSV = [
   "prompt,answer,expected",
@@ -27,7 +29,7 @@ const CSV = [
   '"Do you price match?","We do.","Name the competitors covered."',
 ].join("\n");
 
-test("eval workbench: rubric → case → judge → spreadsheet import → set membership", async ({
+test("eval workbench: rubric → case → judge → spreadsheet import → benchmark membership", async ({
   page,
   api,
 }) => {
@@ -58,6 +60,7 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
   await step("cases: hand-craft one with a reference answer", async () => {
     await page.getByRole("tab", { name: "Cases" }).click();
     await page.getByRole("button", { name: "+ New case" }).click();
+    await page.getByLabel("Target tree").fill("agent1");
     await page.getByLabel("Input (prompt)").fill("Do you price match a competitor?");
     await page.getByLabel("Output (candidate response)").fill("We match most competitors.");
     await page.getByLabel("Reference (expected answer)").fill("Name the competitors covered.");
@@ -87,10 +90,11 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await api.expectCalled("GET /eval/judgments");
   });
 
-  await step("import a spreadsheet into a brand-new set", async () => {
+  await step("import a spreadsheet into a brand-new benchmark", async () => {
     await page.getByRole("button", { name: "⇪ Import" }).click();
     // Scoped to the modal: the case editor behind it has same-named fields.
     const modal = page.getByRole("dialog");
+    await modal.getByLabel("Target tree").fill("agent1");
     // Mantine's FileInput is a button over a hidden input — go through the
     // file chooser the way a user does.
     const chooser = page.waitForEvent("filechooser");
@@ -109,33 +113,35 @@ test("eval workbench: rubric → case → judge → spreadsheet import → set m
     await expect(modal.getByRole("combobox", { name: "Reference (expected)" })).toHaveValue(
       "expected",
     );
-    await modal.getByRole("radio", { name: "New set" }).check();
-    await modal.getByLabel("New set name").fill("Imported policy cases");
+    await modal.getByRole("radio", { name: "New benchmark" }).check();
+    await modal.getByLabel("New benchmark name").fill("Imported policy cases");
     await modal.getByRole("button", { name: "Import", exact: true }).click();
     await api.expectCalled("POST /eval/cases/import");
-    // Per-row report, inline for a small file (openapi.yaml:1385-1389).
+    // Per-row report, inline for a small file.
     await expect(modal.getByTestId("import-report")).toContainText("3");
     await modal.getByRole("button", { name: "Close" }).click();
   });
 
-  await step("sets: the imported set exists and membership versions append", async () => {
-    await page.getByRole("tab", { name: "Sets" }).click();
-    await api.expectCalled("GET /eval/sets");
-    const row = page.locator('[data-testid^="set-row-"]', { hasText: "Imported policy cases" });
+  await step("benchmarks: the imported benchmark exists and membership versions append", async () => {
+    await page.getByRole("tab", { name: "Benchmarks" }).click();
+    await api.expectCalled("GET /eval/benchmarks");
+    const row = page.locator('[data-testid^="benchmark-row-"]', {
+      hasText: "Imported policy cases",
+    });
     await expect(row).toBeVisible();
     await row.click();
     await page.locator('[data-testid^="toggle-"]').first().click();
     await page.getByRole("button", { name: "Save membership as new version" }).click();
-    await api.expectCalled("POST /eval/sets/{set}/versions");
-    await expect(page.getByTestId("set-notice")).toBeVisible();
+    await api.expectCalled("POST /eval/benchmarks/{benchmark}/versions");
+    await expect(page.getByTestId("benchmark-notice")).toBeVisible();
   });
 });
 
-test("inspector → eval set + replay suite", async ({ page, request, api }) => {
-  // Three steps, not four: "the casebook becomes an eval set" was a step about
-  // POST /casebooks/{id}/to-eval-set, and that endpoint no longer exists —
-  // materializing is now freezing items in place, inside the set they are
-  // already in.
+test("inspector → eval benchmark + replay suite", async ({ page, request, api }) => {
+  // Three steps, not four: "the casebook becomes an eval benchmark" was a step
+  // about POST /casebooks/{id}/to-eval-set, and that endpoint no longer
+  // exists — materializing is now freezing items in place, inside the
+  // benchmark they are already in.
   const step = filmed(page, "Journey 13", 3);
   // Real traffic to notice: a machine-origin conversation, exactly what the
   // generator drips in (mock/generator.py).
@@ -155,7 +161,7 @@ test("inspector → eval set + replay suite", async ({ page, request, api }) => 
     await expect(page.getByTestId("inspector-count")).toContainText("conversations");
   });
 
-  await step("read a conversation and collect a turn into a new eval set", async () => {
+  await step("read a conversation and collect a turn into a new eval benchmark", async () => {
     await page
       .getByTestId("inspector-row")
       .filter({ hasText: "Inspector journey" })
@@ -163,34 +169,36 @@ test("inspector → eval set + replay suite", async ({ page, request, api }) => 
       .click();
     await expect(page.getByTestId("inspector-reader")).toBeVisible();
     await page.getByTestId("reader-collect").click();
-    await page.getByLabel("New eval set name").fill("Journey set");
+    await page.getByLabel("New eval benchmark name").fill("Journey benchmark");
     await page.getByRole("button", { name: "Create + add" }).click();
-    await api.expectCalled("POST /eval/sets");
-    await api.expectCalled("POST /eval/sets/{set}/items");
+    await api.expectCalled("POST /eval/benchmarks");
+    await api.expectCalled("POST /eval/benchmarks/{benchmark}/items");
     // Versioned membership, surfaced: collecting appended a version.
     await expect(page.getByTestId("collect-done")).toContainText("v2");
   });
 
   await step(
-    "the set is a regression suite: replay its references, then freeze them",
+    "the benchmark is a regression suite: replay its references, then freeze them",
     async () => {
       await page.goto("/studio");
-      await page.getByRole("tab", { name: "Sets" }).click();
-      await api.expectCalled("GET /eval/sets");
-      await page.locator('[data-testid^="set-row-"]', { hasText: "Journey set" }).click();
-      await expect(page.getByTestId("set-item")).toHaveCount(1);
+      await page.getByRole("tab", { name: "Benchmarks" }).click();
+      await api.expectCalled("GET /eval/benchmarks");
+      await page
+        .locator('[data-testid^="benchmark-row-"]', { hasText: "Journey benchmark" })
+        .click();
+      await expect(page.getByTestId("benchmark-item")).toHaveCount(1);
 
       await page.getByRole("button", { name: "Replay", exact: true }).click();
-      await api.expectCalled("POST /eval/sets/{set}/replay");
-      const accepted = page.getByTestId("set-replay-accepted");
+      await api.expectCalled("POST /eval/benchmarks/{benchmark}/replay");
+      const accepted = page.getByTestId("benchmark-replay-accepted");
       await expect(accepted).toBeVisible();
 
-      // Freezing is what "turn a casebook into an eval set" became: the same
-      // item, flipped in place, appending a membership version.
+      // Freezing is what "turn a casebook into an eval benchmark" became: the
+      // same item, flipped in place, appending a membership version.
       await page.getByRole("button", { name: /Freeze 1 reference/ }).click();
-      await api.expectCalled("POST /eval/sets/{set}/freeze");
-      await expect(page.getByTestId("set-notice")).toContainText("version");
-      await expect(page.getByTestId("set-item")).toContainText("frozen case");
+      await api.expectCalled("POST /eval/benchmarks/{benchmark}/freeze");
+      await expect(page.getByTestId("benchmark-notice")).toContainText("version");
+      await expect(page.getByTestId("benchmark-item")).toContainText("frozen case");
 
       await accepted.getByRole("link").last().click();
       await page.waitForURL(/\/evaluations\/eval_/);

@@ -205,7 +205,7 @@ export function TurnBubble({
               size="sm"
               variant="subtle"
               color="gray"
-              aria-label="Collect into eval set"
+              aria-label="Collect into eval benchmark"
               onClick={onCollect}
             >
               <IconLayoutGrid size={16} stroke={1.5} />

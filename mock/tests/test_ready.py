@@ -121,14 +121,14 @@ def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
                         "/admin/users/{userId}/permissions",
                         "/admin/agenttrees/{treeId}",
                         "/eval/cases", "/eval/cases/import", "/eval/cases/{caseId}",
-                        "/eval/sets", "/eval/sets/{setId}",
-                        "/eval/sets/{setId}/items", "/eval/sets/{setId}/freeze",
-                        "/eval/sets/{setId}/replay", "/eval/rubrics/{rubricId}",
+                        "/eval/benchmarks", "/eval/benchmarks/{benchmarkId}",
+                        "/eval/benchmarks/{benchmarkId}/items", "/eval/benchmarks/{benchmarkId}/freeze",
+                        "/eval/benchmarks/{benchmarkId}/replay", "/eval/rubrics/{rubricId}",
                         "/admin/conversations"):
         assert implemented not in missing_paths
     # Shrink recorded so a regression is loud: 51 -> 61 -> 58 conformant.
-    # The DROP is the Casebook+EvalSet merge, not a regression: nine
-    # /casebooks operations plus three /eval/sets ones became nine on the one
+    # The DROP is the Casebook+EvalBenchmark merge, not a regression: nine
+    # /casebooks operations plus three /eval/benchmarks ones became nine on the one
     # merged noun, so the whole contract went 69 -> 66 operations checked.
     # >= not ==, keeping this test's tolerant design: later tasks only add.
     assert report["conformant"] >= 58

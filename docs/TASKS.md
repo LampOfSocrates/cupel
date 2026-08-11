@@ -268,6 +268,44 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     isolation: a listener in `parity.test.ts` that misattributes later requests, and one
     streaming test in `ChatPage.test.tsx`. File-order shuffle alone is already green.
 
+39. **DONE 2026-08-10 — contract v0.5.0: `EvalSet` renamed to `EvalBenchmark`, and
+    `EvalCase.agenttree` added.** User-directed, both explicitly overriding the Phase-2
+    FULL STOP and the post-launch contract-stability commitment (item 14) — logged here
+    rather than skipped, per this file's own process.
+    (a) **Full rename**, not just the schema name: `/eval/sets/*` → `/eval/benchmarks/*`,
+    every operationId/parameter/field (`setId`→`benchmarkId`, `set_id`→`benchmark_id`,
+    `set_name`→`benchmark_name`, `set_version`→`benchmark_version`), the physical tables
+    (`eval_sets`→`eval_benchmarks`, `eval_set_versions`→`eval_benchmark_versions`), and
+    every "set"/"Sets" UI string, test name, test id and prose mention across
+    `openapi.yaml`, `src/`, `mock/`, `tests/`, `e2e/` and the living docs (`feature-spec.md`,
+    `README.md`, `cupel-phases.md`, `features.md`) — the five DATED documents (item 37) were
+    left untouched, as their own rule requires. `mock/db.py` gained a second migration
+    (`_migrate_eval_sets_into_eval_benchmarks`, same drop-empty-newcomer pattern as the
+    Run→Evaluation rename) so an already-deployed db upgrades in place; proved against a
+    copy of the local dev db before trusting it.
+    (b) **`EvalCase.agenttree`** — free-form label naming the agent tree/endpoint a case
+    evaluates; required on every case (own top-level `required` in `EvalCaseCreate`,
+    sibling to `oneOf`, so it binds regardless of handcrafted/sourced mode — the
+    `oneOf.required` shape the contract test pins, `tests/openapi-contract.test.js:469`,
+    is unchanged). Sourced cases default it from `source.tree`; handcrafted ones get a
+    free-text "Target tree" field (not validated against `GET /agenttrees` — a case may
+    target an endpoint this backend does not itself run). Import gained a required
+    `agenttree` form field (one value per batch). Existing rows backfilled from
+    `source.tree` where sourced, `'(unmigrated)'` where not.
+    Bumped `0.4.0`→`0.5.0`: `openapi.yaml`, `mock/capabilities.py`,
+    `mock/permissions.py`, `tests/openapi-contract.test.js` — the operation/path/family
+    counts (67/52/14) are unchanged, only names and one required field moved.
+    744 vitest / 194 pytest, tsc clean. Two pre-existing failures found unrelated to this
+    item and left alone: `test_off_mode_me_is_dev_user_unchanged` and
+    `test_me_healthz_models_trees` only fail when `$CUPEL_LLM_KEY`/`$OPENROUTER_API_KEY`
+    is set in the shell (seeds an extra `financial_advisor` tree the assertions don't
+    expect) — an environment leak, not a code defect.
+    **Not done, flagged for a follow-up item**: whether `EvalSet`→`EvalBenchmark` was the
+    right call is still a live question — "Benchmark" fits the noun's actual behavior
+    (versioned, judged, replayable collection) better than it fit `EvalCase`, but nothing
+    forced doing both renames in one sitting; `EvalCase` itself was NOT renamed to anything
+    "benchmark"-flavored, only given the new field.
+
 ---
 
 Not on the list, deliberately: a hosted multi-tenant platform (parked indefinitely); sidebar

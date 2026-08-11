@@ -58,13 +58,13 @@ const PHASE2_PATHS = [
   "/agenttrees/{tree}/memory/compact",
   "/eval/cases",
   "/eval/cases/import",
-  "/eval/sets",
-  "/eval/sets/{setId}",
-  "/eval/sets/{setId}/items",
-  "/eval/sets/{setId}/freeze",
-  "/eval/sets/{setId}/replay",
+  "/eval/benchmarks",
+  "/eval/benchmarks/{benchmarkId}",
+  "/eval/benchmarks/{benchmarkId}/items",
+  "/eval/benchmarks/{benchmarkId}/freeze",
+  "/eval/benchmarks/{benchmarkId}/replay",
   "/eval/cases/{caseId}/versions",
-  "/eval/sets/{setId}/versions",
+  "/eval/benchmarks/{benchmarkId}/versions",
   "/eval/rubrics/{rubricId}/versions",
   "/settings",
   // The transcript, split off GET /conversations/{id} so opening a long
@@ -251,9 +251,9 @@ describe("P1-T00 OpenAPI contract", () => {
   });
 });
 
-describe("contract v0.4.0", () => {
-  it("version is 0.4.0", () => {
-    expect(doc.info.version).toBe("0.4.0");
+describe("contract v0.5.0", () => {
+  it("version is 0.5.0", () => {
+    expect(doc.info.version).toBe("0.5.0");
   });
 
   it("security model: bearer JWT gates everything by default (feature-spec.md:15-21)", () => {
@@ -333,10 +333,10 @@ describe("contract v0.4.0", () => {
     // New versioned stores: the write is POST …/versions (a save mints a
     // version, so it is neither idempotent nor a replacement); no DELETE.
     expect(Object.keys(doc.paths["/eval/cases/{caseId}"])).toEqual(["get"]);
-    expect(Object.keys(doc.paths["/eval/sets/{setId}"]).sort()).toEqual(["delete", "get", "patch"]);
+    expect(Object.keys(doc.paths["/eval/benchmarks/{benchmarkId}"]).sort()).toEqual(["delete", "get", "patch"]);
     for (const p of [
       "/eval/cases/{caseId}/versions",
-      "/eval/sets/{setId}/versions",
+      "/eval/benchmarks/{benchmarkId}/versions",
       "/eval/rubrics/{rubricId}/versions",
       "/agenttrees/{tree}/agents/{agentId}/instructions/versions",
     ]) {
@@ -369,44 +369,44 @@ describe("contract v0.4.0", () => {
     }
   });
 
-  it("eval sets carry versioned membership (feature-spec.md:127)", () => {
-    const set = doc.components.schemas.EvalSet;
-    expect(set.required).toEqual(expect.arrayContaining(["version", "items"]));
-    expect(doc.components.schemas.EvalSetUpdate.required).toEqual(["items"]);
+  it("eval benchmarks carry versioned membership (feature-spec.md:127)", () => {
+    const benchmark = doc.components.schemas.EvalBenchmark;
+    expect(benchmark.required).toEqual(expect.arrayContaining(["version", "items"]));
+    expect(doc.components.schemas.EvalBenchmarkUpdate.required).toEqual(["items"]);
     // A rename is metadata, not membership, so PATCH must not be versioned —
     // it is the one write on this resource that answers 200, not 201.
-    expect(doc.paths["/eval/sets/{setId}"].patch.responses["200"]).toBeDefined();
-    expect(doc.paths["/eval/sets/{setId}"].patch.description).toMatch(/NOT versioned/);
+    expect(doc.paths["/eval/benchmarks/{benchmarkId}"].patch.responses["200"]).toBeDefined();
+    expect(doc.paths["/eval/benchmarks/{benchmarkId}"].patch.description).toMatch(/NOT versioned/);
   });
 
-  it("a set member is a live turn reference XOR a frozen case (the Casebook merge)", () => {
-    const item = doc.components.schemas.EvalSetItem;
+  it("a benchmark member is a live turn reference XOR a frozen case (the Casebook merge)", () => {
+    const item = doc.components.schemas.EvalBenchmarkItem;
     expect(item.required).toEqual(expect.arrayContaining(["id", "kind"]));
     expect(item.properties.kind.enum).toEqual(["reference", "frozen"]);
     expect(item.properties.source.required).toEqual(["tree", "conversation_id", "turn_id"]);
     expect(item.properties.case_id).toBeDefined();
-    expect(doc.components.schemas.EvalSetItemCreate.oneOf.map((b) => b.required.join())).toEqual([
+    expect(doc.components.schemas.EvalBenchmarkItemCreate.oneOf.map((b) => b.required.join())).toEqual([
       "source",
       "case_id",
     ]);
     // Materializing is a flip, not a conversion into a second noun: freeze
     // answers the SAME resource, and the old /casebooks routes are gone.
     expect(
-      doc.paths["/eval/sets/{setId}/freeze"].post.responses["201"].content["application/json"].schema.$ref
-    ).toBe("#/components/schemas/EvalSet");
+      doc.paths["/eval/benchmarks/{benchmarkId}/freeze"].post.responses["201"].content["application/json"].schema.$ref
+    ).toBe("#/components/schemas/EvalBenchmark");
     expect(
-      doc.paths["/eval/sets/{setId}/items"].post.responses["201"].content["application/json"].schema.$ref
-    ).toBe("#/components/schemas/EvalSet");
-    expect(doc.paths["/eval/sets/{setId}/replay"].post.responses["202"]).toBeDefined();
+      doc.paths["/eval/benchmarks/{benchmarkId}/items"].post.responses["201"].content["application/json"].schema.$ref
+    ).toBe("#/components/schemas/EvalBenchmark");
+    expect(doc.paths["/eval/benchmarks/{benchmarkId}/replay"].post.responses["202"]).toBeDefined();
     expect(Object.keys(doc.paths).filter((p) => p.startsWith("/casebooks"))).toEqual([]);
     expect(Object.keys(doc.components.schemas).filter((s) => s.startsWith("Casebook"))).toEqual([]);
     expect(doc.tags.map((t) => t.name)).not.toContain("casebooks");
   });
 
-  it("JudgeRequest selects by exactly one of evaluation_id / case_ids / set_id (feature-spec.md:129)", () => {
+  it("JudgeRequest selects by exactly one of evaluation_id / case_ids / benchmark_id (feature-spec.md:129)", () => {
     const judge = doc.components.schemas.JudgeRequest;
-    expect(judge.oneOf.map((b) => b.required.join())).toEqual(["evaluation_id", "case_ids", "set_id"]);
-    expect(judge.properties.set_id).toBeDefined();
+    expect(judge.oneOf.map((b) => b.required.join())).toEqual(["evaluation_id", "case_ids", "benchmark_id"]);
+    expect(judge.properties.benchmark_id).toBeDefined();
   });
 
   // Item 7 stage C. The union that lost its argument — four mutually exclusive
@@ -469,7 +469,7 @@ describe("contract v0.4.0", () => {
     expect(create.oneOf.map((b) => b.required.join())).toEqual(["input,output", "source"]);
     const imp = doc.paths["/eval/cases/import"].post;
     const form = imp.requestBody.content["multipart/form-data"].schema;
-    expect(form.required).toEqual(["file", "mapping"]);
+    expect(form.required).toEqual(["file", "mapping", "agenttree"]);
     expect(imp.responses["200"]).toBeDefined(); // inline per-row report
     expect(imp.responses["202"]).toBeDefined(); // queued for large files
     const report = doc.components.schemas.EvalCaseImportReport;
@@ -484,7 +484,7 @@ describe("contract v0.4.0", () => {
   });
 
   it("context policy widened to frozen/current/custom, Phase-1 defaults preserved (feature-spec.md:77-82)", () => {
-    for (const name of ["ReplayRequest", "ReplayTurnRequest", "EvalSetReplayRequest"]) {
+    for (const name of ["ReplayRequest", "ReplayTurnRequest", "EvalBenchmarkReplayRequest"]) {
       const props = doc.components.schemas[name].properties;
       expect(props.context_policy.enum, `${name}.context_policy`).toEqual(["frozen", "current", "custom"]);
       expect(props.context_policy.default).toBe("frozen");
@@ -847,8 +847,8 @@ describe("contract v0.4.0", () => {
       "POST /agenttrees/{tree}/chat",
       "POST /agenttrees/{tree}/replay",
       "POST /agenttrees/{tree}/replay/turn",
+      "POST /eval/benchmarks/{benchmarkId}/replay",
       "POST /eval/judge",
-      "POST /eval/sets/{setId}/replay",
     ]);
     const res = doc.components.responses.TooManyRequests;
     expect(res.headers["Retry-After"]).toBeDefined();

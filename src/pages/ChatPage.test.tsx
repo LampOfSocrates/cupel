@@ -12,7 +12,7 @@ import { server } from "../test/msw/server";
 import {
   BASE,
   cancelRequests,
-  evalSetItemPosts,
+  evalBenchmarkItemPosts,
   chatConfig,
   chatRequests,
   conv,
@@ -1197,24 +1197,24 @@ describe("Disabled tree (P2-T07c)", () => {
 // ⊞ — "Entry points: ⊞ on any turn, Chat, the Inspector … and results
 // cells". The chat action row gains one glyph; the picker behind it is the
 // same CollectModal the Inspector opens, and what it posts is a REFERENCE
-// {tree, conversation_id, turn_id} — into an eval set, since the Casebook
-// merged into that noun.
+// {tree, conversation_id, turn_id} — into an eval benchmark, since the
+// Casebook merged into that noun.
 describe("⊞ collect from the chat turn action row (P2-T12a)", () => {
-  it("posts the turn as an eval-set item reference", async () => {
+  it("posts the turn as an eval-benchmark item reference", async () => {
     const user = userEvent.setup();
     renderChat("/chat/c1");
     await screen.findByText("Approved refunds land in 3-5 days.");
 
     // Only the assistant turn carries the action row → exactly one ⊞.
-    const collect = screen.getAllByRole("button", { name: "Collect into eval set" });
+    const collect = screen.getAllByRole("button", { name: "Collect into eval benchmark" });
     expect(collect).toHaveLength(1);
     await user.click(collect[0]);
 
     expect(await screen.findByTestId("collect-target")).toHaveTextContent("agent1 · c1 · t2");
     await user.click((await screen.findAllByRole("button", { name: "⊞ Add" }))[0]);
-    await waitFor(() => expect(evalSetItemPosts).toHaveLength(1));
-    expect(evalSetItemPosts[0]).toEqual({
-      setId: "set-refunds",
+    await waitFor(() => expect(evalBenchmarkItemPosts).toHaveLength(1));
+    expect(evalBenchmarkItemPosts[0]).toEqual({
+      benchmarkId: "set-refunds",
       body: {
         source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
         note: null,
@@ -1226,7 +1226,7 @@ describe("⊞ collect from the chat turn action row (P2-T12a)", () => {
     renderChat("/chat");
     await screen.findByText("Send a message to start the conversation.");
     expect(
-      screen.queryByRole("button", { name: "Collect into eval set" }),
+      screen.queryByRole("button", { name: "Collect into eval benchmark" }),
     ).not.toBeInTheDocument();
   });
 });

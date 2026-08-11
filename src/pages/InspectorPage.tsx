@@ -50,7 +50,7 @@ import type { EvalCaseSource } from "../api/types";
 // KEYBOARD MAP (feature-spec.md:285 "keyboard nav j/k/a"):
 //   j — next conversation row (loads it in the reader)
 //   k — previous conversation row
-//   a — ⊞ collect the focused turn into an eval set
+//   a — ⊞ collect the focused turn into an eval benchmark
 // Keys are ignored while typing in a filter field or while a modal is open.
 //
 // Filters live in the URL (feature-spec.md:285 "filters as URL params"), so an
@@ -212,7 +212,7 @@ export function InspectorPage() {
           <Title order={4}>Inspector</Title>
           <Text size="xs" c="dimmed">
             Every conversation in the system, across users. Filter, read the transcript inline,
-            and press <Kbd>a</Kbd> to collect a turn into an eval set. Every query here is
+            and press <Kbd>a</Kbd> to collect a turn into an eval benchmark. Every query here is
             audit-logged server-side.
           </Text>
         </div>
@@ -316,7 +316,7 @@ export function InspectorPage() {
                   <Table.Th>Conversation</Table.Th>
                   <Table.Th>Origin</Table.Th>
                   <Table.Th>Activity</Table.Th>
-                  <Table.Th>Score</Table.Th>
+                  <Table.Th>Judgement Score</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

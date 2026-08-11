@@ -38,15 +38,15 @@ import type {
   EvalCaseCreate,
   EvalCaseImportReport,
   EvalCaseUpdate,
-  EvalSet,
-  EvalSetCreate,
-  EvalSetFreezeRequest,
-  EvalSetItemCreate,
-  EvalSetMetadataUpdate,
-  EvalSetPage,
-  EvalSetReplayAccepted,
-  EvalSetReplayRequest,
-  EvalSetUpdate,
+  EvalBenchmark,
+  EvalBenchmarkCreate,
+  EvalBenchmarkFreezeRequest,
+  EvalBenchmarkItemCreate,
+  EvalBenchmarkMetadataUpdate,
+  EvalBenchmarkPage,
+  EvalBenchmarkReplayAccepted,
+  EvalBenchmarkReplayRequest,
+  EvalBenchmarkUpdate,
   FeedbackRequest,
   Health,
   InstructionHistory,
@@ -431,7 +431,7 @@ export const api = {
 
   // DELETE (deleteConversation) — SOFT and idempotent: the conversation
   // becomes a tombstone (Conversation.deleted true), still readable here and
-  // through api.turns so that forks, eval-set items and judgments pointing at
+  // through api.turns so that forks, eval-benchmark items and judgments pointing at
   // it stay honest, absent from every listing, and 409 conversation_deleted on
   // any further write. Deleting a tombstone answers 204 again.
   deleteConversation: (tree: string, id: string) =>
@@ -653,77 +653,85 @@ export const api = {
   createEvalCaseVersion: (caseId: string, body: EvalCaseUpdate) =>
     request<EvalCase>(`/eval/cases/${caseId}/versions`, { method: "POST", body }),
 
-  // Eval sets — the noun Casebook merged into. Global, not tree-scoped: no
-  // tree in any of these paths, and one set may reference turns across trees.
-  // GET /eval/sets — "Latest version of every set, items included".
-  evalSets: (params: PageParams = {}) =>
-    request<EvalSetPage>("/eval/sets", { query: params as Query }),
+  // Eval benchmarks — the noun Casebook merged into. Global, not tree-scoped:
+  // no tree in any of these paths, and one benchmark may reference turns
+  // across trees.
+  // GET /eval/benchmarks — "Latest version of every benchmark, items included".
+  evalBenchmarks: (params: PageParams = {}) =>
+    request<EvalBenchmarkPage>("/eval/benchmarks", { query: params as Query }),
 
-  // POST /eval/sets — "Create an eval set (version 1)"; membership changes
-  // afterwards append versions through …/versions, …/items or …/freeze.
-  createEvalSet: (body: EvalSetCreate) =>
-    request<EvalSet>("/eval/sets", { method: "POST", body }),
+  // POST /eval/benchmarks — "Create an eval benchmark (version 1)"; membership
+  // changes afterwards append versions through …/versions, …/items or …/freeze.
+  createEvalBenchmark: (body: EvalBenchmarkCreate) =>
+    request<EvalBenchmark>("/eval/benchmarks", { method: "POST", body }),
 
-  // GET /eval/sets/{setId} — the set with its items. Reference items are turn
-  // REFERENCES: render their transcripts by following each item's source.
-  evalSet: (setId: string) => request<EvalSet>(`/eval/sets/${setId}`),
+  // GET /eval/benchmarks/{benchmarkId} — the benchmark with its items.
+  // Reference items are turn REFERENCES: render their transcripts by
+  // following each item's source.
+  evalBenchmark: (benchmarkId: string) =>
+    request<EvalBenchmark>(`/eval/benchmarks/${benchmarkId}`),
 
-  // PATCH /eval/sets/{setId} — "Metadata only, and deliberately NOT versioned:
-  // a set's name and description belong to the set, its items belong to the
-  // version."
-  updateEvalSetMetadata: (setId: string, body: EvalSetMetadataUpdate) =>
-    request<EvalSet>(`/eval/sets/${setId}`, { method: "PATCH", body }),
+  // PATCH /eval/benchmarks/{benchmarkId} — "Metadata only, and deliberately
+  // NOT versioned: a benchmark's name and description belong to the
+  // benchmark, its items belong to the version."
+  updateEvalBenchmarkMetadata: (benchmarkId: string, body: EvalBenchmarkMetadataUpdate) =>
+    request<EvalBenchmark>(`/eval/benchmarks/${benchmarkId}`, { method: "PATCH", body }),
 
-  // POST /eval/sets/{setId}/versions (createEvalSetVersion) — "each save is a
-  // new version carrying its FULL item list". Metadata is the sibling PATCH
-  // on the set itself and appends nothing.
-  createEvalSetVersion: (setId: string, body: EvalSetUpdate) =>
-    request<EvalSet>(`/eval/sets/${setId}/versions`, { method: "POST", body }),
+  // POST /eval/benchmarks/{benchmarkId}/versions (createEvalBenchmarkVersion)
+  // — "each save is a new version carrying its FULL item list". Metadata is
+  // the sibling PATCH on the benchmark itself and appends nothing.
+  createEvalBenchmarkVersion: (benchmarkId: string, body: EvalBenchmarkUpdate) =>
+    request<EvalBenchmark>(`/eval/benchmarks/${benchmarkId}/versions`, { method: "POST", body }),
 
-  // DELETE /eval/sets/{setId} — "Deleting a set never deletes evidence": the
-  // referenced turns, the frozen cases and their judgments all survive.
-  deleteEvalSet: (setId: string) =>
-    request<void>(`/eval/sets/${setId}`, { method: "DELETE" }),
+  // DELETE /eval/benchmarks/{benchmarkId} — "Deleting a benchmark never
+  // deletes evidence": the referenced turns, the frozen cases and their
+  // judgments all survive.
+  deleteEvalBenchmark: (benchmarkId: string) =>
+    request<void>(`/eval/benchmarks/${benchmarkId}`, { method: "DELETE" }),
 
-  // POST /eval/sets/{setId}/items — the ⊞ action. Appends a membership version,
-  // and is IDEMPOTENT: "adding a referent the latest version already holds
-  // appends nothing and returns that version unchanged", so the UI detects
-  // "already there" by an unchanged version number rather than pre-checking.
-  addEvalSetItem: (setId: string, body: EvalSetItemCreate) =>
-    request<EvalSet>(`/eval/sets/${setId}/items`, { method: "POST", body }),
+  // POST /eval/benchmarks/{benchmarkId}/items — the ⊞ action. Appends a
+  // membership version, and is IDEMPOTENT: "adding a referent the latest
+  // version already holds appends nothing and returns that version
+  // unchanged", so the UI detects "already there" by an unchanged version
+  // number rather than pre-checking.
+  addEvalBenchmarkItem: (benchmarkId: string, body: EvalBenchmarkItemCreate) =>
+    request<EvalBenchmark>(`/eval/benchmarks/${benchmarkId}/items`, { method: "POST", body }),
 
-  // POST /eval/sets/{setId}/freeze — what "turn a casebook into an eval set"
-  // became: reference items flip to frozen in place, keeping their id and
-  // source. Omit item_ids for every reference item.
-  freezeEvalSetItems: (setId: string, body: EvalSetFreezeRequest = {}) =>
-    request<EvalSet>(`/eval/sets/${setId}/freeze`, { method: "POST", body }),
+  // POST /eval/benchmarks/{benchmarkId}/freeze — what "turn a casebook into an
+  // eval benchmark" became: reference items flip to frozen in place, keeping
+  // their id and source. Omit item_ids for every reference item.
+  freezeEvalBenchmarkItems: (benchmarkId: string, body: EvalBenchmarkFreezeRequest = {}) =>
+    request<EvalBenchmark>(`/eval/benchmarks/${benchmarkId}/freeze`, { method: "POST", body }),
 
-  // POST /eval/sets/{setId}/replay — 202 EvalSetReplayAccepted, "one evaluation
-  // per tree touched, all children of a single parent task"; frozen items are
-  // skipped. context_policy is hard-set to the contract default exactly as
-  // api.replay does (widening is future work).
-  replayEvalSet: (setId: string, body: EvalSetReplayRequest) =>
-    request<EvalSetReplayAccepted>(`/eval/sets/${setId}/replay`, {
+  // POST /eval/benchmarks/{benchmarkId}/replay — 202 EvalBenchmarkReplayAccepted,
+  // "one evaluation per tree touched, all children of a single parent task";
+  // frozen items are skipped. context_policy is hard-set to the contract
+  // default exactly as api.replay does (widening is future work).
+  replayEvalBenchmark: (benchmarkId: string, body: EvalBenchmarkReplayRequest) =>
+    request<EvalBenchmarkReplayAccepted>(`/eval/benchmarks/${benchmarkId}/replay`, {
       method: "POST",
       body: { ...body, context_policy: "frozen" as const },
     }),
 
-  // POST /eval/cases/import (openapi.yaml:1370-1429) — multipart file +
-  // mapping (+ set_id | set_name). "Small files: 200 with the per-row report
-  // inline. Above the server's size threshold: 202 TaskRef" — the caller gets
-  // the status alongside the body so it can follow the queued path.
+  // POST /eval/cases/import — multipart file + agenttree (required — stamped
+  // on every imported case) + mapping (+ benchmark_id | benchmark_name).
+  // "Small files: 200 with the per-row report inline. Above the server's
+  // size threshold: 202 TaskRef" — the caller gets the status alongside the
+  // body so it can follow the queued path.
   // No Content-Type header: the browser sets the multipart boundary itself
   // (same rule as upload above).
   importEvalCases: async (
     file: File,
+    agenttree: string,
     mapping: { input: string; output: string; reference?: string },
-    target?: { set_id?: string; set_name?: string },
+    target?: { benchmark_id?: string; benchmark_name?: string },
   ): Promise<{ status: 200; report: EvalCaseImportReport } | { status: 202; task: TaskRef }> => {
     const form = new FormData();
     form.append("file", file);
+    form.append("agenttree", agenttree);
     form.append("mapping", JSON.stringify(mapping));
-    if (target?.set_id) form.append("set_id", target.set_id);
-    if (target?.set_name) form.append("set_name", target.set_name);
+    if (target?.benchmark_id) form.append("benchmark_id", target.benchmark_id);
+    if (target?.benchmark_name) form.append("benchmark_name", target.benchmark_name);
     const res = await fetch(buildUrl("/eval/cases/import"), {
       method: "POST",
       headers: authHeaders(),
@@ -736,9 +744,9 @@ export const api = {
       : { status: 200, report: body as EvalCaseImportReport };
   },
 
-  // POST /eval/judge (openapi.yaml:931-954) — "Enqueue LLM judging …
-  // {set_id | case_ids | evaluation_id, judge_model, rubric_id} → enqueued),
-  // judgments append-only"; 202 → TaskRef "(parent task + child per case)".
+  // POST /eval/judge — "Enqueue LLM judging …
+  // {benchmark_id | case_ids | evaluation_id, judge_model, rubric_id} →
+  // enqueued), judgments append-only"; 202 → TaskRef "(parent task + child per case)".
   judge: (body: JudgeRequest) =>
     request<TaskRef>("/eval/judge", { method: "POST", body }),
 

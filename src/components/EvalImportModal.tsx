@@ -17,31 +17,35 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import { useQueue } from "../QueueContext";
-import type { EvalCaseImportReport, EvalSet } from "../api/types";
+import { product } from "../lib/product";
+import type { EvalCaseImportReport, EvalBenchmark } from "../api/types";
 
 // Bulk import — "upload CSV/XLSX (or paste a table) with columns mapped
-// to input/output/reference → creates/extends a set in one shot
+// to input/output/reference → creates/extends a benchmark in one shot
 // (POST /eval/cases/import, queued for large files; row errors reported per
 // line, not all-or-nothing)" (feature-spec.md:63).
 //
 // Column mapping: the contract's `mapping` is a JSON object naming the
-// columns that feed input/output/reference (openapi.yaml:1409-1414), so the
-// picker needs the file's header. For CSV we read the first line locally to
-// offer real column names; for XLSX (a zip, not readable without a parser we
-// deliberately do not ship to the browser) the same three fields fall back to
-// free text — the server answers 422 naming the header if a column is wrong
-// (mock/main.py import handler), so a typo is a clear message, never a silent
-// half-import.
+// columns that feed input/output/reference, so the picker needs the file's
+// header. For CSV we read the first line locally to offer real column names;
+// for XLSX (a zip, not readable without a parser we deliberately do not ship
+// to the browser) the same three fields fall back to free text — the server
+// answers 422 naming the header if a column is wrong (mock/main.py import
+// handler), so a typo is a clear message, never a silent half-import.
+//
+// Every imported case also needs an agenttree (EvalCase.agenttree is
+// required) — a single import batch targets one agent tree/endpoint, so it
+// is one free-text field for the whole file rather than a per-row column.
 //
 // Two response paths, one report shape: 200 renders the report inline; 202
 // hands back a TaskRef and the report arrives on the task
-// (openapi.yaml:1386-1389 "result.import_report carries the identical report
-// shape"). The 202 path is read off the app-wide queue (QueueContext), the
-// same store the queue panel and sidebar badge use — no second poller.
+// ("result.import_report carries the identical report shape"). The 202 path
+// is read off the app-wide queue (QueueContext), the same store the queue
+// panel and sidebar badge use — no second poller.
 
 interface Props {
   opened: boolean;
-  sets: EvalSet[];
+  benchmarks: EvalBenchmark[];
   onClose: () => void;
   /** Fired once cases actually landed, so the workbench refetches. */
   onImported: () => void;
@@ -85,9 +89,9 @@ export function ImportReportView({ report }: { report: EvalCaseImportReport }) {
             {report.errors.length} row {report.errors.length === 1 ? "error" : "errors"}
           </Badge>
         )}
-        {report.set_id && (
+        {report.benchmark_id && (
           <Badge variant="light" color="blue">
-            set {report.set_id}
+            benchmark {report.benchmark_id}
           </Badge>
         )}
       </Group>
@@ -127,29 +131,30 @@ export function ImportReportView({ report }: { report: EvalCaseImportReport }) {
 // `opened`), so the body mounts on open and its state — file, mapping, report,
 // watched task id — starts at the initialisers every time. That is what the old
 // `if (opened) return; …` teardown effect was for.
-export function EvalImportModal({ opened, sets, onClose, onImported }: Props) {
+export function EvalImportModal({ opened, benchmarks, onClose, onImported }: Props) {
   return (
     <Modal opened={opened} onClose={onClose} title="Import eval cases" size="lg">
-      <ImportBody sets={sets} onClose={onClose} onImported={onImported} />
+      <ImportBody benchmarks={benchmarks} onClose={onClose} onImported={onImported} />
     </Modal>
   );
 }
 
-function ImportBody({ sets, onClose, onImported }: Omit<Props, "opened">) {
+function ImportBody({ benchmarks, onClose, onImported }: Omit<Props, "opened">) {
   const { tasks } = useQueue();
   const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[] | null>(null);
   const [mapping, setMapping] = useState({ input: "", output: "", reference: "" });
+  const [agenttree, setAgenttree] = useState("");
   const [target, setTarget] = useState<Target>("none");
-  const [setName, setSetName] = useState("");
-  const [setId, setSetId] = useState<string | null>(null);
+  const [benchmarkName, setBenchmarkName] = useState("");
+  const [benchmarkId, setBenchmarkId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<EvalCaseImportReport | null>(null);
   const [queuedTaskId, setQueuedTaskId] = useState<string | null>(null);
 
   // 202 path: the report lands on the task, watched through the app-wide
-  // queue store (openapi.yaml:2795-2802).
+  // queue store.
   const queuedTask = queuedTaskId ? tasks.find((t) => t.id === queuedTaskId) : undefined;
   const queuedReport = queuedTask?.result?.import_report ?? null;
   useEffect(() => {
@@ -180,7 +185,8 @@ function ImportBody({ sets, onClose, onImported }: Omit<Props, "opened">) {
     }
   }
 
-  const canSubmit = Boolean(file) && Boolean(mapping.input) && Boolean(mapping.output) && !busy;
+  const canSubmit =
+    Boolean(file) && Boolean(mapping.input) && Boolean(mapping.output) && Boolean(agenttree.trim()) && !busy;
 
   async function submit() {
     if (!file) return;
@@ -191,15 +197,16 @@ function ImportBody({ sets, onClose, onImported }: Omit<Props, "opened">) {
     try {
       const result = await api.importEvalCases(
         file,
+        agenttree.trim(),
         {
           input: mapping.input,
           output: mapping.output,
           ...(mapping.reference ? { reference: mapping.reference } : {}),
         },
-        target === "new" && setName
-          ? { set_name: setName }
-          : target === "existing" && setId
-            ? { set_id: setId }
+        target === "new" && benchmarkName
+          ? { benchmark_name: benchmarkName }
+          : target === "existing" && benchmarkId
+            ? { benchmark_id: benchmarkId }
             : undefined,
       );
       if (result.status === 200) {
@@ -242,9 +249,9 @@ function ImportBody({ sets, onClose, onImported }: Omit<Props, "opened">) {
       />
     );
 
-  const setOptions = useMemo(
-    () => sets.map((s) => ({ value: s.id, label: `${s.name} v${s.version}` })),
-    [sets],
+  const benchmarkOptions = useMemo(
+    () => benchmarks.map((b) => ({ value: b.id, label: `${b.name} v${b.version}` })),
+    [benchmarks],
   );
 
 return (
@@ -257,6 +264,14 @@ return (
         accept=".csv,.xlsx,text/csv"
         value={file}
         onChange={pickFile}
+      />
+      <TextInput
+        size="xs"
+        label="Target tree"
+        description={`Every case created by this import is stamped with this ${product.tree.one}/endpoint.`}
+        placeholder="e.g. agent1"
+        value={agenttree}
+        onChange={(e) => setAgenttree(e.currentTarget.value)}
       />
       <Text size="xs" c="dimmed">
         Map the file's columns onto the case fields. Reference is optional —
@@ -275,32 +290,32 @@ return (
       )}
       <Radio.Group
         size="xs"
-        label="Add the imported cases to a set"
+        label="Add the imported cases to a benchmark"
         value={target}
         onChange={(v) => setTarget(v as Target)}
       >
         <Group gap="md" mt={4}>
-          <Radio value="none" label="No set" />
-          <Radio value="new" label="New set" />
-          <Radio value="existing" label="Existing set" disabled={sets.length === 0} />
+          <Radio value="none" label="No benchmark" />
+          <Radio value="new" label="New benchmark" />
+          <Radio value="existing" label="Existing benchmark" disabled={benchmarks.length === 0} />
         </Group>
       </Radio.Group>
       {target === "new" && (
         <TextInput
           size="xs"
-          label="New set name"
-          value={setName}
-          onChange={(e) => setSetName(e.currentTarget.value)}
+          label="New benchmark name"
+          value={benchmarkName}
+          onChange={(e) => setBenchmarkName(e.currentTarget.value)}
         />
       )}
       {target === "existing" && (
         <Select
           size="xs"
-          label="Set to extend"
+          label="Benchmark to extend"
           description="Extending appends a new membership version."
-          data={setOptions}
-          value={setId}
-          onChange={setSetId}
+          data={benchmarkOptions}
+          value={benchmarkId}
+          onChange={setBenchmarkId}
         />
       )}
       {error && (

@@ -1748,13 +1748,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                 "input": {"prompt": c["prompt"], "envelope": unj(c["envelope"])},
                 "output": c["output"], "reference": c["reference"],
                 "source": unj(c["source"]), "version": c["version"],
+                "agenttree": c["agenttree"],
                 "created_at": c["created_at"]}
 
     def insert_case(case_id: str, version: int, prompt: str, envelope,
-                    output: str, reference, source) -> dict:
+                    output: str, reference, source, agenttree: str) -> dict:
         db.run("INSERT INTO eval_cases (id, version, prompt, envelope, output,"
-               " reference, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-               (case_id, version, prompt, envelope, output, reference, source, now_iso()))
+               " reference, source, agenttree, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               (case_id, version, prompt, envelope, output, reference, source, agenttree,
+                now_iso()))
         return case_dict(db.one("SELECT * FROM eval_cases WHERE id = ? AND version = ?",
                                 (case_id, version)))
 
@@ -1790,16 +1792,22 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     @app.post("/eval/cases", status_code=201)
     async def create_case(request: Request):
-        """POST /eval/cases (openapi.yaml:1340-1369) — "Exactly one creation
-        mode (request oneOf): handcrafted = input + output supplied; sourced =
-        source supplied and the server derives input … and output"."""
+        """POST /eval/cases — "Exactly one creation mode (request oneOf):
+        handcrafted = input + output supplied; sourced = source supplied and
+        the server derives input … and output". agenttree is required
+        regardless of mode (own top-level `required`, not inside either oneOf
+        branch)."""
         body = await body_json(request)
+        agenttree = body.get("agenttree")
+        if not isinstance(agenttree, str) or not agenttree.strip():
+            err(422, "invalid", "agenttree is required (openapi.yaml EvalCaseCreate).",
+                field_error("agenttree", "agenttree is required (openapi.yaml EvalCaseCreate)."))
         source = body.get("source")
         handcrafted = body.get("input") is not None or body.get("output") is not None
         if bool(source) == bool(handcrafted):
             err(422, "invalid",
                 "Exactly one of (input + output) / source is required "
-                "(openapi.yaml:3328-3330).")
+                "(openapi.yaml EvalCaseCreate).")
         if source:
             if not isinstance(source, dict):
                 err(422, "invalid", "source must be an object.",
@@ -1824,17 +1832,23 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             err(422, "invalid", "reference must be a string or null.",
                 field_error("reference", "reference must be a string or null."))
         return insert_case(new_id("case"), 1, prompt, envelope, output,
-                           reference, source_json)
+                           reference, source_json, agenttree.strip())
 
     @app.post("/eval/cases/import")
     async def import_cases(request: Request, file: UploadFile = File(...),
+                           agenttree: str = Form(...),
                            mapping: str = Form(...),
-                           set_id: str | None = Form(None),
-                           set_name: str | None = Form(None)):
-        """POST /eval/cases/import (openapi.yaml:1370-1429) — "Failed rows
-        never abort the import; valid rows land". 422 is reserved for
-        WHOLE-file failures ("Unparseable file or invalid mapping", :1421);
-        per-row problems travel in the report instead."""
+                           benchmark_id: str | None = Form(None),
+                           benchmark_name: str | None = Form(None)):
+        """POST /eval/cases/import — "Failed rows never abort the import;
+        valid rows land". 422 is reserved for WHOLE-file failures
+        ("Unparseable file or invalid mapping"); per-row problems travel in
+        the report instead. agenttree is required — every case created by an
+        import batch is stamped with it (EvalCase.agenttree is per-case, but
+        one import targets one agent tree/endpoint)."""
+        if not agenttree.strip():
+            err(422, "invalid", "agenttree is required.",
+                field_error("agenttree", "agenttree is required."))
         data = await file.read()
         if len(data) > config.MAX_UPLOAD_BYTES:
             err(413, "too_large",
@@ -1842,17 +1856,18 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         try:
             spec = json.loads(mapping)
         except Exception:
-            err(422, "invalid", "mapping must be a JSON object string "
-                                "(openapi.yaml:3392-3399).")
+            err(422, "invalid", "mapping must be a JSON object string.")
         if not isinstance(spec, dict) or not isinstance(spec.get("input"), str) \
                 or not isinstance(spec.get("output"), str):
             err(422, "invalid",
                 "mapping must name the columns feeding input and output "
-                "(reference optional) — openapi.yaml:1409-1414.")
-        if set_id and set_name:
-            err(422, "invalid", "Pass set_id (extend) or set_name (create), not both.")
-        if set_id and not db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
-            err(404, "not_found", f"Eval set '{set_id}' not found.")
+                "(reference optional).")
+        if benchmark_id and benchmark_name:
+            err(422, "invalid",
+                "Pass benchmark_id (extend) or benchmark_name (create), not both.")
+        if benchmark_id and not db.one("SELECT 1 AS x FROM eval_benchmarks WHERE id = ?",
+                                       (benchmark_id,)):
+            err(404, "not_found", f"Eval benchmark '{benchmark_id}' not found.")
         try:
             header, rows = tabular.parse_table(file.filename or "", data)
         except tabular.TableError as exc:
@@ -1869,18 +1884,19 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if len(rows) > config.IMPORT_SYNC_MAX_ROWS:
             # "Above the server's size threshold: 202 TaskRef — an 'import'
             # task whose result.import_report carries the identical report
-            # shape on completion" (openapi.yaml:1386-1389). Cases are global,
-            # so the task carries no tree (Broker docstring).
+            # shape on completion". Cases are global, so the task carries no
+            # tree (Broker docstring).
             task = engine.create_task("import", total=len(rows))
-            engine.spawn(run_import(task["id"], header, rows, spec, set_id, set_name))
+            engine.spawn(run_import(task["id"], header, rows, spec, agenttree.strip(),
+                                    benchmark_id, benchmark_name))
             return JSONResponse({"task_id": task["id"]}, status_code=202)
-        return JSONResponse(apply_import(header, rows, spec, set_id, set_name),
-                            status_code=200)
+        return JSONResponse(
+            apply_import(header, rows, spec, agenttree.strip(), benchmark_id, benchmark_name),
+            status_code=200)
 
-    def apply_import(header, rows, spec, set_id, set_name) -> dict:
+    def apply_import(header, rows, spec, agenttree, benchmark_id, benchmark_name) -> dict:
         """The one report builder both paths use, so a 200 body and a finished
-        task's result.import_report are byte-identical in shape
-        (openapi.yaml:1386-1389, 2795-2802)."""
+        task's result.import_report are byte-identical in shape."""
         columns = {name: i for i, name in enumerate(header)}
         created, errors = [], []
         for number, row in enumerate(rows, start=1):
@@ -1900,40 +1916,41 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                "message": "output is empty — a case needs a candidate response."})
                 continue
             case = insert_case(new_id("case"), 1, prompt, None, output,
-                               reference or None, None)
+                               reference or None, None, agenttree)
             created.append(case["id"])
 
-        target_set = None
-        if set_id or set_name:
-            # Imported cases join a set as FROZEN items: they were never turns
-            # in a conversation, so a reference to one could not exist.
+        target_benchmark = None
+        if benchmark_id or benchmark_name:
+            # Imported cases join a benchmark as FROZEN items: they were
+            # never turns in a conversation, so a reference to one could not
+            # exist.
             new_items = [{"id": new_id("esi"), "kind": "frozen", "source": None,
                           "case_id": cid, "note": None, "added_at": now_iso()}
                          for cid in created]
-            if set_id:
-                if db.one("SELECT 1 AS x FROM eval_sets WHERE id = ?", (set_id,)):
-                    # "extend an existing set — new membership version".
-                    version = latest_version(set_id)
-                    insert_version(set_id, version + 1,
-                                   set_items(set_id, version) + new_items)
-                    target_set = set_id
+            if benchmark_id:
+                if db.one("SELECT 1 AS x FROM eval_benchmarks WHERE id = ?", (benchmark_id,)):
+                    # "extend an existing benchmark — new membership version".
+                    version = latest_version(benchmark_id)
+                    insert_version(benchmark_id, version + 1,
+                                   benchmark_items(benchmark_id, version) + new_items)
+                    target_benchmark = benchmark_id
             else:
-                target_set = new_id("set")
-                db.run("INSERT INTO eval_sets (id, name, description, created_by,"
+                target_benchmark = new_id("benchmark")
+                db.run("INSERT INTO eval_benchmarks (id, name, description, created_by,"
                        " created_at) VALUES (?, ?, NULL, 'dev', ?)",
-                       (target_set, set_name, now_iso()))
-                insert_version(target_set, 1, new_items)
-        return {"set_id": target_set,
+                       (target_benchmark, benchmark_name, now_iso()))
+                insert_version(target_benchmark, 1, new_items)
+        return {"benchmark_id": target_benchmark,
                 "rows_total": len(rows), "rows_imported": len(created),
                 "created_case_ids": created, "errors": errors}
 
-    async def run_import(task_id, header, rows, spec, set_id, set_name):
+    async def run_import(task_id, header, rows, spec, agenttree, benchmark_id, benchmark_name):
         """Large-file path: the SAME report, delivered as task result. Defined
         here (not in engine.py) so the engine keeps no eval knowledge."""
         engine.set_status(task_id, "running")
         try:
             await asyncio.sleep(engine.step_delay)
-            report = apply_import(header, rows, spec, set_id, set_name)
+            report = apply_import(header, rows, spec, agenttree, benchmark_id, benchmark_name)
             engine.progress(task_id, f"Imported {report['rows_imported']}/{len(rows)} rows")
             # set_status("done") sets done = total (engine.set_status).
             engine.set_status(task_id, "done", result={"import_report": report})
@@ -1968,31 +1985,34 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if reference is not None and not isinstance(reference, str):
             err(422, "invalid", "reference must be a string or null.",
                 field_error("reference", "reference must be a string or null."))
+        # agenttree is not accepted here — it carries over unchanged from the
+        # previous version, same as source.
         return insert_case(caseId, latest["version"] + 1, data["prompt"],
                            j(data.get("envelope")), body["output"], reference,
-                           latest["source"])
+                           latest["source"], latest["agenttree"])
 
-    # --------------------------------------------------------- eval sets
-    # THE MERGED NOUN. Casebook and EvalSet were one concept modelled twice;
-    # the only real difference — reference vs frozen — is now EvalSetItem.kind,
-    # and POST /casebooks/{id}/to-eval-set is gone because there is nothing to
-    # convert between. Metadata is mutable, membership is append-only, which is
-    # why db.py stores them in two tables.
+    # ----------------------------------------------------- eval benchmarks
+    # THE MERGED NOUN. Casebook and EvalBenchmark (named EvalSet before the
+    # later benchmark-flavored rename) were one concept modelled twice; the
+    # only real difference — reference vs frozen — is now
+    # EvalBenchmarkItem.kind, and POST /casebooks/{id}/to-eval-set is gone
+    # because there is nothing to convert between. Metadata is mutable,
+    # membership is append-only, which is why db.py stores them in two tables.
     #
-    # CROSS-TREE VISIBILITY (a set may reference turns across trees; per-item
-    # visibility follows the viewer's tree permissions — the contract notes
-    # this is under-specified). Decision, carried over from the casebooks it
-    # replaces: REFERENCE items in trees the viewer cannot view are OMITTED
-    # from every response, and every derived action (freeze, replay) operates
-    # on the visible subset only. Omitting beats leaking — the same rule the
-    # SSE broker follows (mock/engine.py Broker docstring). Frozen items are
-    # never gated: they name an eval case, and cases are global
-    # (feature-spec.md:111).
+    # CROSS-TREE VISIBILITY (a benchmark may reference turns across trees;
+    # per-item visibility follows the viewer's tree permissions — the
+    # contract notes this is under-specified). Decision, carried over from
+    # the casebooks it replaces: REFERENCE items in trees the viewer cannot
+    # view are OMITTED from every response, and every derived action (freeze,
+    # replay) operates on the visible subset only. Omitting beats leaking —
+    # the same rule the SSE broker follows (mock/engine.py Broker docstring).
+    # Frozen items are never gated: they name an eval case, and cases are
+    # global (feature-spec.md:111).
     #
     # The one place omission would be destructive is the full-membership save
-    # (createEvalSetVersion): a partially-permitted caller cannot send back
-    # what they were never shown. So a new version PRESERVES the items it hid
-    # — omitting must not become deleting.
+    # (createEvalBenchmarkVersion): a partially-permitted caller cannot send
+    # back what they were never shown. So a new version PRESERVES the items
+    # it hid — omitting must not become deleting.
     def visible_trees(request: Request) -> set[str] | None:
         return permitted_trees(request)
 
@@ -2020,50 +2040,50 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
 
     def referent(item: dict) -> tuple:
         """What an item POINTS AT, which is what its id follows across
-        membership versions (openapi.yaml EvalSetItem.id "Stable across
+        membership versions (openapi.yaml EvalBenchmarkItem.id "Stable across
         membership versions for as long as the item's referent stays in the
-        set") and what makes POST …/items idempotent."""
+        benchmark") and what makes POST …/items idempotent."""
         if item["kind"] == "frozen":
             return ("case", item["case_id"])
         s = item["source"]
         return ("turn", s["tree"], s["conversation_id"], s["turn_id"])
 
-    def set_items(set_id: str, version: int) -> list[dict]:
-        row = db.one("SELECT items FROM eval_set_versions WHERE set_id = ? AND version = ?",
-                     (set_id, version))
+    def benchmark_items(benchmark_id: str, version: int) -> list[dict]:
+        row = db.one("SELECT items FROM eval_benchmark_versions WHERE benchmark_id = ? AND version = ?",
+                     (benchmark_id, version))
         return unj(row["items"], []) if row else []
 
-    def set_dict(s: dict, version: int, request: Request | None = None) -> dict:
-        row = db.one("SELECT * FROM eval_set_versions WHERE set_id = ? AND version = ?",
-                     (s["id"], version))
+    def benchmark_dict(b: dict, version: int, request: Request | None = None) -> dict:
+        row = db.one("SELECT * FROM eval_benchmark_versions WHERE benchmark_id = ? AND version = ?",
+                     (b["id"], version))
         items = unj(row["items"], []) if row else []
         allowed = visible_trees(request) if request is not None else None
-        return {"id": s["id"], "name": s["name"], "description": s["description"],
+        return {"id": b["id"], "name": b["name"], "description": b["description"],
                 "version": version,
                 "items": [i for i in items if item_visible(i, allowed)],
-                "created_at": row["created_at"] if row else s["created_at"]}
+                "created_at": row["created_at"] if row else b["created_at"]}
 
-    def latest_version(set_id: str) -> int:
-        row = db.one("SELECT MAX(version) AS v FROM eval_set_versions WHERE set_id = ?",
-                     (set_id,))
+    def latest_version(benchmark_id: str) -> int:
+        row = db.one("SELECT MAX(version) AS v FROM eval_benchmark_versions WHERE benchmark_id = ?",
+                     (benchmark_id,))
         return (row or {}).get("v") or 0
 
-    def need_set(set_id: str) -> dict:
-        row = db.one("SELECT * FROM eval_sets WHERE id = ?", (set_id,))
+    def need_benchmark(benchmark_id: str) -> dict:
+        row = db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmark_id,))
         if not row:
-            err(404, "not_found", f"Eval set '{set_id}' not found.")
+            err(404, "not_found", f"Eval benchmark '{benchmark_id}' not found.")
         return row
 
-    def insert_version(set_id: str, version: int, items: list) -> None:
-        db.run("INSERT INTO eval_set_versions (set_id, version, items, created_at)"
-               " VALUES (?, ?, ?, ?)", (set_id, version, j(items), now_iso()))
+    def insert_version(benchmark_id: str, version: int, items: list) -> None:
+        db.run("INSERT INTO eval_benchmark_versions (benchmark_id, version, items, created_at)"
+               " VALUES (?, ?, ?, ?)", (benchmark_id, version, j(items), now_iso()))
 
     def build_items(inputs, previous: list[dict], request: Request) -> list[dict]:
         """Membership inputs -> stored items, carrying an id forward whenever
         the previous version already held the same referent."""
         if not isinstance(inputs, list):
-            err(422, "invalid", "items must be an array (openapi.yaml EvalSetUpdate).",
-                field_error("items", "items must be an array (openapi.yaml EvalSetUpdate)."))
+            err(422, "invalid", "items must be an array (openapi.yaml EvalBenchmarkUpdate).",
+                field_error("items", "items must be an array (openapi.yaml EvalBenchmarkUpdate)."))
         by_referent = {referent(i): i for i in previous}
         built, seen = [], set()
         for raw in inputs:
@@ -2073,7 +2093,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             if bool(source) == bool(case_id):
                 err(422, "invalid",
                     "Exactly one of source / case_id is required per item "
-                    "(openapi.yaml EvalSetItemCreate).")
+                    "(openapi.yaml EvalBenchmarkItemCreate).")
             if case_id:
                 if not isinstance(case_id, str) or not latest_case(case_id):
                     err(404, "not_found", f"Eval case '{case_id}' not found.")
@@ -2090,7 +2110,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                    "conversation_id": source["conversation_id"],
                                    "turn_id": source["turn_id"]}}
             key = referent(item)
-            if key in seen:  # a set is a SET; re-listing a member is not two members
+            if key in seen:  # a benchmark is a SET; re-listing a member is not two members
                 continue
             seen.add(key)
             kept = by_referent.get(key)
@@ -2101,102 +2121,102 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             built.append(item)
         return built
 
-    @app.get("/eval/sets")
-    async def list_sets(request: Request, page: int = 1, page_size: int = 20):
-        """"Returns the latest version of each set, membership included" — a
-        page of them. Every row carries its full item list, so this is the
-        listing whose unpaged size was the product of set count and set
-        size."""
+    @app.get("/eval/benchmarks")
+    async def list_benchmarks(request: Request, page: int = 1, page_size: int = 20):
+        """"Returns the latest version of each benchmark, membership
+        included" — a page of them. Every row carries its full item list, so
+        this is the listing whose unpaged size was the product of benchmark
+        count and benchmark size."""
         page, page_size = clamp_page(page, page_size, 100)
-        total = db.one("SELECT COUNT(*) AS n FROM eval_sets")["n"]
-        rows = db.all("SELECT * FROM eval_sets ORDER BY rowid DESC LIMIT ? OFFSET ?",
+        total = db.one("SELECT COUNT(*) AS n FROM eval_benchmarks")["n"]
+        rows = db.all("SELECT * FROM eval_benchmarks ORDER BY rowid DESC LIMIT ? OFFSET ?",
                       (page_size, (page - 1) * page_size))
-        items = [set_dict(s, latest_version(s["id"]), request) for s in rows]
+        items = [benchmark_dict(b, latest_version(b["id"]), request) for b in rows]
         return page_of(items, page, page_size, total)
 
-    @app.post("/eval/sets", status_code=201)
-    async def create_set(request: Request):
+    @app.post("/eval/benchmarks", status_code=201)
+    async def create_benchmark(request: Request):
         body = await body_json(request)
         name = body.get("name")
         if not isinstance(name, str) or not name.strip():
-            err(422, "invalid", "name is required (openapi.yaml EvalSetCreate).",
-                field_error("name", "name is required (openapi.yaml EvalSetCreate)."))
-        sid, user = new_id("set"), request_user(request)
+            err(422, "invalid", "name is required (openapi.yaml EvalBenchmarkCreate).",
+                field_error("name", "name is required (openapi.yaml EvalBenchmarkCreate)."))
+        bid, user = new_id("benchmark"), request_user(request)
         items = build_items(body.get("items") or [], [], request)
-        db.run("INSERT INTO eval_sets (id, name, description, created_by, created_at)"
+        db.run("INSERT INTO eval_benchmarks (id, name, description, created_by, created_at)"
                " VALUES (?, ?, ?, ?, ?)",
-               (sid, name.strip(), body.get("description"),
+               (bid, name.strip(), body.get("description"),
                 user["id"] if user else "dev", now_iso()))
-        insert_version(sid, 1, items)
-        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (sid,)), 1, request)
+        insert_version(bid, 1, items)
+        return benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (bid,)), 1, request)
 
-    @app.get("/eval/sets/{setId}")
-    async def get_set(setId: str, request: Request):
-        return set_dict(need_set(setId), latest_version(setId), request)
+    @app.get("/eval/benchmarks/{benchmarkId}")
+    async def get_benchmark(benchmarkId: str, request: Request):
+        return benchmark_dict(need_benchmark(benchmarkId), latest_version(benchmarkId), request)
 
-    @app.patch("/eval/sets/{setId}")
-    async def update_set_metadata(setId: str, request: Request):
+    @app.patch("/eval/benchmarks/{benchmarkId}")
+    async def update_benchmark_metadata(benchmarkId: str, request: Request):
         """"Metadata only, and deliberately NOT versioned" — a rename leaves
         every recorded membership version untouched. Null/absent fields leave
         the value unchanged."""
-        row = need_set(setId)
+        row = need_benchmark(benchmarkId)
         body = await body_json(request)
         name = body.get("name")
         if name is not None and (not isinstance(name, str) or not name.strip()):
             err(422, "invalid", "name must be a non-empty string when supplied.",
                 field_error("name", "name must be a non-empty string when supplied."))
         description = body.get("description") if "description" in body else row["description"]
-        db.run("UPDATE eval_sets SET name = ?, description = ? WHERE id = ?",
-               (name.strip() if name else row["name"], description, setId))
-        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
-                        latest_version(setId), request)
+        db.run("UPDATE eval_benchmarks SET name = ?, description = ? WHERE id = ?",
+               (name.strip() if name else row["name"], description, benchmarkId))
+        return benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmarkId,)),
+                        latest_version(benchmarkId), request)
 
-    @app.post("/eval/sets/{setId}/versions", status_code=201)
-    async def create_set_version(setId: str, request: Request):
-        """createEvalSetVersion — "each save is a new version carrying its
-        FULL item list; earlier versions remain queryable"."""
-        need_set(setId)
+    @app.post("/eval/benchmarks/{benchmarkId}/versions", status_code=201)
+    async def create_benchmark_version(benchmarkId: str, request: Request):
+        """createEvalBenchmarkVersion — "each save is a new version carrying
+        its FULL item list; earlier versions remain queryable"."""
+        need_benchmark(benchmarkId)
         body = await body_json(request)
         if body.get("items") is None:
-            err(422, "invalid", "items is required — a set version carries its FULL"
-                                " membership (openapi.yaml EvalSetUpdate).")
-        version = latest_version(setId)
-        previous = set_items(setId, version)
+            err(422, "invalid", "items is required — a benchmark version carries its FULL"
+                                " membership (openapi.yaml EvalBenchmarkUpdate).")
+        version = latest_version(benchmarkId)
+        previous = benchmark_items(benchmarkId, version)
         allowed = visible_trees(request)
         hidden = [i for i in previous if not item_visible(i, allowed)]
         items = hidden + build_items(body["items"], previous, request)
-        insert_version(setId, version + 1, items)
-        return set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+        insert_version(benchmarkId, version + 1, items)
+        return benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmarkId,)),
                         version + 1, request)
 
-    @app.delete("/eval/sets/{setId}", status_code=204)
-    async def delete_set(setId: str):
-        """"Deleting a set never deletes evidence": the referenced turns, the
-        frozen cases, their judgments and any evaluation replayed from the set
-        all survive."""
-        need_set(setId)
-        db.run("DELETE FROM eval_set_versions WHERE set_id = ?", (setId,))
-        db.run("DELETE FROM eval_sets WHERE id = ?", (setId,))
+    @app.delete("/eval/benchmarks/{benchmarkId}", status_code=204)
+    async def delete_benchmark(benchmarkId: str):
+        """"Deleting a benchmark never deletes evidence": the referenced
+        turns, the frozen cases, their judgments and any evaluation replayed
+        from the benchmark all survive."""
+        need_benchmark(benchmarkId)
+        db.run("DELETE FROM eval_benchmark_versions WHERE benchmark_id = ?", (benchmarkId,))
+        db.run("DELETE FROM eval_benchmarks WHERE id = ?", (benchmarkId,))
         return Response(status_code=204)
 
-    @app.post("/eval/sets/{setId}/items", status_code=201)
-    async def add_set_item(setId: str, request: Request):
+    @app.post("/eval/benchmarks/{benchmarkId}/items", status_code=201)
+    async def add_benchmark_item(benchmarkId: str, request: Request):
         """The ⊞ action. "IDEMPOTENT: adding a referent the latest version
         already holds appends nothing and returns that version unchanged" —
         implemented literally, so two concurrent ⊞ presses cannot produce two
         members or two versions."""
-        need_set(setId)
+        need_benchmark(benchmarkId)
         body = await body_json(request)
-        version = latest_version(setId)
-        previous = set_items(setId, version)
+        version = latest_version(benchmarkId)
+        previous = benchmark_items(benchmarkId, version)
         added = build_items([body], previous, request)
         if added and referent(added[0]) in {referent(i) for i in previous}:
             return JSONResponse(
-                set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+                benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmarkId,)),
                          version, request), status_code=201)
-        insert_version(setId, version + 1, previous + added)
+        insert_version(benchmarkId, version + 1, previous + added)
         return JSONResponse(
-            set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+            benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmarkId,)),
                      version + 1, request), status_code=201)
 
     def case_for_turn(source: dict) -> str:
@@ -2214,22 +2234,23 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return found["id"]
         prompt, envelope, output = case_from_source(source)
         return insert_case(new_id("case"), 1, prompt, envelope, output, None,
-                           j(source))["id"]
+                           j(source), source["tree"])["id"]
 
-    @app.post("/eval/sets/{setId}/freeze", status_code=201)
-    async def freeze_set_items(setId: str, request: Request):
-        """What "turn a casebook into an eval set" became: the item keeps its
-        id and its source and gains a case_id, so provenance survives the
-        freeze and nothing had to be converted into a second resource."""
-        need_set(setId)
+    @app.post("/eval/benchmarks/{benchmarkId}/freeze", status_code=201)
+    async def freeze_benchmark_items(benchmarkId: str, request: Request):
+        """What "turn a casebook into an eval benchmark" became: the item
+        keeps its id and its source and gains a case_id, so provenance
+        survives the freeze and nothing had to be converted into a second
+        resource."""
+        need_benchmark(benchmarkId)
         body = await body_json(request)
         wanted = body.get("item_ids")
         if wanted is not None and (not isinstance(wanted, list)
                                    or any(not isinstance(i, str) for i in wanted)):
             err(422, "invalid", "item_ids must be an array of item ids when supplied.",
                 field_error("item_ids", "item_ids must be an array of item ids when supplied."))
-        version = latest_version(setId)
-        previous = set_items(setId, version)
+        version = latest_version(benchmarkId)
+        previous = benchmark_items(benchmarkId, version)
         allowed = visible_trees(request)
         targets = [i for i in previous
                    if i["kind"] == "reference" and item_visible(i, allowed)
@@ -2238,7 +2259,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             known = {i["id"] for i in previous if item_visible(i, allowed)}
             for item_id in wanted:
                 if item_id not in known:
-                    err(404, "not_found", f"Item '{item_id}' is not in this set.")
+                    err(404, "not_found", f"Item '{item_id}' is not in this benchmark.")
         if not targets:
             err(422, "invalid",
                 "No reference items to freeze — every item you can see is already frozen.")
@@ -2253,17 +2274,17 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                               source["turn_id"])
             items.append({**item, "kind": "frozen",
                           "case_id": case_for_turn(source)})
-        insert_version(setId, version + 1, items)
+        insert_version(benchmarkId, version + 1, items)
         return JSONResponse(
-            set_dict(db.one("SELECT * FROM eval_sets WHERE id = ?", (setId,)),
+            benchmark_dict(db.one("SELECT * FROM eval_benchmarks WHERE id = ?", (benchmarkId,)),
                      version + 1, request), status_code=201)
 
-    @app.post("/eval/sets/{setId}/replay", status_code=202)
-    async def replay_set(setId: str, request: Request):
+    @app.post("/eval/benchmarks/{benchmarkId}/replay", status_code=202)
+    async def replay_benchmark(benchmarkId: str, request: Request):
         """"Replays every REFERENCE item's turn under the given configs — same
-        engine as POST /agenttrees/{tree}/replay … A set may reference several
-        trees, so the response carries one evaluation per tree touched, all
-        children of a single parent task".
+        engine as POST /agenttrees/{tree}/replay … A benchmark may reference
+        several trees, so the response carries one evaluation per tree
+        touched, all children of a single parent task".
 
         Frozen items are skipped: a frozen case is content, not a turn in a
         conversation, so there is nothing to re-fire.
@@ -2273,7 +2294,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         config) — the same children mock/engine.py already drives for
         /agenttrees/{tree}/replay, so there is no second replay path."""
         need_live_budget(request)  # 429 before the batch is enqueued
-        need_set(setId)
+        need_benchmark(benchmarkId)
         body = await body_json(request)
         configs = body.get("configs")
         if not configs or not isinstance(configs, list):
@@ -2282,14 +2303,15 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if body.get("context_policy", "frozen") != "frozen":
             # Widening the policy is Phase 3; the tree-scoped replay pins the
             # same way (see /agenttrees/{tree}/replay above).
-            err(422, "invalid", "Replays currently run frozen (openapi.yaml EvalSetReplayRequest).")
+            err(422, "invalid",
+                "Replays currently run frozen (openapi.yaml EvalBenchmarkReplayRequest).")
 
         allowed = visible_trees(request)
-        items = [i for i in set_items(setId, latest_version(setId))
+        items = [i for i in benchmark_items(benchmarkId, latest_version(benchmarkId))
                  if i["kind"] == "reference" and item_visible(i, allowed)]
         if not items:
             err(422, "invalid",
-                "This set has no turn references you can see — nothing to replay.")
+                "This benchmark has no turn references you can see — nothing to replay.")
 
         # Group into per-tree units, preserving item order. Each item resolves
         # to the ASSISTANT turn of its invocation plus the prompt that produced
@@ -2316,7 +2338,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             if rows:
                 by_tree.setdefault(source["tree"], []).extend(rows)
         if not by_tree:
-            err(422, "invalid", "Set references resolve to no assistant turns to replay.")
+            err(422, "invalid", "Benchmark references resolve to no assistant turns to replay.")
         for tree in by_tree:
             need_enabled_tree(tree)  # 409 tree_disabled
 
@@ -2338,7 +2360,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             for idx, row in enumerate(rows):
                 row["row_idx"] = idx
             evaluation_id = build_evaluation(tree, parent["id"],
-                               f"Eval set · {len(configs)} config(s)", columns, rows)
+                               f"Eval benchmark · {len(configs)} config(s)", columns, rows)
             for row in rows:
                 db.run("INSERT INTO evaluation_cells (evaluation_id, row_idx, col_idx, status, content,"
                        " conversation_id, turn_id) VALUES (?, ?, 0, 'done', ?, ?, ?)",
@@ -2373,32 +2395,32 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         if not body.get("judge_model") or not body.get("rubric_id"):
             err(422, "invalid", "judge_model and rubric_id are required.",
                 field_error("rubric_id", "judge_model and rubric_id are required."))
-        evaluation_id, case_ids, set_id = body.get("evaluation_id"), body.get("case_ids"), body.get("set_id")
-        # v0.3.0 widened the oneOf to evaluation_id | case_ids | set_id
-        # (openapi.yaml:2926-2929).
-        if sum(1 for sel in (evaluation_id, case_ids, set_id) if sel) != 1:
+        evaluation_id, case_ids, benchmark_id = (body.get("evaluation_id"), body.get("case_ids"),
+                                                 body.get("benchmark_id"))
+        # v0.3.0 widened the oneOf to evaluation_id | case_ids | benchmark_id.
+        if sum(1 for sel in (evaluation_id, case_ids, benchmark_id) if sel) != 1:
             err(422, "invalid",
-                "Exactly one of evaluation_id / case_ids / set_id is required "
-                "(openapi.yaml:2926-2929).")
-        if set_id:
-            # "set_id … judges the set's latest membership version unless
-            # set_version pins one". Since the merge a version holds reference
-            # items too, so judging RESOLVES each item to a case: frozen items
-            # give their case_id, references reuse-or-create the case for their
-            # turn (identical to …/freeze). Turns are immutable, so the
-            # resolution is deterministic — but membership is NOT rewritten
-            # here: the item stays a reference until someone freezes it.
-            need_set(set_id)
-            version = latest_version(set_id)
-            if body.get("set_version") is not None:
-                version = body["set_version"]
-                if not db.one("SELECT 1 AS x FROM eval_set_versions WHERE set_id = ?"
-                              " AND version = ?", (set_id, version)):
+                "Exactly one of evaluation_id / case_ids / benchmark_id is required.")
+        if benchmark_id:
+            # "benchmark_id … judges the benchmark's latest membership version
+            # unless benchmark_version pins one". Since the merge a version
+            # holds reference items too, so judging RESOLVES each item to a
+            # case: frozen items give their case_id, references reuse-or-
+            # create the case for their turn (identical to …/freeze). Turns
+            # are immutable, so the resolution is deterministic — but
+            # membership is NOT rewritten here: the item stays a reference
+            # until someone freezes it.
+            need_benchmark(benchmark_id)
+            version = latest_version(benchmark_id)
+            if body.get("benchmark_version") is not None:
+                version = body["benchmark_version"]
+                if not db.one("SELECT 1 AS x FROM eval_benchmark_versions WHERE benchmark_id = ?"
+                              " AND version = ?", (benchmark_id, version)):
                     err(404, "not_found",
-                        f"Eval set '{set_id}' has no version {version}.")
+                        f"Eval benchmark '{benchmark_id}' has no version {version}.")
             allowed = visible_trees(request)
             case_ids = []
-            for item in set_items(set_id, version):
+            for item in benchmark_items(benchmark_id, version):
                 if not item_visible(item, allowed):
                     continue
                 cid = (item["case_id"] if item["kind"] == "frozen"
@@ -2407,7 +2429,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                     case_ids.append(cid)
             if not case_ids:
                 err(422, "invalid",
-                    f"Eval set '{set_id}' v{version} has no cases to judge.")
+                    f"Eval benchmark '{benchmark_id}' v{version} has no cases to judge.")
         versions = db.all("SELECT * FROM rubrics WHERE id = ? ORDER BY version", (body["rubric_id"],))
         if not versions:
             err(404, "not_found", f"Rubric '{body['rubric_id']}' not found.")
@@ -2444,11 +2466,11 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
                                  (evaluation_id, cell["row_idx"]))
                     case_id = new_id("case")
                     db.run(
-                        "INSERT INTO eval_cases (id, prompt, envelope, output, source, created_at)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO eval_cases (id, prompt, envelope, output, source, agenttree,"
+                        " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (case_id, row["prompt"], row["envelope"], cell["content"] or "",
                          j({"tree": r["tree_id"], "conversation_id": row["conversation_id"],
-                            "turn_id": row["turn_id"]}), now_iso()))
+                            "turn_id": row["turn_id"]}), r["tree_id"], now_iso()))
                     db.run("UPDATE evaluation_cells SET case_id = ? WHERE evaluation_id = ? AND row_idx = ?"
                            " AND col_idx = ?", (case_id, evaluation_id, cell["row_idx"], cell["col_idx"]))
                 cases.append((case_id, evaluation_id, cell["turn_id"], cell["conversation_id"]))

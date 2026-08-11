@@ -1,9 +1,9 @@
-"""Eval workbench — the mock half of contract v0.3.0's eval surface:
+"""Eval workbench — the mock half of the eval surface:
 POST /eval/cases, GET /eval/cases/{caseId}, POST /eval/cases/{caseId}/versions,
 POST /eval/cases/import,
-GET+POST /eval/sets, POST /eval/sets/{setId}/versions,
+GET+POST /eval/benchmarks, POST /eval/benchmarks/{benchmarkId}/versions,
 POST /eval/rubrics/{rubricId}/versions,
-and JudgeRequest.set_id (+ set_version).
+and JudgeRequest.benchmark_id (+ benchmark_version).
 
 Run: npm run test:mock.
 
@@ -39,15 +39,17 @@ def csv_bytes(*rows: str) -> bytes:
 MAPPING = json.dumps({"input": "question", "output": "answer", "reference": "expected"})
 
 
-def upload(data: bytes, mapping: str = MAPPING, filename: str = "cases.csv", **fields):
+def upload(data: bytes, mapping: str = MAPPING, filename: str = "cases.csv",
+          agenttree: str = "agent1", **fields):
     files = {"file": (filename, data, "text/csv")}
-    return {"files": files, "data": {"mapping": mapping, **fields}}
+    return {"files": files, "data": {"mapping": mapping, "agenttree": agenttree, **fields}}
 
 
 async def make_case(c, prompt="Why was I charged twice?", output="A hold, not a charge.",
-                    reference=None):
+                    reference=None, agenttree="agent1"):
     r = await c.post("/eval/cases", json={
-        "input": {"prompt": prompt}, "output": output, "reference": reference})
+        "agenttree": agenttree, "input": {"prompt": prompt}, "output": output,
+        "reference": reference})
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -73,19 +75,36 @@ def test_create_case_handcrafted_and_read_back():
 
 
 def test_create_case_requires_exactly_one_mode():
-    """openapi.yaml:3328-3330 oneOf: (input + output) XOR source."""
+    """openapi.yaml EvalCaseCreate oneOf: (input + output) XOR source."""
     async def case():
         async with client_pair() as c:
             assert (await c.post("/eval/cases", json={})).status_code == 422
             both = await c.post("/eval/cases", json={
+                "agenttree": "agent1",
                 "input": {"prompt": "p"}, "output": "o",
                 "source": {"tree": "agent1", "conversation_id": "c", "turn_id": "t"}})
             assert both.status_code == 422
             # handcrafted mode still validates its own fields
             assert (await c.post("/eval/cases",
-                                 json={"input": {"prompt": "  "}, "output": "o"})).status_code == 422
+                                 json={"agenttree": "agent1", "input": {"prompt": "  "},
+                                      "output": "o"})).status_code == 422
             assert (await c.post("/eval/cases",
-                                 json={"input": {"prompt": "p"}})).status_code == 422
+                                 json={"agenttree": "agent1",
+                                      "input": {"prompt": "p"}})).status_code == 422
+    run(case())
+
+
+def test_create_case_requires_agenttree():
+    """agenttree is required regardless of creation mode (own top-level
+    `required`, not inside either oneOf branch)."""
+    async def case():
+        async with client_pair() as c:
+            missing = await c.post("/eval/cases",
+                                   json={"input": {"prompt": "p"}, "output": "o"})
+            assert missing.status_code == 422
+            blank = await c.post("/eval/cases",
+                                 json={"agenttree": "  ", "input": {"prompt": "p"}, "output": "o"})
+            assert blank.status_code == 422
     run(case())
 
 
@@ -100,7 +119,7 @@ def test_create_case_sourced_from_a_real_turn():
             user_turn = next(t for t in conv["turns"] if t["role"] == "user")
             answer = next(t for t in conv["turns"] if t["role"] == "assistant")
 
-            r = await c.post("/eval/cases", json={"source": {
+            r = await c.post("/eval/cases", json={"agenttree": "agent1", "source": {
                 "tree": "agent1", "conversation_id": conv_id, "turn_id": answer["id"]}})
             assert r.status_code == 201, r.text
             created = r.json()
@@ -108,19 +127,20 @@ def test_create_case_sourced_from_a_real_turn():
             assert created["output"] == answer["content"]
             assert created["source"] == {"tree": "agent1", "conversation_id": conv_id,
                                          "turn_id": answer["id"]}
+            assert created["agenttree"] == "agent1"
             assert created["version"] == 1
 
             # Referencing the user half of the same invocation resolves to the
             # same pair (a turn row is one message, db.py:53).
-            from_user = (await c.post("/eval/cases", json={"source": {
+            from_user = (await c.post("/eval/cases", json={"agenttree": "agent1", "source": {
                 "tree": "agent1", "conversation_id": conv_id,
                 "turn_id": user_turn["id"]}})).json()
             assert from_user["output"] == answer["content"]
 
-            missing = await c.post("/eval/cases", json={"source": {
+            missing = await c.post("/eval/cases", json={"agenttree": "agent1", "source": {
                 "tree": "agent1", "conversation_id": conv_id, "turn_id": "nope"}})
             assert missing.status_code == 404
-            bad_tree = await c.post("/eval/cases", json={"source": {
+            bad_tree = await c.post("/eval/cases", json={"agenttree": "agent1", "source": {
                 "tree": "ghost", "conversation_id": conv_id, "turn_id": answer["id"]}})
             assert bad_tree.status_code == 404
     run(case())
@@ -193,11 +213,14 @@ def test_versioned_case_keeps_phase1_rows_valid(tmp_path):
         again.conn.close()
 
 
-def test_casebooks_migrate_into_eval_sets(tmp_path):
-    """The merge migration (db.py Db._migrate_casebooks_into_eval_sets): a
-    database written before it opens fine, its eval sets keep their versions
-    with their cases as FROZEN items, and each casebook becomes a set whose
-    version 1 holds its turn REFERENCES — ids, notes and added_at intact."""
+def test_casebooks_migrate_into_eval_benchmarks(tmp_path):
+    """The merge migration (db.py Db._migrate_casebooks_into_eval_benchmarks): a
+    database written before it opens fine, its eval benchmarks keep their
+    versions with their cases as FROZEN items, and each casebook becomes a
+    benchmark whose version 1 holds its turn REFERENCES — ids, notes and
+    added_at intact. Deliberately uses the OLD physical table name
+    (eval_sets, pre-dating even the EvalSet->EvalBenchmark rename) — that is
+    the marker the migration's presence guard checks for."""
     path = str(tmp_path / "pre-merge.sqlite")
     conn = sqlite3.connect(path)
     conn.executescript(
@@ -223,27 +246,27 @@ def test_casebooks_migrate_into_eval_sets(tmp_path):
 
     db = Db(path)
     try:
-        cols = {r[1] for r in db.conn.execute("PRAGMA table_info(eval_sets)")}
+        cols = {r[1] for r in db.conn.execute("PRAGMA table_info(eval_benchmarks)")}
         assert "case_ids" not in cols and "description" in cols
         tables = {r[0] for r in db.conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert "casebooks" not in tables and "casebook_items" not in tables
 
-        # The eval set kept both versions; its cases are frozen items.
-        versions = db.all("SELECT * FROM eval_set_versions WHERE set_id = 'set_old'"
+        # The eval benchmark kept both versions; its cases are frozen items.
+        versions = db.all("SELECT * FROM eval_benchmark_versions WHERE benchmark_id = 'set_old'"
                           " ORDER BY version")
         assert [v["version"] for v in versions] == [1, 2]
         v2 = json.loads(versions[1]["items"])
         assert [i["kind"] for i in v2] == ["frozen", "frozen"]
         assert [i["case_id"] for i in v2] == ["case_a", "case_b"]
         # Metadata moved out of the version rows; the latest name won.
-        assert db.one("SELECT * FROM eval_sets WHERE id = 'set_old'")["name"] == "refunds v2"
+        assert db.one("SELECT * FROM eval_benchmarks WHERE id = 'set_old'")["name"] == "refunds v2"
 
-        # The casebook is a set now, references and all.
-        book = db.one("SELECT * FROM eval_sets WHERE id = 'cb_old'")
+        # The casebook is a benchmark now, references and all.
+        book = db.one("SELECT * FROM eval_benchmarks WHERE id = 'cb_old'")
         assert book["name"] == "Noteworthy" and book["description"] == "worst first"
         items = json.loads(db.one(
-            "SELECT * FROM eval_set_versions WHERE set_id = 'cb_old'")["items"])
+            "SELECT * FROM eval_benchmark_versions WHERE benchmark_id = 'cb_old'")["items"])
         assert items == [{"id": "cbi_1", "kind": "reference",
                           "source": {"tree": "agent1", "conversation_id": "conv_1",
                                      "turn_id": "turn_1"},
@@ -254,8 +277,8 @@ def test_casebooks_migrate_into_eval_sets(tmp_path):
     # Idempotent: reopening the same file changes nothing.
     again = Db(path)
     try:
-        assert len(again.all("SELECT * FROM eval_sets")) == 2
-        assert len(again.all("SELECT * FROM eval_set_versions")) == 3
+        assert len(again.all("SELECT * FROM eval_benchmarks")) == 2
+        assert len(again.all("SELECT * FROM eval_benchmark_versions")) == 3
     finally:
         again.conn.close()
 
@@ -320,7 +343,7 @@ def test_judgments_migrate_to_subject_and_scorer(tmp_path):
 # -------------------------------------------------------------------- sets
 # Since the Casebook merge a set's membership is a list of ITEMS, and a case in
 # a set is a FROZEN item ({"case_id": ...}). Reference items — the other kind —
-# live in mock/tests/test_inspector_eval_sets.py, next to the ⊞ action that
+# live in mock/tests/test_inspector_eval_benchmarks.py, next to the ⊞ action that
 # creates them.
 def frozen(case) -> dict:
     return {"case_id": case["id"]}
@@ -334,26 +357,26 @@ def test_set_create_list_and_versioned_membership():
     async def case():
         async with client_pair() as c:
             a, b, d = [await make_case(c, prompt=f"q{i}") for i in range(3)]
-            created = await c.post("/eval/sets", json={"name": "refund-fails",
+            created = await c.post("/eval/benchmarks", json={"name": "refund-fails",
                                                        "items": [frozen(a), frozen(b)]})
             assert created.status_code == 201, created.text
             s1 = created.json()
             assert s1["version"] == 1 and case_ids(s1) == [a["id"], b["id"]]
             assert [i["kind"] for i in s1["items"]] == ["frozen", "frozen"]
 
-            s2 = await c.post(f"/eval/sets/{s1['id']}/versions",
+            s2 = await c.post(f"/eval/benchmarks/{s1['id']}/versions",
                              json={"items": [frozen(a), frozen(b), frozen(d)]})
             assert s2.status_code == 201, s2.text
             assert s2.json()["version"] == 2 and len(s2.json()["items"]) == 3
-            s3 = (await c.post(f"/eval/sets/{s1['id']}/versions",
+            s3 = (await c.post(f"/eval/benchmarks/{s1['id']}/versions",
                               json={"items": [frozen(d)]})).json()
             assert s3["version"] == 3
             # A rename is NOT a membership change, so it takes no version.
-            named = (await c.patch(f"/eval/sets/{s1['id']}",
+            named = (await c.patch(f"/eval/benchmarks/{s1['id']}",
                                    json={"name": "refund-fails-lite"})).json()
             assert named["version"] == 3 and named["name"] == "refund-fails-lite"
 
-            listed = (await c.get("/eval/sets")).json()["items"]
+            listed = (await c.get("/eval/benchmarks")).json()["items"]
             assert [s["id"] for s in listed] == [s1["id"]]  # latest version each
             assert listed[0]["version"] == 3 and case_ids(listed[0]) == [d["id"]]
     run(case())
@@ -363,13 +386,13 @@ def test_set_validation():
     async def case():
         async with client_pair() as c:
             a = await make_case(c)
-            assert (await c.post("/eval/sets", json={})).status_code == 422
-            assert (await c.post("/eval/sets",
+            assert (await c.post("/eval/benchmarks", json={})).status_code == 422
+            assert (await c.post("/eval/benchmarks",
                                  json={"name": "s", "items": [{"case_id": "ghost"}]})).status_code == 404
-            s = (await c.post("/eval/sets", json={"name": "s"})).json()
+            s = (await c.post("/eval/benchmarks", json={"name": "s"})).json()
             assert s["items"] == []  # "empty/omitted = start empty"
-            assert (await c.post(f"/eval/sets/{s['id']}/versions", json={})).status_code == 422
-            assert (await c.post("/eval/sets/ghost/versions",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/versions", json={})).status_code == 422
+            assert (await c.post("/eval/benchmarks/ghost/versions",
                                 json={"items": [frozen(a)]})).status_code == 404
     run(case())
 
@@ -394,19 +417,19 @@ def test_rubric_put_appends_a_new_version():
 
 
 # ------------------------------------------------------------ judge by set
-def test_judge_by_set_id_fans_out_over_membership():
+def test_judge_by_benchmark_id_fans_out_over_membership():
     async def case():
         async with client_pair() as c:
             cases = [await make_case(c, prompt=f"q{i}", output=f"a{i}") for i in range(3)]
             rubric = await make_rubric(c)
-            s1 = (await c.post("/eval/sets", json={
+            s1 = (await c.post("/eval/benchmarks", json={
                 "name": "set-a", "items": [frozen(c_) for c_ in cases[:2]]})).json()
-            # v2 adds the third case; judging without set_version uses LATEST.
-            (await c.post(f"/eval/sets/{s1['id']}/versions",
+            # v2 adds the third case; judging without benchmark_version uses LATEST.
+            (await c.post(f"/eval/benchmarks/{s1['id']}/versions",
                          json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
-                "set_id": s1["id"], "judge_model": "claude-haiku-4-5",
+                "benchmark_id": s1["id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})
             assert r.status_code == 202, r.text
             task = await wait_task(c, r.json()["task_id"])
@@ -426,18 +449,18 @@ def test_judge_by_set_id_fans_out_over_membership():
     run(case())
 
 
-def test_judge_by_set_version_pins_the_older_membership():
+def test_judge_by_benchmark_version_pins_the_older_membership():
     async def case():
         async with client_pair() as c:
             cases = [await make_case(c, prompt=f"q{i}") for i in range(3)]
             rubric = await make_rubric(c)
-            s1 = (await c.post("/eval/sets", json={
+            s1 = (await c.post("/eval/benchmarks", json={
                 "name": "pinned", "items": [frozen(cases[0])]})).json()
-            (await c.post(f"/eval/sets/{s1['id']}/versions",
+            (await c.post(f"/eval/benchmarks/{s1['id']}/versions",
                          json={"items": [frozen(c_) for c_ in cases]}))
 
             r = await c.post("/eval/judge", json={
-                "set_id": s1["id"], "set_version": 1,
+                "benchmark_id": s1["id"], "benchmark_version": 1,
                 "judge_model": "claude-haiku-4-5", "rubric_id": rubric["id"]})
             task = await wait_task(c, r.json()["task_id"])
             detail = (await c.get(f"/tasks/{task['id']}")).json()
@@ -447,7 +470,7 @@ def test_judge_by_set_version_pins_the_older_membership():
                                         "subject_id": cases[2]["id"]})).json()["items"] == []
 
             missing = await c.post("/eval/judge", json={
-                "set_id": s1["id"], "set_version": 9,
+                "benchmark_id": s1["id"], "benchmark_version": 9,
                 "judge_model": "claude-haiku-4-5", "rubric_id": rubric["id"]})
             assert missing.status_code == 404
     run(case())
@@ -460,12 +483,12 @@ def test_judge_selector_is_exactly_one():
             rubric = await make_rubric(c)
             base = {"judge_model": "claude-haiku-4-5", "rubric_id": rubric["id"]}
             assert (await c.post("/eval/judge", json=base)).status_code == 422
-            two = await c.post("/eval/judge", json={**base, "set_id": "s", "case_ids": [a["id"]]})
+            two = await c.post("/eval/judge", json={**base, "benchmark_id": "s", "case_ids": [a["id"]]})
             assert two.status_code == 422
             assert (await c.post("/eval/judge",
-                                 json={**base, "set_id": "ghost"})).status_code == 404
-            empty = (await c.post("/eval/sets", json={"name": "empty"})).json()
-            no_cases = await c.post("/eval/judge", json={**base, "set_id": empty["id"]})
+                                 json={**base, "benchmark_id": "ghost"})).status_code == 404
+            empty = (await c.post("/eval/benchmarks", json={"name": "empty"})).json()
+            no_cases = await c.post("/eval/judge", json={**base, "benchmark_id": empty["id"]})
             assert no_cases.status_code == 422
     run(case())
 
@@ -477,7 +500,7 @@ def test_import_csv_creates_cases_and_a_named_set():
             data = csv_bytes("Why two charges?,A hold.,Not a double charge.\n",
                              "Where is my refund?,In 3 days.,\n")
             r = await c.post("/eval/cases/import",
-                             **upload(data, set_name="imported"))
+                             **upload(data, benchmark_name="imported"))
             assert r.status_code == 200, r.text
             report = r.json()
             assert report["rows_total"] == 2 and report["rows_imported"] == 2
@@ -491,8 +514,8 @@ def test_import_csv_creates_cases_and_a_named_set():
             second = (await c.get(f"/eval/cases/{report['created_case_ids'][1]}")).json()
             assert second["reference"] is None  # blank cell -> nullable reference
 
-            sets = (await c.get("/eval/sets")).json()["items"]
-            assert [s["id"] for s in sets] == [report["set_id"]]
+            sets = (await c.get("/eval/benchmarks")).json()["items"]
+            assert [s["id"] for s in sets] == [report["benchmark_id"]]
             assert sets[0]["name"] == "imported"
             assert case_ids(sets[0]) == report["created_case_ids"]
     run(case())
@@ -516,7 +539,7 @@ def test_import_reports_bad_rows_per_line_and_still_lands_the_good_ones():
             assert report["errors"][0]["field"] == "question"
             assert report["errors"][1]["field"] == "answer"
             assert all(e["message"] for e in report["errors"])
-            assert report["set_id"] is None  # no set requested
+            assert report["benchmark_id"] is None  # no set requested
     run(case())
 
 
@@ -524,22 +547,22 @@ def test_import_honours_column_mapping_and_extends_an_existing_set():
     async def case():
         async with client_pair() as c:
             seed = await make_case(c)
-            target = (await c.post("/eval/sets", json={"name": "growing",
+            target = (await c.post("/eval/benchmarks", json={"name": "growing",
                                                        "items": [frozen(seed)]})).json()
             # Deliberately mapped in a different order than the header.
             mapping = json.dumps({"input": "expected", "output": "question"})
             data = csv_bytes("used-as-output,ignored,used-as-input\n")
             r = await c.post("/eval/cases/import",
-                             **upload(data, mapping=mapping, set_id=target["id"]))
+                             **upload(data, mapping=mapping, benchmark_id=target["id"]))
             assert r.status_code == 200, r.text
             report = r.json()
-            assert report["set_id"] == target["id"] and report["rows_imported"] == 1
+            assert report["benchmark_id"] == target["id"] and report["rows_imported"] == 1
             imported = (await c.get(f"/eval/cases/{report['created_case_ids'][0]}")).json()
             assert imported["input"]["prompt"] == "used-as-input"
             assert imported["output"] == "used-as-output"
             assert imported["reference"] is None  # reference unmapped
 
-            sets = (await c.get("/eval/sets")).json()["items"]
+            sets = (await c.get("/eval/benchmarks")).json()["items"]
             assert sets[0]["version"] == 2  # membership appended, not overwritten
             assert case_ids(sets[0]) == [seed["id"], report["created_case_ids"][0]]
     run(case())
@@ -562,10 +585,10 @@ def test_import_whole_file_failures_are_422():
             assert "nope" in bad_col.json()["message"]
             assert (await c.post("/eval/cases/import", **upload(b""))).status_code == 422
             both_sets = await c.post("/eval/cases/import",
-                                     **upload(good, set_id="a", set_name="b"))
+                                     **upload(good, benchmark_id="a", benchmark_name="b"))
             assert both_sets.status_code == 422
             assert (await c.post("/eval/cases/import",
-                                 **upload(good, set_id="ghost"))).status_code == 404
+                                 **upload(good, benchmark_id="ghost"))).status_code == 404
     run(case())
 
 
@@ -578,20 +601,20 @@ def test_import_large_file_returns_202_with_the_same_report_on_the_task():
             rows = [f"q{i},a{i},\n" for i in range(IMPORT_SYNC_MAX_ROWS + 1)]
             rows[5] = ",orphan answer,\n"  # one bad row survives the async path too
             r = await c.post("/eval/cases/import",
-                             **upload(csv_bytes(*rows), set_name="bulk"))
+                             **upload(csv_bytes(*rows), benchmark_name="bulk"))
             assert r.status_code == 202, r.text
             assert set(r.json()) == {"task_id"}
             task = await wait_task(c, r.json()["task_id"])
             assert task["type"] == "import" and task["status"] == "done"
             report = task["result"]["import_report"]
-            assert set(report) == {"set_id", "rows_total", "rows_imported",
+            assert set(report) == {"benchmark_id", "rows_total", "rows_imported",
                                    "created_case_ids", "errors"}
             assert report["rows_total"] == IMPORT_SYNC_MAX_ROWS + 1
             assert report["rows_imported"] == IMPORT_SYNC_MAX_ROWS
             assert [e["row"] for e in report["errors"]] == [6]
-            assert report["set_id"]
-            sets = (await c.get("/eval/sets")).json()["items"]
-            assert sets[0]["id"] == report["set_id"]
+            assert report["benchmark_id"]
+            sets = (await c.get("/eval/benchmarks")).json()["items"]
+            assert sets[0]["id"] == report["benchmark_id"]
             assert len(sets[0]["items"]) == IMPORT_SYNC_MAX_ROWS
     run(case())
 
@@ -633,7 +656,7 @@ def test_import_xlsx_needs_no_extra_dependency(shared):
                              files={"file": ("cases.xlsx", data,
                                              "application/vnd.openxmlformats-officedocument"
                                              ".spreadsheetml.sheet")},
-                             data={"mapping": MAPPING})
+                             data={"mapping": MAPPING, "agenttree": "agent1"})
             assert r.status_code == 200, r.text
             report = r.json()
             assert report["rows_total"] == 2 and report["rows_imported"] == 1
@@ -649,7 +672,7 @@ def test_import_rejects_a_corrupt_workbook_whole_file():
         async with client_pair() as c:
             r = await c.post("/eval/cases/import",
                              files={"file": ("cases.xlsx", b"PK\x03\x04garbage", "application/x")},
-                             data={"mapping": MAPPING})
+                             data={"mapping": MAPPING, "agenttree": "agent1"})
             assert r.status_code == 422
             assert "XLSX" in r.json()["message"] or "workbook" in r.json()["message"].lower()
     run(case())
@@ -659,20 +682,21 @@ def test_import_rejects_a_corrupt_workbook_whole_file():
 def test_eval_cases_are_global_not_tree_scoped():
     """"Global: tasks, span payloads, eval rubrics/judgments, settings"
     (feature-spec.md:111) — a disabled tree blocks new RUN work, never eval
-    case/set CRUD or judging standalone cases."""
+    case/benchmark CRUD or judging standalone cases."""
     async def case():
         async with client_pair() as c:
             a = await make_case(c)
             rubric = await make_rubric(c)
-            s = (await c.post("/eval/sets", json={"name": "s", "items": [frozen(a)]})).json()
+            s = (await c.post("/eval/benchmarks", json={"name": "s", "items": [frozen(a)]})).json()
             assert (await c.patch("/admin/agenttrees/agent1",
                                   json={"enabled": False})).status_code == 200
-            assert (await c.post("/eval/cases", json={"input": {"prompt": "p"},
+            assert (await c.post("/eval/cases", json={"agenttree": "agent1",
+                                                      "input": {"prompt": "p"},
                                                       "output": "o"})).status_code == 201
-            assert (await c.post(f"/eval/sets/{s['id']}/versions",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/versions",
                                 json={"items": [frozen(a)]})).status_code == 201
             judged = await c.post("/eval/judge", json={
-                "set_id": s["id"], "judge_model": "claude-haiku-4-5",
+                "benchmark_id": s["id"], "judge_model": "claude-haiku-4-5",
                 "rubric_id": rubric["id"]})
             assert judged.status_code == 202
             assert (await wait_task(c, judged.json()["task_id"]))["status"] == "done"

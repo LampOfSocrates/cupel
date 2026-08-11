@@ -31,7 +31,7 @@ runs this code and is allowed, rather than skipping it.
 import re
 
 # openapi.yaml info.version — the contract these requirements were read from.
-CONTRACT_VERSION = "0.4.0"
+CONTRACT_VERSION = "0.5.0"
 
 TREE_PERMISSIONS = ("view", "tune", "evaluate")
 ROLES = ("admin", "inspect")
@@ -92,15 +92,15 @@ REQUIREMENTS: dict[str, str] = {
     "POST /eval/cases/import": "none",
     "GET /eval/cases/{caseId}": "none",
     "POST /eval/cases/{caseId}/versions": "none",
-    "GET /eval/sets": "none",
-    "POST /eval/sets": "none",
-    "GET /eval/sets/{setId}": "none",
-    "DELETE /eval/sets/{setId}": "none",
-    "PATCH /eval/sets/{setId}": "none",
-    "POST /eval/sets/{setId}/versions": "none",
-    "POST /eval/sets/{setId}/items": "none",
-    "POST /eval/sets/{setId}/freeze": "none",
-    "POST /eval/sets/{setId}/replay": "none",
+    "GET /eval/benchmarks": "none",
+    "POST /eval/benchmarks": "none",
+    "GET /eval/benchmarks/{benchmarkId}": "none",
+    "DELETE /eval/benchmarks/{benchmarkId}": "none",
+    "PATCH /eval/benchmarks/{benchmarkId}": "none",
+    "POST /eval/benchmarks/{benchmarkId}/versions": "none",
+    "POST /eval/benchmarks/{benchmarkId}/items": "none",
+    "POST /eval/benchmarks/{benchmarkId}/freeze": "none",
+    "POST /eval/benchmarks/{benchmarkId}/replay": "none",
     "POST /eval/judge": "none",
     "GET /eval/judgments": "none",
     "GET /eval/evaluations/{evaluationId}/summary": "none",

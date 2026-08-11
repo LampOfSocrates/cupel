@@ -14,27 +14,28 @@ import {
 } from "@mantine/core";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
-import type { EvalCaseSource, EvalSet } from "../api/types";
+import type { EvalCaseSource, EvalBenchmark } from "../api/types";
 
 // ⊞ collect — "Collect noteworthy turns into Casebooks with one
-// keystroke" (cupel-phases.md:79). Since Casebook and EvalSet merged, the
-// keystroke collects into an EVAL SET: one modal behind every ⊞ entry point
-// (feature-spec.md:236 "Inspector | GET /admin/conversations,
-// POST /casebooks/{id}/items", now POST /eval/sets/{setId}/items) — pick an
-// existing set or type a new name, add an optional note, POST the REFERENCE.
+// keystroke" (cupel-phases.md:79). Since Casebook and EvalBenchmark merged,
+// the keystroke collects into an EVAL BENCHMARK: one modal behind every ⊞
+// entry point (feature-spec.md:236 "Inspector | GET /admin/conversations,
+// POST /casebooks/{id}/items", now POST /eval/benchmarks/{benchmarkId}/items)
+// — pick an existing benchmark or type a new name, add an optional note,
+// POST the REFERENCE.
 //
 // Three contract facts shape the UX:
 // - The item is {source: {tree, conversation_id, turn_id}} + note — a
 //   REFERENCE, never a copy. Nothing about the turn's text is sent.
 // - Membership is VERSIONED, so collecting appends a version rather than
-//   mutating the set. The modal says so, because "add" quietly meaning "new
-//   version" is exactly the kind of thing a UI should not hide.
-// - Adding a turn the set already holds "appends nothing and returns that
-//   version unchanged", so the modal never pre-checks membership: an
+//   mutating the benchmark. The modal says so, because "add" quietly meaning
+//   "new version" is exactly the kind of thing a UI should not hide.
+// - Adding a turn the benchmark already holds "appends nothing and returns
+//   that version unchanged", so the modal never pre-checks membership: an
 //   unchanged version number IS the "already there" signal.
 //
-// Create-new is inline (POST /eval/sets then POST …/items) rather than a
-// second screen — the whole point is one keystroke from noticing a turn.
+// Create-new is inline (POST /eval/benchmarks then POST …/items) rather than
+// a second screen — the whole point is one keystroke from noticing a turn.
 
 interface Props {
   opened: boolean;
@@ -42,7 +43,7 @@ interface Props {
   target: EvalCaseSource | null;
   onClose: () => void;
   /** Fired after a successful add, so callers can refresh their own view. */
-  onCollected?: (set: EvalSet) => void;
+  onCollected?: (benchmark: EvalBenchmark) => void;
 }
 
 // Fresh form per open WITHOUT a reset effect: Mantine's Modal does not render
@@ -52,7 +53,7 @@ interface Props {
 // still has a Modal to run, and so the fetch stops when the modal does.
 export function CollectModal({ opened, target, onClose, onCollected }: Props) {
   return (
-    <Modal opened={opened} onClose={onClose} title="Collect turn into an eval set" size="md">
+    <Modal opened={opened} onClose={onClose} title="Collect turn into an eval benchmark" size="md">
       <CollectBody target={target} onCollected={onCollected} />
     </Modal>
   );
@@ -65,40 +66,41 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  // GET /eval/sets is paged, so this picker holds a PAGE, not "the sets".
-  // Everything below reads page.items and the footer states the rest —
-  // a picker that silently omits a set is how a turn ends up collected twice.
+  // GET /eval/benchmarks is paged, so this picker holds a PAGE, not "the
+  // benchmarks". Everything below reads page.items and the footer states the
+  // rest — a picker that silently omits a benchmark is how a turn ends up
+  // collected twice.
   const {
     data: page,
     error: loadError,
     setData: setPage,
-  } = useAsync(() => api.evalSets(), []);
-  const sets = page?.items ?? null;
+  } = useAsync(() => api.evalBenchmarks(), []);
+  const benchmarks = page?.items ?? null;
 
   const loadMore = async () => {
     if (!page) return;
-    const next = await api.evalSets({ page: page.page + 1 });
+    const next = await api.evalBenchmarks({ page: page.page + 1 });
     setPage((prev) => ({ ...next, items: [...prev.items, ...next.items] }));
   };
 
-  const add = async (evalSet: EvalSet) => {
+  const add = async (evalBenchmark: EvalBenchmark) => {
     if (!target) return;
-    setBusy(evalSet.id);
+    setBusy(evalBenchmark.id);
     setError(null);
     try {
-      const updated = await api.addEvalSetItem(evalSet.id, {
+      const updated = await api.addEvalBenchmarkItem(evalBenchmark.id, {
         source: target,
         note: note.trim() || null,
       });
-      const already = updated.version === evalSet.version;
+      const already = updated.version === evalBenchmark.version;
       setDone(
         already
-          ? `Already in ${evalSet.name} — nothing added.`
-          : `Added to ${evalSet.name}, now v${updated.version}.`,
+          ? `Already in ${evalBenchmark.name} — nothing added.`
+          : `Added to ${evalBenchmark.name}, now v${updated.version}.`,
       );
       setPage((prev) => ({
         ...prev,
-        items: prev.items.map((s) => (s.id === updated.id ? updated : s)),
+        items: prev.items.map((b) => (b.id === updated.id ? updated : b)),
       }));
       onCollected?.(updated);
     } catch (e) {
@@ -114,7 +116,7 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
     setBusy("__new__");
     setError(null);
     try {
-      const created = await api.createEvalSet({ name });
+      const created = await api.createEvalBenchmark({ name });
       setPage((prev) => ({ ...prev, items: [created, ...prev.items], total: prev.total + 1 }));
       setNewName("");
       await add(created);
@@ -127,8 +129,8 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
   return (
     <Stack gap="xs">
       <Text size="xs" c="dimmed">
-        A set stores a <strong>reference</strong> to this turn — the transcript stays in its
-        conversation. Membership is versioned, so collecting appends a new version rather
+        A benchmark stores a <strong>reference</strong> to this turn — the transcript stays in
+        its conversation. Membership is versioned, so collecting appends a new version rather
         than editing the current one.
       </Text>
       {target && (
@@ -156,27 +158,27 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
         </Alert>
       )}
       <Divider label="Add to" labelPosition="left" />
-      {!sets && !error && !loadError && <Loader size="sm" />}
-      {sets?.length === 0 && (
+      {!benchmarks && !error && !loadError && <Loader size="sm" />}
+      {benchmarks?.length === 0 && (
         <Text size="xs" c="dimmed" data-testid="collect-empty">
-          No eval sets yet — name one below and this turn becomes its first entry.
+          No eval benchmarks yet — name one below and this turn becomes its first entry.
         </Text>
       )}
       <ScrollArea.Autosize mah={220}>
         <Stack gap={4}>
-          {sets?.map((s) => (
-            <Group key={s.id} gap={6} wrap="nowrap" justify="space-between">
-              <Text size="sm" truncate title={s.description ?? undefined}>
-                {s.name}{" "}
+          {benchmarks?.map((b) => (
+            <Group key={b.id} gap={6} wrap="nowrap" justify="space-between">
+              <Text size="sm" truncate title={b.description ?? undefined}>
+                {b.name}{" "}
                 <Text span size="xs" c="dimmed">
-                  v{s.version} · {s.items.length} item{s.items.length === 1 ? "" : "s"}
+                  v{b.version} · {b.items.length} item{b.items.length === 1 ? "" : "s"}
                 </Text>
               </Text>
               <Button
                 size="compact-xs"
                 variant="light"
-                loading={busy === s.id}
-                onClick={() => add(s)}
+                loading={busy === b.id}
+                onClick={() => add(b)}
               >
                 ⊞ Add
               </Button>
@@ -199,8 +201,8 @@ function CollectBody({ target, onCollected }: Pick<Props, "target" | "onCollecte
         <TextInput
           size="xs"
           style={{ flex: 1 }}
-          placeholder="New eval set name"
-          aria-label="New eval set name"
+          placeholder="New eval benchmark name"
+          aria-label="New eval benchmark name"
           value={newName}
           onChange={(e) => setNewName(e.currentTarget.value)}
         />

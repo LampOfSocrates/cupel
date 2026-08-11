@@ -622,7 +622,7 @@ class Engine:
             except llm.LiveUnavailable:
                 pass  # canned reasoning stands
         # Subject = the CASE (openapi.yaml JudgmentSubject): every judge path —
-        # a grid cell, explicit case_ids, or an eval set whose reference items
+        # a grid cell, explicit case_ids, or an eval benchmark whose reference items
         # were resolved — converges on a case, so there is no separate `result`
         # subject kind. The evaluation is the batch SCOPE, and conversation_id
         # the query index (mock/db.py judgments); the turn is reachable through

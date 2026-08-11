@@ -280,34 +280,42 @@ export function InstructionEditor({
               </Text>
             )}
             {versionsDesc.map((v) => (
-              <Group key={v.version} gap={6} justify="space-between" data-testid={`version-${v.version}`}>
-                <Group gap={6}>
-                  <Text size="sm">v{v.version}</Text>
-                  {v.version === history.live_version && (
-                    <Badge size="xs" variant="filled" color="violet">
-                      live
-                    </Badge>
-                  )}
-                  {v.promoted_from_snapshot_id && (
-                    <Badge size="xs" variant="light" color="teal">
-                      from snapshot {v.promoted_from_snapshot_id}
-                    </Badge>
-                  )}
+              // The whole row is the click target, not just the trailing
+              // "restore" label — a row click with no visible reaction
+              // ("I click a different version, I don't see the text") was
+              // the bug: only that small trailing text used to carry the
+              // handler. ↩ rollback (sketch 06): restore into the draft,
+              // then Save = "PUT the old version's content"
+              // (openapi.yaml:249-250).
+              <UnstyledButton
+                key={v.version}
+                aria-label={`Restore v${v.version}`}
+                onClick={() => restore(v.version)}
+                data-testid={`version-${v.version}`}
+                style={{ display: "block", width: "100%" }}
+              >
+                <Group gap={6} justify="space-between" wrap="nowrap">
+                  <Group gap={6}>
+                    <Text size="sm">v{v.version}</Text>
+                    {v.version === history.live_version && (
+                      <Badge size="xs" variant="filled" color="violet">
+                        live
+                      </Badge>
+                    )}
+                    {v.promoted_from_snapshot_id && (
+                      <Badge size="xs" variant="light" color="teal">
+                        from snapshot {v.promoted_from_snapshot_id}
+                      </Badge>
+                    )}
+                    <Text size="xs" c="dimmed">
+                      {relativeTime(v.created_at)}
+                    </Text>
+                  </Group>
                   <Text size="xs" c="dimmed">
-                    {relativeTime(v.created_at)}
+                    &#x21A9; restore
                   </Text>
                 </Group>
-                {/* ↩ rollback (sketch 06): restore into the draft, then Save
-                    = "PUT the old version's content" (openapi.yaml:249-250). */}
-                <UnstyledButton
-                  aria-label={`Restore v${v.version}`}
-                  onClick={() => restore(v.version)}
-                  fz="xs"
-                  c="dimmed"
-                >
-                  &#x21A9; restore
-                </UnstyledButton>
-              </Group>
+              </UnstyledButton>
             ))}
             <NativeSelect
               label="Format"

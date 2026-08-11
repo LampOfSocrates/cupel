@@ -18,7 +18,7 @@
 // Behavioural rules the handlers mirror from the reference implementation
 // (mock/main.py), because a UI test can lean on any of them: append-only
 // judgments/versions with latest-version-wins reads, newest-first collections,
-// idempotent eval-set item add, 404-never-403 for absent or unpermitted trees,
+// idempotent eval-benchmark item add, 404-never-403 for absent or unpermitted trees,
 // and the 409 tree_disabled write set. Deliberate divergences are marked
 // "DELIBERATE DIVERGENCE" (or "Documented divergence") at the handler that
 // makes them — ./routes/judgments.ts (POST /feedback) and ./routes/evaluations.ts

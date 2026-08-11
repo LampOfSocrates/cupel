@@ -86,8 +86,8 @@ export function ChatPage() {
   const [agentId, setAgentId] = useState<string | null>(null);
   // ⑂ target — assistant turn id the fork modal is open for (null = closed).
   const [forkTurnId, setForkTurnId] = useState<string | null>(null);
-  // ⊞ — the turn a collect dialog is open for (the source of the eval-set item
-  // POST /eval/sets/{setId}/items creates).
+  // ⊞ — the turn a collect dialog is open for (the source of the
+  // eval-benchmark item POST /eval/benchmarks/{benchmarkId}/items creates).
   const [collectTarget, setCollectTarget] = useState<EvalCaseSource | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);

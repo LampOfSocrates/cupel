@@ -1,21 +1,23 @@
-"""Inspector + eval-set tests. Run: npm run test:mock.
+"""Inspector + eval-benchmark tests. Run: npm run test:mock.
 
-Contract under test (openapi.yaml v0.3.0):
-- :298-348 GET /admin/conversations ("Inspector — every conversation,
+Contract under test:
+- GET /admin/conversations ("Inspector — every conversation,
   cross-user"; filters user_id/tree/date_from/date_to/score_min/score_max,
   page/page_size; "Requires the inspect role (403 otherwise); EVERY access is
   audit-logged server-side")
-- :3129-3155 AdminConversationItem (user_id, user_email, latest_score) +
+- AdminConversationItem (user_id, user_email, latest_score) +
   AdminConversationPage (items/page/page_size/total)
-- GET/POST /eval/sets, GET/PATCH/DELETE /eval/sets/{setId},
-  POST /eval/sets/{setId}/versions — the noun
+- GET/POST /eval/benchmarks, GET/PATCH/DELETE /eval/benchmarks/{benchmarkId},
+  POST /eval/benchmarks/{benchmarkId}/versions — the noun
   Casebook merged into ("A member is either kind, so the collection is both")
-- POST /eval/sets/{setId}/items ("IDEMPOTENT: adding a referent the latest
-  version already holds appends nothing and returns that version unchanged")
-- POST /eval/sets/{setId}/freeze ("reuses the existing eval case for that turn
-  or creates one sourced from it … The item keeps its id and its source")
-- POST /eval/sets/{setId}/replay ("one evaluation per tree touched, all
-  children of a single parent task", EvalSetReplayAccepted)
+- POST /eval/benchmarks/{benchmarkId}/items ("IDEMPOTENT: adding a referent
+  the latest version already holds appends nothing and returns that version
+  unchanged")
+- POST /eval/benchmarks/{benchmarkId}/freeze ("reuses the existing eval case
+  for that turn or creates one sourced from it … The item keeps its id and
+  its source")
+- POST /eval/benchmarks/{benchmarkId}/replay ("one evaluation per tree
+  touched, all children of a single parent task", EvalBenchmarkReplayAccepted)
 """
 
 import asyncio
@@ -342,13 +344,14 @@ def test_a_403_writes_no_audit_record(monkeypatch):
 
 
 
-# ================================================================= eval sets
-# The merged noun: Casebook folded into EvalSet, so what used to be nine
-# /casebooks routes plus three /eval/sets ones is one resource whose members
-# carry a kind (reference | frozen). "Materialize the casebook" became
-# POST /eval/sets/{id}/freeze flipping items in place.
-async def seed_set(c, name="Noteworthy", **kwargs):
-    r = await c.post("/eval/sets", json={"name": name}, **kwargs)
+# ============================================================ eval benchmarks
+# The merged noun: Casebook folded into EvalBenchmark (named EvalSet before
+# the later benchmark-flavored rename), so what used to be nine /casebooks
+# routes plus three /eval/benchmarks ones is one resource whose members carry
+# a kind (reference | frozen). "Materialize the casebook" became
+# POST /eval/benchmarks/{id}/freeze flipping items in place.
+async def seed_benchmark(c, name="Noteworthy", **kwargs):
+    r = await c.post("/eval/benchmarks", json={"name": name}, **kwargs)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -358,19 +361,19 @@ def ref(conv, tree="agent1", **extra):
                        "turn_id": conv["turn"]["id"]}, **extra}
 
 
-def test_eval_set_crud():
+def test_eval_benchmark_crud():
     async def case():
         async with make_client() as c:
-            assert (await c.get("/eval/sets")).json()["items"] == []
-            s = await seed_set(c, "Refund failures")
+            assert (await c.get("/eval/benchmarks")).json()["items"] == []
+            s = await seed_benchmark(c, "Refund failures")
             assert s["name"] == "Refund failures"
             assert s["items"] == [] and s["description"] is None
             assert s["version"] == 1 and s["created_at"]
 
-            assert [x["id"] for x in (await c.get("/eval/sets")).json()["items"]] == [s["id"]]
-            assert (await c.get(f"/eval/sets/{s['id']}")).json()["id"] == s["id"]
+            assert [x["id"] for x in (await c.get("/eval/benchmarks")).json()["items"]] == [s["id"]]
+            assert (await c.get(f"/eval/benchmarks/{s['id']}")).json()["id"] == s["id"]
 
-            r = await c.patch(f"/eval/sets/{s['id']}",
+            r = await c.patch(f"/eval/benchmarks/{s['id']}",
                               json={"name": "Refunds", "description": "worst first"})
             assert r.status_code == 200, r.text
             assert r.json()["name"] == "Refunds"
@@ -379,17 +382,17 @@ def test_eval_set_crud():
             assert r.json()["items"] == []
             assert r.json()["version"] == 1
 
-            assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 204
-            assert (await c.get(f"/eval/sets/{s['id']}")).status_code == 404
-            assert (await c.delete(f"/eval/sets/{s['id']}")).status_code == 404
-            assert (await c.get("/eval/sets")).json()["items"] == []
+            assert (await c.delete(f"/eval/benchmarks/{s['id']}")).status_code == 204
+            assert (await c.get(f"/eval/benchmarks/{s['id']}")).status_code == 404
+            assert (await c.delete(f"/eval/benchmarks/{s['id']}")).status_code == 404
+            assert (await c.get("/eval/benchmarks")).json()["items"] == []
     run(case())
 
 
 def test_create_requires_a_name():
     async def case():
         async with make_client() as c:
-            assert (await c.post("/eval/sets", json={})).status_code == 422
+            assert (await c.post("/eval/benchmarks", json={})).status_code == 422
     run(case())
 
 
@@ -399,8 +402,8 @@ def test_reference_items_are_references_only_and_removal_appends_a_version():
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "keep this one")
-            s = await seed_set(c)
-            r = await c.post(f"/eval/sets/{s['id']}/items",
+            s = await seed_benchmark(c)
+            r = await c.post(f"/eval/benchmarks/{s['id']}/items",
                              json=ref(conv, note="great answer"))
             assert r.status_code == 201, r.text
             # Adding appends a MEMBERSHIP VERSION — the casebook's free
@@ -416,10 +419,10 @@ def test_reference_items_are_references_only_and_removal_appends_a_version():
             # No transcript copy travels with the item.
             assert set(item) == {"id", "kind", "source", "case_id", "note", "added_at"}
 
-            fetched = (await c.get(f"/eval/sets/{s['id']}")).json()
+            fetched = (await c.get(f"/eval/benchmarks/{s['id']}")).json()
             assert [i["id"] for i in fetched["items"]] == [item["id"]]
 
-            r = await c.post(f"/eval/sets/{s['id']}/versions", json={"items": []})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/versions", json={"items": []})
             assert r.status_code == 201, r.text
             assert r.json()["items"] == [] and r.json()["version"] == 3
             # The turn and its conversation survived the removal.
@@ -440,10 +443,10 @@ def test_item_ids_are_stable_across_membership_versions():
         async with make_client() as c:
             a = await chat(c, "agent1", "first")
             b = await chat(c, "agent1", "second")
-            s = await seed_set(c)
-            first = (await c.post(f"/eval/sets/{s['id']}/items", json=ref(a))).json()
+            s = await seed_benchmark(c)
+            first = (await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(a))).json()
             item_id = first["items"][0]["id"]
-            after = (await c.post(f"/eval/sets/{s['id']}/versions",
+            after = (await c.post(f"/eval/benchmarks/{s['id']}/versions",
                                  json={"items": [ref(b), ref(a)]})).json()
             assert after["version"] == 3
             assert [i["id"] for i in after["items"]][1] == item_id
@@ -459,14 +462,14 @@ def test_adding_the_same_turn_twice_appends_nothing():
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "collect me twice")
-            s = await seed_set(c)
+            s = await seed_benchmark(c)
             body = ref(conv, note="first note")
-            first = (await c.post(f"/eval/sets/{s['id']}/items", json=body)).json()
-            r = await c.post(f"/eval/sets/{s['id']}/items",
+            first = (await c.post(f"/eval/benchmarks/{s['id']}/items", json=body)).json()
+            r = await c.post(f"/eval/benchmarks/{s['id']}/items",
                              json={**body, "note": "second note"})
             assert r.status_code == 201, r.text
             assert r.json() == first  # same version, same id, original note
-            assert len((await c.get(f"/eval/sets/{s['id']}")).json()["items"]) == 1
+            assert len((await c.get(f"/eval/benchmarks/{s['id']}")).json()["items"]) == 1
     run(case())
 
 
@@ -474,34 +477,34 @@ def test_item_endpoints_404_on_unknown_references():
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "real turn")
-            s = await seed_set(c)
-            assert (await c.post("/eval/sets/set_nope/items",
+            s = await seed_benchmark(c)
+            assert (await c.post("/eval/benchmarks/set_nope/items",
                                  json=ref(conv))).status_code == 404
-            assert (await c.post(f"/eval/sets/{s['id']}/items", json={"source": {
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items", json={"source": {
                 "tree": "agent1", "conversation_id": conv["conversation_id"],
                 "turn_id": "turn_nope"}})).status_code == 404
-            assert (await c.post(f"/eval/sets/{s['id']}/items",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items",
                                  json={"source": {"tree": "agent1"}})).status_code == 422
             # oneOf: a member points at a turn or at a case, never both/neither.
-            assert (await c.post(f"/eval/sets/{s['id']}/items",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items",
                                  json={})).status_code == 422
-            assert (await c.post(f"/eval/sets/{s['id']}/items",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items",
                                  json={**ref(conv), "case_id": "case_x"})).status_code == 422
-            assert (await c.post(f"/eval/sets/{s['id']}/items",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items",
                                  json={"case_id": "case_nope"})).status_code == 404
     run(case())
 
 
-def test_a_set_holds_references_and_frozen_cases_side_by_side():
+def test_a_benchmark_holds_references_and_frozen_cases_side_by_side():
     """The whole point of the merge: one collection, two kinds of member."""
     async def case():
         async with make_client() as c:
             conv = await chat(c, "agent1", "live turn")
             handmade = (await c.post("/eval/cases", json={
-                "input": {"prompt": "p"}, "output": "o"})).json()
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
-            r = await c.post(f"/eval/sets/{s['id']}/items",
+                "agenttree": "agent1", "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv))
+            r = await c.post(f"/eval/benchmarks/{s['id']}/items",
                              json={"case_id": handmade["id"]})
             assert r.status_code == 201, r.text
             assert [i["kind"] for i in r.json()["items"]] == ["reference", "frozen"]
@@ -511,7 +514,7 @@ def test_a_set_holds_references_and_frozen_cases_side_by_side():
 
 
 def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
-    """A set may reference turns across trees; per-item visibility still
+    """A benchmark may reference turns across trees; per-item visibility still
     follows the viewer's tree permissions. Decision: OMIT rather than leak —
     restricted@demo has no agent2 view."""
     monkeypatch.setenv("AUTH_MODE", "on")
@@ -521,31 +524,31 @@ def test_cross_tree_visibility_omits_items_the_viewer_cannot_see(monkeypatch):
             admin = await login(c)
             one = await chat(c, "agent1", "visible everywhere", **admin)
             two = await chat(c, "agent2", "admin only", **admin)
-            s = await seed_set(c, "Mixed", headers=admin)
+            s = await seed_benchmark(c, "Mixed", headers=admin)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                r = await c.post(f"/eval/sets/{s['id']}/items", headers=admin,
+                r = await c.post(f"/eval/benchmarks/{s['id']}/items", headers=admin,
                                  json=ref(conv, tree))
                 assert r.status_code == 201, r.text
-            assert len((await c.get(f"/eval/sets/{s['id']}",
+            assert len((await c.get(f"/eval/benchmarks/{s['id']}",
                                     headers=admin)).json()["items"]) == 2
 
             limited = await login(c, "restricted@demo")
-            seen = (await c.get(f"/eval/sets/{s['id']}", headers=limited)).json()
+            seen = (await c.get(f"/eval/benchmarks/{s['id']}", headers=limited)).json()
             assert [i["source"]["tree"] for i in seen["items"]] == ["agent1"]
             assert [i["source"]["tree"] for i in
-                    (await c.get("/eval/sets", headers=limited)).json()["items"][0]["items"]] == ["agent1"]
+                    (await c.get("/eval/benchmarks", headers=limited)).json()["items"][0]["items"]] == ["agent1"]
 
             # ...and the hidden item cannot be added or acted on.
-            assert (await c.post(f"/eval/sets/{s['id']}/items", headers=limited,
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/items", headers=limited,
                                  json=ref(two, "agent2"))).status_code == 404
 
             # Omitting must not become DELETING: a save from the partially
             # permitted viewer preserves what they were never shown.
-            r = await c.post(f"/eval/sets/{s['id']}/versions", headers=limited,
+            r = await c.post(f"/eval/benchmarks/{s['id']}/versions", headers=limited,
                             json={"items": [ref(one)]})
             assert r.status_code == 201, r.text
             assert [i["source"]["tree"] for i in r.json()["items"]] == ["agent1"]
-            full = (await c.get(f"/eval/sets/{s['id']}", headers=admin)).json()
+            full = (await c.get(f"/eval/benchmarks/{s['id']}", headers=admin)).json()
             assert sorted(i["source"]["tree"] for i in full["items"]) == ["agent1", "agent2"]
     run(case())
 
@@ -558,12 +561,12 @@ def test_freeze_turns_references_into_cases_in_place():
         async with make_client() as c:
             a = await chat(c, "agent1", "first prompt")
             b = await chat(c, "agent1", "second prompt")
-            s = await seed_set(c)
+            s = await seed_benchmark(c)
             for conv in (a, b):
-                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
-            before = (await c.get(f"/eval/sets/{s['id']}")).json()
+                await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv))
+            before = (await c.get(f"/eval/benchmarks/{s['id']}")).json()
 
-            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/freeze", json={})
             assert r.status_code == 201, r.text
             frozen = r.json()
             assert frozen["id"] == s["id"]
@@ -597,10 +600,10 @@ def test_freeze_reuses_an_existing_case_for_the_same_turn():
             conv = await chat(c, "agent1", "already a case")
             source = {"tree": "agent1", "conversation_id": conv["conversation_id"],
                       "turn_id": conv["turn"]["id"]}
-            existing = (await c.post("/eval/cases", json={"source": source})).json()
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json={"source": source})
-            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={})
+            existing = (await c.post("/eval/cases", json={"agenttree": "agent1", "source": source})).json()
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json={"source": source})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/freeze", json={})
             assert [i["case_id"] for i in r.json()["items"]] == [existing["id"]]
     run(case())
 
@@ -610,11 +613,11 @@ def test_freeze_can_name_a_subset_and_leaves_the_rest_alone():
         async with make_client() as c:
             a = await chat(c, "agent1", "freeze me")
             b = await chat(c, "agent1", "leave me live")
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json=ref(a))
-            latest = (await c.post(f"/eval/sets/{s['id']}/items", json=ref(b))).json()
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(a))
+            latest = (await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(b))).json()
             target = latest["items"][0]["id"]
-            r = await c.post(f"/eval/sets/{s['id']}/freeze", json={"item_ids": [target]})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/freeze", json={"item_ids": [target]})
             assert r.status_code == 201, r.text
             assert [i["kind"] for i in r.json()["items"]] == ["frozen", "reference"]
     run(case())
@@ -623,21 +626,21 @@ def test_freeze_can_name_a_subset_and_leaves_the_rest_alone():
 def test_freeze_validation():
     async def case():
         async with make_client() as c:
-            s = await seed_set(c)
-            # Empty set — nothing to freeze.
-            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
+            s = await seed_benchmark(c)
+            # Empty benchmark — nothing to freeze.
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/freeze",
                                  json={})).status_code == 422
             handmade = (await c.post("/eval/cases", json={
-                "input": {"prompt": "p"}, "output": "o"})).json()
-            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
+                "agenttree": "agent1", "input": {"prompt": "p"}, "output": "o"})).json()
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json={"case_id": handmade["id"]})
             # Every item already frozen — still nothing to do, and no empty
             # version is appended for it.
-            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/freeze",
                                  json={})).status_code == 422
-            assert (await c.get(f"/eval/sets/{s['id']}")).json()["version"] == 2
-            assert (await c.post(f"/eval/sets/{s['id']}/freeze",
+            assert (await c.get(f"/eval/benchmarks/{s['id']}")).json()["version"] == 2
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/freeze",
                                  json={"item_ids": ["esi_nope"]})).status_code == 404
-            assert (await c.post("/eval/sets/set_nope/freeze",
+            assert (await c.post("/eval/benchmarks/set_nope/freeze",
                                  json={})).status_code == 404
     run(case())
 
@@ -650,22 +653,22 @@ def test_freeze_uses_only_the_items_the_viewer_can_see(monkeypatch):
             admin = await login(c)
             one = await chat(c, "agent1", "visible", **admin)
             two = await chat(c, "agent2", "hidden", **admin)
-            s = await seed_set(c, "Mixed", headers=admin)
+            s = await seed_benchmark(c, "Mixed", headers=admin)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                await c.post(f"/eval/sets/{s['id']}/items", headers=admin,
+                await c.post(f"/eval/benchmarks/{s['id']}/items", headers=admin,
                              json=ref(conv, tree))
             limited = await login(c, "restricted@demo")
-            r = await c.post(f"/eval/sets/{s['id']}/freeze", headers=limited, json={})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/freeze", headers=limited, json={})
             assert r.status_code == 201, r.text
             assert [i["kind"] for i in r.json()["items"]] == ["frozen"]
             # The hidden item is still there, still a reference.
-            full = (await c.get(f"/eval/sets/{s['id']}", headers=admin)).json()
+            full = (await c.get(f"/eval/benchmarks/{s['id']}", headers=admin)).json()
             assert sorted(i["kind"] for i in full["items"]) == ["frozen", "reference"]
     run(case())
 
 
-# --------------------------------------------------------- judging a set
-def test_judging_a_set_resolves_reference_items_to_cases():
+# ----------------------------------------------------- judging a benchmark
+def test_judging_a_benchmark_resolves_reference_items_to_cases():
     """"judging resolves each item to a case ... but it does NOT alter
     membership: the item stays a reference until someone freezes it"."""
     app = make_app()
@@ -675,10 +678,10 @@ def test_judging_a_set_resolves_reference_items_to_cases():
             conv = await chat(c, "agent1", "judge my reference")
             rubric = (await c.post("/eval/rubrics", json={
                 "name": "helpful", "prompt": "score it"})).json()
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv))
             r = await c.post("/eval/judge", json={
-                "set_id": s["id"], "judge_model": "claude-sonnet-5",
+                "benchmark_id": s["id"], "judge_model": "claude-sonnet-5",
                 "rubric_id": rubric["id"]})
             assert r.status_code == 202, r.text
             for _ in range(300):
@@ -690,13 +693,13 @@ def test_judging_a_set_resolves_reference_items_to_cases():
             judged = (await c.get("/eval/judgments")).json()["items"]
             assert len(judged) == 1
             # The judgment's subject IS the resolved case (stage C: judging a
-            # set resolves each reference item to one, and the case is what the
+            # benchmark resolves each reference item to one, and the case is what the
             # score names).
             assert judged[0]["subject"]["kind"] == "case"
             case_row = (await c.get(f"/eval/cases/{judged[0]['subject']['id']}")).json()
             assert case_row["source"]["turn_id"] == conv["turn"]["id"]
             # Membership is untouched: still one REFERENCE item, still v2.
-            after = (await c.get(f"/eval/sets/{s['id']}")).json()
+            after = (await c.get(f"/eval/benchmarks/{s['id']}")).json()
             assert after["version"] == 2
             assert [i["kind"] for i in after["items"]] == ["reference"]
     run(case())
@@ -708,18 +711,18 @@ def test_judging_pins_a_membership_version():
             rubric = (await c.post("/eval/rubrics", json={
                 "name": "r", "prompt": "p"})).json()
             handmade = (await c.post("/eval/cases", json={
-                "input": {"prompt": "p"}, "output": "o"})).json()
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
+                "agenttree": "agent1", "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json={"case_id": handmade["id"]})
             # v1 was empty, so pinning it has nothing to judge; v2 has the case.
             assert (await c.post("/eval/judge", json={
-                "set_id": s["id"], "set_version": 1, "judge_model": "m",
+                "benchmark_id": s["id"], "benchmark_version": 1, "judge_model": "m",
                 "rubric_id": rubric["id"]})).status_code == 422
             assert (await c.post("/eval/judge", json={
-                "set_id": s["id"], "set_version": 2, "judge_model": "m",
+                "benchmark_id": s["id"], "benchmark_version": 2, "judge_model": "m",
                 "rubric_id": rubric["id"]})).status_code == 202
             assert (await c.post("/eval/judge", json={
-                "set_id": s["id"], "set_version": 9, "judge_model": "m",
+                "benchmark_id": s["id"], "benchmark_version": 9, "judge_model": "m",
                 "rubric_id": rubric["id"]})).status_code == 404
     run(case())
 
@@ -727,7 +730,7 @@ def test_judging_pins_a_membership_version():
 # ----------------------------------------------------------------- replay
 def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
     """EvalSetReplayAccepted — "One parent task; one evaluation per tree the
-    set's reference items touch"."""
+    benchmark's reference items touch"."""
     app = make_app()
 
     async def case():
@@ -735,11 +738,11 @@ def test_replay_fans_out_one_evaluation_per_tree_under_one_parent_task():
             one = await chat(c, "agent1", "support question")
             two = await chat(c, "agent1", "second support question")
             three = await chat(c, "agent2", "ops question")
-            s = await seed_set(c)
+            s = await seed_benchmark(c)
             for conv, tree in ((one, "agent1"), (two, "agent1"), (three, "agent2")):
-                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, tree))
+                await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv, tree))
 
-            r = await c.post(f"/eval/sets/{s['id']}/replay",
+            r = await c.post(f"/eval/benchmarks/{s['id']}/replay",
                              json={"configs": [{"model": "deepseek-v3"}]})
             assert r.status_code == 202, r.text
             accepted = r.json()
@@ -780,10 +783,10 @@ def test_replay_finishes_and_fills_both_evaluations():
         async with client_for(app) as c:
             one = await chat(c, "agent1", "a question")
             two = await chat(c, "agent2", "another question")
-            s = await seed_set(c)
+            s = await seed_benchmark(c)
             for conv, tree in ((one, "agent1"), (two, "agent2")):
-                await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, tree))
-            accepted = (await c.post(f"/eval/sets/{s['id']}/replay",
+                await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv, tree))
+            accepted = (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                      json={"configs": [{}]})).json()
             for _ in range(200):
                 task = (await c.get(f"/tasks/{accepted['task_id']}")).json()
@@ -808,14 +811,14 @@ def test_replay_skips_frozen_items():
     async def case():
         async with make_client() as c:
             handmade = (await c.post("/eval/cases", json={
-                "input": {"prompt": "p"}, "output": "o"})).json()
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json={"case_id": handmade["id"]})
-            assert (await c.post(f"/eval/sets/{s['id']}/replay",
+                "agenttree": "agent1", "input": {"prompt": "p"}, "output": "o"})).json()
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json={"case_id": handmade["id"]})
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                  json={"configs": [{}]})).status_code == 422
             conv = await chat(c, "agent1", "replayable")
-            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv))
-            r = await c.post(f"/eval/sets/{s['id']}/replay", json={"configs": [{}]})
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv))
+            r = await c.post(f"/eval/benchmarks/{s['id']}/replay", json={"configs": [{}]})
             assert r.status_code == 202, r.text
             grid = (await c.get(
                 f"/agenttrees/agent1/evaluations/{r.json()['evaluations'][0]['evaluation_id']}")).json()
@@ -826,22 +829,22 @@ def test_replay_skips_frozen_items():
 def test_replay_validation_and_disabled_trees():
     async def case():
         async with make_client() as c:
-            s = await seed_set(c)
-            assert (await c.post(f"/eval/sets/{s['id']}/replay",
+            s = await seed_benchmark(c)
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                  json={"configs": [{}]})).status_code == 422
             conv = await chat(c, "agent2", "ops")
-            await c.post(f"/eval/sets/{s['id']}/items", json=ref(conv, "agent2"))
-            assert (await c.post(f"/eval/sets/{s['id']}/replay",
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json=ref(conv, "agent2"))
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                  json={"configs": []})).status_code == 422
             # Context widening is Phase 3; frozen is pinned like tree replay.
-            assert (await c.post(f"/eval/sets/{s['id']}/replay",
+            assert (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                  json={"configs": [{}],
                                        "context_policy": "current"})).status_code == 422
-            assert (await c.post("/eval/sets/set_nope/replay",
+            assert (await c.post("/eval/benchmarks/set_nope/replay",
                                  json={"configs": [{}]})).status_code == 404
 
             await c.patch("/admin/agenttrees/agent2", json={"enabled": False})
-            r = await c.post(f"/eval/sets/{s['id']}/replay", json={"configs": [{}]})
+            r = await c.post(f"/eval/benchmarks/{s['id']}/replay", json={"configs": [{}]})
             assert r.status_code == 409, r.text
             assert r.json()["code"] == "tree_disabled"
     run(case())
@@ -858,11 +861,11 @@ def test_replay_accepts_a_user_turn_reference_by_replaying_its_answer():
             user_turn = app.state.db.one(
                 "SELECT * FROM turns WHERE conversation_id = ? AND role = 'user'",
                 (conv["conversation_id"],))
-            s = await seed_set(c)
-            await c.post(f"/eval/sets/{s['id']}/items", json={"source": {
+            s = await seed_benchmark(c)
+            await c.post(f"/eval/benchmarks/{s['id']}/items", json={"source": {
                 "tree": "agent1", "conversation_id": conv["conversation_id"],
                 "turn_id": user_turn["id"]}})
-            accepted = (await c.post(f"/eval/sets/{s['id']}/replay",
+            accepted = (await c.post(f"/eval/benchmarks/{s['id']}/replay",
                                      json={"configs": [{}]})).json()
             grid = (await c.get(
                 f"/agenttrees/agent1/evaluations/{accepted['evaluations'][0]['evaluation_id']}")).json()

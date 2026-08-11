@@ -71,8 +71,8 @@ describe("Sidebar queue badge", () => {
 // Evaluations, Eval workbench, and Inspector used to be a group plus a
 // separate role-gated entry; they're one route with tabs now
 // (StudioPage.test.tsx covers the tabs themselves). Casebooks was a third
-// entry until Casebook and EvalSet merged; its collections are the Sets tab
-// now, and /casebooks no longer exists.
+// entry until Casebook and EvalBenchmark merged; its collections are the
+// Benchmarks tab now, and /casebooks no longer exists.
 describe("Sidebar Studio entry", () => {
   it("is a flat link to /studio, not a group", async () => {
     const user = userEvent.setup();

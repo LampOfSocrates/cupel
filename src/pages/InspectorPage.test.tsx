@@ -6,9 +6,9 @@ import { renderApp } from "../test/render";
 import {
   adminConversationConfig,
   adminConversationRequests,
-  evalSetCreates,
-  evalSetItemPosts,
-  mockEvalSets,
+  evalBenchmarkCreates,
+  evalBenchmarkItemPosts,
+  mockEvalBenchmarks,
 } from "../test/msw/handlers";
 import { product } from "../lib/product";
 import { InspectorPage } from "./InspectorPage";
@@ -22,7 +22,7 @@ import { InspectorPage } from "./InspectorPage";
 // - AdminConversationItem's user_id + latest_score columns (:3129-3144)
 // - the reader loads GET /agenttrees/{tree}/conversations/{id} for the
 //   selected row (admin rows carry no transcript)
-// - POST /eval/sets/{setId}/items from the ⊞ action / `a` key
+// - POST /eval/benchmarks/{benchmarkId}/items from the ⊞ action / `a` key
 // - role gating: Inspector is now a Studio tab (UX polish 2026-08-10), not
 //   its own nav entry/route — that gate is tested in StudioPage.test.tsx
 //   ("Inspector tab" describe block), not here.
@@ -196,7 +196,7 @@ describe("inline transcript reader", () => {
 });
 
 describe("⊞ collect", () => {
-  it("posts the focused turn as a reference to the chosen eval set", async () => {
+  it("posts the focused turn as a reference to the chosen eval benchmark", async () => {
     renderInspector();
     await screen.findByTestId("inspector-reader");
     await waitFor(() => expect(screen.getAllByTestId("reader-turn")).toHaveLength(2));
@@ -208,9 +208,9 @@ describe("⊞ collect", () => {
     });
     await userEvent.click(screen.getAllByRole("button", { name: "⊞ Add" })[0]);
 
-    await waitFor(() => expect(evalSetItemPosts).toHaveLength(1));
-    expect(evalSetItemPosts[0]).toEqual({
-      setId: "set-refunds",
+    await waitFor(() => expect(evalBenchmarkItemPosts).toHaveLength(1));
+    expect(evalBenchmarkItemPosts[0]).toEqual({
+      benchmarkId: "set-refunds",
       body: {
         source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
         note: "hedged",
@@ -235,21 +235,21 @@ describe("⊞ collect", () => {
     expect(await screen.findByTestId("collect-target")).toHaveTextContent("agent1 · c1 · t1");
   });
 
-  it("creates an eval set inline and adds the turn to it", async () => {
-    mockEvalSets.length = 0;
+  it("creates an eval benchmark inline and adds the turn to it", async () => {
+    mockEvalBenchmarks.length = 0;
     renderInspector();
     await waitFor(() => expect(screen.getAllByTestId("reader-turn")).toHaveLength(2));
     fireEvent.keyDown(window, { key: "a" });
     expect(await screen.findByTestId("collect-empty")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("New eval set name"), {
+    fireEvent.change(screen.getByLabelText("New eval benchmark name"), {
       target: { value: "Weekend triage" },
     });
     await userEvent.click(screen.getByRole("button", { name: "Create + add" }));
 
-    await waitFor(() => expect(evalSetCreates).toEqual([{ name: "Weekend triage" }]));
-    await waitFor(() => expect(evalSetItemPosts).toHaveLength(1));
-    expect(evalSetItemPosts[0].body).toEqual({
+    await waitFor(() => expect(evalBenchmarkCreates).toEqual([{ name: "Weekend triage" }]));
+    await waitFor(() => expect(evalBenchmarkItemPosts).toHaveLength(1));
+    expect(evalBenchmarkItemPosts[0].body).toEqual({
       source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
       note: null,
     });

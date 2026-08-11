@@ -1,14 +1,14 @@
 openapi: 3.0.3
 info:
   title: Cupel API — Phase 2 contract
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Phase 2 API contract for Cupel. Extends v0.2.0 (Phase 1) in place: every
     Phase-1 path and schema is unchanged or additively extended (new optional
     fields, widened enums with unchanged defaults), so Phase-1 clients keep
     working. New in v0.3.0: auth + security model, admin (users, permissions,
     tree enable/disable, Inspector, generator control), the eval
-    workbench (cases/sets CRUD — one set holds live turn references and
+    workbench (cases/benchmarks CRUD — one benchmark holds live turn references and
     frozen cases — import, rubric saves), context-policy
     widening, per-tree memory, and user settings. Source of truth:
     feature-spec.md "API" section (feature-spec.md:110-131) filtered by
@@ -102,10 +102,10 @@ info:
     A `none` operation is not necessarily unfiltered: several of them return
     tree-scoped rows and NARROW the result to the caller's permitted trees
     instead of refusing (GET /agenttrees, GET /tasks/stream,
-    GET /spans/{spanId}/payload, GET /admin/conversations, the eval sets'
+    GET /spans/{spanId}/payload, GET /admin/conversations, the eval benchmarks'
     reference items) — omitting beats leaking, and a refusal there would make
     a legitimate mixed-scope listing unusable. The whole eval workbench is
-    `none` because it is tree-LESS by construction: a case, a set and a rubric
+    `none` because it is tree-LESS by construction: a case, a benchmark and a rubric
     carry no tree, so `evaluate` would have nothing to be checked against.
 
     AUTH_MODE=off does not disable any of this. The permissions come from the
@@ -173,7 +173,7 @@ info:
     rule, and the VERB now says so. Every versioned store is written through a
     `…/versions` sub-collection that is POSTed to — POST
     /agenttrees/{tree}/agents/{id}/instructions/versions, POST
-    /eval/cases/{id}/versions, POST /eval/sets/{id}/versions and POST
+    /eval/cases/{id}/versions, POST /eval/benchmarks/{id}/versions and POST
     /eval/rubrics/{id}/versions — each appending a NEW version and answering
     201 with it (feature-spec.md:126-128, whose rule is "save = new version").
     None of them is a PUT: a save that creates a new
@@ -274,7 +274,7 @@ tags:
   - name: tasks
     description: The background-work queue — listing, detail with children, live stream, cancel, retry-failed.
   - name: eval
-    description: The eval workbench — cases, eval sets, rubrics, judging and score summaries.
+    description: The eval workbench — cases, eval benchmarks, rubrics, judging and score summaries.
   - name: settings
     description: Server-side settings (upload limits, context policy, fallback envelope).
 
@@ -528,7 +528,7 @@ paths:
         score filter. Feed the ⊞ collect action from here
         (feature-spec.md:236 "Inspector | GET /admin/conversations,
         POST /casebooks/{id}/items" — quoted as written; since Casebook and
-        EvalSet merged, that POST is POST /eval/sets/{setId}/items).
+        EvalBenchmark merged, that POST is POST /eval/benchmarks/{benchmarkId}/items).
       parameters:
         - name: user_id
           in: query
@@ -1018,7 +1018,7 @@ paths:
             parameter: nothing in this contract can act on a list of deleted
             conversations — there is no restore and no purge — and every
             caller that must reach one arrives by following a reference (a
-            fork's lineage, an eval-set item's source, a judgment's subject),
+            fork's lineage, an eval-benchmark item's source, a judgment's subject),
             which is a read BY ID. A filter whose results support no action
             would be surface pretending to be a feature.
           content:
@@ -1149,12 +1149,12 @@ paths:
         `total` says how much is earlier — page-1-onwards is "load earlier".
 
         `turn_ids` is the escape hatch from paging for callers that already
-        know which turns they want (an eval set's reference items, a fork's
+        know which turns they want (an eval benchmark's reference items, a fork's
         lineage turn): with it the page is those turns, in the same
         chronological order, and paging applies to that subset.
 
         A DELETED conversation's transcript still reads here. That is the
-        point of a soft delete: an eval-set reference item, an eval case's
+        point of a soft delete: an eval-benchmark reference item, an eval case's
         source and a judgment's subject all name a turn, and every one of them
         would become a dangling pointer if the tombstone stopped answering.
       parameters:
@@ -1901,27 +1901,35 @@ paths:
         (CSV/XLSX/pasted table, column mapping, per-row error report)".
         Workbench rule (feature-spec.md:63): "upload CSV/XLSX (or paste a
         table) with columns mapped to input/output/reference → creates/
-        extends a set in one shot (…queued for large files; row errors
+        extends a benchmark in one shot (…queued for large files; row errors
         reported per line, not all-or-nothing)". Multipart: file (pasted
-        tables are uploaded as CSV) + mapping (JSON object as a string:
-        which column feeds input/output/reference) + set_id (extend an
-        existing set — new membership version) or set_name (create one).
-        Small files: 200 with the per-row report inline. Above the server's
-        size threshold: 202 TaskRef — an "import" task whose
-        result.import_report carries the identical report shape on
-        completion. Failed rows never abort the import; valid rows land.
+        tables are uploaded as CSV) + agenttree (every imported case is
+        stamped with this — EvalCase.agenttree is required) + mapping (JSON
+        object as a string: which column feeds input/output/reference) +
+        benchmark_id (extend an existing benchmark — new membership version)
+        or benchmark_name (create one). Small files: 200 with the per-row
+        report inline. Above the server's size threshold: 202 TaskRef — an
+        "import" task whose result.import_report carries the identical
+        report shape on completion. Failed rows never abort the import;
+        valid rows land.
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [file, mapping]
+              required: [file, mapping, agenttree]
               properties:
                 file:
                   type: string
                   format: binary
                   description: CSV or XLSX; a pasted table is submitted as CSV.
+                agenttree:
+                  type: string
+                  description: >-
+                    Free-form label applied to every case created by this
+                    import (EvalCase.agenttree is required per-case; a
+                    single import batch targets one agent tree/endpoint).
                 mapping:
                   type: string
                   description: >-
@@ -1929,12 +1937,12 @@ paths:
                     {"input":"question","output":"answer","reference":"expected"}
                     — reference optional (nullable references allowed,
                     feature-spec.md:57).
-                set_id:
+                benchmark_id:
                   type: string
-                  description: Extend this set (appends a new membership version).
-                set_name:
+                  description: Extend this benchmark (appends a new membership version).
+                benchmark_name:
                   type: string
-                  description: Create a new set holding the imported cases.
+                  description: Create a new benchmark holding the imported cases.
       responses:
         "200":
           description: Import processed synchronously — per-row report.
@@ -2010,39 +2018,39 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
-  # THE MERGED NOUN (v0.4.0). Casebook and EvalSet were the same concept
+  # THE MERGED NOUN (v0.4.0). Casebook and EvalBenchmark were the same concept
   # modelled twice — "a named collection of turn REFERENCES" and "a named
   # collection of cases (versioned, reusable across runs/models)". They are one
-  # resource now, EvalSet, and the only real difference between them is a FIELD
+  # resource now, EvalBenchmark, and the only real difference between them is a FIELD
   # on the member: an item is either a REFERENCE to a live turn or a FROZEN
-  # case (EvalSetItem.kind). /casebooks and POST /casebooks/{id}/to-eval-set are
+  # case (EvalBenchmarkItem.kind). /casebooks and POST /casebooks/{id}/to-eval-set are
   # gone: materializing is no longer a conversion between two nouns, it is
-  # POST /eval/sets/{id}/freeze flipping items from reference to frozen.
+  # POST /eval/benchmarks/{id}/freeze flipping items from reference to frozen.
   #
-  # Membership is VERSIONED for every item, reference or frozen (the eval-set
+  # Membership is VERSIONED for every item, reference or frozen (the eval-benchmark
   # rule wins over the casebook's free mutation, because judgments reference
-  # sets and membership has to be reproducible): every add, removal and freeze
+  # benchmarks and membership has to be reproducible): every add, removal and freeze
   # appends a new version carrying its FULL item list.
-  /eval/sets:
+  /eval/benchmarks:
     get:
       tags: [eval]
-      operationId: listEvalSets
+      operationId: listEvalBenchmarks
       x-requires: none
-      summary: Eval sets (latest version each)
+      summary: Eval benchmarks (latest version each)
       description: |
-        feature-spec.md:127: "Sets: POST/GET /eval/sets". Model
-        (feature-spec.md:58): "EvalSet: named collection of cases
+        feature-spec.md:127: "Benchmarks: POST/GET /eval/benchmarks". Model
+        (feature-spec.md:58): "EvalBenchmark: named collection of cases
         (versioned, reusable across runs/models)", widened by the merge to
         hold live turn references as well as frozen cases. Returns the
-        latest version of each set, membership included — feeds the
-        workbench set manager (feature-spec.md:63), the ⊞ collect action
-        (cupel-phases.md:79) and the judge's set picker. Global, not
-        tree-scoped: a set may reference turns across trees, and per-item
+        latest version of each benchmark, membership included — feeds the
+        workbench benchmark manager (feature-spec.md:63), the ⊞ collect action
+        (cupel-phases.md:79) and the judge's benchmark picker. Global, not
+        tree-scoped: a benchmark may reference turns across trees, and per-item
         visibility still follows the viewer's tree permissions.
 
         Paged, and this is the collection paging helps most: every row
         carries its FULL item list, so an unpaged listing grew as the product
-        of set count and set size.
+        of benchmark count and benchmark size.
       parameters:
         - name: page
           in: query
@@ -2052,183 +2060,183 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Page of sets, newest first, latest version of each, items included.
+          description: Page of benchmarks, newest first, latest version of each, items included.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSetPage" }
+              schema: { $ref: "#/components/schemas/EvalBenchmarkPage" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
       tags: [eval]
-      operationId: createEvalSet
+      operationId: createEvalBenchmark
       x-requires: none
-      summary: Create an eval set (version 1)
+      summary: Create an eval benchmark (version 1)
       description: |
-        feature-spec.md:127 "POST/GET /eval/sets"; workbench set manager:
-        "create/name/version sets, drag cases in" (feature-spec.md:63).
+        feature-spec.md:127 "POST/GET /eval/benchmarks"; workbench benchmark manager:
+        "create/name/version benchmarks, drag cases in" (feature-spec.md:63).
         Starts empty unless items are supplied. Membership changes after
-        creation go through POST /eval/sets/{id}/versions, POST …/items or
+        creation go through POST /eval/benchmarks/{id}/versions, POST …/items or
         POST …/freeze — each appends a new version.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetCreate" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkCreate" }
       responses:
         "201":
-          description: The created set (version 1).
+          description: The created benchmark (version 1).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
-  /eval/sets/{setId}:
+  /eval/benchmarks/{benchmarkId}:
     get:
       tags: [eval]
-      operationId: getEvalSet
+      operationId: getEvalBenchmark
       x-requires: none
-      summary: One eval set (latest membership version)
+      summary: One eval benchmark (latest membership version)
       description: |
-        The set with its items. Reference items are turn REFERENCES, never
+        The benchmark with its items. Reference items are turn REFERENCES, never
         copies (feature-spec.md:285 "Quote the reference-not-copy rule") —
         render their transcripts by following each item's
         source.tree/conversation_id/turn_id; the transcript stays in its
         conversation. Frozen items name an EvalCase instead, read via
         GET /eval/cases/{id}.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       responses:
         "200":
-          description: The set (latest version), items included.
+          description: The benchmark (latest version), items included.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [eval]
-      operationId: updateEvalSetMetadata
+      operationId: updateEvalBenchmarkMetadata
       x-requires: none
-      summary: Rename / re-describe a set (NOT a new version)
+      summary: Rename / re-describe a benchmark (NOT a new version)
       description: |
-        Metadata only, and deliberately NOT versioned: a set's name and
-        description belong to the set, its items belong to the version. A
+        Metadata only, and deliberately NOT versioned: a benchmark's name and
+        description belong to the benchmark, its items belong to the version. A
         rename therefore does not append a membership version and does not
         change what any judgment was made against. Membership changes go
-        through POST /eval/sets/{id}/versions, POST …/items or POST …/freeze.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+        through POST /eval/benchmarks/{id}/versions, POST …/items or POST …/freeze.
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetMetadataUpdate" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkMetadataUpdate" }
       responses:
         "200":
-          description: The updated set (membership version unchanged).
+          description: The updated benchmark (membership version unchanged).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
       tags: [eval]
-      operationId: deleteEvalSet
+      operationId: deleteEvalBenchmark
       x-requires: none
-      summary: Delete a set (its items are references — nothing else is touched)
+      summary: Delete a benchmark (its items are references — nothing else is touched)
       description: |
-        Removes the set and every membership version. Reference items were
+        Removes the benchmark and every membership version. Reference items were
         references, so the referenced turns and conversations are untouched;
         frozen items named EvalCases, and those cases — plus the judgments
-        recorded against them and any evaluation replayed from this set —
-        remain. Deleting a set never deletes evidence.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+        recorded against them and any evaluation replayed from this benchmark —
+        remain. Deleting a benchmark never deletes evidence.
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       responses:
         "204": { description: Deleted. }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /eval/sets/{setId}/versions:
+  /eval/benchmarks/{benchmarkId}/versions:
     post:
       tags: [eval]
-      operationId: createEvalSetVersion
+      operationId: createEvalBenchmarkVersion
       x-requires: none
       summary: Append the next membership version (append-only)
       description: |
-        feature-spec.md:127: "POST /eval/sets/{id}/versions (versioned
+        feature-spec.md:127: "POST /eval/benchmarks/{id}/versions (versioned
         membership)". Each save is a new version carrying its FULL item
         list; earlier versions
         remain queryable so judgments made against version N stay
         attributable to exactly that membership. Metadata is NOT here: a
-        rename is PATCH /eval/sets/{id} and appends nothing, because a set's
-        name belongs to the set and its items belong to the version.
+        rename is PATCH /eval/benchmarks/{id} and appends nothing, because a benchmark's
+        name belongs to the benchmark and its items belong to the version.
 
         ITEM IDENTITY ACROSS VERSIONS: the server carries an item's id
         forward when the new version still holds the same referent — the
         same case_id for a frozen item, the same source triple for a
         reference item — and mints an id for referents the previous version
-        did not hold. So an id addresses "this member of this set", not
+        did not hold. So an id addresses "this member of this benchmark", not
         "this row of this version", which is what makes POST …/freeze able
         to name an item.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetUpdate" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkUpdate" }
       responses:
         "201":
-          description: The new set version (now latest).
+          description: The new benchmark version (now latest).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
-  /eval/sets/{setId}/items:
+  /eval/benchmarks/{benchmarkId}/items:
     post:
       tags: [eval]
-      operationId: addEvalSetItem
+      operationId: addEvalBenchmarkItem
       x-requires: none
       summary: Add one item — a turn reference (the ⊞ action) or a case
       description: |
         cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
         keystroke … using the ⊞ action" — the keystroke now collects into an
-        eval set. Exactly one of source / case_id (request oneOf): source =
+        eval benchmark. Exactly one of source / case_id (request oneOf): source =
         {tree, conversation_id, turn_id} adds a REFERENCE item (nothing about
         the turn's text is stored); case_id adds a FROZEN item naming an
         existing EvalCase.
 
-        The convenience half of POST /eval/sets/{id}/versions: ⊞ fires from
+        The convenience half of POST /eval/benchmarks/{id}/versions: ⊞ fires from
         anywhere a turn is shown (Chat, the Inspector, results cells) where
-        the caller does not hold the set's membership and so cannot post a
+        the caller does not hold the benchmark's membership and so cannot post a
         full one. Removal has no such endpoint on purpose — you can only
-        remove from a set you are already looking at, and that caller has the
+        remove from a benchmark you are already looking at, and that caller has the
         full item list to post.
 
         Appends a NEW membership version. IDEMPOTENT: adding a referent the
         latest version already holds appends nothing and returns that
         version unchanged, so a caller detects "already there" by an
         unchanged version number.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetItemCreate" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkItemCreate" }
       responses:
         "201":
-          description: The set — a new membership version, or the unchanged latest when the item was already a member.
+          description: The benchmark — a new membership version, or the unchanged latest when the item was already a member.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
-  /eval/sets/{setId}/freeze:
+  /eval/benchmarks/{benchmarkId}/freeze:
     post:
       tags: [eval]
-      operationId: freezeEvalSetItems
+      operationId: freezeEvalBenchmarkItems
       x-requires: none
       summary: Freeze reference items into cases
       description: |
-        What "turn a casebook into an eval set" (cupel-phases.md:79) becomes
+        What "turn a casebook into an eval benchmark" (cupel-phases.md:79) becomes
         once the two nouns are one: not a conversion into another resource,
         but flipping items in place from reference to frozen. For each named
         reference item the server reuses the existing eval case for that turn
@@ -2238,51 +2246,51 @@ paths:
         keeps its id and its source, so its provenance survives the freeze.
 
         item_ids omitted = every reference item in the latest version.
-        Already-frozen items are left alone. A set with no reference item to
+        Already-frozen items are left alone. A benchmark with no reference item to
         freeze is a 422 rather than a silent empty version.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetFreezeRequest" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkFreezeRequest" }
       responses:
         "201":
           description: The new membership version, with the named items frozen.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSet" }
+              schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
-  /eval/sets/{setId}/replay:
+  /eval/benchmarks/{benchmarkId}/replay:
     post:
       tags: [eval]
-      operationId: replayEvalSet
+      operationId: replayEvalBenchmark
       x-requires: none
-      summary: Replay the set's referenced turns as a regression suite
+      summary: Replay the benchmark's referenced turns as a regression suite
       description: |
         cupel-phases.md:79 "a replay regression suite". Replays every
         REFERENCE item's turn under the given configs — same engine as
         POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
         fields and frozen default. Frozen items are skipped: a frozen case
         is content, not a turn in a conversation, so there is nothing to
-        re-fire (judge those with POST /eval/judge instead). A set may
+        re-fire (judge those with POST /eval/judge instead). A benchmark may
         reference several trees, so the response carries one evaluation per
         tree touched, all children of a single parent task; each grid is
         fetched tree-scoped as usual.
-      parameters: [{ $ref: "#/components/parameters/setId" }]
+      parameters: [{ $ref: "#/components/parameters/benchmarkId" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EvalSetReplayRequest" }
+            schema: { $ref: "#/components/schemas/EvalBenchmarkReplayRequest" }
       responses:
         "202":
           description: Replays enqueued.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EvalSetReplayAccepted" }
+              schema: { $ref: "#/components/schemas/EvalBenchmarkReplayAccepted" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -2295,15 +2303,15 @@ paths:
       x-requires: none
       summary: Enqueue LLM judging
       description: |
-        feature-spec.md:129: "POST /eval/judge ({set_id | case_ids | evaluation_id,
+        feature-spec.md:129: "POST /eval/judge ({benchmark_id | case_ids | evaluation_id,
         judge_model, rubric_id} → enqueued), judgments append-only". Exactly
         one selector (oneOf): evaluation_id ("Judge this evaluation"… auto-creating cases
         from conversation turns if none exist", feature-spec.md:61),
-        explicit case_ids, or — since v0.3.0, with EvalSets — set_id
-        (latest membership version unless set_version pins one). Judge
+        explicit case_ids, or — since v0.3.0, with EvalBenchmarks — benchmark_id
+        (latest membership version unless benchmark_version pins one). Judge
         prompt receives the case's envelope (feature-spec.md:81).
 
-        Since the merge, a set version holds reference items as well as
+        Since the merge, a benchmark version holds reference items as well as
         frozen ones, and judging resolves each item to a case: a frozen item
         contributes its case_id; a reference item is resolved by reusing the
         existing case for that turn or creating one sourced from it, exactly
@@ -2504,8 +2512,8 @@ components:
       required: true
       description: Tree being administered — same ids as {tree} (feature-spec.md:117).
       schema: { type: string }
-    setId:
-      name: setId
+    benchmarkId:
+      name: benchmarkId
       in: path
       required: true
       schema: { type: string }
@@ -2616,7 +2624,7 @@ components:
         conversations stay readable and re-enabling via
         PATCH /admin/agenttrees/{id} restores everything. code
         conversation_deleted: the named conversation is a TOMBSTONE — it still
-        reads (GET, /turns) so that forks, eval-set items and judgments
+        reads (GET, /turns) so that forks, eval-benchmark items and judgments
         pointing at it stay honest, but it takes no rename, no message, no
         replay and no fork. Neither is recoverable by retrying; both are
         deliberate states, not transient failures.
@@ -3103,7 +3111,7 @@ components:
             conversation from an absent one: a tombstone still reads (this
             operation and its /turns), because the row is kept precisely so
             that the things pointing INTO it stay honest — a fork's lineage,
-            an eval-set reference item, an eval case's source, a judgment's
+            an eval-benchmark reference item, an eval case's source, a judgment's
             subject. What deletion changes is that it leaves the listings
             (GET /conversations never returns one) and accepts no further
             work (409 conversation_deleted on rename, chat, replay and fork).
@@ -3505,7 +3513,7 @@ components:
             evaluation's own cells answer: every cell `done` → `done`,
             anything else → `failed`. Case 4 never reads `queued`/`running`
             (nothing executes for a task that does not exist) and never claims
-            a success it cannot see. A cross-tree eval-set replay shares ONE
+            a success it cannot see. A cross-tree eval-benchmark replay shares ONE
             task across several evaluations, so (2) counts only the failed
             units belonging to this evaluation.
         created_at: { type: string, format: date-time }
@@ -3782,13 +3790,22 @@ components:
 
     EvalCase:
       type: object
-      required: [id, input, output]
+      required: [id, input, output, agenttree]
       description: >
         feature-spec.md:54-58: "EvalCase = {input, output, reference?}" —
         input "prompt + context (frozen)", reference nullable (reference-free
         rubrics allowed).
       properties:
         id: { type: string }
+        agenttree:
+          type: string
+          description: >-
+            Free-form label naming the agent tree/endpoint this case is
+            meant to evaluate. Required on every case — for a sourced case
+            it defaults to source.tree; for a handcrafted case the author
+            picks it (not validated against GET /agenttrees, since a case
+            may target an endpoint this backend does not itself run).
+            Carried forward unchanged across POST …/versions.
         input:
           type: object
           required: [prompt]
@@ -3823,30 +3840,30 @@ components:
       type: object
       required: [judge_model, rubric_id]
       description: >
-        Exactly one of evaluation_id / case_ids / set_id (feature-spec.md:129
-        "{set_id | case_ids | evaluation_id, judge_model, rubric_id}") — enforced
+        Exactly one of evaluation_id / case_ids / benchmark_id (feature-spec.md:129
+        "{benchmark_id | case_ids | evaluation_id, judge_model, rubric_id}") — enforced
         by the oneOf. evaluation_id = "Judge this evaluation", auto-creating cases from
-        turns if none exist (feature-spec.md:61). set_id (added in v0.3.0
-        with EvalSets) judges the set's latest membership version unless
-        set_version pins one.
+        turns if none exist (feature-spec.md:61). benchmark_id (added in v0.3.0
+        with EvalBenchmarks) judges the benchmark's latest membership version unless
+        benchmark_version pins one.
       oneOf:
         - required: [evaluation_id]
         - required: [case_ids]
-        - required: [set_id]
+        - required: [benchmark_id]
       properties:
         evaluation_id: { type: string, nullable: true }
         case_ids:
           type: array
           nullable: true
           items: { type: string }
-        set_id:
+        benchmark_id:
           type: string
           nullable: true
-          description: Judge every case in this eval set (feature-spec.md:129).
-        set_version:
+          description: Judge every case in this eval benchmark (feature-spec.md:129).
+        benchmark_version:
           type: integer
           nullable: true
-          description: Pin a set membership version; omit for latest (feature-spec.md:127 "versioned membership").
+          description: Pin a benchmark membership version; omit for latest (feature-spec.md:127 "versioned membership").
         judge_model: { type: string }
         rubric_id: { type: string }
         rubric_version:
@@ -3868,7 +3885,7 @@ components:
         added enum value, not a reshape, and nothing here has to move for it.
         There is deliberately no `result` kind: a grid cell is addressed by
         its case (Result.case_id) plus Judgment.evaluation_id, and judging an
-        eval set resolves every reference item into a case too, so `case` is
+        eval benchmark resolves every reference item into a case too, so `case` is
         the one unit every judge path already converges on.
       properties:
         kind: { type: string, enum: [case, turn] }
@@ -3930,7 +3947,7 @@ components:
           description: >
             The evaluation this score was produced inside, when it was one —
             a scope, not a subject. Null for a thumb, and for judging
-            standalone eval cases or an eval set.
+            standalone eval cases or an eval benchmark.
         score:
           type: number
           description: For scorer kind human, 1 = 👍 and 0 = 👎.
@@ -4188,6 +4205,7 @@ components:
     # --------------------------------------------------------- eval workbench
     EvalCaseCreate:
       type: object
+      required: [agenttree]
       description: >
         Exactly one creation mode (oneOf; feature-spec.md:126 "handcrafted
         or source: {tree, conversation_id, turn_id}"): handcrafted = input +
@@ -4196,11 +4214,15 @@ components:
         referenced turn. reference optional in both (feature-spec.md:57
         "Nullable (reference-free rubrics allowed)"); "pick a turn → its
         response becomes the reference" is the reference-from-turn picker
-        filling the field client-side.
+        filling the field client-side. agenttree is required regardless of
+        mode (own top-level `required`, not inside either oneOf branch —
+        both modes need it): for a sourced case the client sends the same
+        value as source.tree; for a handcrafted case the author picks it.
       oneOf:
         - required: [input, output]
         - required: [source]
       properties:
+        agenttree: { type: string }
         input:
           type: object
           nullable: true
@@ -4248,7 +4270,7 @@ components:
         per line, not all-or-nothing") — valid rows import even when others
         fail.
       properties:
-        set_id:
+        benchmark_id:
           type: string
           nullable: true
           description: The set created/extended (new membership version), when requested.
@@ -4267,11 +4289,11 @@ components:
             COLUMN name when the complaint is about one.
           items: { $ref: "#/components/schemas/ErrorDetail" }
 
-    EvalSet:
+    EvalBenchmark:
       type: object
       required: [id, name, version, items, created_at]
       description: >
-        feature-spec.md:58: "EvalSet: named collection of cases (versioned,
+        feature-spec.md:58: "EvalBenchmark: named collection of cases (versioned,
         reusable across runs/models)", merged with the Casebook —
         "a named collection of turn REFERENCES" (cupel-phases.md:79) — into
         the one noun. A member is either kind, so the collection is both:
@@ -4279,8 +4301,8 @@ components:
         Membership is versioned (feature-spec.md:127): every change appends a
         new version with its own full item list, so judgments made against
         version N stay attributable to exactly that membership. name and
-        description are NOT versioned — they belong to the set, not to a
-        version (PATCH /eval/sets/{id}).
+        description are NOT versioned — they belong to the benchmark, not to a
+        version (PATCH /eval/benchmarks/{id}).
       properties:
         id: { type: string }
         name: { type: string }
@@ -4288,24 +4310,24 @@ components:
         version: { type: integer, description: This membership version; the latest unless one was pinned. }
         items:
           type: array
-          items: { $ref: "#/components/schemas/EvalSetItem" }
+          items: { $ref: "#/components/schemas/EvalBenchmarkItem" }
         created_at:
           type: string
           format: date-time
           description: Creation time of THIS version.
 
-    EvalSetPage:
+    EvalBenchmarkPage:
       type: object
       required: [items, page, page_size, total]
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/EvalSet" }
+          items: { $ref: "#/components/schemas/EvalBenchmark" }
         page: { type: integer }
         page_size: { type: integer }
         total: { type: integer }
 
-    EvalSetItem:
+    EvalBenchmarkItem:
       type: object
       required: [id, kind, added_at]
       description: >
@@ -4327,7 +4349,7 @@ components:
           type: string
           description: >-
             Stable across membership versions for as long as the item's
-            referent stays in the set (POST /eval/sets/{id}/versions).
+            referent stays in the benchmark (POST /eval/benchmarks/{id}/versions).
         kind: { type: string, enum: [reference, frozen] }
         source:
           type: object
@@ -4347,7 +4369,7 @@ components:
         note: { type: string, nullable: true, description: Why this member is noteworthy. }
         added_at: { type: string, format: date-time }
 
-    EvalSetItemCreate:
+    EvalBenchmarkItemCreate:
       type: object
       description: >
         Exactly one referent (oneOf): source adds a reference item, case_id
@@ -4367,7 +4389,7 @@ components:
         case_id: { type: string, nullable: true }
         note: { type: string, nullable: true }
 
-    EvalSetCreate:
+    EvalBenchmarkCreate:
       type: object
       required: [name]
       properties:
@@ -4376,28 +4398,28 @@ components:
         items:
           type: array
           description: Initial membership (version 1); empty/omitted = start empty.
-          items: { $ref: "#/components/schemas/EvalSetItemCreate" }
+          items: { $ref: "#/components/schemas/EvalBenchmarkItemCreate" }
 
-    EvalSetUpdate:
+    EvalBenchmarkUpdate:
       type: object
       required: [items]
       description: >
         The full membership for the NEW version (append-only,
-        feature-spec.md:127) — items absent from this list leave the set.
+        feature-spec.md:127) — items absent from this list leave the benchmark.
         Metadata is not carried here; PATCH renames without a version.
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/EvalSetItemCreate" }
+          items: { $ref: "#/components/schemas/EvalBenchmarkItemCreate" }
 
-    EvalSetMetadataUpdate:
+    EvalBenchmarkMetadataUpdate:
       type: object
       description: Metadata only; every membership change goes elsewhere. Absent fields are left unchanged.
       properties:
         name: { type: string, nullable: true }
         description: { type: string, nullable: true }
 
-    EvalSetFreezeRequest:
+    EvalBenchmarkFreezeRequest:
       type: object
       description: >
         Which reference items to freeze into cases; omit item_ids for all of
@@ -4408,12 +4430,12 @@ components:
           nullable: true
           items: { type: string }
 
-    EvalSetReplayRequest:
+    EvalBenchmarkReplayRequest:
       type: object
       required: [configs]
       description: >
         Same engine as ReplayRequest (feature-spec.md:41) applied to the
-        set's REFERENCE items; context fields carry ReplayRequest's enums and
+        benchmark's REFERENCE items; context fields carry ReplayRequest's enums and
         defaults (frozen / settings / live), so Phase-1-shaped requests
         behave identically.
       properties:
@@ -4442,13 +4464,13 @@ components:
           default: live
           description: As on ReplayRequest (feature-spec.md:79).
 
-    EvalSetReplayAccepted:
+    EvalBenchmarkReplayAccepted:
       type: object
       required: [task_id, evaluations]
       description: >
-        One parent task; one evaluation per tree the set's reference items
+        One parent task; one evaluation per tree the benchmark's reference items
         touch (evaluations are tree-scoped, feature-spec.md:111 — a
-        cross-tree set therefore yields several). Fetch each grid via
+        cross-tree benchmark therefore yields several). Fetch each grid via
         GET /agenttrees/{tree_id}/evaluations/{evaluation_id}.
       properties:
         task_id: { type: string }

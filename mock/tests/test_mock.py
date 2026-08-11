@@ -1130,7 +1130,7 @@ def test_every_collection_answers_the_same_page_envelope():
         async with client_pair() as c:
             await seed_conversation(c, n=1)
             await seed_conversation(c, n=1)
-            for path in ("/agenttrees/agent1/conversations", "/tasks", "/eval/sets",
+            for path in ("/agenttrees/agent1/conversations", "/tasks", "/eval/benchmarks",
                          "/eval/rubrics", "/eval/judgments", "/admin/users",
                          "/agenttrees/agent1/evaluations"):
                 page = (await c.get(path)).json()

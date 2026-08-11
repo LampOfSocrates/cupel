@@ -24,7 +24,7 @@ browser's ByokSection. Defaults to $OPENROUTER_API_KEY, falling back to
 $CUPEL_LLM_KEY. The key must be an OpenRouter key (sk-or-...) — the
 mock's only provider is OpenRouter (mock/config.py:60), which is how the
 default model, "deepseek/deepseek-chat", reaches DeepSeek. The five
-endpoints that read the header (chat, replay, replay/turn, eval/sets
+endpoints that read the header (chat, replay, replay/turn, eval/benchmarks
 replay, eval/judge) then generate for real instead of canned text; every
 other call ignores the header harmlessly. Rate limit is server-side
 (mock/config.py:65-66, 20 generations/60s per key) — _post retries once on

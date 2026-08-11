@@ -167,7 +167,7 @@ export interface Conversation {
   /**
    * True iff this conversation is a TOMBSTONE. Deletion is soft and now says
    * so on the wire: the row keeps reading (getConversation, turns) because
-   * forks, eval-set items, eval cases and judgments all point into it, while
+   * forks, eval-benchmark items, eval cases and judgments all point into it, while
    * it leaves every listing and refuses new work with 409
    * conversation_deleted. Read this instead of inferring deletion from a 404,
    * which cannot tell "deleted" from "absent" or "not yours".
@@ -483,10 +483,9 @@ export interface JudgeConfig {
   rubric_id: string;
 }
 
-// openapi.yaml:1825 EvalCase — ":1829-1831 'EvalCase = {input, output,
-// reference?}' — input 'prompt + context (frozen)', reference nullable
-// (reference-free rubrics allowed)"; source ":1848-1850 set when auto-created
-// from a conversation turn".
+// openapi.yaml EvalCase — "'EvalCase = {input, output, reference?}' — input
+// 'prompt + context (frozen)', reference nullable (reference-free rubrics
+// allowed)"; source "set when auto-created from a conversation turn".
 export interface EvalCaseInput {
   prompt: string;
   envelope?: ContextEnvelope | null;
@@ -504,22 +503,27 @@ export interface EvalCase {
   output: string;
   reference?: string | null;
   source?: Partial<EvalCaseSource> | null;
+  /** Free-form label naming the agent tree/endpoint this case evaluates.
+   * Required on every case — sourced cases default it from source.tree,
+   * handcrafted ones are picked by the author. Carried forward unchanged
+   * across POST /eval/cases/{id}/versions. */
+  agenttree: string;
   /** EvalCase.version — "Additive in v0.3.0 (not required — Phase-1 backends
    * omit it, read as 1): versions append on POST /eval/cases/{id}/versions". */
   version?: number;
   created_at?: string;
 }
 
-// openapi.yaml:3319 EvalCaseCreate — ":3328-3330 oneOf: handcrafted =
-// input + output typed in the editor; sourced = the server derives input …
-// and output … from the referenced turn".
+// openapi.yaml EvalCaseCreate — "oneOf: handcrafted = input + output typed in
+// the editor; sourced = the server derives input … and output … from the
+// referenced turn". agenttree is required regardless of mode.
 export type EvalCaseCreate =
-  | { input: EvalCaseInput; output: string; reference?: string | null }
-  | { source: EvalCaseSource; reference?: string | null };
+  | { agenttree: string; input: EvalCaseInput; output: string; reference?: string | null }
+  | { agenttree: string; source: EvalCaseSource; reference?: string | null };
 
-// openapi.yaml:3354 EvalCaseUpdate — "Full content for the NEW version
+// openapi.yaml EvalCaseUpdate — "Full content for the NEW version
 // (append-only … ) — prior versions and the judgments recorded against them
-// are untouched".
+// are untouched". agenttree is not here: it carries over unchanged, same as source.
 export interface EvalCaseUpdate {
   input: EvalCaseInput;
   output: string;
@@ -532,7 +536,7 @@ export interface EvalCaseUpdate {
 // report used to declare a private near-copy ({row, column?, message}), so a
 // client rendered "which bit of my input was rejected" twice.
 export interface EvalCaseImportReport {
-  set_id?: string | null;
+  benchmark_id?: string | null;
   rows_total: number;
   rows_imported: number;
   created_case_ids: string[];
@@ -540,13 +544,14 @@ export interface EvalCaseImportReport {
   errors: ErrorDetail[];
 }
 
-// openapi.yaml EvalSetItem — the merged noun's member. "kind is the whole
+// openapi.yaml EvalBenchmarkItem — the merged noun's member (EvalBenchmark
+// absorbed the earlier separate Casebook concept). "kind is the whole
 // difference the merge collapsed: `reference` is a REFERENCE to a live turn,
 // never a copy …; `frozen` names an EvalCase". source survives a freeze, so an
 // item frozen from a turn still says where it came from.
-export interface EvalSetItem {
+export interface EvalBenchmarkItem {
   /** "Stable across membership versions for as long as the item's referent
-   * stays in the set." */
+   * stays in the benchmark." */
   id: string;
   kind: "reference" | "frozen";
   source?: EvalCaseSource | null;
@@ -556,68 +561,68 @@ export interface EvalSetItem {
   added_at: string;
 }
 
-// openapi.yaml EvalSetItemCreate — "Exactly one referent (oneOf): source adds a
-// reference item, case_id adds a frozen one." Also the ⊞ action's body.
-export type EvalSetItemCreate =
+// openapi.yaml EvalBenchmarkItemCreate — "Exactly one referent (oneOf): source
+// adds a reference item, case_id adds a frozen one." Also the ⊞ action's body.
+export type EvalBenchmarkItemCreate =
   | { source: EvalCaseSource; note?: string | null }
   | { case_id: string; note?: string | null };
 
-// openapi.yaml EvalSet — "named collection of cases (versioned, reusable across
-// runs/models)", merged with the Casebook — "a named collection of turn
+// openapi.yaml EvalBenchmark — "named collection of cases (versioned, reusable
+// across runs/models)", merged with the Casebook — "a named collection of turn
 // REFERENCES" — into the one noun. "Membership is versioned: every change
 // appends a new version with its own full item list … name and description are
 // NOT versioned."
-export interface EvalSet {
+export interface EvalBenchmark {
   id: string;
   name: string;
   description?: string | null;
   version: number;
-  items: EvalSetItem[];
+  items: EvalBenchmarkItem[];
   created_at: string;
 }
 
-// openapi.yaml EvalSetPage
-export type EvalSetPage = Page<EvalSet>;
+// openapi.yaml EvalBenchmarkPage
+export type EvalBenchmarkPage = Page<EvalBenchmark>;
 
-export interface EvalSetCreate {
+export interface EvalBenchmarkCreate {
   name: string;
   description?: string | null;
   /** "Initial membership (version 1); empty/omitted = start empty." */
-  items?: EvalSetItemCreate[];
+  items?: EvalBenchmarkItemCreate[];
 }
 
-// openapi.yaml EvalSetUpdate — "The full membership for the NEW version …
-// items absent from this list leave the set."
-export interface EvalSetUpdate {
-  items: EvalSetItemCreate[];
+// openapi.yaml EvalBenchmarkUpdate — "The full membership for the NEW version
+// … items absent from this list leave the benchmark."
+export interface EvalBenchmarkUpdate {
+  items: EvalBenchmarkItemCreate[];
 }
 
-// openapi.yaml EvalSetMetadataUpdate — "Metadata only; every membership change
-// goes elsewhere." A rename takes no membership version.
-export interface EvalSetMetadataUpdate {
+// openapi.yaml EvalBenchmarkMetadataUpdate — "Metadata only; every membership
+// change goes elsewhere." A rename takes no membership version.
+export interface EvalBenchmarkMetadataUpdate {
   name?: string | null;
   description?: string | null;
 }
 
-// openapi.yaml EvalSetFreezeRequest — "Which reference items to freeze into
-// cases; omit item_ids for all of them."
-export interface EvalSetFreezeRequest {
+// openapi.yaml EvalBenchmarkFreezeRequest — "Which reference items to freeze
+// into cases; omit item_ids for all of them."
+export interface EvalBenchmarkFreezeRequest {
   item_ids?: string[] | null;
 }
 
-// openapi.yaml EvalSetReplayRequest — "Same engine as ReplayRequest applied to
-// the set's REFERENCE items". context_policy is pinned to frozen by the client
-// exactly as on ReplayRequest (widening is future work).
-export interface EvalSetReplayRequest {
+// openapi.yaml EvalBenchmarkReplayRequest — "Same engine as ReplayRequest
+// applied to the benchmark's REFERENCE items". context_policy is pinned to
+// frozen by the client exactly as on ReplayRequest (widening is future work).
+export interface EvalBenchmarkReplayRequest {
   configs: Variant[];
   context_policy?: "frozen";
 }
 
-// openapi.yaml EvalSetReplayAccepted — "One parent task; one evaluation per
-// tree the set's reference items touch (evaluations are tree-scoped … a
-// cross-tree set therefore yields several). Fetch each grid via
+// openapi.yaml EvalBenchmarkReplayAccepted — "One parent task; one evaluation
+// per tree the benchmark's reference items touch (evaluations are tree-scoped
+// … a cross-tree benchmark therefore yields several). Fetch each grid via
 // GET /agenttrees/{tree_id}/evaluations/{evaluation_id}".
-export interface EvalSetReplayAccepted {
+export interface EvalBenchmarkReplayAccepted {
   task_id: string;
   evaluations: Array<{ tree_id: string; evaluation_id: string }>;
 }
@@ -640,11 +645,11 @@ export interface RubricUpdate {
 export interface JudgeRequest {
   evaluation_id?: string | null;
   case_ids?: string[] | null;
-  /** openapi.yaml:2934-2936 — "Judge every case in this eval set"; the oneOf
-   * became evaluation_id | case_ids | set_id in v0.3.0 (:2926-2929). */
-  set_id?: string | null;
-  /** ":2939-2941 Pin a set membership version; omit for latest." */
-  set_version?: number | null;
+  /** openapi.yaml JudgeRequest — "Judge every case in this eval benchmark";
+   * the oneOf is evaluation_id | case_ids | benchmark_id. */
+  benchmark_id?: string | null;
+  /** "Pin a benchmark membership version; omit for latest." */
+  benchmark_version?: number | null;
   judge_model: string;
   rubric_id: string;
   rubric_version?: number | null;

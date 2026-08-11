@@ -129,33 +129,40 @@ CREATE TABLE IF NOT EXISTS rubrics (
 -- ORDER BY. Pre-existing databases are migrated in Db._migrate_eval_cases
 -- below: every existing row becomes version 1, so Phase-1 cases (and the
 -- judgments pointing at them) keep working untouched.
+-- agenttree: free-form label naming the agent tree/endpoint this case
+-- evaluates (openapi.yaml EvalCase.agenttree). Required on every case going
+-- forward; older rows are backfilled by Db._migrate_eval_cases_agenttree
+-- below (from source.tree where sourced, a visible placeholder otherwise).
 CREATE TABLE IF NOT EXISTS eval_cases (
   id TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
   prompt TEXT NOT NULL, envelope TEXT,
   output TEXT NOT NULL, reference TEXT, source TEXT, created_at TEXT NOT NULL,
+  agenttree TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (id, version));
 
--- Eval sets, the noun Casebook merged into (openapi.yaml EvalSet). TWO tables,
--- because the resource has two lifetimes and saying so here is cheaper than a
--- comment: the SET is mutable metadata (a rename is not a membership change,
--- openapi.yaml PATCH /eval/sets/{setId}), the MEMBERSHIP is append-only
--- ("each save is a new version carrying its FULL item list"). Splitting them
--- is what lets a rename leave every recorded version untouched, so the
--- append-only invariant (cupel-phases.md:160) needs no exception for metadata.
+-- Eval benchmarks, the noun Casebook merged into (openapi.yaml EvalBenchmark
+-- — named EvalSet before the rename to a benchmark-flavored noun). TWO
+-- tables, because the resource has two lifetimes and saying so here is
+-- cheaper than a comment: the BENCHMARK is mutable metadata (a rename is not
+-- a membership change, openapi.yaml PATCH /eval/benchmarks/{benchmarkId}),
+-- the MEMBERSHIP is append-only ("each save is a new version carrying its
+-- FULL item list"). Splitting them is what lets a rename leave every
+-- recorded version untouched, so the append-only invariant
+-- (cupel-phases.md:160) needs no exception for metadata.
 --
--- A set is GLOBAL, not tree-scoped: its reference items may point at turns
--- across trees, and per-item visibility follows the viewer's permissions.
--- items is a JSON array of {id, kind, source?, case_id?, note, added_at} —
--- reference items are turn REFERENCES, never copies, so nothing here holds a
--- turn's text. Deleting a set touches no turn, conversation, case, judgment or
--- evaluation.
-CREATE TABLE IF NOT EXISTS eval_sets (
+-- A benchmark is GLOBAL, not tree-scoped: its reference items may point at
+-- turns across trees, and per-item visibility follows the viewer's
+-- permissions. items is a JSON array of {id, kind, source?, case_id?, note,
+-- added_at} — reference items are turn REFERENCES, never copies, so nothing
+-- here holds a turn's text. Deleting a benchmark touches no turn,
+-- conversation, case, judgment or evaluation.
+CREATE TABLE IF NOT EXISTS eval_benchmarks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
   created_by TEXT, created_at TEXT NOT NULL);
 
-CREATE TABLE IF NOT EXISTS eval_set_versions (
-  set_id TEXT NOT NULL, version INTEGER NOT NULL, items TEXT NOT NULL,
-  created_at TEXT NOT NULL, PRIMARY KEY (set_id, version));
+CREATE TABLE IF NOT EXISTS eval_benchmark_versions (
+  benchmark_id TEXT NOT NULL, version INTEGER NOT NULL, items TEXT NOT NULL,
+  created_at TEXT NOT NULL, PRIMARY KEY (benchmark_id, version));
 
 -- Audit trail. "EVERY access is audit-logged server-side"
 -- (openapi.yaml:308-309) for GET /admin/conversations. The contract declares
@@ -225,9 +232,11 @@ class Db:
                                       deterministic=True)
             self.conn.executescript(SCHEMA)
             self._migrate_eval_cases()
+            self._migrate_eval_cases_agenttree()
             self._migrate_conversation_owner()
             self._migrate_run_to_evaluation()
-            self._migrate_casebooks_into_eval_sets()
+            self._migrate_casebooks_into_eval_benchmarks()
+            self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
             self.conn.commit()
 
@@ -253,6 +262,22 @@ class Db:
             "   SELECT id, 1, prompt, envelope, output, reference, source, created_at"
             "   FROM eval_cases_pre_t12;"
             " DROP TABLE eval_cases_pre_t12;")
+
+    def _migrate_eval_cases_agenttree(self):
+        """Older databases carry eval_cases with no agenttree column
+        (openapi.yaml EvalCase.agenttree, added after v0.4.0 — every case now
+        names the agent tree/endpoint it evaluates). Backfilled from
+        source.tree for sourced cases, since that is the tree the case was
+        actually pulled from; a handcrafted case with no source has no tree to
+        recover, so it gets a visible placeholder rather than a silent guess.
+        Idempotent: the column's presence is the marker."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(eval_cases)")}
+        if not cols or "agenttree" in cols:
+            return
+        self.conn.execute("ALTER TABLE eval_cases ADD COLUMN agenttree TEXT NOT NULL DEFAULT ''")
+        self.conn.execute(
+            "UPDATE eval_cases SET agenttree ="
+            " COALESCE(NULLIF(json_extract(source, '$.tree'), ''), '(unmigrated)')")
 
     def _migrate_conversation_owner(self):
         """Older databases carry conversations without user_id,
@@ -302,56 +327,61 @@ class Db:
                 self.conn.execute(
                     f"ALTER TABLE {table} RENAME COLUMN run_id TO evaluation_id")
 
-    def _migrate_casebooks_into_eval_sets(self):
-        """Casebook and EvalSet merged into one noun, so their two physical
-        shapes merge too. Older databases carry
+    def _migrate_casebooks_into_eval_benchmarks(self):
+        """Casebook and EvalBenchmark (named EvalSet before the later
+        benchmark-flavored rename) merged into one noun, so their two
+        physical shapes merge too. Older databases carry
         eval_sets(id, name, version, case_ids, created_at) plus casebooks /
-        casebook_items; the new shape is eval_sets(id, name, description,
-        created_by, created_at) + eval_set_versions(set_id, version, items).
+        casebook_items; the current shape is
+        eval_benchmarks(id, name, description, created_by, created_at) +
+        eval_benchmark_versions(benchmark_id, version, items) — this
+        migration writes directly into the current names, so a database this
+        old upgrades in one hop rather than passing through the intermediate
+        eval_sets/eval_set_versions shape (that shape's own rename, for
+        databases that DO carry it, is _migrate_eval_sets_into_eval_benchmarks
+        below).
 
-        Two independent, presence-guarded halves, in the style of the three
+        Two independent, presence-guarded halves, in the style of the
         migrations above:
-          1. eval_sets still has a case_ids column -> rebuild it and turn each
-             old version row into an eval_set_versions row whose items are
+          1. an eval_sets table still has a case_ids column -> turn each old
+             version row into an eval_benchmark_versions row whose items are
              FROZEN (they were case ids, and a case id is exactly a frozen
-             item's referent). CREATE TABLE IF NOT EXISTS at the top of this
-             file is a no-op against the old table, which is what leaves the
-             marker column visible here.
-          2. a casebooks table exists -> each casebook becomes a set whose
-             version 1 holds its items as REFERENCES, keeping their ids,
-             notes and added_at. The casebook keeps its own id: ids are
+             item's referent).
+          2. a casebooks table exists -> each casebook becomes a benchmark
+             whose version 1 holds its items as REFERENCES, keeping their
+             ids, notes and added_at. The casebook keeps its own id: ids are
              opaque, and rewriting them would break every judgment, link and
              bookmark that already names one.
         Nothing here runs on a database created after the merge."""
-        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(eval_sets)")}
-        if "case_ids" in cols:
-            self.conn.execute("ALTER TABLE eval_sets RENAME TO eval_sets_pre_t7b")
-            self.conn.execute(
-                "CREATE TABLE eval_sets ("
-                " id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,"
-                " created_by TEXT, created_at TEXT NOT NULL)")
-            rows = self.conn.execute(
-                "SELECT id, name, version, case_ids, created_at"
-                " FROM eval_sets_pre_t7b ORDER BY id, version").fetchall()
-            first: dict[str, tuple] = {}
-            latest_name: dict[str, str] = {}
-            for row in rows:
-                first.setdefault(row["id"], (row["created_at"],))
-                latest_name[row["id"]] = row["name"]
-                items = [{"id": f"esi_{row['id']}_{i}", "kind": "frozen",
-                          "source": None, "case_id": case_id, "note": None,
-                          "added_at": row["created_at"]}
-                         for i, case_id in enumerate(json.loads(row["case_ids"] or "[]"))]
-                self.conn.execute(
-                    "INSERT INTO eval_set_versions (set_id, version, items, created_at)"
-                    " VALUES (?, ?, ?, ?)",
-                    (row["id"], row["version"], json.dumps(items), row["created_at"]))
-            for set_id, (created_at,) in first.items():
-                self.conn.execute(
-                    "INSERT INTO eval_sets (id, name, description, created_by, created_at)"
-                    " VALUES (?, ?, NULL, NULL, ?)",
-                    (set_id, latest_name[set_id], created_at))
-            self.conn.execute("DROP TABLE eval_sets_pre_t7b")
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "eval_sets" in tables:
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(eval_sets)")}
+            if "case_ids" in cols:
+                rows = self.conn.execute(
+                    "SELECT id, name, version, case_ids, created_at"
+                    " FROM eval_sets ORDER BY id, version").fetchall()
+                first: dict[str, tuple] = {}
+                latest_name: dict[str, str] = {}
+                for row in rows:
+                    first.setdefault(row["id"], (row["created_at"],))
+                    latest_name[row["id"]] = row["name"]
+                    items = [{"id": f"esi_{row['id']}_{i}", "kind": "frozen",
+                              "source": None, "case_id": case_id, "note": None,
+                              "added_at": row["created_at"]}
+                             for i, case_id in enumerate(json.loads(row["case_ids"] or "[]"))]
+                    self.conn.execute(
+                        "INSERT INTO eval_benchmark_versions (benchmark_id, version, items, created_at)"
+                        " VALUES (?, ?, ?, ?)",
+                        (row["id"], row["version"], json.dumps(items), row["created_at"]))
+                for benchmark_id, (created_at,) in first.items():
+                    self.conn.execute(
+                        "INSERT INTO eval_benchmarks (id, name, description, created_by, created_at)"
+                        " VALUES (?, ?, NULL, NULL, ?)",
+                        (benchmark_id, latest_name[benchmark_id], created_at))
+                self.conn.execute("DROP TABLE eval_sets")
+                if "eval_set_versions" in tables:
+                    self.conn.execute("DROP TABLE eval_set_versions")
 
         tables = {r[0] for r in self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'")}
@@ -369,16 +399,43 @@ class Db:
                          "SELECT * FROM casebook_items WHERE casebook_id = ?"
                          " ORDER BY rowid", (book["id"],)).fetchall()]
             self.conn.execute(
-                "INSERT OR REPLACE INTO eval_sets"
+                "INSERT OR REPLACE INTO eval_benchmarks"
                 " (id, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
                 (book["id"], book["name"], book["description"],
                  book["created_by"], book["created_at"]))
             self.conn.execute(
-                "INSERT OR REPLACE INTO eval_set_versions"
-                " (set_id, version, items, created_at) VALUES (?, 1, ?, ?)",
+                "INSERT OR REPLACE INTO eval_benchmark_versions"
+                " (benchmark_id, version, items, created_at) VALUES (?, 1, ?, ?)",
                 (book["id"], json.dumps(items), book["created_at"]))
         self.conn.executescript(
             "DROP TABLE IF EXISTS casebook_items; DROP TABLE IF EXISTS casebooks;")
+
+    def _migrate_eval_sets_into_eval_benchmarks(self):
+        """Older databases carry the pre-rename physical names eval_sets /
+        eval_set_versions(set_id, …) — the intermediate shape the Casebook
+        merge produced, before EvalSet itself was later renamed to
+        EvalBenchmark. CREATE TABLE IF NOT EXISTS at the top of this file has
+        already created empty eval_benchmarks / eval_benchmark_versions
+        tables on such a database, so each old table's data is moved by
+        dropping the empty newcomer and renaming the old one over it — same
+        pattern as _migrate_run_to_evaluation. Idempotent: the presence of the
+        OLD table is the marker. Nothing here runs on a database created
+        after the rename, and _migrate_casebooks_into_eval_benchmarks above
+        already drops eval_sets/eval_set_versions for anything older still, so
+        the two migrations never both fire on the same database."""
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "eval_sets" not in tables:
+            return
+        if "eval_benchmarks" in tables:
+            self.conn.execute("DROP TABLE eval_benchmarks")
+        self.conn.execute("ALTER TABLE eval_sets RENAME TO eval_benchmarks")
+        if "eval_set_versions" in tables:
+            if "eval_benchmark_versions" in tables:
+                self.conn.execute("DROP TABLE eval_benchmark_versions")
+            self.conn.execute("ALTER TABLE eval_set_versions RENAME TO eval_benchmark_versions")
+            self.conn.execute(
+                "ALTER TABLE eval_benchmark_versions RENAME COLUMN set_id TO benchmark_id")
 
     def _migrate_judgment_subject_scorer(self):
         """Older databases carry the union shape: judgments(case_id,

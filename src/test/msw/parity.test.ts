@@ -317,10 +317,10 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "task", run: () => api.task("task-seed-replay") },
   { apiMethod: "rubrics", run: () => api.rubrics() },
   { apiMethod: "evalCase", run: () => api.evalCase("case-1") },
-  { apiMethod: "evalSets", run: () => api.evalSets() },
+  { apiMethod: "evalBenchmarks", run: () => api.evalBenchmarks() },
   { apiMethod: "judgments", run: () => api.judgments({ page: 1 }) },
   { apiMethod: "evaluationSummary", run: () => api.evaluationSummary("evaluation-old-1") },
-  { apiMethod: "evalSet", run: () => api.evalSet("set-misses") },
+  { apiMethod: "evalBenchmark", run: () => api.evalBenchmark("set-misses") },
 
   // Second reads over the fixtures whose SHAPE differs from the first: forks
   // carry lineage, the re-fire evaluation carries per-endpoint cells, the finished
@@ -401,7 +401,7 @@ const EXERCISES: Exercise[] = [
   {
     apiMethod: "importEvalCases",
     run: () =>
-      api.importEvalCases(file("cases.csv", "q,a\n1,2\n", "text/csv"), {
+      api.importEvalCases(file("cases.csv", "q,a\n1,2\n", "text/csv"), "agent1", {
         input: "q",
         output: "a",
       }),
@@ -454,40 +454,46 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "createRubricVersion", run: () => api.createRubricVersion("rub-help", { prompt: "Score it better." }) },
   {
     apiMethod: "createEvalCase",
-    run: () => api.createEvalCase({ input: { prompt: "Hi" }, output: "Hello" }),
+    run: () => api.createEvalCase({ agenttree: "agent1", input: { prompt: "Hi" }, output: "Hello" }),
   },
   {
     apiMethod: "createEvalCase",
     label: "createEvalCase (sourced from a turn)",
     run: () =>
-      api.createEvalCase({ source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" } }),
+      api.createEvalCase({
+        agenttree: "agent1",
+        source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
+      }),
   },
   {
     apiMethod: "createEvalCaseVersion",
     run: () => api.createEvalCaseVersion("case-1", { input: { prompt: "Hi" }, output: "Hello again" }),
   },
-  { apiMethod: "createEvalSet", run: () => api.createEvalSet({ name: "parity-set" }) },
-  { apiMethod: "createEvalSetVersion", run: () => api.createEvalSetVersion("set-refunds", { items: [{ case_id: "case-1" }] }) },
+  { apiMethod: "createEvalBenchmark", run: () => api.createEvalBenchmark({ name: "parity-set" }) },
   {
-    apiMethod: "updateEvalSetMetadata",
-    run: () => api.updateEvalSetMetadata("set-misses", { name: "Renamed" }),
+    apiMethod: "createEvalBenchmarkVersion",
+    run: () => api.createEvalBenchmarkVersion("set-refunds", { items: [{ case_id: "case-1" }] }),
   },
   {
-    apiMethod: "addEvalSetItem",
+    apiMethod: "updateEvalBenchmarkMetadata",
+    run: () => api.updateEvalBenchmarkMetadata("set-misses", { name: "Renamed" }),
+  },
+  {
+    apiMethod: "addEvalBenchmarkItem",
     run: () =>
-      api.addEvalSetItem("set-misses", {
+      api.addEvalBenchmarkItem("set-misses", {
         source: { tree: "agent1", conversation_id: "c2", turn_id: "t9" },
       }),
   },
   // Replay BEFORE freeze: replay re-fires reference items, so it needs one to
   // still be a reference — freezing is what takes them out of its reach.
   {
-    apiMethod: "replayEvalSet",
-    run: () => api.replayEvalSet("set-misses", { configs: [{ instruction_version: 3 }] }),
+    apiMethod: "replayEvalBenchmark",
+    run: () => api.replayEvalBenchmark("set-misses", { configs: [{ instruction_version: 3 }] }),
   },
   {
-    apiMethod: "freezeEvalSetItems",
-    run: () => api.freezeEvalSetItems("set-misses"),
+    apiMethod: "freezeEvalBenchmarkItems",
+    run: () => api.freezeEvalBenchmarkItems("set-misses"),
   },
   { apiMethod: "putAdminUsers", run: () => api.putAdminUsers([{ email: "parity@demo" }]) },
   {
@@ -499,7 +505,7 @@ const EXERCISES: Exercise[] = [
   { apiMethod: "cancelTask", run: () => api.cancelTask("task-seed-replay") },
 
   // --- deletes last: they remove the fixtures the reads above needed.
-  { apiMethod: "deleteEvalSet", run: () => api.deleteEvalSet("set-misses") },
+  { apiMethod: "deleteEvalBenchmark", run: () => api.deleteEvalBenchmark("set-misses") },
   { apiMethod: "deleteConversation", run: () => api.deleteConversation("agent1", "c3") },
 ];
 
@@ -509,7 +515,7 @@ const IMPORT_QUEUED_EXERCISE: Exercise = {
   label: "importEvalCases (202 queued)",
   run: () => {
     importConfig.queued = true;
-    return api.importEvalCases(file("big.csv", "q,a\n", "text/csv"), {
+    return api.importEvalCases(file("big.csv", "q,a\n", "text/csv"), "agent1", {
       input: "q",
       output: "a",
     });
@@ -549,10 +555,10 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     run: () => api.createEvalCaseVersion("nope", { input: { prompt: "p" }, output: "o" }),
   },
   {
-    label: "createEvalSetVersion 404",
+    label: "createEvalBenchmarkVersion 404",
     status: 404,
     code: "not_found",
-    run: () => api.createEvalSetVersion("nope", { items: [] }),
+    run: () => api.createEvalBenchmarkVersion("nope", { items: [] }),
   },
   {
     label: "createRubricVersion 404",
@@ -561,34 +567,34 @@ const ERROR_EXERCISES: ErrorExercise[] = [
     run: () => api.createRubricVersion("nope", { prompt: "p" }),
   },
   { label: "evaluationSummary 404", status: 404, code: "not_found", run: () => api.evaluationSummary("nope") },
-  { label: "evalSet 404", status: 404, code: "not_found", run: () => api.evalSet("nope") },
+  { label: "evalBenchmark 404", status: 404, code: "not_found", run: () => api.evalBenchmark("nope") },
   {
-    label: "updateEvalSetMetadata 404",
+    label: "updateEvalBenchmarkMetadata 404",
     status: 404,
     code: "not_found",
-    run: () => api.updateEvalSetMetadata("nope", { name: "x" }),
+    run: () => api.updateEvalBenchmarkMetadata("nope", { name: "x" }),
   },
-  { label: "deleteEvalSet 404", status: 404, code: "not_found", run: () => api.deleteEvalSet("nope") },
+  { label: "deleteEvalBenchmark 404", status: 404, code: "not_found", run: () => api.deleteEvalBenchmark("nope") },
   {
-    label: "addEvalSetItem 404",
+    label: "addEvalBenchmarkItem 404",
     status: 404,
     code: "not_found",
     run: () =>
-      api.addEvalSetItem("nope", {
+      api.addEvalBenchmarkItem("nope", {
         source: { tree: "agent1", conversation_id: "c1", turn_id: "t2" },
       }),
   },
   {
-    label: "freezeEvalSetItems 404",
+    label: "freezeEvalBenchmarkItems 404",
     status: 404,
     code: "not_found",
-    run: () => api.freezeEvalSetItems("nope"),
+    run: () => api.freezeEvalBenchmarkItems("nope"),
   },
   {
-    label: "replayEvalSet 404",
+    label: "replayEvalBenchmark 404",
     status: 404,
     code: "not_found",
-    run: () => api.replayEvalSet("nope", { configs: [{}] }),
+    run: () => api.replayEvalBenchmark("nope", { configs: [{}] }),
   },
   {
     label: "userPermissions 404",
@@ -945,7 +951,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(after.versions[0]).toEqual(before.versions[0]);
   });
 
-  it("PUT eval case / set / rubric append a version, latest wins on read", async () => {
+  it("PUT eval case / benchmark / rubric append a version, latest wins on read", async () => {
     const caseBefore = await api.evalCase("case-1");
     const caseAfter = await api.createEvalCaseVersion("case-1", {
       input: { prompt: "p" },
@@ -954,9 +960,9 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(caseAfter.version).toBe((caseBefore.version ?? 1) + 1);
     expect((await api.evalCase("case-1")).output).toBe("o");
 
-    const setAfter = await api.createEvalSetVersion("set-refunds", { items: [] });
-    expect(setAfter.version).toBe(4); // fixture is v3
-    expect((await api.evalSets()).items.find((s) => s.id === "set-refunds")?.version).toBe(4);
+    const benchmarkAfter = await api.createEvalBenchmarkVersion("set-refunds", { items: [] });
+    expect(benchmarkAfter.version).toBe(4); // fixture is v3
+    expect((await api.evalBenchmarks()).items.find((b) => b.id === "set-refunds")?.version).toBe(4);
 
     const rubricAfter = await api.createRubricVersion("rub-help", { prompt: "p" });
     expect(rubricAfter.version).toBe(3); // fixture is v2
@@ -1015,30 +1021,30 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(await api.judgments({ conversation_id: "c1" })).not.toContainEqual(judgment);
   });
 
-  it("adding the same turn to a set twice appends one version, then nothing", async () => {
+  it("adding the same turn to a benchmark twice appends one version, then nothing", async () => {
     // The merged noun's duplicate rule: "adding a referent the latest version
     // already holds appends nothing and returns that version unchanged"
-    // (mock/main.py add_set_item), so the caller reads an unchanged version
-    // number as "already there".
+    // (mock/main.py add_benchmark_item), so the caller reads an unchanged
+    // version number as "already there".
     const item = {
       source: { tree: "agent1", conversation_id: "c2", turn_id: "t9" },
     } as const;
-    const before = await api.evalSet("set-misses");
-    const first = await api.addEvalSetItem("set-misses", item);
-    const second = await api.addEvalSetItem("set-misses", item);
+    const before = await api.evalBenchmark("set-misses");
+    const first = await api.addEvalBenchmarkItem("set-misses", item);
+    const second = await api.addEvalBenchmarkItem("set-misses", item);
     expect(first.version).toBe(before.version + 1);
     expect(second.version).toBe(first.version);
     expect(
-      (await api.evalSet("set-misses")).items.filter((i) => i.source?.turn_id === "t9"),
+      (await api.evalBenchmark("set-misses")).items.filter((i) => i.source?.turn_id === "t9"),
     ).toHaveLength(1);
   });
 
   it("freezing flips reference items in place, keeping their id", async () => {
     // "The item keeps its id and its source, so its provenance survives the
-    // freeze" — the merge's replacement for POST /casebooks/{id}/to-eval-set.
-    const before = await api.evalSet("set-misses");
+    // freeze" — the merge's replacement for POST /casebooks/{id}/to-eval-benchmark.
+    const before = await api.evalBenchmark("set-misses");
     const reference = before.items.find((i) => i.kind === "reference")!;
-    const after = await api.freezeEvalSetItems("set-misses");
+    const after = await api.freezeEvalBenchmarkItems("set-misses");
     expect(after.version).toBe(before.version + 1);
     const frozen = after.items.find((i) => i.id === reference.id)!;
     expect(frozen.kind).toBe("frozen");
@@ -1095,7 +1101,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
       "PATCH /agenttrees/{tree}/conversations/{conversationId}",
       "DELETE /agenttrees/{tree}/conversations/{conversationId}",
       "POST /eval/judge",
-      "POST /eval/sets/{setId}/replay",
+      "POST /eval/benchmarks/{benchmarkId}/replay",
     ]) {
       expect(declaredStatuses(op), op).toContain("409");
     }
