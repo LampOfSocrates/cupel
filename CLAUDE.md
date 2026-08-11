@@ -13,6 +13,14 @@ Read before any work: **docs/feature-spec.md** — the what; sketches/clean/ = t
 density, sketches/ = API wiring. docs/TASKS.md is the work queue, and its numbering is the
 commit convention (`N: <summary>`).
 
+**Docs state how the system behaves — never log the work that proved it.** No dated
+"verified on", no run/deploy/build ids, no rehearsal narrative, no cleanup or trial
+records. Those age into noise a reader has to sift past, and git already holds them. Fold
+what was LEARNED into the instruction it changes (a step, a caveat, a failure row) and
+throw the episode away: "setting env vars does not restart the service — deploy
+explicitly" earns its place; "observed 2026-08-11, deploy dep-xxxx came up healthy"
+does not.
+
 Status: feature build-out COMPLETE — FULL STOP. Work is user-directed; build what the
 current task asks for and nothing beyond it.
 Invariants (never break): versions/judgments/snapshots append-only ·
