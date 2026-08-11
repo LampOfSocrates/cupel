@@ -7,38 +7,43 @@
 <meta name="description" content="Bring your own agent: one command generates a self-hosted chat client and agent studio around it. Replay conversations against a new instruction version, compare side by side, judge with an LLM, read the trace with cost. Answer one question per family — your backend, the bundled mock, or hide it.">
 <style>
 :root {
-  --ground:#EEF0EC; --paper:#F8F9F5; --ink:#1C1E1D; --ink-soft:#4B504C;
-  --rule:#CBCEC7; --silver:#7C8278; --accent:#B0650F; --accent-soft:#F5E7CC;
-  --accent2:#0E7C6B; --accent2-soft:#DCEFE9;
-  --accent3:#7A4FA8; --accent3-soft:#ECE2F7;
-  --struck:#B0650F; --absent:#A7ACA1;
-  --shadow:0 1px 0 rgba(28,30,29,.04), 0 12px 32px -20px rgba(28,30,29,.55);
+  /* Same warm-paper/blue palette now driving the app (src/theme.ts) —
+     pulled from the Claude-style reference design: #F5F4EF bg, #2C2C2A
+     ink, #D3D1C7/#E4E2DA borders, #185FA5 accent. accent2/accent3 are
+     the reference's alternate accent presets (green/purple) repurposed
+     as this page's secondary/tertiary hues. */
+  --ground:#F5F4EF; --paper:#FFFFFF; --ink:#2C2C2A; --ink-soft:#5C5B55;
+  --rule:#D3D1C7; --silver:#888780; --accent:#185FA5; --accent-soft:#E6F1FB;
+  --accent2:#2F6B34; --accent2-soft:#E4F0E4;
+  --accent3:#4B3C8F; --accent3-soft:#ECE6F7;
+  --struck:#185FA5; --absent:#B4B2A9;
+  --shadow:0 1px 0 rgba(44,44,42,.04), 0 12px 32px -20px rgba(44,44,42,.55);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground:#131513; --paper:#1B1E1B; --ink:#E7EAE3; --ink-soft:#ABB2A7;
-    --rule:#31352F; --silver:#838A7F; --accent:#E8A85C; --accent-soft:#3A2A14;
-    --accent2:#4FD9C0; --accent2-soft:#11312C;
-    --accent3:#C7A3EE; --accent3-soft:#2B2140;
-    --struck:#E8A85C; --absent:#4C5147;
+    --ground:#171613; --paper:#201F1B; --ink:#EDEBE4; --ink-soft:#B0AEA5;
+    --rule:#38362F; --silver:#8D8B82; --accent:#7DB5E2; --accent-soft:#16314A;
+    --accent2:#7FBF7F; --accent2-soft:#1C3320;
+    --accent3:#B39DDB; --accent3-soft:#2A2140;
+    --struck:#7DB5E2; --absent:#55534C;
     --shadow:0 1px 0 rgba(0,0,0,.35), 0 14px 36px -22px #000;
   }
 }
 :root[data-theme="dark"] {
-  --ground:#131513; --paper:#1B1E1B; --ink:#E7EAE3; --ink-soft:#ABB2A7;
-  --rule:#31352F; --silver:#838A7F; --accent:#E8A85C; --accent-soft:#3A2A14;
-  --accent2:#4FD9C0; --accent2-soft:#11312C;
-  --accent3:#C7A3EE; --accent3-soft:#2B2140;
-  --struck:#E8A85C; --absent:#4C5147;
+  --ground:#171613; --paper:#201F1B; --ink:#EDEBE4; --ink-soft:#B0AEA5;
+  --rule:#38362F; --silver:#8D8B82; --accent:#7DB5E2; --accent-soft:#16314A;
+  --accent2:#7FBF7F; --accent2-soft:#1C3320;
+  --accent3:#B39DDB; --accent3-soft:#2A2140;
+  --struck:#7DB5E2; --absent:#55534C;
   --shadow:0 1px 0 rgba(0,0,0,.35), 0 14px 36px -22px #000;
 }
 :root[data-theme="light"] {
-  --ground:#EEF0EC; --paper:#F8F9F5; --ink:#1C1E1D; --ink-soft:#4B504C;
-  --rule:#CBCEC7; --silver:#7C8278; --accent:#B0650F; --accent-soft:#F5E7CC;
-  --accent2:#0E7C6B; --accent2-soft:#DCEFE9;
-  --accent3:#7A4FA8; --accent3-soft:#ECE2F7;
-  --struck:#B0650F; --absent:#A7ACA1;
-  --shadow:0 1px 0 rgba(28,30,29,.04), 0 12px 32px -20px rgba(28,30,29,.55);
+  --ground:#F5F4EF; --paper:#FFFFFF; --ink:#2C2C2A; --ink-soft:#5C5B55;
+  --rule:#D3D1C7; --silver:#888780; --accent:#185FA5; --accent-soft:#E6F1FB;
+  --accent2:#2F6B34; --accent2-soft:#E4F0E4;
+  --accent3:#4B3C8F; --accent3-soft:#ECE6F7;
+  --struck:#185FA5; --absent:#B4B2A9;
+  --shadow:0 1px 0 rgba(44,44,42,.04), 0 12px 32px -20px rgba(44,44,42,.55);
 }
 
 *,*::before,*::after { box-sizing:border-box; }
@@ -104,7 +109,7 @@ header::before {
 
 .cta { display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; align-items:center; }
 .btn {
-  display:inline-block; padding:11px 18px; border-radius:3px; font-size:15px; text-decoration:none;
+  display:inline-block; padding:11px 18px; border-radius:6px; font-size:15px; text-decoration:none;
   border:1px solid var(--accent); color:var(--accent); background:transparent; font-weight:500;
 }
 .btn.primary { background:var(--accent); color:var(--ground); border-color:var(--accent); }
@@ -116,7 +121,7 @@ header::before {
 .btn:hover { filter:brightness(1.08); }
 
 pre {
-  background:var(--paper); border:1px solid var(--rule); border-radius:3px;
+  background:var(--paper); border:1px solid var(--rule); border-radius:6px;
   padding:16px; overflow-x:auto; font-size:13.5px; line-height:1.65; margin:0 0 14px;
 }
 pre .c { color:var(--silver); }
@@ -129,7 +134,7 @@ p code, li code, td code { background:var(--paper); border:1px solid var(--rule)
 .main section { padding:52px 0; border-top:1px solid var(--rule); }
 .main section:first-of-type { border-top:0; padding-top:36px; }
 .rail {
-  position:sticky; top:28px; padding:24px; border:1px solid var(--rule); border-radius:6px;
+  position:sticky; top:28px; padding:24px; border:1px solid var(--rule); border-radius:8px;
   background:var(--paper); box-shadow:var(--shadow);
 }
 .rail figure { margin:0 0 16px; display:grid; place-items:center; }
@@ -150,7 +155,7 @@ p code, li code, td code { background:var(--paper); border:1px solid var(--rule)
 
 /* ---- concept chips (mine / mock / hide) ---- */
 .halves { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); margin-top:8px; }
-.half { background:var(--paper); border:1px solid var(--rule); border-radius:4px; padding:20px; box-shadow:var(--shadow); border-top:3px solid var(--chip, var(--accent)); }
+.half { background:var(--paper); border:1px solid var(--rule); border-radius:8px; padding:20px; box-shadow:var(--shadow); border-top:3px solid var(--chip, var(--accent)); }
 .half.mine { --chip:var(--accent2); }
 .half.mock { --chip:var(--accent); }
 .half.hide { --chip:var(--absent); }
@@ -204,7 +209,7 @@ ol.loop p { margin:2px 0 0; color:var(--ink-soft); font-size:15px; }
 
 /* ---- demo CTA panel ---- */
 .demo-panel {
-  border:1px solid var(--rule); border-radius:6px; padding:28px; margin-top:8px;
+  border:1px solid var(--rule); border-radius:8px; padding:28px; margin-top:8px;
   background:linear-gradient(160deg, var(--accent-soft), var(--accent3-soft) 130%);
   display:flex; flex-wrap:wrap; gap:24px; align-items:center; justify-content:space-between;
 }
