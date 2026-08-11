@@ -149,9 +149,8 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
       (await instructions.inputValue()) + "\n- Draft under test via Test as evaluation.",
     );
     await page.getByRole("button", { name: "Test as evaluation" }).click();
-    // Studio's Results tab (formerly the bare /evaluations route — UX
-    // polish 2026-08-10, Studio merge).
-    await page.waitForURL(/\/studio\?tab=results$/);
+    // Test as evaluation lands on the stepper's own route.
+    await page.waitForURL(/\/studio\/evaluations\/new$/);
     // First-time testing: empty last-selection lands on Pick (openapi.yaml:311).
     await page.getByRole("checkbox", { name: `Select ${DOD_MSG}` }).check();
     await page.getByRole("button", { name: "Configure ▸" }).click();

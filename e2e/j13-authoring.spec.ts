@@ -4,7 +4,7 @@ import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 13 — the last numbered journey in the Phase-2 test
 // deliverable list is the "authoring/PR loop", and repo/PR integration is not
-// built yet (it is the Agents-as-Code item on TASKS.md, ordinary roadmap work
+// built yet (Agents-as-Code is ordinary roadmap work
 // — there is no paid tier). NOT APPLICABLE as written.
 //
 // The authoring loop this build actually ships is
@@ -151,10 +151,10 @@ test("inspector → eval benchmark + replay suite", async ({ page, request, api 
 
   await step("Inspector lists conversations across users", async () => {
     await page.goto("/");
-    // Inspector is a Studio tab now (UX polish 2026-08-10, Studio merge) —
-    // switching tabs is local state, so no URL change to wait on.
+    // Inspector is a Studio tab, and every tab is a route — clicking one is a
+    // real navigation, so there IS a URL to wait on.
     await page.getByRole("link", { name: "Studio" }).click();
-    await page.waitForURL(/\/studio$/);
+    await page.waitForURL(/\/studio\//);
     await page.getByRole("tab", { name: "Inspector" }).click();
     await api.expectCalled("GET /admin/conversations");
     await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
@@ -180,7 +180,7 @@ test("inspector → eval benchmark + replay suite", async ({ page, request, api 
   await step(
     "the benchmark is a regression suite: replay its references, then freeze them",
     async () => {
-      await page.goto("/studio");
+      await page.goto("/studio/benchmarks");
       await page.getByRole("tab", { name: "Benchmarks" }).click();
       await api.expectCalled("GET /eval/benchmarks");
       await page

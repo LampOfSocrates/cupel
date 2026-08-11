@@ -70,9 +70,9 @@ function TraceProbe() {
 function renderDetail(evaluationId: string) {
   return renderApp(
     <Routes>
-      <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+      <Route path="/studio/evaluations/:evaluationId" element={<EvaluationPage />} />
     </Routes>,
-    { route: `/evaluations/${evaluationId}` },
+    { route: `/studio/evaluations/${evaluationId}` },
   );
 }
 
@@ -197,10 +197,10 @@ describe("EvaluationPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+        <Route path="/studio/evaluations/:evaluationId" element={<EvaluationPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
-      { route: "/evaluations/evaluation-refire-1" },
+      { route: "/studio/evaluations/evaluation-refire-1" },
     );
     await screen.findByText("Evaluation evaluation-refire-1");
 
@@ -219,10 +219,10 @@ describe("EvaluationPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+        <Route path="/studio/evaluations/:evaluationId" element={<EvaluationPage />} />
         <Route path="/chat/:conversationId" element={<ChatProbe />} />
       </Routes>,
-      { route: "/evaluations/evaluation-refire-1" },
+      { route: "/studio/evaluations/evaluation-refire-1" },
     );
     await screen.findByText("Evaluation evaluation-refire-1");
 
@@ -245,10 +245,10 @@ describe("EvaluationPage", () => {
     const user = userEvent.setup();
     renderApp(
       <Routes>
-        <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+        <Route path="/studio/evaluations/:evaluationId" element={<EvaluationPage />} />
         <Route path="/trace/:turnId" element={<TraceProbe />} />
       </Routes>,
-      { route: "/evaluations/evaluation-refire-1" },
+      { route: "/studio/evaluations/evaluation-refire-1" },
     );
     await screen.findByText("Evaluation evaluation-refire-1");
 
@@ -288,7 +288,7 @@ describe("EvaluationPage", () => {
 //   forever, never overwritten … Re-judging appends")
 // - POST /eval/judge {evaluation_id, judge_model, rubric_id} → 202 TaskRef
 //   (openapi.yaml:931-954).
-describe("EvaluationPage — eval (P1-T12b)", () => {
+describe("EvaluationPage — eval", () => {
   it("renders the summary header: per-scorer mean + count + inline distribution", async () => {
     mockEvaluationSummaries["evaluation-old-1"] = {
       evaluation_id: "evaluation-old-1",
@@ -658,7 +658,7 @@ describe("EvaluationPage — auto-judge (UX phase)", () => {
   );
 });
 
-// getEvaluation is paged by ROW and conditional (item 7 stage F3). This page
+// getEvaluation is paged by ROW and conditional. This page
 // POLLS it while the grid fills, which is exactly why both matter: the body
 // is rows × columns × cells, and most polls find nothing changed.
 describe("EvaluationPage grid paging + ETag", () => {

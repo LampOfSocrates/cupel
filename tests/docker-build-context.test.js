@@ -24,7 +24,7 @@ describe("Dockerfile build context covers the root files src/ imports", () => {
 // The runtime stage grew a second moving part (the litestream
 // binary) and a new CMD. Same failure shape as the agentic.config.ts incident:
 // invisible locally, only fatal in the image.
-describe("Dockerfile runtime stage (P2-PERSIST storage modes)", () => {
+describe("Dockerfile runtime stage (storage modes)", () => {
   const dockerfile = readFileSync("Dockerfile", "utf8");
 
   it("boots via mock.boot, which is what picks the storage mode", () => {

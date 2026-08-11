@@ -62,7 +62,7 @@ describe("arguments", () => {
 });
 
 describe("the tech check", () => {
-  it("states the Python prerequisite before anything is generated (item 10b)", () => {
+  it("states the Python prerequisite before anything is generated", () => {
     const report = techReport({ node: "24.0.0", python: null });
     expect(report.lines.join("\n")).toMatch(/MISS Python .*3\.11\+/);
     expect(report.pythonOk).toBe(false);
@@ -236,7 +236,7 @@ describe("the generated config", () => {
     expect(block.indexOf('"chat"')).toBeLessThan(block.indexOf('"datasets"'));
   });
 
-  // item 40 — a backend whose routes need more than a prefix (renamed
+  // A backend whose routes need more than a prefix (renamed
   // resource, dropped "agenttrees" segment, chat streaming on its own route).
   it("writes a rules-based remap instead of the plain-prefix shape", () => {
     const init = {
@@ -278,12 +278,12 @@ describe("the generated README", () => {
     needsPython: true,
   });
 
-  // Item 8: the cost the adopter is consenting to, said plainly.
+  // The cost the adopter is consenting to, said plainly.
   it("says the copy receives no upstream fixes", () => {
     expect(readme).toMatch(/will not receive upstream fixes/i);
   });
 
-  // Item 10b: the prerequisite is declared, not discovered at first run.
+  // The prerequisite is declared, not discovered at first run.
   it("declares the Python prerequisite and why it is there", () => {
     expect(readme).toMatch(/Python 3\.11\+/);
     expect(readme).toMatch(/served by the bundled mock/i);
@@ -341,7 +341,7 @@ describe("a full generation", () => {
   });
 
   it("carries no test suite and no repo-internal papers", () => {
-    for (const file of ["tests", "e2e", "docs", "vitest.config.ts", "src/test", "TASKS.md"]) {
+    for (const file of ["tests", "e2e", "docs", "vitest.config.ts", "src/test"]) {
       expect(existsSync(path.join(out, file)), file).toBe(false);
     }
   });
@@ -416,7 +416,7 @@ describe("stream shape detection", () => {
   });
 });
 
-describe("backend detection reads the shape out of the spec (item 40)", () => {
+describe("backend detection reads the shape out of the spec", () => {
   // The user's own example: agents ALWAYS live at /XXXX/agent1, /XXXX/agent2,
   // chat streams on its own route, "conversations" are called "sessions".
   // Nothing here is passed in — it all comes off the document.

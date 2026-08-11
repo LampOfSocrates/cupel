@@ -34,7 +34,7 @@ CAPABILITIES: dict[str, dict] = {
     "identity": {"status": "full", "implemented": 1, "operations": 1},
     "admin": {
         "status": "partial", "implemented": 6, "operations": 8,
-        # Generator control is Phase 3 (TASKS.md item 23); the Settings
+        # Generator control is Phase 3; the Settings
         # drip-rate controls stay greyed out until it exists.
         "missing": ["POST /admin/generator", "GET /admin/generator/status"],
     },
@@ -44,7 +44,7 @@ CAPABILITIES: dict[str, dict] = {
     "conversations": {"status": "full", "implemented": 5, "operations": 5},
     "memory": {
         "status": "none", "implemented": 0, "operations": 4,
-        # The one family that is contracted and built nowhere (TASKS.md item 12).
+        # The one family that is contracted and built nowhere.
         "missing": [
             "GET /agenttrees/{tree}/memory",
             "PUT /agenttrees/{tree}/memory",

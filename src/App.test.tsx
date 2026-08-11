@@ -21,7 +21,7 @@ import {
 // remount, so every store refetches against the new base. /me is always
 // called (invariant) — including once per switch.
 
-describe("live target switch (P2-T17)", () => {
+describe("live target switch", () => {
   it("switching target refetches /me, /agenttrees, sidebar + queue + healthz against the new base", async () => {
     const user = userEvent.setup();
     render(
@@ -96,7 +96,7 @@ describe("live target switch (P2-T17)", () => {
 // return_to, and a successful login re-runs the boot with the token. Against
 // an off-mode backend (the deployed demo) none of this fires — /me succeeds
 // and the app boots straight in, zero UI change (all other App tests).
-describe("boot auth (P2-T07)", () => {
+describe("boot auth", () => {
   const BASE = agenticConfig.targets.find((t) => t.id === "mock")!.baseUrl;
   const unauthorized = () =>
     HttpResponse.json(
@@ -183,7 +183,7 @@ describe("boot auth (P2-T07)", () => {
 describe("legacy /runs deep links (#2)", () => {
   const BASE = agenticConfig.targets.find((t) => t.id === "mock")!.baseUrl;
 
-  it("off-mode: a bookmarked /runs/{id} lands on /evaluations/{id}", async () => {
+  it("off-mode: a bookmarked /runs/{id} lands on /studio/evaluations/{id}", async () => {
     render(
       <MantineProvider env="test">
         <MemoryRouter initialEntries={["/runs/evaluation-old-1"]}>
@@ -193,10 +193,12 @@ describe("legacy /runs deep links (#2)", () => {
       </MantineProvider>,
     );
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/evaluation-old-1"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations/evaluation-old-1"),
     );
-    // Not a 404 shell: the detail page for that evaluation actually rendered.
+    // Not a 404 shell: the detail page for that evaluation actually rendered —
+    // and the Studio tab strip is around it, which is the point of the move.
     await screen.findByText("Evaluation evaluation-old-1");
+    expect(screen.getByRole("tab", { name: "Cases" })).toBeInTheDocument();
   });
 
   it("the bare /runs redirects and keeps the query", async () => {
@@ -209,8 +211,25 @@ describe("legacy /runs deep links (#2)", () => {
       </MantineProvider>,
     );
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/studio?from=share&tab=results"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations?from=share"),
     );
+  });
+
+  // `?tab=` was the middle generation of Studio link, and `results` is the tab
+  // that got renamed — it named both the tab and the flow's third step.
+  it("a legacy ?tab=results deep link lands on the Evaluations tab, query intact", async () => {
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={["/studio?tab=results&from=share"]}>
+          <App />
+          <LocationProbe />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations?from=share"),
+    );
+    await screen.findByRole("heading", { name: "Evaluations" });
   });
 
   it("auth-on: /runs/{id} → login carrying it as return_to → /evaluations/{id}", async () => {

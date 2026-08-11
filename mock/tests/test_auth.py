@@ -223,7 +223,7 @@ def test_restricted_user_tree_filtering_and_404(monkeypatch):
     run(case())
 
 
-# ------------------------------------- cross-tree leaks (review bucket A)
+# ------------------------------------------------------ cross-tree leaks
 async def wait_task_as(c, task_id, token, timeout=15):
     deadline = time.monotonic() + timeout
     task = None

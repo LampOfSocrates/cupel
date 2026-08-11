@@ -16,6 +16,7 @@ import {
 } from "../test/msw/handlers";
 import { EvaluationsPage } from "./EvaluationsPage";
 import { EvaluationPage } from "./EvaluationPage";
+import { StudioFrame } from "./studio/StudioFrame";
 
 // Contract under test — the Evaluations stepper (pick (sketch
 // 02), configure (sketch 03), compare (sketch 04)):
@@ -28,11 +29,17 @@ import { EvaluationPage } from "./EvaluationPage";
 // - 202 "evaluation row appears immediately and fills incrementally" (:617) →
 //   navigate to the detail grid.
 
-function renderEvaluations(route = "/evaluations", state?: unknown) {
+// The real Studio route shape: list, stepper and grid are three paths under one
+// layout route, so "New evaluation" and the post-Queue hop to the grid are
+// genuine navigations here, not state changes.
+function renderEvaluations(route = "/studio/evaluations", state?: unknown) {
   return renderApp(
     <Routes>
-      <Route path="/evaluations" element={<EvaluationsPage />} />
-      <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+      <Route path="/studio" element={<StudioFrame />}>
+        <Route path="evaluations" element={<EvaluationsPage mode="list" />} />
+        <Route path="evaluations/new" element={<EvaluationsPage mode="stepper" />} />
+        <Route path="evaluations/:evaluationId" element={<EvaluationPage />} />
+      </Route>
     </Routes>,
     { route, state },
   );
@@ -210,7 +217,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderEvaluations("/evaluations", arrival);
+    renderEvaluations("/studio/evaluations/new", arrival);
 
     // two taps: Test as evaluation already happened, Queue is immediately reachable
     expect(await screen.findByTestId("config-0")).toBeInTheDocument();
@@ -227,7 +234,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
 
   it('empty last-selection ("first-time testing") → lands on Pick', async () => {
     seedSnapshot();
-    renderEvaluations("/evaluations", arrival);
+    renderEvaluations("/studio/evaluations/new", arrival);
     // picker shown, nothing preselected, Configure gated as usual
     expect(
       await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
@@ -240,7 +247,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderEvaluations("/evaluations", arrival);
+    renderEvaluations("/studio/evaluations/new", arrival);
 
     await user.click(await screen.findByRole("button", { name: "Queue" }));
     await waitFor(() => expect(replayRequests).toHaveLength(1));
@@ -266,7 +273,7 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     seedSnapshot();
     mockLastSelections.ag_refunds = [{ conversation_id: "c1" }];
     const user = userEvent.setup();
-    renderEvaluations("/evaluations", arrival);
+    renderEvaluations("/studio/evaluations/new", arrival);
     await screen.findByTestId("config-0");
 
     // widen the preloaded selection, then queue
@@ -291,11 +298,11 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
 // "Existing conversations stay READABLE (read-only banner)"
 // (feature-spec.md:20) — the evaluations list of a disabled tree still loads; only
 // NEW work is blocked (409 tree_disabled, surfaced by the central mapping).
-describe("Disabled tree (P2-T07c)", () => {
+describe("Disabled tree", () => {
   it("shows the read-only banner above a still-readable evaluations list", async () => {
     renderApp(
       <Routes>
-        <Route path="/evaluations" element={<EvaluationsPage />} />
+        <Route path="/evaluations" element={<EvaluationsPage mode="list" />} />
       </Routes>,
       {
         route: "/evaluations",

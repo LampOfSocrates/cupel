@@ -1,5 +1,5 @@
 // Path-remap rules — the shared primitive behind the browser create-app
-// mapper's "path differences" step (docs/TASKS.md item 40). A plain prefix
+// mapper's "path differences" step. A plain prefix
 // (cupel-ready.mjs detectPrefix, "everything lives under /nabu-service/…")
 // covers only ONE real adopter shape. Three more showed up as soon as a real
 // adopter was described:

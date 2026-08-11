@@ -2,7 +2,7 @@
 // parser and the non-interactive (`--yes`) runner. Deliberately separate from
 // scripts/create-app.mjs (the CLI entry point, which re-exports everything
 // here) and scripts/create-app-server.mjs (the browser mapper's HTTP
-// transport, item 40): both of THOSE import FROM this module, and this
+// transport): both of THOSE import FROM this module, and this
 // module imports neither of them.
 //
 // That split exists for a real reason, not tidiness: create-app.mjs is the
@@ -82,7 +82,7 @@ export function parseArgs(argv) {
 
 // ------------------------------------------------------------- tech check
 // Stated BEFORE anything is generated, prerequisites included, so nobody
-// discovers a dependency at first run (item 10b).
+// discovers a dependency at first run.
 
 function commandVersion(command, args) {
   try {
@@ -368,7 +368,7 @@ export function applyGeneration(
 
   if (init) {
     const targets = valueRange(out, "targets");
-    // A rules-based remap (item 40 — prefix + drop /agenttrees/ + resource
+    // A rules-based remap (prefix + drop /agenttrees/ + resource
     // renames + split chat/stream route) replaces the plain-prefix comment
     // and `remap:` line renderInitBlock would otherwise derive.
     const remapLines = init.remapRules && !rulesAreEmpty(init.remapRules)

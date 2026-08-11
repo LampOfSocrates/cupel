@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // create-app — clone this repo, run ONE command, get a folder that `npm run`s
-// a chat + studio UI for YOUR agent. TASKS.md item 11 (terminal); item 40
+// a chat + studio UI for YOUR agent. Terminal entry point; the browser
 // replaced the terminal questionnaire with a local browser mapper. The flow
 // is docs/plans/plan-adopter-onboarding.md.
 //
@@ -39,12 +39,12 @@
 // on a first run. Families come from the contract's own tags — this script
 // holds no list of its own.
 //
-// WHAT `mock` COSTS, said before anything is generated (item 10b): the bundled
+// WHAT `mock` COSTS, said before anything is generated: the bundled
 // mock is Python/FastAPI, so a `mock` answer anywhere makes Python 3.11+ a
 // prerequisite of the generated folder. A JS/TS agent developer meeting an
 // unannounced pip install is exactly the bounce this flow exists to prevent.
 //
-// WHAT THE FOLDER IS: a COPY they own, with no upstream updates (item 8). The
+// WHAT THE FOLDER IS: a COPY they own, with no upstream updates. The
 // generated README says so in its second paragraph.
 
 import path from "node:path";
@@ -91,7 +91,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   // Interactive default: a local browser page replaces the old terminal
-  // questionnaire (item 40). Loaded lazily so `--yes`/CI runs never pay for
+  // questionnaire. Loaded lazily so `--yes`/CI runs never pay for
   // node:http or touch a socket.
   try {
     const { runInteractive } = await import("./create-app-server.mjs");

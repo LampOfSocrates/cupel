@@ -128,7 +128,7 @@ test("chat: attach + upload → send → SSE tokens → 👍 + comment → copy 
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("**");
   });
 
-  await step("copy a link to the turn and open it (P2-SHARE, off-mode)", async () => {
+  await step("copy a link to the turn and open it (off-mode)", async () => {
     await transcript.getByRole("button", { name: "Copy link to turn" }).click();
     await expect(transcript.getByRole("button", { name: "Link copied" })).toBeVisible();
     const link = await page.evaluate(() => navigator.clipboard.readText());

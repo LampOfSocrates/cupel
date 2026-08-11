@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PW-1 whitelabel-lite — `npm run init`: the ONE command that puts an
+// whitelabel-lite — `npm run init`: the ONE command that puts an
 // adopter's name on the app. Asks three things (product name, what this
 // deployment calls an agent tree, the backend URL) and rewrites
 // agentic.config.ts, the one config artifact.

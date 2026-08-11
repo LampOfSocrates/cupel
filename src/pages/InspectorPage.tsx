@@ -205,8 +205,10 @@ export function InspectorPage() {
     ...trees.map((t) => ({ value: t.id, label: t.name })),
   ];
 
+  // No p="md": this renders inside StudioFrame's Outlet, which owns the page
+  // padding.
   return (
-    <Stack gap="sm" p="md">
+    <Stack gap="sm">
       <Group justify="space-between" align="flex-end">
         <div>
           <Title order={4}>Inspector</Title>

@@ -16,7 +16,7 @@ const PHASE1_PATHS = [
   "/agenttrees/{tree}/agents",
   "/agenttrees/{tree}/agents/{agentId}/instructions",
   // The save, relocated off the parent: appending v(n+1) is a creation, so it
-  // is POST …/versions and the parent GET is the history (item 7 stage F4).
+  // is POST …/versions and the parent GET is the history.
   "/agenttrees/{tree}/agents/{agentId}/instructions/versions",
   "/agenttrees/{tree}/agents/{agentId}/snapshots",
   "/agenttrees/{tree}/agents/{agentId}/last-selection",
@@ -68,11 +68,11 @@ const PHASE2_PATHS = [
   "/eval/rubrics/{rubricId}/versions",
   "/settings",
   // The transcript, split off GET /conversations/{id} so opening a long
-  // conversation costs a bounded body (item 7 stage F2).
+  // conversation costs a bounded body.
   "/agenttrees/{tree}/conversations/{conversationId}/turns",
 ];
 
-describe("P1-T00 OpenAPI contract", () => {
+describe("OpenAPI contract", () => {
   it("is valid OpenAPI 3.0 (refs resolve, schemas well-formed)", async () => {
     await SwaggerParser.validate("openapi.yaml");
   });
@@ -160,7 +160,7 @@ describe("P1-T00 OpenAPI contract", () => {
     // idempotent means here) but because a disabled tree makes its history
     // read-only, so a delete against one is tree_disabled like every other
     // write. The reference implementation has always answered that; only the
-    // contract was silent (item 7 stage F7).
+    // contract was silent.
     expect(Object.keys(path).sort()).toEqual(["delete", "get", "patch"]);
     expect(path.delete.responses["204"]).toBeDefined();
     expect(path.delete.responses["409"]).toBeDefined();
@@ -178,7 +178,7 @@ describe("P1-T00 OpenAPI contract", () => {
   // schemes" is REPLACED by design in v0.3.0. Phase 2
   // introduces the bearerAuth security model (feature-spec.md:15-21), so the
   // old assertion inverts into the security-model tests in the
-  // "P2-T00 contract v0.3.0" block below.
+  // contract v0.3.0 block below.
 
   it("SSE endpoints declare machine-checkable event schemas (x-sse-events)", () => {
     const sse = [
@@ -409,7 +409,7 @@ describe("contract v0.6.0", () => {
     expect(judge.properties.benchmark_id).toBeDefined();
   });
 
-  // Item 7 stage C. The union that lost its argument — four mutually exclusive
+  // The union that lost its argument — four mutually exclusive
   // nullable foreign keys plus a `type` enum — is now a discriminated subject
   // (what was judged) plus a scorer (what produced the score). No backward
   // compatibility: the four keys are GONE, not aliased.
@@ -475,7 +475,7 @@ describe("contract v0.6.0", () => {
     const report = doc.components.schemas.EvalCaseImportReport;
     expect(report.required).toEqual(expect.arrayContaining(["rows_total", "rows_imported", "errors"]));
     // The per-row report and Error.details are the SAME schema — one shape for
-    // "which bit of your input, and why" (item 7 stage F7). The old private
+    // "which bit of your input, and why". The old private
     // copy was {row, column?, message}; column became ErrorDetail.field.
     expect(report.properties.errors.items.$ref).toBe("#/components/schemas/ErrorDetail");
     const detail = doc.components.schemas.ErrorDetail;
@@ -525,7 +525,7 @@ describe("contract v0.6.0", () => {
   // it is additive by construction: a new optional property on an existing
   // response schema. These assertions are what makes "additive" checkable,
   // not just claimed.
-  it("Health.storage is optional and additive (P2-PERSIST)", () => {
+  it("Health.storage is optional and additive", () => {
     const health = doc.components.schemas.Health;
     // required is untouched — a backend that omits storage stays conformant,
     // which is also what cupel-ready compares (scripts/conformance.mjs checks
@@ -542,7 +542,7 @@ describe("contract v0.6.0", () => {
   // task, additive by construction: a new optional property on an existing
   // request schema, so v0.3.0 clients that only send {message_id, rating}
   // remain conformant and the version does not move.
-  it("FeedbackRequest.comment is optional and additive (P2-CHATUX)", () => {
+  it("FeedbackRequest.comment is optional and additive", () => {
     const feedback = doc.components.schemas.FeedbackRequest;
     // required untouched — the comment can never be demanded of a client
     expect(feedback.required).toEqual(["message_id", "rating"]);
@@ -686,7 +686,7 @@ describe("contract v0.6.0", () => {
     "PUT /admin/users", // write echo: exactly the rows the body named
   ]);
 
-  it("a conversation does not inline its transcript (item 7 stage F2)", () => {
+  it("a conversation does not inline its transcript", () => {
     const conversation = doc.components.schemas.Conversation;
     expect(conversation.properties.turns, "turns must not be inlined").toBeUndefined();
     // The count stays, so a caller can size or skip the transcript fetch.
@@ -703,7 +703,7 @@ describe("contract v0.6.0", () => {
     expect(turns.parameters.map((p) => p.name)).toContain("turn_ids");
   });
 
-  it("the evaluation grid is paged by row and revalidates with an ETag (item 7 stage F3)", () => {
+  it("the evaluation grid is paged by row and revalidates with an ETag", () => {
     const op = doc.paths["/agenttrees/{tree}/evaluations/{evaluationId}"].get;
     const params = op.parameters.map((p) => p.name);
     expect(params).toEqual(expect.arrayContaining(["page", "page_size", "If-None-Match"]));

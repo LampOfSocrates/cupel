@@ -56,7 +56,7 @@ type HealthState =
 // deliverables that are not built yet (failure/latency
 // injection env vars ship with the generator work) — these controls render
 // disabled per the sketch, wired to nothing.
-const GEN_TOOLTIP = "Arrives with generator controls (P2-GEN)";
+const GEN_TOOLTIP = "Arrives with generator controls";
 
 export function SettingsPage() {
   const target = useBackendTarget();

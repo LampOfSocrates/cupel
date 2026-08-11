@@ -1,7 +1,7 @@
 # Chat App — Feature Spec (brief)
 
 ## Layout
-- Collapsible left sidebar. Four doors: **Chat**, **Studio** (one route, five tabs — Cases · Benchmarks · Rubrics · Results · Inspector), **Queue** and **Agents**, plus **Settings**. Task-queue badge in sidebar.
+- Collapsible left sidebar. Four doors: **Chat**, **Studio** (one route, five tabs, each its own path — `/studio/cases` · `/studio/benchmarks` · `/studio/rubrics` · `/studio/evaluations` · `/studio/inspector`), **Queue** and **Agents**, plus **Settings**. Task-queue badge in sidebar.
 - **Expanded sidebar shows recent conversations** under Chat: title + relative time, search, infinite scroll. Forked conversations nest under their parent as a collapsed "N forks" chip (expand to list; lineage badge on each). New chat button at top. Collapsed sidebar = icons only.
 - Conversation actions (long-press/⋯): rename, delete, open parent (if fork), send to Evaluations.
 - Chat has its own **Settings submenu** (model, temperature, system prompt — session-scoped).
@@ -38,15 +38,16 @@
 
 ## Studio — the evaluation workspace
 
-One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* It lives on one route, `/studio`, as five tabs over four contract families — Cases and Benchmarks are `datasets`, Rubrics is `judging`, Results is `replay`, Inspector is `admin`. Each tab vanishes on its own when its family is answered `hide`; the route vanishes only when all of them are.
+One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* It lives under one route, `/studio`, as five tabs over four contract families — Cases and Benchmarks are `datasets`, Rubrics is `judging`, Evaluations is `replay`, Inspector is `admin`. Each tab is a CHILD ROUTE of a layout route that owns the tab strip, so the strip stays on screen through all three evaluation steps — including the grid at `/studio/evaluations/{id}`. Each tab vanishes on its own when its family is answered `hide`; the route vanishes only when all of them are.
 
-### Results tab — the 3-step stepper
+### Evaluations tab — the 3-step stepper
+The three steps are three paths: `/studio/evaluations` (list) → `/studio/evaluations/new` (steps 1-2) → `/studio/evaluations/{id}` (step 3).
 1. **Select** — ConversationPicker: search/filter/multi-select conversations, **expandable to pick individual turns** within a conversation (checkbox per turn). Scoped by permissions.
 2. **Configure** — Variant drawer, prefilled from the baseline so changing one axis = one field:
    - Agent tree + instruction version
    - Model, temperature, deploy endpoints
    - **Judge (optional, collapsed by default)**: toggle on → judge model + rubric fields appear
-3. **Results** — Comparison grid: baseline column + one column per variant, row per turn. Diff highlighting. Per-cell 👍/👎 always available. If judge on: score column + summary header (mean, distribution sparkline), drill-in per turn for judge reasoning.
+3. **Compare** — Comparison grid: baseline column + one column per variant, row per turn. Diff highlighting. Per-cell 👍/👎 always available. If judge on: score column + summary header (mean, distribution sparkline), drill-in per turn for judge reasoning.
 
 ### Evaluation domain (first-class, judge optional)
 Evaluation is its own domain, not a bolt-on to runs:
@@ -226,10 +227,10 @@ The app should never look empty — a generator produces realistic synthetic dat
 | Studio · Cases | `POST /eval/cases`, `POST /eval/cases/{id}/versions`, `GET /eval/cases/{id}`, `POST /eval/cases/import` |
 | Studio · Benchmarks | `GET`/`POST /eval/benchmarks`, `GET`/`PATCH`/`DELETE /eval/benchmarks/{id}`, `POST …/{id}/versions`, `POST …/{id}/items`, `POST …/{id}/freeze`, `POST …/{id}/replay` |
 | Studio · Rubrics | `GET`/`POST /eval/rubrics`, `POST /eval/rubrics/{id}/versions` |
-| Studio · Results · 1 Select | `GET /agenttrees/{tree}/conversations`, `GET …/conversations/{id}/turns` |
-| Studio · Results · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics` |
-| Studio · Results · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
-| Studio · Results · 3 grid | `GET /agenttrees/{tree}/evaluations`, `GET …/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary` |
+| Studio · Evaluations · 1 Select | `GET /agenttrees/{tree}/conversations`, `GET …/conversations/{id}/turns` |
+| Studio · Evaluations · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics` |
+| Studio · Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
+| Studio · Evaluations · 3 Compare grid | `GET /agenttrees/{tree}/evaluations`, `GET …/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary` |
 | Studio · Inspector (role `inspect`) | `GET /admin/conversations` |
 | Judge action | `POST /eval/judge` |
 | Judgment drawer | `GET /eval/judgments?subject_kind=case&subject_id=`, `GET /eval/cases/{id}` |
@@ -319,26 +320,28 @@ A person arriving at `/studio` lands on **Cases**. The path through the product 
    benchmark reproducible, and membership is versioned so a judgment can name the exact
    version it ran against.
 3. **Say how to score.** **Rubrics** holds the judge's criteria. Save appends a version.
-4. **Run something.** **Results** is a three-step wizard: pick conversations or individual
+4. **Run something.** **Evaluations** is a three-step wizard: pick conversations or individual
    turns, configure one or more variants against a baseline, queue it. Work runs as a parent
    task with a child per unit, and the grid fills in cell by cell over SSE.
-5. **Read the outcome.** Scores land in the grid. Drilling into one leaves Studio for
-   `/evaluations/{id}`; a turn's trace leaves for `/trace/{turn}`; comparing forks leaves for
-   `/forks/{parent}/{turn}`. Any fork opens in Chat and continues as a normal conversation.
+5. **Read the outcome.** Scores land in the grid at `/studio/evaluations/{id}` — inside
+   Studio, under the tab strip, so fixing a bad reference is one click back to Cases. A turn's
+   trace still leaves for `/trace/{turn}` and comparing forks for `/forks/{parent}/{turn}`.
+   Any fork opens in Chat and continues as a normal conversation.
 6. **Inspector**, for a super user, lists every conversation in the system regardless of owner.
 
 The instruction editor short-circuits all of this: **Test as evaluation** snapshots the draft
-and drops the user at Studio's Results tab with the config prefilled, remembering the
+and drops the user at `/studio/evaluations/new` with the config prefilled, remembering the
 conversation set per agent so a repeat test is two taps.
 
 ### Frictions worth designing away
 
-1. **"Results" names two different things.** The Results *tab* contains a wizard whose third
-   *step* is also Results. "Go to results" is ambiguous in the UI, in the URL
-   (`/studio?tab=results` lands on step 1) and in conversation.
-2. **The payoff screen is not in Studio.** Reading an evaluation properly means leaving the
-   tab frame for a full-page route. The tabs disappear at the exact moment the user most wants
-   to get back to Cases and fix a bad reference.
+1. ~~**"Results" names two different things.**~~ **Fixed by the tab split.** The tab is
+   **Evaluations** and only the wizard's third step is about results, now named **Compare**.
+   Each name belongs to one thing, in the UI and in the URL.
+2. ~~**The payoff screen is not in Studio.**~~ **Fixed by the tab split.** Every tab is a
+   child route of a layout route that owns the tab strip, and the grid is one of them
+   (`/studio/evaluations/{id}`), so the tabs no longer vanish when the user most needs them.
+   `/evaluations/{id}` redirects there and stays a working deep link.
 3. **"Created here" is browser state, not server state.** The session bucket is a list of ids
    held in the page. Reload and the cases still exist but the bucket is empty. There is no
    "cases not in a benchmark" query in the contract, so the UI keeps its own list — a gap the
@@ -351,8 +354,10 @@ conversation set per agent so a repeat test is two taps.
 6. **Five tabs, four families, three gating rules.** Cases and Benchmarks share a family, so
    they hide together whether or not that makes sense. Inspector needs a role *and* a family.
    The route needs all four families hidden before it disappears.
-7. **Hidden tabs still fetch.** Studio loads benchmarks and rubrics on mount regardless of
-   which tabs are visible, so hiding `datasets` still issues its requests.
-8. **The stepper is modal but the tabs are not.** Switching tabs mid-wizard is plain state, so
-   a half-configured evaluation can be walked away from and back into, but nothing says it is
-   still there.
+7. ~~**Hidden tabs still fetch.**~~ **Fixed alongside the tab split.** The frame's mount
+   fetch is gated per family, so a `hide` answer costs no request — the same rule its route
+   and its nav entry already followed.
+8. ~~**The stepper is modal but the tabs are not.**~~ **Fixed by the tab split.** Tabs are
+   routes, so a tab body really unmounts; the authoring buffers (case draft, staged
+   membership, rubric prompt, evaluation config) moved into the frame that outlives them, and
+   the Evaluations tab now carries a dot plus a **Resume draft** button when one is pending.

@@ -649,7 +649,7 @@ const ERROR_EXERCISES: ErrorExercise[] = [
 
 /**
  * Empty, and it must stay empty. It used to hold 422 — returned freely by
- * both implementations and declared on ONE operation — which item 7 stage F7
+ * both implementations and declared on ONE operation — which the v0.4.0 contract
  * closed by declaring 422 on all 38 operations that can answer it, plus 409
  * on the five writes a disabled tree refuses, 429 on the five live-generation
  * paths, and 404/413 on the import. An entry here now means the fake answers
@@ -666,15 +666,15 @@ const UNDECLARED_ERROR_STATUSES = new Set<number>();
  */
 const UNEXERCISED_OPS: Record<string, string> = {
   "POST /agenttrees":
-    "Generator seed path only (openapi.yaml:455-473 'exists for API completeness and seeding'). No UI creates trees — there is not even a tree switcher yet (TASKS.md UX-phase note).",
+    "Generator seed path only (openapi.yaml:455-473 'exists for API completeness and seeding'). No UI creates trees — there is not even a tree switcher yet.",
   "GET /agenttrees/{tree}/memory":
-    "P3-MEM (TASKS.md). Contract shipped in v0.3.0; the memory panel is Phase 3, so no client method exists.",
-  "PUT /agenttrees/{tree}/memory": "P3-MEM — see GET /agenttrees/{tree}/memory.",
-  "DELETE /agenttrees/{tree}/memory": "P3-MEM — see GET /agenttrees/{tree}/memory.",
-  "POST /agenttrees/{tree}/memory/compact": "P3-MEM — see GET /agenttrees/{tree}/memory.",
+    "The memory panel is not built. Contract shipped in v0.3.0; no client method exists yet.",
+  "PUT /agenttrees/{tree}/memory": "Not built — see GET /agenttrees/{tree}/memory.",
+  "DELETE /agenttrees/{tree}/memory": "Not built — see GET /agenttrees/{tree}/memory.",
+  "POST /agenttrees/{tree}/memory/compact": "Not built — see GET /agenttrees/{tree}/memory.",
   "POST /admin/generator":
-    "P3-GEN (TASKS.md) — the Settings drip-rate controls are greyed placeholders until then.",
-  "GET /admin/generator/status": "P3-GEN — see POST /admin/generator.",
+    "The generator control API is not built — the Settings drip-rate controls are greyed placeholders until it is.",
+  "GET /admin/generator/status": "Not built — see POST /admin/generator.",
   "GET /settings":
     "No client method: the backend target is device-local in agentic.config.ts (feature-spec.md:157) and chat settings are ChatPage state (docs/review-2026-08-05.md A5). A Settings-page binding is a UX-phase decision.",
   "PUT /settings": "No client method — see GET /settings.",
@@ -1062,7 +1062,7 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(frozen.source).toEqual(reference.source);
   });
 
-  // ?search= was declared in item 7 stage F8 after being an undescribed
+  // ?search= was declared in the v0.4.0 contract after being an undescribed
   // `{type: string}`. The drift it left behind was in THIS file's fake: it
   // searched the title only, while mock/main.py searched title OR turn
   // content — two implementations of the same repo disagreeing, which is
@@ -1095,8 +1095,8 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
 
   // Was: a pinned GAP. The reference implementation emitted 409 tree_disabled
   // from five operations whose contract entries declared only 2xx/404, and
-  // this test asserted the gap so it could not be forgotten. Item 7 stage F7
-  // closed it, so the test flipped: the WHOLE write set a disabled tree
+  // this test asserted the gap so it could not be forgotten. The v0.4.0
+  // contract closed it, so the test flipped: the WHOLE write set a disabled tree
   // refuses must declare 409, and a new blocked write that forgets to is a
   // failure here rather than a silent divergence.
   it("every write a disabled tree refuses declares 409", () => {

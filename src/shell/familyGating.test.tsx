@@ -58,10 +58,10 @@ describe("hide", () => {
     // Cases/Benchmarks are "datasets" and are gone...
     expect(screen.queryByRole("tab", { name: "Cases" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Benchmarks" })).not.toBeInTheDocument();
-    // ...Rubrics ("judging") and Results ("replay") stay, and Rubrics is what
+    // ...Rubrics ("judging") and Evaluations ("replay") stay, and Rubrics is what
     // the page lands on since Cases is no longer the default tab.
     expect(await screen.findByRole("tab", { name: "Rubrics" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Results" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Evaluations" })).toBeInTheDocument();
   });
 
   // The split's point: `judging` is answerable on its own, so hiding it takes

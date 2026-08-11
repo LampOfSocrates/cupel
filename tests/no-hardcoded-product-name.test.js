@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { agenticConfig } from "../agentic.config.ts";
 
-// PW-1 guard, twin of no-hardcoded-hosts.test.js — an adopter renames the
+// guard, twin of no-hardcoded-hosts.test.js — an adopter renames the
 // product and its agent trees in ONE place (agentic.config.ts `product`), so
 // no component may spell either out. src/lib/product.ts is the only reader.
 //

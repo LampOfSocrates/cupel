@@ -3,8 +3,8 @@ import { readFileSync, existsSync } from "node:fs";
 import YAML from "yaml";
 import { operationCounts } from "../scripts/create-app-server.mjs";
 
-// The browser mapper's transport layer (item 40) — pure helpers only. The
-// HTTP server itself is exercised by hand (docs/TASKS.md item 40 write-up);
+// The browser mapper's transport layer — pure helpers only. The
+// HTTP server itself is exercised by hand against a live CLI run;
 // what's unit-testable without booting a socket lives here.
 
 describe("operationCounts", () => {

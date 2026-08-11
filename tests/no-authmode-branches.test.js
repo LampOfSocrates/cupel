@@ -21,7 +21,7 @@ function walk(dir, out = []) {
   return out;
 }
 
-describe("no AUTH_MODE branches in the frontend (P2-T07 invariant)", () => {
+describe("no AUTH_MODE branches in the frontend (invariant)", () => {
   it(`no file under src/ contains "${BANNED}"`, () => {
     const offenders = walk("src").filter((file) =>
       readFileSync(file, "utf8").includes(BANNED),

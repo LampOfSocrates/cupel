@@ -12,7 +12,7 @@ vi.mock("./target", async (importOriginal) => {
     id: "nabu",
     label: "Nabu",
     baseUrl: "http://localhost:9999",
-    // Item 40's split-stream shape: chat replies at ".../chat", chat's SSE
+    // The split-stream shape: chat replies at ".../chat", chat's SSE
     // stream at its own ".../stream" — `opts` is buildUrl's third argument.
     remap: (path: string, opts?: { stream?: boolean }) =>
       `/nabu-service${opts?.stream ? path.replace(/\/chat$/, "/stream") : path}`,
@@ -37,7 +37,7 @@ describe("buildUrl through a remapped target", () => {
   });
 });
 
-// A backend that splits streaming into its own route (item 40) branches on
+// A backend that splits streaming into its own route branches on
 // buildUrl's third argument — every OTHER call site omits it, so remap must
 // see plain `undefined` there rather than crash on a missing param.
 describe("buildUrl passes per-request context to remap", () => {

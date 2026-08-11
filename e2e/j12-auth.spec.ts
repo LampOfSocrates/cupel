@@ -59,7 +59,7 @@ test(
       // Inspector tab is `inspect`-role-gated (UX polish 2026-08-10, Studio
       // merge — Eval workbench + Inspector are tabs there now).
       await page.getByRole("link", { name: "Studio", exact: true }).click();
-      await page.waitForURL(/\/studio$/);
+      await page.waitForURL(/\/studio\//);
       await page.getByRole("tab", { name: "Inspector" }).click();
       await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
     });

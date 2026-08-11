@@ -34,7 +34,7 @@ const renderQueue = () =>
   renderApp(
     <Routes>
       <Route path="/queue" element={<QueuePage />} />
-      <Route path="/evaluations/:evaluationId" element={<EvaluationProbe />} />
+      <Route path="/studio/evaluations/:evaluationId" element={<EvaluationProbe />} />
       <Route path="/chat/:conversationId" element={<ChatProbe />} />
     </Routes>,
     { route: "/queue", queue: true },
@@ -101,7 +101,7 @@ describe("QueuePage", () => {
     expect(within(children).queryByText("failed")).not.toBeInTheDocument();
   });
 
-  it("deep links: result.evaluation_id → View results → /evaluations/{id}", async () => {
+  it("deep links: result.evaluation_id → View results → /studio/evaluations/{id}", async () => {
     const user = userEvent.setup();
     renderQueue();
     await screen.findByTestId("task-task-seed-replay");

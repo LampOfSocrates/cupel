@@ -1,8 +1,7 @@
 // Return_to round-trip for the login redirect. Built for share
 // deep links (/chat/{id}?turn=...): a 401 on a shared link must land on
 // /login?return_to=<full path incl. query> and, after login, navigate back to
-// exactly that path (TASKS.md:48 — sharing "works in both auth modes via
-// T07's return_to redirect").
+// exactly that path, so a shared link works in both auth modes.
 
 export const RETURN_TO_PARAM = "return_to";
 

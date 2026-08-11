@@ -53,7 +53,7 @@ describe("ApiErrorNote", () => {
     expect(errorMessage(undefined)).toBe("Something went wrong.");
   });
 
-  // Item 7 stage F5: a 403 is an answer, not a fault, and the heading is the
+  // a 403 is an answer, not a fault, and the heading is the
   // first thing that says so. Keyed on the STATUS — the contract answers one
   // `forbidden` code for a missing role and a missing per-tree permission
   // alike, because what is required is declared on the operation.

@@ -61,10 +61,9 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   expect(chatB.ok()).toBeTruthy();
 
   // --- Evaluations stepper: pick 2 conversations → configure 1 config → queue ---
-  // Results tab, Studio (formerly its own "Evaluations" nav entry — UX
-  // polish 2026-08-10, Studio merge).
+  // Studio's Evaluations tab — /studio/evaluations, a path of its own.
   await page.getByRole("link", { name: "Studio" }).click();
-  await page.getByRole("tab", { name: "Results" }).click();
+  await page.getByRole("tab", { name: "Evaluations" }).click();
   await page.getByRole("button", { name: "New evaluation" }).click();
   await page.getByRole("checkbox", { name: `Select ${MSG_A}` }).check();
   await page.getByRole("checkbox", { name: `Select ${MSG_B}` }).check();

@@ -112,7 +112,7 @@ describe("RunConfigPanel", () => {
     expect(onChange).toHaveBeenLastCalledWith({ judge: null });
   });
 
-  it("showJudge=false keeps the judge section fully dormant (P1-T11 scope guard)", () => {
+  it("showJudge=false keeps the judge section fully dormant (scope guard)", () => {
     renderPanel({ showJudge: false });
     expect(screen.queryByRole("switch", { name: "⚖ Judge" })).not.toBeInTheDocument();
   });

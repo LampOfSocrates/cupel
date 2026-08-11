@@ -140,7 +140,7 @@ test(
       expect(rename.status()).toBe(409);
     });
 
-    // The five writes whose 409 the contract did not declare until item 7
+    // The five writes whose 409 the contract did not declare until v0.4.0
     // stage F7. They always behaved this way; only openapi.yaml was silent,
     // so an adopter reading the contract would have built a client that
     // treated any of these as an unexpected failure.

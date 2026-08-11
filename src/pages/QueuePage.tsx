@@ -19,7 +19,7 @@ function resultLinks(task: Task) {
   const links = [];
   if (task.result?.evaluation_id) {
     links.push(
-      <Anchor key="run" component={Link} to={`/evaluations/${task.result.evaluation_id}`} size="xs">
+      <Anchor key="run" component={Link} to={`/studio/evaluations/${task.result.evaluation_id}`} size="xs">
         View results ↗
       </Anchor>,
     );

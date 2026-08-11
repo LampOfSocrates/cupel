@@ -14,7 +14,7 @@ import {
   writeConfig,
 } from "../scripts/init.mjs";
 
-// PW-1 — `npm run init` writes agentic.config.ts. The interactivity is not
+// `npm run init` writes agentic.config.ts. The interactivity is not
 // under test; the WRITE is: it edits the one config artifact in place, so a
 // checkout's hand-written comments, extra targets and compareSets have to
 // survive, and re-running must not leave two targets with the same id.

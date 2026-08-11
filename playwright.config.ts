@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
-// P1-TE2E — smoke e2e (`npm run e2e:smoke`) against the
+// Smoke e2e (`npm run e2e:smoke`) against the
 // REAL mock (no MSW): webServer boots BOTH processes, mock first.
 //
 // Scratch DB: CUPEL_MOCK_DB (mock/config.py:51) points the mock at a temp
@@ -20,7 +20,7 @@ if (!process.env.CUPEL_E2E_SCRATCH_READY) {
   process.env.CUPEL_E2E_SCRATCH_READY = "1";
 }
 
-// P2-RECORD — `npm run e2e:record` (scripts/e2e-record.mjs) sets this. It picks
+// Filming: `npm run e2e:record` (scripts/e2e-record.mjs) sets this. It picks
 // the `record` project AND swaps the reporter: two passes write blob shards
 // that merge into ONE built-in HTML report, which is the review gallery. The
 // normal suites never see it.
@@ -28,7 +28,7 @@ const RECORDING = process.env.CUPEL_E2E_RECORD === "1";
 
 export default defineConfig({
   testDir: "e2e",
-  // P2-E2E — the deterministic generator dataset (seed 42), loaded once the
+  // Seeds the deterministic generator dataset (seed 42), loaded once the
   // mock is up. Skipped in AUTH_MODE=on runs; see e2e/global-setup.ts.
   globalSetup: "./e2e/global-setup.ts",
   // One worker: every spec shares the one mock instance + scratch DB.
@@ -46,7 +46,7 @@ export default defineConfig({
     // second project below cannot silently double their work.
     { name: "chromium", use: { browserName: "chromium" } },
     {
-      // P2-RECORD — the film rig. Same browser, same specs; only the capture
+      // The film rig. Same browser, same specs; only the capture
       // settings and the pace differ.
       name: "record",
       use: {
@@ -79,7 +79,7 @@ export default defineConfig({
         // Faster than dev defaults (mock/config.py:17-18) but slow enough
         // that the smoke test can observe tokens streaming before `done`.
         //
-        // P2-RECORD films run the mock ~3x slower: under slowMo + video +
+        // Filmed runs drive the mock ~3x slower: under slowMo + video +
         // trace the browser lags, and a reply that materialises in one frame
         // is a bad film.
         //
@@ -91,12 +91,12 @@ export default defineConfig({
         // only now, and removing it can no longer break journey 5.
         MOCK_TOKEN_DELAY: RECORDING ? "0.03" : "0.01",
         MOCK_STEP_DELAY: RECORDING ? "0.09" : "0.03",
-        // P2-E2E failure injection (mock/config.py fail_marker): the FIRST
+        // Failure injection (mock/config.py fail_marker): the FIRST
         // attempt at any batch child whose payload mentions this string fails,
         // the retry succeeds. Inert unless a spec deliberately puts the marker
         // in a prompt — only e2e/j06-queue.spec.ts does.
         MOCK_FAIL_MARKER: "CUPEL-E2E-INJECTED-FAILURE",
-        // P2-T07: `npm run e2e:auth` (scripts/e2e-auth.mjs) sets AUTH_E2E=1,
+        // `npm run e2e:auth` (scripts/e2e-auth.mjs) sets AUTH_E2E=1,
         // which boots THIS mock with AUTH_MODE=on and runs e2e/auth.spec.ts
         // only; auth.spec skips itself otherwise, so the plain e2e:smoke run
         // (and the deployed demo) stay off-mode and unchanged.

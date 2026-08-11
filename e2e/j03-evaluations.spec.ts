@@ -32,9 +32,8 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
   });
 
   await step("1 Select: a whole conversation plus a single turn of another", async () => {
-    // Results tab, Studio (formerly the bare /evaluations route — UX
-    // polish 2026-08-10, Studio merge).
-    await page.goto("/studio?tab=results");
+    // Studio's Evaluations tab — a path of its own since the tab split.
+    await page.goto("/studio/evaluations");
     await page.getByRole("button", { name: "New evaluation" }).click();
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
     await page.getByRole("checkbox", { name: `Select ${CONV_A}` }).check();
@@ -99,7 +98,7 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
     await expect(page.getByText("done", { exact: true })).toBeVisible();
 
     // The grid is polled while it fills, so those reads must be CONDITIONAL
-    // (item 7 stage F3): after the first, every refetch carries the ETag the
+    // reads: after the first, every refetch carries the ETag the
     // previous one returned, and a grid that has not moved answers 304 with no
     // body. Asserted on the request side because that is the half the client
     // owns — the mock's 304 itself is pinned by test_mock.py.
@@ -113,11 +112,12 @@ test("evaluations: pick conversations + one turn → configure (changed fields) 
 
   await step("the finished evaluation is listed and re-openable", async () => {
     const evaluationUrl = page.url();
-    // The back control is a Mantine Anchor with an onClick and no href, so it
-    // has no link role — matched by text (noted for the UX phase).
-    await page.getByText("‹ Studio").click();
-    // Lands back on Studio's Results tab — EvaluationsPage's own list-mode
-    // heading, unchanged by the merge.
+    // No back control any more, and that is the point: the grid renders inside
+    // the Studio frame, so the tab strip is still on screen while you read a
+    // result. Getting back to the list — or to Cases to fix a bad reference —
+    // is the tab you never lost.
+    await expect(page.getByRole("tab", { name: "Cases" })).toBeVisible();
+    await page.getByRole("tab", { name: "Evaluations" }).click();
     await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
     await page.goto(evaluationUrl);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();

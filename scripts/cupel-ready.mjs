@@ -253,7 +253,7 @@ export function buildInit(contract, target, { source, id = null, label = null, p
 }
 
 /**
- * `header` lets a caller that DOES write the config (scripts/init.mjs, PW-1)
+ * `header` lets a caller that DOES write the config (scripts/init.mjs)
  * replace the paste-it-yourself preamble while reusing the same derivations
  * and the same rendering — there is only ever one target-block renderer.
  */
@@ -261,7 +261,7 @@ export function buildInit(contract, target, { source, id = null, label = null, p
  * `remapLines`, when given, REPLACES the remap comment+field this function
  * would otherwise derive from `init.remapPrefix` — the escape hatch for a
  * remap richer than one prefix string (scripts/remap-rules.mjs's `renames` /
- * `dropAgenttrees` / `splitStream`, item 40). `init.remapPrefix` stays the
+ * `dropAgenttrees` / `splitStream`). `init.remapPrefix` stays the
  * only source of truth for every existing caller (init.mjs, this script's
  * own --init, create-app.mjs's plain-prefix path).
  */

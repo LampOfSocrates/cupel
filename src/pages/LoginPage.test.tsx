@@ -40,7 +40,7 @@ async function signIn(email = "admin@demo", password = "demo") {
   await user.click(screen.getByRole("button", { name: "Sign in" }));
 }
 
-describe("LoginPage (P2-T07)", () => {
+describe("LoginPage", () => {
   it("posts credentials, stores the token, and redirects to return_to incl. a ?turn= deep link", async () => {
     renderLogin("/login?return_to=%2Fchat%2Fc1%3Fturn%3Dt2");
     await signIn();

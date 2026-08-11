@@ -67,7 +67,7 @@ describe("buildStartupPlan — localMock enabled", () => {
   });
 });
 
-describe("buildStartupPlan — storage mode (P2-PERSIST)", () => {
+describe("buildStartupPlan — storage mode", () => {
   it("defaults to local: plain uvicorn, plain SQLite file, no S3 anything", () => {
     for (const env of [{}, { CUPEL_STORAGE: "local" }, { CUPEL_STORAGE: "nonsense" }]) {
       const { commands, bannerLines } = enabled(env);

@@ -69,7 +69,7 @@ test("shell: boot → sidebar → search → fork nesting expands", async ({
 
   // The parameter's SEMANTICS, not just that it reaches the backend
   // (openapi.yaml listConversations ?search=). Each of these was undefined
-  // until item 7 stage F8, and the two implementations in this repo had
+  // until the v0.4.0 contract, and the two implementations in this repo had
   // already drifted apart on the second one.
   await step("search is a literal, untokenised substring of the title OR a turn", async () => {
     const search = page.getByPlaceholder("Search");

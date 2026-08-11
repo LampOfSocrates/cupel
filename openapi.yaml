@@ -215,8 +215,8 @@ info:
     asserts their absence so nothing half-specified leaks in: repo/PR
     integration (POST /agenttrees/{tree}/agents/{id}/pr, GET/PUT
     /settings/repo, POST /webhooks/git, the mock git server) and public
-    tokenized share links. Both are ordinary roadmap work on TASKS.md — there
-    is no paid tier and nothing is withheld. Sharing as shipped is in-app deep
+    tokenized share links. Neither is planned, and neither is withheld — there
+    is no paid tier. Sharing as shipped is in-app deep
     links (/chat/{id}?turn=) over the existing conversation GETs, which needs
     no new endpoints.
 
@@ -1126,7 +1126,7 @@ paths:
         There is NO restore. Undelete is not one endpoint: it is a place to
         find the tombstone, a decision about what happens to its forks, and a
         story for a conversation restored into a tree that has since been
-        disabled — real UX, and UX is item 17. Making the tombstone visible is
+        disabled — real UX, and that design is not done. Making the tombstone visible is
         what a restore would need first, and that is what this operation now
         provides.
       parameters:
@@ -2784,7 +2784,7 @@ components:
         storage:
           type: object
           description: |
-            P2-PERSIST — how this backend persists its data, surfaced where a
+            How this backend persists its data, surfaced where a
             human already looks (the backend switcher's health check). OPTIONAL
             and purely additive: a backend that does not report it stays
             conformant, and no client may require it.

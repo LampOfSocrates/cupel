@@ -9,7 +9,7 @@ import { filmed } from "./helpers/hud";
 // "admin permission matrix edit takes effect" (feature-spec.md:213).
 // Endpoint tags (feature-spec.md:244):
 //   GET/PUT /admin/users · GET/PUT /admin/users/{id}/permissions
-//   plus the per-operation half (item 7 stage F5): POST
+//   plus the per-operation half: POST
 //   …/instructions/versions (x-requires tune) answering 403, and PUT
 //   …/last-selection (x-requires evaluate) still answering 200.
 //
@@ -45,7 +45,7 @@ test(
     });
 
     await step("a tree they CAN see refuses the tuning they cannot do", async () => {
-      // Item 7 stage F5. The two failures are different on purpose: agent2 is
+      // The two failures are different on purpose: agent2 is
       // hidden (404 above), while agent1 — which restricted@demo holds `view`
       // and `evaluate` on, but not `tune` — EXPLAINS itself. Before this, the
       // save simply went through the tune-less user and the only thing wrong

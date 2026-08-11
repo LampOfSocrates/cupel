@@ -62,7 +62,7 @@ export const PHASE1_PATHS = [
 
 // There is no per-METHOD Phase-1 exemption any more. v0.3.0 had exactly one —
 // the versioned PUT that Phase 2 added onto the Phase-1 path
-// /eval/cases/{caseId} — and item 7 stage F4 moved every versioned save onto
+// /eval/cases/{caseId} — and the v0.4.0 contract moved every versioned save onto
 // its own POST …/versions path, so the phase split is once again a split
 // between PATHS. Filtering is path-level below; if a Phase-2 method is ever
 // added to a Phase-1 path again, that is when a per-method map earns its

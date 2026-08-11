@@ -362,7 +362,7 @@ export function CompareView({
       {atCap && (
         <Text size="xs" c="dimmed" data-testid="compare-cap-hint">
           {MAX_COMPARE_COLUMNS} columns is the readable maximum here —{" "}
-          <Anchor size="xs" onClick={() => navigate("/studio?tab=results")}>
+          <Anchor size="xs" onClick={() => navigate("/studio/evaluations")}>
             use Studio
           </Anchor>{" "}
           to compare more.
@@ -418,7 +418,7 @@ export function CompareView({
             <Group justify="flex-end">
               <Anchor
                 size="xs"
-                onClick={() => navigate(`/evaluations/${evaluationId}`)}
+                onClick={() => navigate(`/studio/evaluations/${evaluationId}`)}
                 data-testid="compare-evaluation-link"
               >
                 See the comparison ↗

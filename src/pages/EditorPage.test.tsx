@@ -14,7 +14,8 @@ import {
   snapshotRequests,
 } from "../test/msw/handlers";
 import { EditorPage } from "./EditorPage";
-import { StudioPage } from "./StudioPage";
+import { EvaluationsPage } from "./EvaluationsPage";
+import { StudioFrame } from "./studio/StudioFrame";
 
 // Contract under test:
 // - GET .../instructions → live pointer + full ascending history
@@ -203,14 +204,16 @@ describe("EditorPage", () => {
   // Test an instruction change in one click: 'Test as evaluation'
   // snapshots your draft and replays your usual conversations against it —
   // using the editor → Evaluations flow (sketches 06 → 03).
-  // Real StudioPage mounted at /studio (Results tab, formerly the bare
-  // /evaluations route — UX polish 2026-08-10) so the router-state handoff is
-  // exercised end to end, not against a probe.
+  // The real Studio frame + its stepper route, so the router-state handoff is
+  // exercised end to end against the thing it actually lands on
+  // (/studio/evaluations/new), not against a probe.
   const renderEditorWithEvaluations = (agentId = "ag_concierge") =>
     renderApp(
       <Routes>
         <Route path="/agents/:agentId/editor" element={<EditorPage />} />
-        <Route path="/studio" element={<StudioPage />} />
+        <Route path="/studio" element={<StudioFrame />}>
+          <Route path="evaluations/new" element={<EvaluationsPage mode="stepper" />} />
+        </Route>
       </Routes>,
       { route: `/agents/${agentId}/editor` },
     );
@@ -335,7 +338,7 @@ describe("EditorPage", () => {
       expect(screen.getByRole("button", { name: "Save as v4" })).toBeEnabled();
     });
 
-    // Item 7 stage F5. Saving instructions requires `tune` on this tree
+    // Saving instructions requires `tune` on this tree
     // (openapi.yaml x-requires on createInstructionVersion), so a viewer's
     // Save is a 403, not a fault. It used to render under "Instruction editor
     // error" with the bare sentence — indistinguishable from the store being

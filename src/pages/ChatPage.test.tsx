@@ -182,7 +182,7 @@ describe("ChatPage streaming", () => {
   });
 });
 
-// listTurns (item 7 stage F2): the transcript is a paged collection, opened on
+// listTurns: the transcript is a paged collection, opened on
 // its LAST page. A long conversation therefore renders its tail — and the page
 // must SAY so rather than presenting a prefix of the history as the whole of
 // it.
@@ -863,7 +863,7 @@ describe("Turn envelope affordance", () => {
 // badge/breadcrumb" (feature-spec.md:69); "open parent (if fork)"
 // (feature-spec.md:6); deleted parent → "the parent link renders as deleted"
 // (openapi.yaml:441-443).
-describe("Turn forks (P1-T13)", () => {
+describe("Turn forks", () => {
   it("⑂ on an assistant turn opens the fork modal and fires with that conversation/turn", async () => {
     const user = userEvent.setup();
     renderChat("/chat/c1");
@@ -951,7 +951,7 @@ function ForksProbe() {
 // drill-in" (feature-spec.md:141). Chat surface: sketch 01's action row
 // (👍👎⧉⑂⌁) exists on assistant turns only, so ⌁ ships there (user turns'
 // traces are empty-span per the contract — no affordance).
-describe("Turn trace entry (P1-T16)", () => {
+describe("Turn trace entry", () => {
   it("⌁ on an assistant turn routes to /trace/{turn_id}", async () => {
     const user = userEvent.setup();
     renderApp(
@@ -1049,7 +1049,7 @@ describe("Live LLM (BYOK) settings", () => {
 // conversation the receiver can't see is 404 for BOTH "deleted" and
 // "unpermitted" (openapi.yaml:1948) and renders one friendly state.
 // Anonymous tokenized public links are not planned (dropped 2026-08-11).
-describe("Share links (P2-SHARE)", () => {
+describe("Share links", () => {
   it("🔗 on an assistant turn copies the conversation URL plus ?turn={id}", async () => {
     const user = userEvent.setup();
     renderChat("/chat/c1");
@@ -1142,7 +1142,7 @@ describe("Share links (P2-SHARE)", () => {
 // Disabled tree (feature-spec.md:20): "existing conversations stay
 // READABLE (read-only banner) so history and traces aren't lost"; "new
 // chat/replay/judge against it return 409 tree_disabled".
-describe("Disabled tree (P2-T07c)", () => {
+describe("Disabled tree", () => {
   const disabledTrees = [
     { id: "agent1", name: "Agent 1", enabled: false },
     { id: "agent2", name: "Agent 2", enabled: true },
@@ -1199,7 +1199,7 @@ describe("Disabled tree (P2-T07c)", () => {
 // same CollectModal the Inspector opens, and what it posts is a REFERENCE
 // {tree, conversation_id, turn_id} — into an eval benchmark, since the
 // Casebook merged into that noun.
-describe("⊞ collect from the chat turn action row (P2-T12a)", () => {
+describe("⊞ collect from the chat turn action row", () => {
   it("posts the turn as an eval-benchmark item reference", async () => {
     const user = userEvent.setup();
     renderChat("/chat/c1");

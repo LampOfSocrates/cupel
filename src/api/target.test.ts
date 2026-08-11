@@ -23,7 +23,7 @@ describe("default target resolution", () => {
     expect(resolveDefaultTargetId(true)).toBe("prod");
   });
 
-  it("prod target baseUrl is '' = same-origin (P1-TDEPLOY semantic preserved)", () => {
+  it("prod target baseUrl is '' = same-origin (semantic preserved)", () => {
     const prod = agenticConfig.targets.find((t) => t.id === "prod")!;
     expect(prod.baseUrl).toBe("");
     expect(prod.requiresToken).toBe(true);
@@ -60,7 +60,7 @@ describe("device-local persistence (feature-spec.md:157)", () => {
 
 // The "custom Base URL field" (feature-spec.md:154), device-local
 // under cupel.backend.customUrl like the target choice itself (:161).
-describe("custom target (P2-T17)", () => {
+describe("custom target", () => {
   const URL = "http://backend.internal:9999";
 
   it("setCustomUrl + setActiveTarget('custom') resolve a target with the stored URL", () => {

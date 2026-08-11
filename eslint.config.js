@@ -1,7 +1,7 @@
 import reactHooks from "eslint-plugin-react-hooks";
 import babelParser from "@babel/eslint-parser";
 
-// Lint-only adoption (TASKS.md #10). Scope: the React Hooks rules and nothing
+// Lint-only adoption. Scope: the React Hooks rules and nothing
 // else — no style ruleset, no type-aware linting, and NO React Compiler (that
 // one would put a Babel *transform* back into a Vite/rolldown build).
 //

@@ -456,6 +456,9 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
     return <Loader size="sm" mx="auto" my="xl" display="block" />;
   }
 
+  // No p="md" and no "‹ Studio" crumb below: this renders inside StudioFrame's
+  // Outlet now, under a tab strip that never leaves — both would duplicate a
+  // frame that is already on screen.
   const rubricName = (id: string) => rubrics.find((r) => r.id === id)?.name ?? id;
   const rowTotalPages = Math.max(
     1,
@@ -463,14 +466,9 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   );
 
   return (
-    <Stack gap="sm" p="md">
+    <Stack gap="sm">
       <Group justify="space-between">
         <Group gap="xs">
-          {/* Studio's Results tab (formerly the bare /evaluations route —
-              UX polish 2026-08-10, Studio merge). */}
-          <Anchor size="xs" onClick={() => navigate("/studio?tab=results")}>
-            ‹ Studio
-          </Anchor>
           <Title order={4}>Evaluation {evaluation.id}</Title>
           <Badge size="sm" variant="light" color={STATUS_COLOR[evaluation.status]}>
             {evaluation.status}

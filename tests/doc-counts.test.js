@@ -15,7 +15,7 @@ import { facts } from "../scripts/contract-facts.mjs";
 // version its counts belong to.
 
 const DATED = {
-  "docs/TASKS.md": "a dated log — each item records what was true when it shipped",
+  "docs/TASKS.md": "the work queue — its numbers are task ids, not contract counts",
   "docs/review-2026-08-05.md": "a dated review of a specific commit",
   "docs/plans/plan-agentic-app-maker.md": "superseded plan, kept as the record of what was superseded",
 };

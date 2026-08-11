@@ -18,7 +18,7 @@ const captureAuthHeader = (base: string, captured: Array<string | null>) =>
     return HttpResponse.json(mockMe);
   });
 
-describe("bearer attach (P2-T07)", () => {
+describe("bearer attach", () => {
   it("attaches Authorization: Bearer <login token> when one is stored", async () => {
     const captured: Array<string | null> = [];
     server.use(captureAuthHeader(BASE, captured));
@@ -46,7 +46,7 @@ describe("bearer attach (P2-T07)", () => {
   });
 });
 
-describe("central 401 handling (P2-T07)", () => {
+describe("central 401 handling", () => {
   it("any 401 clears the active target's token and emits auth-required", async () => {
     server.use(
       http.get(`${BASE}/me`, () =>

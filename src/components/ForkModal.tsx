@@ -183,7 +183,7 @@ function ForkBody({
       <Group justify="space-between" mt={4}>
         {/* evaluation_id backs the fork-comparison pivot (openapi.yaml:1581-1585)
             — link to the existing evaluation detail route. */}
-        <Anchor size="xs" onClick={() => go(`/evaluations/${accepted.evaluation_id}`)}>
+        <Anchor size="xs" onClick={() => go(`/studio/evaluations/${accepted.evaluation_id}`)}>
           View evaluation
         </Anchor>
         <Button size="xs" variant="default" onClick={onClose}>

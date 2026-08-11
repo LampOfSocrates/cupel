@@ -13,7 +13,7 @@ import {
   rulesAreEmpty,
 } from "../scripts/remap-rules.mjs";
 
-// item 40: a plain prefix (cupel-ready.mjs detectPrefix) covers only one real
+// A plain prefix (cupel-ready.mjs detectPrefix) covers only one real
 // adopter shape. The fixtures below are the exact shape a user described:
 //   /nabu-service/agent1/chat        /nabu-service/agent2/chat
 //   /nabu-service/agent1/stream      /nabu-service/agent2/stream  (chat's OWN route)

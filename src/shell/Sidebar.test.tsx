@@ -140,7 +140,7 @@ describe("Sidebar rail collapse", () => {
 // Session row — user name from /me; "Sign out" shows EXACTLY when a
 // login token exists for the active target (no auth-mode branch: an off-mode
 // backend issues no token, so the dev user shows without sign-out).
-describe("Sidebar session row (P2-T07)", () => {
+describe("Sidebar session row", () => {
   it("off-mode shape: dev user name, no Sign out (no token stored)", async () => {
     renderShell();
     expect(await screen.findByText("Dev User")).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
-import { renderApp } from "../test/render";
+import { renderApp } from "../../test/render";
 import {
   evalCaseCreates,
   evalCaseVersionPosts,
@@ -18,8 +18,13 @@ import {
   mockEvalBenchmarks,
   mockRubrics,
   rubricVersionPosts,
-} from "../test/msw/handlers";
-import { StudioPage } from "./StudioPage";
+} from "../../test/msw/handlers";
+import { EvaluationsPage } from "../EvaluationsPage";
+import { InspectorPage } from "../InspectorPage";
+import { StudioFrame } from "./StudioFrame";
+import { CasesTab } from "./CasesTab";
+import { BenchmarksTab } from "./BenchmarksTab";
+import { RubricsTab } from "./RubricsTab";
 
 // Contract under test — eval workbench (sketch 10; feature-spec.md:63
 // "case editor (input / output / reference fields; 'reference from turn'
@@ -38,16 +43,28 @@ import { StudioPage } from "./StudioPage";
 // Cases are GLOBAL (feature-spec.md:111) — no tree in any of these paths;
 // agenttree is a free-text label, not a scope.
 
-function renderEval() {
+// The real route shape: one layout route owning the tab strip and the shared
+// caches, one child route per tab. Clicking a tab is a NAVIGATION here, so
+// these tests exercise the thing that broke when the tabs stopped being
+// <Tabs.Panel>s — a tab body unmounting and coming back.
+function renderStudio(me?: typeof mockAdminMe, route = "/studio/cases") {
   return renderApp(
     <Routes>
-      <Route path="/studio" element={<StudioPage />} />
+      <Route path="/studio" element={<StudioFrame />}>
+        <Route path="cases" element={<CasesTab />} />
+        <Route path="benchmarks" element={<BenchmarksTab />} />
+        <Route path="rubrics" element={<RubricsTab />} />
+        <Route path="evaluations" element={<EvaluationsPage mode="list" />} />
+        <Route path="inspector" element={<InspectorPage />} />
+      </Route>
     </Routes>,
     // queue: the import modal reads the 202 task's report off the app-wide
     // queue store, so the provider must be present.
-    { route: "/studio", queue: true },
+    { route, queue: true, me },
   );
 }
+
+const renderEval = () => renderStudio();
 
 async function openTab(name: string) {
   await userEvent.click(screen.getByRole("tab", { name }));
@@ -401,22 +418,48 @@ describe("import", () => {
   });
 });
 
-// UX polish (2026-08-10): the former standalone /evaluations and /inspector
-// routes now live here as same-page tabs — no navigation on click.
-function renderStudio(me?: typeof mockAdminMe) {
-  return renderApp(
-    <Routes>
-      <Route path="/studio" element={<StudioPage />} />
-    </Routes>,
-    { route: "/studio", queue: true, me },
-  );
-}
-
-describe("Results tab", () => {
-  it("hosts the evaluations list/stepper flow (EvaluationsPage) as a same-page tab", async () => {
+describe("Evaluations tab", () => {
+  it("is its own path, and the tab strip survives the trip to it", async () => {
     renderStudio();
-    await openTab("Results");
+    await openTab("Evaluations");
     expect(await screen.findByRole("heading", { name: "Evaluations" })).toBeInTheDocument();
+    // The frictions this split exists to remove: the tab is Evaluations, not
+    // "Results" (which also named the flow's third step), and the strip is
+    // still there to get back to Cases with.
+    expect(screen.queryByRole("tab", { name: "Results" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cases" })).toBeInTheDocument();
+  });
+});
+
+// What <Tabs keepMounted> used to give these panels for free, now that they are
+// routes that really unmount: see useStudioState in StudioContext.tsx.
+describe("buffers survive a tab click", () => {
+  it("keeps a half-written rubric prompt across a trip to Cases and back", async () => {
+    renderStudio(undefined, "/studio/rubrics");
+    await userEvent.click(await screen.findByTestId("rubric-row-rub-help"));
+    const prompt = screen.getByLabelText("Rubric prompt");
+    await userEvent.clear(prompt);
+    await userEvent.type(prompt, "Half a thought.");
+
+    await openTab("Cases");
+    await screen.findByTestId("cases-empty");
+    await openTab("Rubrics");
+
+    expect(await screen.findByLabelText("Rubric prompt")).toHaveValue("Half a thought.");
+  });
+
+  it("keeps an unsaved case draft across a trip to Benchmarks and back", async () => {
+    renderStudio();
+    await screen.findByTestId("cases-empty");
+    setField("Input (prompt)", "Why was I charged twice?");
+
+    await openTab("Benchmarks");
+    await screen.findByTestId("benchmark-row-set-refunds");
+    await openTab("Cases");
+
+    expect(await screen.findByLabelText("Input (prompt)")).toHaveValue(
+      "Why was I charged twice?",
+    );
   });
 });
 

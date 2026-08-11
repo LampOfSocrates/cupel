@@ -169,10 +169,11 @@ export function InstructionEditor({
         lastSnapshot && lastSnapshot.content === draft
           ? { snapshot_id: lastSnapshot.id, label: lastSnapshot.label }
           : await createDraftSnapshot();
-      // Results tab (formerly the bare /evaluations route — UX polish
-      // 2026-08-10, Studio merge); the handoff mechanism itself (location.
-      // state read by EvaluationsPage, now embedded there) is unchanged.
-      navigate("/studio?tab=results", {
+      // Straight to the stepper's own route — Test as evaluation always meant
+      // "open the wizard", and since Studio's tabs became paths that is a URL
+      // rather than a tab plus an implied step. The handoff mechanism itself
+      // (location.state, read by EvaluationsPage) is unchanged.
+      navigate("/studio/evaluations/new", {
         state: {
           testInRuns: {
             agent_id: agentId,

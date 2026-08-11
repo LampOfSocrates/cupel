@@ -62,7 +62,7 @@ function renderModal(
               }
             />
             <Route path="/chat/:id" element={<ChatProbe />} />
-            <Route path="/evaluations/:id" element={<EvaluationProbe />} />
+            <Route path="/studio/evaluations/:id" element={<EvaluationProbe />} />
           </Routes>
         </MemoryRouter>
       </AppContext.Provider>

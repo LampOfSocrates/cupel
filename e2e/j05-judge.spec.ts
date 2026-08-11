@@ -24,9 +24,8 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
   });
 
   await step("configure an evaluation with the judge enabled up front", async () => {
-    // Results tab, Studio (formerly the bare /evaluations route — UX
-    // polish 2026-08-10, Studio merge).
-    await page.goto("/studio?tab=results");
+    // Studio's Evaluations tab — its own path since the tab split.
+    await page.goto("/studio/evaluations");
     await page.getByRole("button", { name: "New evaluation" }).click();
     await page.getByRole("checkbox", { name: `Select ${CONV}` }).check();
     await page.getByRole("button", { name: "Configure ▸" }).click();
@@ -170,7 +169,7 @@ test("judge: an evaluation that finished before its page was opened is judged, o
 
   let judged = 0;
   await step("open the finished evaluation's link — the judge fires anyway", async () => {
-    await page.goto(`/evaluations/${replay.evaluation_id}`);
+    await page.goto(`/studio/evaluations/${replay.evaluation_id}`);
     await expect(page.getByTestId("comparison-grid")).toBeVisible();
     // The idempotency probe, then the judging pass it did not veto.
     await api.expectCalled("GET /eval/judgments");
@@ -201,8 +200,8 @@ test("judge: an evaluation that finished before its page was opened is judged, o
   await step("navigating away and back is idempotent too", async () => {
     api.clear();
     await page.getByRole("link", { name: "Studio" }).first().click();
-    await page.waitForURL(/\/studio$/);
-    await page.goto(`/evaluations/${replay.evaluation_id}`);
+    await page.waitForURL(/\/studio\//);
+    await page.goto(`/studio/evaluations/${replay.evaluation_id}`);
     await expect(page.locator('[data-testid^="score-chip-"]').first()).toBeVisible({
       timeout: 120_000,
     });

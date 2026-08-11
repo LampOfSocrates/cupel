@@ -220,7 +220,7 @@ describe("cupel-ready comparator", () => {
 
   it("phase1Only checks only the Phase-1 surface", () => {
     // Every method of a Phase-1 path counts; a Phase-2 path is skipped whole.
-    // Since item 7 stage F4 the split is purely by path — the one Phase-2
+    // Since the v0.4.0 contract the split is purely by path — the one Phase-2
     // METHOD that used to sit on a Phase-1 path (the versioned case save) is
     // now POST /eval/cases/{caseId}/versions, a path of its own.
     const c = doc({
@@ -426,7 +426,7 @@ describe("cupel-ready --init", () => {
     expect(block.endsWith("},")).toBe(true);
   });
 
-  // item 40: a remap richer than one prefix string (scripts/remap-rules.mjs)
+  // A remap richer than one prefix string (scripts/remap-rules.mjs)
   // replaces the derived comment + `remap:` line wholesale.
   it("remapLines overrides the plain-prefix remap rendering", () => {
     const { init } = buildInit(nabuContract(), nabuTarget(), { source: "spec.json" });

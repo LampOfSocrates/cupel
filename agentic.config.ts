@@ -45,13 +45,13 @@ export interface BackendTarget {
    * API origin, e.g. "http://localhost:8000". Empty string "" means
    * SAME-ORIGIN: calls stay relative to the page URL. That is how the
    * production Docker image works — FastAPI serves both the API and the
-   * built frontend from one origin (P1-TDEPLOY, docs/deployment.md).
+   * built frontend from one origin (docs/deployment.md).
    */
   baseUrl: string;
   /**
    * The target needs an auth token before it will answer (feature-spec.md:157
    * "Prod requires an auth token field"). The token UI ships with the
-   * Settings → Backend switcher (P2-T17); the flag is declared here so the
+   * Settings → Backend switcher; the flag is declared here so the
    * switcher knows to ask.
    */
   requiresToken?: boolean;
@@ -59,7 +59,7 @@ export interface BackendTarget {
    * Chrome banner for this target (feature-spec.md:157 "Non-prod targets show
    * a colored banner in the app chrome so nobody mistakes mock data for
    * real"). `false` = no banner (prod). When UNSET the app falls back to the
-   * P2-CONFIG id-based rule: every target except id "prod" shows an orange
+   * Id-based rule: every target except id "prod" shows an orange
    * "<label> backend" banner. color is any CSS color; defaults to orange.
    */
   banner?: { label: string; color?: string } | false;
@@ -84,13 +84,13 @@ export interface BackendTarget {
    * (any backend at all via a small adapter module —
    * with the mock filling in whatever your backend doesn't do yet).
    * Module specifier of an adapter, resolved by the switcher/readiness
-   * tooling (P2-T17 / P2-READY). Declared + typed now; not consumed yet.
+   * tooling. Declared + typed now; not consumed yet.
    */
   adapter?: string;
 }
 
 /**
- * The BUNDLED DEMO BACKEND — the FastAPI mock in `mock/` (P2-DEVSTART).
+ * The BUNDLED DEMO BACKEND — the FastAPI mock in `mock/`.
  *
  * `npm start` reads this block (scripts/dev.mjs) and, when `enabled`, boots
  * the mock alongside the Vite dev server and prints what it is and where its
@@ -133,7 +133,7 @@ export interface LocalMockConfig {
  *
  * It is declared here so the config you write today is the config that works
  * unchanged once `ReplayTurnRequest.configs[]` lands (queued with the contract
- * bump, docs/TASKS.md) — at that point the picker applies these instead
+ * bump) — at that point the picker applies these instead
  * of rejecting them, and no existing `compareSets` entry has to be rewritten.
  * Vary version/model across many conversations in Evaluate meanwhile.
  */

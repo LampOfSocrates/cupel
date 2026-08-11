@@ -176,7 +176,7 @@ describe("mock options (feature-spec.md:156)", () => {
     expect(localStorage.getItem(SSE_STORAGE_KEY)).toBeNull();
   });
 
-  it("latency / failure % / seed picker render disabled with the P2-GEN tooltip", async () => {
+  it("latency / failure % / seed picker render disabled with the not-built tooltip", async () => {
     const user = userEvent.setup();
     renderSettings();
 
@@ -185,6 +185,6 @@ describe("mock options (feature-spec.md:156)", () => {
     expect(screen.getByRole("button", { name: /Seed dataset/ })).toBeDisabled();
 
     await user.hover(screen.getByText("Simulate latency"));
-    await screen.findByText("Arrives with generator controls (P2-GEN)");
+    await screen.findByText("Arrives with generator controls");
   });
 });

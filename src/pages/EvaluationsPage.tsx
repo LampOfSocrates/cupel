@@ -1,16 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Stepper,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Group, Loader, Paper, Stack, Stepper, Text, Title } from "@mantine/core";
 import { api } from "../api/client";
 import type { Agent, Rubric, Variant, SelectionItem } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
@@ -18,6 +8,15 @@ import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { ApiErrorNote, errorMessage, errorTitle } from "../components/ApiErrorNote";
 import { useApp } from "../AppContext";
+import { useStudioState } from "./studio/StudioContext";
+import {
+  EVALUATION_DRAFT_KEY,
+  emptyConfig,
+  evaluationDraftReducer,
+  initialEvaluationDraft,
+  type EvaluationDraftAction,
+  type Handoff,
+} from "./studio/evaluationDraft";
 
 // Evaluations 3-step flow: "Replay stored conversations
 // — or a single turn — under a different instruction version, model, or
@@ -26,10 +25,15 @@ import { useApp } from "../AppContext";
 // conversations or individual turns, re-execute them under a changed config…
 // queue the work, compare outputs."
 //
-// Landing = RunsList of GET /agenttrees/{tree}/evaluations ("Evaluations, newest first",
-// openapi.yaml:663) + "New run" opening the stepper; row click → the evaluation
-// detail route (EvaluationPage — step 3 doubles as the results view for old
-// evaluations).
+// THE STEPS ARE ROUTES under Studio's Evaluations tab, and the tab strip stays
+// above all three:
+//   /studio/evaluations       → this page in `list` mode (RunsList + New)
+//   /studio/evaluations/new   → this page in `stepper` mode (steps 1–2)
+//   /studio/evaluations/{id}  → EvaluationPage — step 3, "Compare"
+// Step 3 is labelled Compare, not Results, because the TAB is Evaluations:
+// under the old naming "Results" meant both the tab and its third step, so
+// "go to results" was ambiguous in the UI and in the URL (/studio?tab=results
+// landed on step 1).
 //
 // Step 2 supports MULTIPLE configs because the grid is "baseline column + one
 // column per run config" (feature-spec.md:49; ReplayRequest.configs[] "One
@@ -46,14 +50,13 @@ import { useApp } from "../AppContext";
 // note) — queueing here only records the intent in the config.
 //
 // Scope guards (never build ahead):
-// - no endpoints picker: varying the deploy endpoint applies to turn re-fire
-//   only, which owns its own multi-select in ForkModal.
+// - endpoints hidden (showEndpoints defaults false).
 // - baseline_evaluation_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 //
 // Test-as-evaluation arrival (editor → Evaluations flow,
-// sketches 06 → 03): the editor navigates here with router state
-// {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
+// sketches 06 → 03): the editor navigates to /studio/evaluations/new with router
+// state {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set
 // is remembered per agent (GET/PUT /agents/{id}/last-selection). Repeat
 // testing = Test as evaluation → Queue, two taps."):
@@ -64,137 +67,30 @@ import { useApp } from "../AppContext";
 //   the snapshot's label ("v3-draft (a3f1)", feature-spec.md:86).
 // - Queue PUTs last-selection with the selection ACTUALLY queued (preloaded
 //   or user-changed) before POSTing the replay, so the next test remembers it.
-// A fresh "New run" clears the flow — the PUT belongs to Test-as-evaluation only.
+// A fresh "New evaluation" clears the flow — the PUT belongs to
+// Test-as-evaluation only.
+//
+// The buffer itself lives in the Studio frame, not in this component
+// (studio/evaluationDraft.ts): a route unmounts the moment another tab is
+// clicked, and a part-configured evaluation must not evaporate because the user
+// went to fix the case it was going to run against.
 
-interface TestInRunsState {
-  agent_id: string;
-  snapshot_id: string;
-  snapshot_label: string;
-}
-
-/** Router state this page can arrive with — the editor's Test-as-evaluation handoff. */
-interface Handoff {
-  testInRuns?: TestInRunsState;
-}
-
-const emptyConfig = (): Variant => ({});
-
-// One reducer owns everything the stepper navigates by. Router state has a
-// single reader — the `arrive` case, which both seeds the initial state and
-// folds in later arrivals — and `navKey` makes it idempotent, since the effect
-// that dispatches arrivals also fires for the one the initial state consumed.
-interface NavState {
-  /** location.key already folded in; null before the first arrival. */
-  navKey: string | null;
-  mode: "list" | "stepper";
-  /** 0 = Select, 1 = Configure; step 2 (Results) lives on the evaluation-detail route. */
-  step: number;
-  /** Waiting on GET last-selection before the stepper knows its landing step. */
-  prefilling: boolean;
-  testFlow: TestInRunsState | null;
-  selection: SelectionItem[];
-  configs: Variant[];
-}
-
-type NavAction =
-  | { type: "arrive"; key: string; handoff: Handoff | null }
-  | { type: "prefilled"; items: SelectionItem[] }
-  | { type: "prefillFailed" }
-  | { type: "newEvaluation" }
-  | { type: "cancel" }
-  | { type: "goToStep"; step: number }
-  | { type: "select"; items: SelectionItem[] }
-  | { type: "addConfig" }
-  | { type: "removeConfig"; index: number }
-  | { type: "updateConfig"; index: number; config: Variant };
-
-// A fresh stepper entry drops any Test-as-evaluation handoff: its config prefill and
-// its Queue-time last-selection PUT belong to that flow only.
-const freshStepper = (state: NavState): NavState => ({
-  ...state,
-  mode: "stepper",
-  step: 0,
-  prefilling: false,
-  testFlow: null,
-  selection: [],
-  configs: [emptyConfig()],
-});
-
-function navReducer(state: NavState, action: NavAction): NavState {
-  switch (action.type) {
-    case "arrive": {
-      if (action.key === state.navKey) return state;
-      const next = { ...state, navKey: action.key };
-      const { testInRuns } = action.handoff ?? {};
-      if (!testInRuns) return next;
-      return {
-        ...next,
-        mode: "stepper",
-        step: 0,
-        prefilling: true,
-        testFlow: testInRuns,
-        selection: [],
-        configs: [{ agent_id: testInRuns.agent_id, snapshot_id: testInRuns.snapshot_id }],
-      };
-    }
-    case "prefilled":
-      // "empty items = first-time testing" (openapi.yaml:311) → start at Pick.
-      return {
-        ...state,
-        selection: action.items,
-        step: action.items.length > 0 ? 1 : 0,
-        prefilling: false,
-      };
-    case "prefillFailed":
-      return { ...state, prefilling: false };
-    case "newEvaluation":
-      return freshStepper(state);
-    case "cancel":
-      return { ...state, mode: "list" };
-    case "goToStep":
-      return { ...state, step: action.step };
-    case "select":
-      return { ...state, selection: action.items };
-    case "addConfig":
-      return {
-        ...state,
-        configs: [...state.configs, { ...state.configs[state.configs.length - 1] }],
-      };
-    case "removeConfig":
-      return { ...state, configs: state.configs.filter((_, i) => i !== action.index) };
-    case "updateConfig":
-      return {
-        ...state,
-        configs: state.configs.map((c, i) => (i === action.index ? action.config : c)),
-      };
-  }
-}
-
-const initialNav = (handoff: Handoff | null, key: string): NavState =>
-  navReducer(
-    {
-      navKey: null,
-      mode: "list",
-      step: 0,
-      prefilling: false,
-      testFlow: null,
-      selection: [],
-      configs: [emptyConfig()],
-    },
-    { type: "arrive", key, handoff },
-  );
-
-export function EvaluationsPage() {
+export function EvaluationsPage({ mode }: { mode: "list" | "stepper" }) {
   const { tree, models, ensureModels } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Seeded from the arrival so a handoff opens the stepper without a
-  // list-mode flash; every later arrival goes through the same reducer case.
-  const [nav, dispatch] = useReducer(navReducer, null, () =>
-    initialNav(location.state as Handoff | null, location.key),
+  // Seeded from the arrival so a handoff opens the stepper already prefilling
+  // rather than flashing an empty Pick step (and firing its fetches); every
+  // later arrival goes through the same reducer case.
+  const [nav, setNav] = useStudioState(EVALUATION_DRAFT_KEY, () =>
+    initialEvaluationDraft(location.state as Handoff | null, location.key),
   );
-  const { mode, step, prefilling, testFlow, selection, configs } = nav;
+  const dispatch = useCallback(
+    (action: EvaluationDraftAction) => setNav((prev) => evaluationDraftReducer(prev, action)),
+    [setNav],
+  );
+  const { step, prefilling, testFlow, selection, configs } = nav;
 
   // GET /agenttrees/{tree}/evaluations is paged — a tree accumulates
   // evaluations forever. The page is kept whole (not just its items) so the
@@ -277,7 +173,7 @@ export function EvaluationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [testFlow, tree, ensureVersions]);
+  }, [testFlow, tree, ensureVersions, dispatch]);
 
   // Arrivals — fires for every location change, so a Test-as-evaluation handoff
   // reaching a page that is ALREADY mounted still applies; the reducer drops a
@@ -288,9 +184,12 @@ export function EvaluationsPage() {
       key: location.key,
       handoff: location.state as Handoff | null,
     });
-  }, [location]);
+  }, [location, dispatch]);
 
-  const startStepper = () => dispatch({ type: "newEvaluation" });
+  const startStepper = () => {
+    dispatch({ type: "reset" });
+    navigate("/studio/evaluations/new");
+  };
 
   const queueEvaluation = async () => {
     setQueueing(true);
@@ -306,7 +205,10 @@ export function EvaluationsPage() {
       // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
       // straight to the detail route, which owns the live fill.
       const accepted = await api.replay(tree, { selection, configs });
-      navigate(`/evaluations/${accepted.evaluation_id}`);
+      // The draft outlives this page now, so a QUEUED one has to be spent
+      // explicitly — otherwise the tab goes on advertising a draft that ran.
+      dispatch({ type: "reset" });
+      navigate(`/studio/evaluations/${accepted.evaluation_id}`);
     } catch (e) {
       setError(e);
       setQueueing(false);
@@ -314,13 +216,28 @@ export function EvaluationsPage() {
   };
 
   if (mode === "list") {
+    // A draft that survived a tab click is offered back, rather than left to be
+    // rediscovered by accident.
+    const resumable = selection.length > 0 || configs.some((c) => Object.keys(c).length > 0);
     return (
-      <Stack gap="sm" p="md" maw={640}>
+      <Stack gap="sm" maw={640}>
         <Group justify="space-between">
           <Title order={3}>Evaluations</Title>
-          <Button size="xs" onClick={startStepper}>
-            New evaluation
-          </Button>
+          <Group gap={6}>
+            {resumable && (
+              <Button
+                size="xs"
+                variant="light"
+                data-testid="resume-draft"
+                onClick={() => navigate("/studio/evaluations/new")}
+              >
+                Resume draft
+              </Button>
+            )}
+            <Button size="xs" onClick={startStepper}>
+              New evaluation
+            </Button>
+          </Group>
         </Group>
         {/* A disabled tree keeps its evaluations readable while queueing new
             work 409s (feature-spec.md:20 "read-only banner"). */}
@@ -337,7 +254,7 @@ export function EvaluationsPage() {
           <>
             <RunsList
               evaluations={evaluationPage.items}
-              onOpen={(evaluation) => navigate(`/evaluations/${evaluation.id}`)}
+              onOpen={(evaluation) => navigate(`/studio/evaluations/${evaluation.id}`)}
             />
             {/* The list is one page of a collection that only ever grows —
                 say which slice of it this is rather than trailing off. */}
@@ -358,11 +275,12 @@ export function EvaluationsPage() {
   }
 
   return (
-    <Stack gap="sm" p="md" maw={640}>
+    <Stack gap="sm" maw={640}>
       <Stepper active={step} size="xs">
         <Stepper.Step label="Select" />
         <Stepper.Step label="Configure" />
-        <Stepper.Step label="Results" />
+        {/* Queueing navigates to /studio/evaluations/{id}, which IS this step. */}
+        <Stepper.Step label="Compare" />
       </Stepper>
       <ReadOnlyTreeBanner />
       {error != null && (
@@ -388,11 +306,11 @@ export function EvaluationsPage() {
               last-selection on Test-as-evaluation arrival, or Back from Configure). */}
           <ConversationPicker
             tree={tree}
-            onSelectionChange={(items) => dispatch({ type: "select", items })}
+            onSelectionChange={(items: SelectionItem[]) => dispatch({ type: "select", items })}
             initialSelection={selection}
           />
           <Group justify="space-between">
-            <Button variant="default" size="xs" onClick={() => dispatch({ type: "cancel" })}>
+            <Button variant="default" size="xs" onClick={() => navigate("/studio/evaluations")}>
               Cancel
             </Button>
             <Button
@@ -415,7 +333,7 @@ export function EvaluationsPage() {
           <Text size="xs" c="dimmed">
             baseline: stored originals · prefilled
           </Text>
-          {configs.map((cfg, i) => (
+          {configs.map((cfg: Variant, i: number) => (
             <Paper key={i} withBorder p="sm" data-testid={`config-${i}`}>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" fw={600}>
@@ -453,15 +371,15 @@ export function EvaluationsPage() {
               />
             </Paper>
           ))}
-          <Button
-            variant="light"
-            size="compact-xs"
-            onClick={() => dispatch({ type: "addConfig" })}
-          >
+          <Button variant="light" size="compact-xs" onClick={() => dispatch({ type: "addConfig" })}>
             + Add config
           </Button>
           <Group justify="flex-end">
-            <Button variant="default" size="xs" onClick={() => dispatch({ type: "goToStep", step: 0 })}>
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() => dispatch({ type: "goToStep", step: 0 })}
+            >
               Back
             </Button>
             <Button size="xs" loading={queueing} onClick={() => void queueEvaluation()}>

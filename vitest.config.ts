@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // Two projects (vitest 4 removed environmentMatchGlobs):
-// - contract: node env, the P1-T00 OpenAPI suite in tests/
+// - contract: node env, the OpenAPI suite in tests/
 // - ui: jsdom + MSW, component/client tests colocated in src/
 export default defineConfig({
   test: {

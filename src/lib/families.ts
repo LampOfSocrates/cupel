@@ -80,16 +80,15 @@ export function mockTargetId(): string {
 // `chat`. routeFamily() takes the first segment, so they need no entries.
 const ROUTE_FAMILY: Record<string, Family> = {
   "/chat": "chat",
-  // /studio merges THREE contract families into one screen with tabs —
-  // "datasets" (cases, benchmarks), "judging" (rubrics) and "replay" (the
-  // results grid). This map is one-family-per-route (also what the mock badge
-  // names, shell/MockBadge.tsx), so it picks "datasets" as the representative
-  // family; actual show/hide for the route and its nav entry goes through
-  // isStudioHidden() below, which checks all three, and the individual tabs
-  // gate on their own family (pages/StudioPage.tsx).
+  // /studio merges FOUR contract families into one screen — "datasets" (cases,
+  // benchmarks), "judging" (rubrics), "replay" (evaluations) and "admin"
+  // (inspector). This map is one-family-per-route, so it names "datasets" as
+  // the representative; the per-TAB answer is STUDIO_TABS below, which
+  // routeFamily() consults first. Show/hide for the route and its nav entry
+  // goes through isStudioHidden(), which checks the three merged families.
   "/studio": "datasets",
-  // /evaluations/:id (the results-grid detail route) survives the merge on
-  // its own — this entry is still what routeFamily() resolves it to.
+  // /evaluations/:id is a legacy redirect into /studio/evaluations/:id now
+  // (App.tsx) — the entry is what gates that redirect route.
   "/evaluations": "replay",
   "/inspector": "admin",
   "/queue": "tasks",
@@ -99,9 +98,64 @@ const ROUTE_FAMILY: Record<string, Family> = {
   "/settings": "settings",
 };
 
+// ---------------------------------------------------------------- studio tabs
+// The tabs are ROUTES (/studio/cases, /studio/evaluations/{id}, …), so this is
+// the single list App.tsx builds the route block from, StudioFrame draws the
+// tab strip from, and defaultStudioPath() picks a landing tab from. Order is
+// tab order.
+export interface StudioTab {
+  /** Path segment under /studio. */
+  segment: string;
+  label: string;
+  family: Family;
+  /** Also needs this role on /me — the Inspector's own gate. */
+  role?: "inspect";
+}
+
+export const STUDIO_TABS: StudioTab[] = [
+  { segment: "cases", label: "Cases", family: "datasets" },
+  { segment: "benchmarks", label: "Benchmarks", family: "datasets" },
+  { segment: "rubrics", label: "Rubrics", family: "judging" },
+  { segment: "evaluations", label: "Evaluations", family: "replay" },
+  { segment: "inspector", label: "Inspector", family: "admin", role: "inspect" },
+];
+
+export interface StudioGate {
+  /** /me.roles includes "inspect" — the role half of the Inspector's gate. */
+  inspectorAllowed: boolean;
+}
+
+/** The tabs a given viewer actually gets, in tab order. */
+export function visibleStudioTabs({ inspectorAllowed }: StudioGate): StudioTab[] {
+  return STUDIO_TABS.filter(
+    (tab) => !isHidden(tab.family) && (tab.role !== "inspect" || inspectorAllowed),
+  );
+}
+
+/**
+ * Where a bare /studio goes. The first tab this viewer can see — an adopter who
+ * hid `datasets` lands on Rubrics rather than on a route that does not exist.
+ * Falls back to the app's front door only when no tab survives at all, which
+ * also means isStudioHidden() is true and the route is absent, so this can
+ * never bounce back into /studio.
+ */
+export function defaultStudioPath(gate: StudioGate): string {
+  const first = visibleStudioTabs(gate)[0];
+  return first ? `/studio/${first.segment}` : landingRoute();
+}
+
+const STUDIO_TAB_FAMILY: Record<string, Family> = Object.fromEntries(
+  STUDIO_TABS.map((tab) => [tab.segment, tab.family]),
+);
+
 /** The family a UI path belongs to, or null when it belongs to none. */
 export function routeFamily(path: string): Family | null {
-  const [, first = ""] = path.split("/");
+  const [, first = "", second = ""] = path.split("/");
+  // /studio is five tabs over four families, so the badge must name the family
+  // of the TAB on screen — resolving the whole route to "datasets" would have
+  // labelled the evaluation grid `datasets` where the old standalone
+  // /evaluations/{id} correctly said `replay`.
+  if (first === "studio") return STUDIO_TAB_FAMILY[second] ?? ROUTE_FAMILY["/studio"];
   return ROUTE_FAMILY[`/${first}`] ?? null;
 }
 
@@ -111,7 +165,10 @@ export function isRouteHidden(path: string): boolean {
   return family !== null && isHidden(family);
 }
 
-/** The families /studio's tabs are drawn from, in tab order. */
+// The families the Studio MERGE is made of. Deliberately not every family a
+// tab belongs to: "admin" is the Inspector's, and the Inspector was a
+// role-gated route of its own before the merge — it is not on its own reason
+// to keep the Studio door open.
 const STUDIO_FAMILIES: Family[] = ["datasets", "judging", "replay"];
 
 /**

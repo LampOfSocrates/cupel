@@ -4,8 +4,8 @@
 //
 // Two things it must say plainly, because burying either would be dishonest:
 //   1. this folder is a COPY they own and it will NOT receive upstream fixes
-//      (item 8's decision — that is the cost they are consenting to);
-//   2. running the bundled mock needs Python 3.11+ (item 10b).
+//      (that is the cost they are consenting to);
+//   2. running the bundled mock needs Python 3.11+.
 //
 // It is a separate module from scripts/create-app.mjs so the prose is
 // testable and reviewable on its own.

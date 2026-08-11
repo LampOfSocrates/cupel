@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // The browser-based family mapper for `npm run create` — replaces the old
-// terminal questionnaire (item 11) with an HTML page so mapping ~15 families
+// terminal questionnaire with an HTML page so mapping ~15 families
 // to mine/mock/hide, plus the path rules a real backend needs
-// (scripts/remap-rules.mjs, item 40), is a form instead of a sequence of
+// (scripts/remap-rules.mjs), is a form instead of a sequence of
 // blocking prompts. This file is transport only: every decision (suggested
 // answers, validation, the write itself) stays in create-app-core.mjs's
 // plain functions, imported here and never forked. Importing from THAT

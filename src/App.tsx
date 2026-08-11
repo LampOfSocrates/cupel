@@ -7,7 +7,7 @@ import { agenticConfig } from "../agentic.config";
 import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api/target";
 import { onAuthRequired, useAuthToken } from "./api/auth";
 import { loginPath, RETURN_TO_PARAM, sanitizeReturnTo } from "./lib/returnTo";
-import { isRouteHidden, isStudioHidden, landingRoute } from "./lib/families";
+import { defaultStudioPath, isHidden, isRouteHidden, isStudioHidden, landingRoute } from "./lib/families";
 import type { Model } from "./api/types";
 import { useAsync } from "./hooks/useAsync";
 import { AppContext } from "./AppContext";
@@ -21,7 +21,12 @@ import { EditorPage } from "./pages/EditorPage";
 import { AgentConversationsPage } from "./pages/AgentConversationsPage";
 import { ForkComparePage } from "./pages/ForkComparePage";
 import { TracePage } from "./pages/TracePage";
-import { StudioPage } from "./pages/StudioPage";
+import { StudioFrame } from "./pages/studio/StudioFrame";
+import { CasesTab } from "./pages/studio/CasesTab";
+import { BenchmarksTab } from "./pages/studio/BenchmarksTab";
+import { RubricsTab } from "./pages/studio/RubricsTab";
+import { EvaluationsPage } from "./pages/EvaluationsPage";
+import { InspectorPage } from "./pages/InspectorPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 
@@ -65,32 +70,61 @@ function LoginBounce() {
   return <Navigate to={sanitizeReturnTo(returnTo)} replace />;
 }
 
-// /runs and /runs/{id} were the pre-rename paths and are in the wild as shared
-// deep links, so they redirect instead of 404ing. Query + hash ride along
-// (a shared link may carry them); `replace` keeps Back out of a redirect loop.
-// /runs/{id} still lands on /evaluations/{id} — that detail route survived
-// the Studio merge unchanged. Bare /runs (no id) meant "the evaluations
-// list", which is now the Results tab, so it redirects into /studio instead.
+// Every Studio tab is a path now (/studio/cases, /studio/evaluations/{id}, …),
+// so three generations of link are in the wild and all of them still resolve.
+// Query + hash ride along (a shared link may carry them); `replace` keeps Back
+// out of a redirect loop.
+//
+// /runs and /runs/{id} are the oldest — the pre-rename paths. Bare /runs meant
+// "the evaluations list", which is Studio's Evaluations tab.
 function LegacyRunsRedirect() {
   const { evaluationId } = useParams();
   const { search, hash } = useLocation();
-  if (evaluationId) {
-    return <Navigate to={`/evaluations/${evaluationId}${search}${hash}`} replace />;
-  }
-  const params = new URLSearchParams(search);
-  params.set("tab", "results");
-  return <Navigate to={`/studio?${params.toString()}${hash}`} replace />;
+  const suffix = evaluationId ? `/${evaluationId}` : "";
+  return <Navigate to={`/studio/evaluations${suffix}${search}${hash}`} replace />;
+}
+
+// /evaluations/{id} was the standalone results grid. It is Studio's third
+// evaluation step now — the whole point of the move being that reading a result
+// no longer costs you the tab strip.
+function LegacyEvaluationRedirect() {
+  const { evaluationId } = useParams();
+  const { search, hash } = useLocation();
+  return <Navigate to={`/studio/evaluations/${evaluationId}${search}${hash}`} replace />;
 }
 
 // /inspector was its own route before the Studio merge; its filters live in
 // the URL by design (InspectorPage.tsx, "an inspection is a shareable
-// link"), so old links redirect to the Inspector tab with those filters
-// intact rather than 404ing.
+// link"), so old links keep those filters rather than 404ing.
 function LegacyInspectorRedirect() {
   const { search, hash } = useLocation();
+  return <Navigate to={`/studio/inspector${search}${hash}`} replace />;
+}
+
+// The tab was a `?tab=` query before it was a path, and that form is in the
+// wild too (shared links, the editor's Test-as-evaluation handoff, /runs
+// bookmarks that already redirected once). `results` is the rename: the tab is
+// Evaluations, and only its THIRD STEP is a set of results.
+const STUDIO_TAB_ALIASES: Record<string, string> = { results: "evaluations", sets: "benchmarks" };
+
+// A bare /studio: honour a legacy ?tab= if there is one, else open the first
+// tab this viewer can see. An unknown or hidden tab name falls through to the
+// same default via the /studio catch-all below.
+function StudioIndexRedirect({ home }: { home: string }) {
+  const { search, hash } = useLocation();
   const params = new URLSearchParams(search);
-  params.set("tab", "inspector");
-  return <Navigate to={`/studio?${params.toString()}${hash}`} replace />;
+  const tab = params.get("tab");
+  if (tab) {
+    params.delete("tab");
+    const rest = params.toString();
+    return (
+      <Navigate
+        to={`/studio/${STUDIO_TAB_ALIASES[tab] ?? tab}${rest ? `?${rest}` : ""}${hash}`}
+        replace
+      />
+    );
+  }
+  return <Navigate to={`${home}${search}${hash}`} replace />;
 }
 
 export function App() {
@@ -244,6 +278,12 @@ export function App() {
     if (trees.some((t) => t.id === id && t.enabled)) setStoredTree(id);
   };
 
+  // The Inspector is the one screen gated on a ROLE as well as a family, and
+  // Studio's landing tab depends on whether it survives both — so the pair is
+  // resolved once, here, and shared by every place below that needs it.
+  const inspectorAllowed = (me.roles?.includes("inspect") ?? false) && !isHidden("admin");
+  const studioHome = defaultStudioPath({ inspectorAllowed });
+
   return (
     <AppContext.Provider
       value={{
@@ -276,13 +316,11 @@ export function App() {
               <Route path="/chat/:conversationId" element={<ChatPage />} />
             </>
           )}
-          {/* The list + "new run" stepper (formerly the bare /evaluations
-              route) now lives in Studio's Results tab. The detail route
-              survives on its own: it's linked from six other places (chat
-              compare, the queue, fork modal, share links, Studio's own Sets
-              tab) that all keep working unchanged. */}
+          {/* Pre-split path for the results grid — now Studio's third
+              evaluation step. Still linked from the wild (share links, old
+              bookmarks), so it redirects rather than 404s. */}
           {visible("/evaluations") && (
-            <Route path="/evaluations/:evaluationId" element={<EvaluationPage />} />
+            <Route path="/evaluations/:evaluationId" element={<LegacyEvaluationRedirect />} />
           )}
           {/* Pre-rename paths, still live in shared links (see above). */}
           <Route path="/runs" element={<LegacyRunsRedirect />} />
@@ -298,21 +336,45 @@ export function App() {
               context like all pages. */}
           {visible("/trace") && <Route path="/trace/:turnId" element={<TracePage />} />}
           {/* Studio (sketch 10, formerly /eval "Eval workbench" +
-              /evaluations "Evaluations" + /inspector — merged, UX polish
-              2026-08-10): case editor, set manager, rubric editor, the
-              run/results flow, and (role-gated) the Inspector, as tabs on
-              one page rather than three-plus nav entries for one workflow.
-              Global, not tree-scoped (feature-spec.md:111), so the route
-              carries no tree. Visible if EITHER family it merges still
-              answers something other than hide (isStudioHidden); which
-              *tabs* render is StudioPage's own per-family/role call. */}
-          {!isStudioHidden() && <Route path="/studio" element={<StudioPage />} />}
+              /evaluations "Evaluations" + /inspector): case editor, benchmark
+              manager, rubric editor, the evaluation flow, and (role-gated) the
+              Inspector. Global, not tree-scoped (feature-spec.md:111), so the
+              route carries no tree. Visible if ANY family it merges still
+              answers something other than hide (isStudioHidden).
+
+              EACH TAB IS A ROUTE, under a layout route that owns the tab strip
+              and the shared caches (pages/studio/StudioFrame.tsx). That is what
+              lets the evaluation grid — /studio/evaluations/{id}, the flow's
+              third step — render WITH the tabs still on screen instead of
+              replacing the whole page, and what makes the URL name one thing
+              each. A hidden family loses its child route the same way it loses
+              its top-level one; anything unmatched inside /studio falls to the
+              first tab this viewer can see rather than a bare frame. */}
+          {!isStudioHidden() && (
+            <Route path="/studio" element={<StudioFrame />}>
+              <Route index element={<StudioIndexRedirect home={studioHome} />} />
+              {!isHidden("datasets") && (
+                <>
+                  <Route path="cases" element={<CasesTab />} />
+                  <Route path="benchmarks" element={<BenchmarksTab />} />
+                </>
+              )}
+              {!isHidden("judging") && <Route path="rubrics" element={<RubricsTab />} />}
+              {!isHidden("replay") && (
+                <>
+                  <Route path="evaluations" element={<EvaluationsPage mode="list" />} />
+                  <Route path="evaluations/new" element={<EvaluationsPage mode="stepper" />} />
+                  <Route path="evaluations/:evaluationId" element={<EvaluationPage />} />
+                </>
+              )}
+              {inspectorAllowed && <Route path="inspector" element={<InspectorPage />} />}
+              <Route path="*" element={<Navigate to={studioHome} replace />} />
+            </Route>
+          )}
           {/* Old standalone paths — see the redirect components above for
               why each still resolves instead of 404ing. */}
           <Route path="/eval" element={<Navigate to="/studio" replace />} />
-          {me.roles?.includes("inspect") && visible("/inspector") && (
-            <Route path="/inspector" element={<LegacyInspectorRedirect />} />
-          )}
+          {inspectorAllowed && <Route path="/inspector" element={<LegacyInspectorRedirect />} />}
           {visible("/queue") && <Route path="/queue" element={<QueuePage />} />}
           {visible("/agents") && (
             <>
