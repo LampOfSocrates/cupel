@@ -32,7 +32,7 @@ Two prior decisions are superseded — recorded here so the change is deliberate
 | Earlier decision | Now |
 |---|---|
 | "create-agentic-app scaffolder parked indefinitely" (2026-08-05) | **Un-parked** as the Phase-3 deliverable, in the reduced form below (no feature-bundle stripping unless §7-Q3 says otherwise) |
-| P4-HYBRID "hybrid backend fill" = pro tier | **Overlaps `--gap-as-mock`.** Recommendation: the *static* generation-time gap fill becomes free Phase 3 (it is what makes adoption possible at all); the *runtime* per-request routing with "served by mock" badges can stay Phase 4, or be dropped as redundant. **Needs a decision (§7-Q1).** |
+| P4-HYBRID "hybrid backend fill" | **Overlaps `--gap-as-mock`.** Recommendation: the *static* generation-time gap fill becomes free Phase 3 (it is what makes adoption possible at all); the *runtime* per-request routing with "served by mock" badges can stay Phase 4, or be dropped as redundant. **Needs a decision (§7-Q1).** |
 
 Unchanged: no hosted multi-tenant platform.
 
@@ -174,8 +174,8 @@ must be shared, not copy-pasted.
 ## 7. Open decisions (need the user before building)
 
 - **Q1. Does `--gap-as-mock` make P4-HYBRID redundant?** Recommendation: yes — implement
-  static family-level gap filling here in Phase 3, and delete P4-HYBRID rather than keep a
-  pro-tier variant that differs only by badges.
+  static family-level gap filling here in Phase 3, and delete P4-HYBRID rather than keep an
+  alternative variant that differs only by badges.
 - **Q2. What language is `create-backend`?** Recommendation: FastAPI/Python first, since
   the reference mock is already FastAPI and can seed the templates. A TypeScript/Express
   target is a later addition, not a launch requirement.

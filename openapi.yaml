@@ -200,11 +200,11 @@ info:
     rubrics through the public API — invariant "generator writes only through
     the public API" (cupel-phases.md:160, feature-spec.md:181, :184).
 
-    Pro-tier exclusions (user decision 2026-08-05, TASKS.md:56-61): repo/PR
+    Excluded features (user decision 2026-08-05, TASKS.md:56-61): repo/PR
     integration (POST /agenttrees/{tree}/agents/{id}/pr, GET/PUT
     /settings/repo, POST /webhooks/git, the mock git server) and public
-    tokenized share links are PRO tier and deliberately ABSENT from this
-    contract — the contract test asserts their absence. Free-tier sharing
+    tokenized share links are deliberately ABSENT from this
+    contract — the contract test asserts their absence. Copy sharing
     (P2-SHARE, TASKS.md:47) is in-app deep links (/chat/{id}?turn=) over the
     existing conversation GETs and needs no new endpoints.
 

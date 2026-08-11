@@ -14,6 +14,7 @@ import { ApiErrorNote, ForkModal } from "../components";
 import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { useAsync } from "../hooks/useAsync";
+import { useChatFeedback } from "../hooks/useChatFeedback";
 import { useApp } from "../AppContext";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
 import { ChatSettingsMenu } from "./chat/ChatSettingsMenu";
@@ -94,10 +95,7 @@ export function ChatPage() {
   // Lazy init: one store per ChatPage instance, stable for its lifetime.
   const [draft] = useState(createDraftStore);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [thumbs, setThumbs] = useState<Record<string, ThumbState>>({});
-  // Turn id whose comment box is open (null = none). Only ever one — a thumb
-  // elsewhere moves the box rather than stacking prompts.
-  const [commentFor, setCommentFor] = useState<string | null>(null);
+  const { thumbs, setThumbs, commentFor, setCommentFor, rate, submitComment } = useChatFeedback();
   // Session-scoped chat settings (feature-spec.md:7, :274). They live HERE,
   // not in AppContext: only this page reads them, and in the context every
   // keystroke in the settings popover re-rendered the entire app
@@ -371,47 +369,6 @@ export function ChatPage() {
   // done(status=cancelled) (openapi.yaml:835-839).
   const stop = () => {
     if (stream?.taskId) void api.cancelTask(stream.taskId);
-  };
-
-  // 👍/👎 → POST /feedback {message_id, rating} (openapi.yaml:1475-1480;
-  // feature-spec.md:272). Optimistic; judgments are append-only (no un-vote
-  // endpoint), so re-clicking the same thumb simply appends again.
-  // The rating is submitted on the click ITSELF — a user who only wants to
-  // rate still does exactly one click — and the comment box is merely revealed
-  // alongside it. The new judgment carries no comment, so the rendered note
-  // clears until one is submitted (newest judgment wins).
-  const rate = (turnId: string, rating: Rating) => {
-    const previous = thumbs[turnId];
-    setThumbs((m) => ({ ...m, [turnId]: { rating, comment: null } }));
-    setCommentFor(turnId);
-    api.postFeedback({ message_id: turnId, rating }).catch(() => {
-      // Revert the optimistic thumb — the judgment was never appended.
-      setThumbs((m) => {
-        const next = { ...m };
-        if (previous === undefined) delete next[turnId];
-        else next[turnId] = previous;
-        return next;
-      });
-      setCommentFor((open) => (open === turnId ? null : open));
-    });
-  };
-
-  // The comment is a SECOND feedback post carrying the same rating plus the
-  // note — an append, never an update (there is no judgment PATCH,
-  // openapi.yaml /eval/judgments is GET-only). Newest-wins in deriveThumbs
-  // then makes this judgment the one that renders.
-  const submitComment = (turnId: string, text: string) => {
-    const comment = text.trim();
-    const previous = thumbs[turnId];
-    if (!comment || !previous) return;
-    setThumbs((m) => ({ ...m, [turnId]: { rating: previous.rating, comment } }));
-    setCommentFor(null);
-    api
-      .postFeedback({ message_id: turnId, rating: previous.rating, comment })
-      .catch(() => {
-        // Nothing was appended — fall back to the thumb-only judgment.
-        setThumbs((m) => ({ ...m, [turnId]: previous }));
-      });
   };
 
   if (loadError) {

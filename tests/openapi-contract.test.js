@@ -894,11 +894,11 @@ describe("contract v0.4.0", () => {
     expect(searches).toEqual(["GET /agenttrees/{tree}/conversations"]);
   });
 
-  it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
+  it("NO deferred endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
-      expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);
-      expect(p.startsWith("/webhooks"), `${p} — git webhooks are pro tier`).toBe(false);
-      expect(/\/pr$/.test(p), `${p} — PR endpoints are pro tier`).toBe(false);
+      expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is deferred`).toBe(false);
+      expect(p.startsWith("/webhooks"), `${p} — git webhooks are deferred`).toBe(false);
+      expect(/\/pr$/.test(p), `${p} — PR endpoints are deferred`).toBe(false);
       expect(p.startsWith("/assist"), `${p} — /assist is Phase 3`).toBe(false);
     }
   });

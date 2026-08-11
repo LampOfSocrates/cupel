@@ -1,8 +1,9 @@
 # Cupel
 Read these before any work, in order:
-1. docs/react-migration.md — evidence rules: quote spec lines, cite file:line, check lockfiles
-2. docs/cupel-phases.md — we build phase by phase; NEVER build ahead of the current phase
-3. docs/feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
+1. docs/cupel-phases.md — we build phase by phase; NEVER build ahead of the current phase
+2. docs/feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
+
+Evidence rules: quote spec lines, cite file:line, check lockfiles.
 
 Current phase: 2. Current task: Phase 2 COMPLETE — FULL STOP. Next: UX polish phase, planned with the user (see docs/TASKS.md).
 Invariants (never break): versions/judgments/snapshots append-only ·
