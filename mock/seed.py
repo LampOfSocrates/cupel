@@ -36,6 +36,32 @@ def instruction_text(agent_name: str, version: int) -> str:
     )
 
 
+def seeded_trees() -> list[dict]:
+    """The trees a FRESH bootstrap plants.
+
+    One function owns the decision, because it is conditional: the Financial
+    Advisor demo joins only when this process holds a provider key
+    (config.live_env_key) — it exists to show a genuine multi-step tool-calling
+    loop and has nothing honest to demonstrate without one. Restating that
+    condition anywhere else makes the restatement environment-dependent, which
+    is exactly how two tests came to pass in CI and fail on any machine with
+    OPENROUTER_API_KEY set.
+
+    A fresh bootstrap: an already-seeded database keeps whatever it was seeded
+    with, so read the trees table rather than this list when the answer must
+    describe an existing DB.
+    """
+    trees = list(TREES)
+    if config.live_env_key():
+        trees.append(financial_advisor.TREE)
+    return trees
+
+
+def seeded_tree_ids() -> set[str]:
+    """Ids of seeded_trees() — what /agenttrees answers on a fresh database."""
+    return {tree["id"] for tree in seeded_trees()}
+
+
 def bootstrap(db: Db) -> str:
     # Seeded auth users, on fresh AND pre-existing DBs — ensure_users
     # is INSERT OR IGNORE so it runs before the seed-label short-circuit
@@ -46,10 +72,7 @@ def bootstrap(db: Db) -> str:
     if row:
         return row["value"]
     now = now_iso()
-    trees = list(TREES)
-    if config.live_env_key():
-        trees.append(financial_advisor.TREE)
-    for tree in trees:
+    for tree in seeded_trees():
         db.run("INSERT INTO trees (id, name, enabled, created_at) VALUES (?, ?, 1, ?)",
                (tree["id"], tree["name"], now))
         for eid, name, desc in tree["endpoints"]:

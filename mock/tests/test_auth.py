@@ -18,6 +18,7 @@ import pytest
 
 from mock import auth
 from mock.main import create_app
+from mock.seed import seeded_tree_ids
 from mock.tests import with_turns
 from mock.tests.test_mock import StreamingASGITransport, parse_sse
 
@@ -65,8 +66,17 @@ def test_off_mode_me_is_dev_user_unchanged():
             assert r.json() == {
                 "user": {"id": "dev", "name": "Dev User", "email": "dev@cupel.local"},
                 "roles": ["admin", "inspect"],
-                "permissions": {"agent1": ["view", "tune", "evaluate"],
-                                "agent2": ["view", "tune", "evaluate"]},
+                # "all trees, all rights" is the RULE, so the expectation is
+                # derived from whatever the seed planted rather than restated
+                # as a literal. It was a literal, and it broke the moment a
+                # demo tree appeared that seeds only when the process holds a
+                # provider key (seed.py: financial_advisor) — the assertion
+                # then depended on the developer's environment, passing in CI
+                # and failing on any machine with OPENROUTER_API_KEY set. More
+                # sample trees are the direction of travel; the rule is what
+                # this test is for.
+                "permissions": {tree: ["view", "tune", "evaluate"]
+                                for tree in seeded_tree_ids()},
             }
     run(case())
 

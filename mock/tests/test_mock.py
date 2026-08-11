@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from mock.main import create_app
+from mock.seed import seeded_tree_ids
 from mock.tests import with_turns
 
 
@@ -205,7 +206,12 @@ def test_me_healthz_models_trees():
             assert hz["status"] == "ok" and hz["seed"]
             assert any(m["id"] == "claude-sonnet-5" for m in (await c.get("/models")).json())
             trees = (await c.get("/agenttrees")).json()
-            assert {t["id"] for t in trees} == {"agent1", "agent2"}
+            # Derived, not a literal: a demo tree that seeds only when the
+            # process holds a provider key (seed.py: financial_advisor) made a
+            # hardcoded set environment-dependent. The always-on pair is still
+            # asserted positively below.
+            assert {t["id"] for t in trees} == seeded_tree_ids()
+            assert {"agent1", "agent2"} <= {t["id"] for t in trees}
             assert all(t["enabled"] for t in trees)
             eps = (await c.get("/agenttrees/agent1/endpoints")).json()
             assert len(eps) >= 2
