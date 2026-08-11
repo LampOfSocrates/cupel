@@ -21,17 +21,12 @@ info:
     tree enable/disable, Inspector, generator control), the eval
     workbench (cases/benchmarks CRUD — one benchmark holds live turn references and
     frozen cases — import, rubric saves), context-policy
-    widening, per-tree memory, and user settings. Source of truth:
-    feature-spec.md "API" section (feature-spec.md:110-131) filtered by
-    what Phase 2 covers; not-yet-built endpoints are
+    widening, per-tree memory, and user settings. Not-yet-built endpoints are
     excluded (see below).
 
-    Vocabulary note: what feature-spec.md calls a "run" this contract calls an
-    Evaluation — the path is /agenttrees/{tree}/evaluations, the id field is
-    evaluation_id, and a grid column's config is a Variant. feature-spec.md is
-    not being rewritten, so text QUOTED from it below still reads "run" and
-    "run_id"; the quotes are verbatim on purpose and the contract's own
-    vocabulary is the renamed one.
+    Vocabulary note: what earlier drafts called a "run" is an Evaluation here —
+    the path is /agenttrees/{tree}/evaluations, the id field is evaluation_id,
+    and a grid column's config is a Variant.
 
     Collections (ONE shape, everywhere): every operation that returns a
     collection of user data answers a PAGE — an object
@@ -63,23 +58,23 @@ info:
     at its own response. tests/openapi-contract.test.js enforces both halves:
     the page shape, and that no fifth bare-array collection appears.
 
-    Scoping rule (feature-spec.md:111): "Tree-scoped: conversation/run/chat
-    resources live under /agenttrees/{tree_id}/… — permission checks fall out of
-    the path. Global: tasks, span payloads, eval rubrics/judgments, settings."
+    Scoping rule: tree-scoped resources — conversation, evaluation and chat —
+    live under /agenttrees/{tree_id}/…, so permission checks fall out of the
+    path. Global: tasks, span payloads, eval rubrics/judgments, settings.
 
-    Auth model (feature-spec.md:15-21): one bearer JWT scheme
+    Auth model: one bearer JWT scheme
     (components.securitySchemes.bearerAuth) applies to EVERY operation via
     the top-level security block, except the two explicitly open ones —
     GET /healthz and POST /auth/token (security: []) — because a client must
     be able to probe liveness and log in before it holds a token. Everything
-    else, including GET /models, is gated. AUTH_MODE semantics
-    (feature-spec.md:16-18): this contract declares the AUTH_MODE=on
+    else, including GET /models, is gated. AUTH_MODE semantics: this
+    contract declares the AUTH_MODE=on
     behaviour; with AUTH_MODE=off the backend simply does not ENFORCE the
     scheme — requests without a token succeed as the configured dev user.
     Clients never branch on the mode (invariant: "no
     component branches on AUTH_MODE"): they always attach a token when they
     have one, and route any 401 to the login screen. GET /me answers in both
-    modes (feature-spec.md:116). The 401 response is spelled out on /me,
+    modes. The 401 response is spelled out on /me,
     /auth/logout and every /admin/* operation; for all other gated
     operations it is implied by the top-level security block rather than
     repeated per path.
@@ -97,8 +92,8 @@ info:
     * **404 hides existence.** `view` on `{tree}` is the precondition of the
       PATH, not of the operation: a caller without it gets `404 not_found`
       from every `/agenttrees/{tree}/…` operation, indistinguishable from a
-      tree that does not exist ("unpermitted trees never render",
-      feature-spec.md:32). So an operation declaring `x-requires: view` can
+      tree that does not exist — unpermitted trees never render. So an
+      operation declaring `x-requires: view` can
       never answer 403 — there is nothing left to explain once the tree is
       visible — and none of them declares one.
     * **403 explains capability.** WITHIN a tree the caller can already see,
@@ -121,8 +116,8 @@ info:
 
     AUTH_MODE=off does not disable any of this. The permissions come from the
     matrix in both modes; an off-mode backend simply resolves every request to
-    the dev user, who holds every permission on every tree
-    (feature-spec.md:17), so the same code path runs and answers 200. There is
+    the dev user, who holds every permission on every tree, so the same code
+    path runs and answers 200. There is
     no mode branch anywhere in the check.
 
     Errors (ONE body, everywhere): every non-2xx response of every operation
@@ -186,7 +181,7 @@ info:
     /agenttrees/{tree}/agents/{id}/instructions/versions, POST
     /eval/cases/{id}/versions, POST /eval/benchmarks/{id}/versions and POST
     /eval/rubrics/{id}/versions — each appending a NEW version and answering
-    201 with it (feature-spec.md:126-128, whose rule is "save = new version").
+    201 with it. The rule is "save = new version".
     None of them is a PUT: a save that creates a new
     resource on every call is neither idempotent nor a replacement, and
     writing it as PUT would oblige every implementor of this contract to
@@ -208,8 +203,8 @@ info:
 
     Structural seed writes (POST /agenttrees, POST /agenttrees/{tree}/agents,
     POST /eval/rubrics) exist so the generator can seed trees, agents and
-    rubrics through the public API — invariant "generator writes only through
-    the public API" (feature-spec.md:181, :184).
+    rubrics through the public API — invariant: the generator writes only
+    through the public API, never directly to the database.
 
     Unbuilt, deliberately ABSENT from this contract — the contract test
     asserts their absence so nothing half-specified leaks in: repo/PR
@@ -221,9 +216,8 @@ info:
     no new endpoints.
 
     Deferred to later phases (deliberately absent): /assist — the AI
-    authoring fast path is Phase 3 (feature-spec.md:115), the
-    "New-agent wizard" — and additional YAML framework
-    schemas (Phase 4).
+    authoring fast path and the new-agent wizard are Phase 3 — and additional
+    YAML framework schemas (Phase 4).
 servers:
   - url: http://localhost:4010
     description: FastAPI mock ("npm run mock — Python (FastAPI) mock on :4010, seeded")
@@ -302,13 +296,13 @@ paths:
       summary: Exchange credentials for a bearer JWT + user
       security: []
       description: |
-        feature-spec.md:18: "On: login screen (email + password or SSO
-        redirect) → POST /auth/token; token attached by the single API
-        client; 401 anywhere → back to login." Open endpoint (security: []) —
+        With AUTH_MODE=on the login screen (email + password, or SSO redirect)
+        POSTs here; the single API client attaches the token, and a 401
+        anywhere returns the user to login. Open endpoint (security: []) —
         a client cannot hold a token before logging in. The mock serves
         seeded credentials admin@demo / restricted@demo issuing real-shaped
-        JWTs so the auth-on path is testable without a real IdP
-        (feature-spec.md:21). With AUTH_MODE=off the
+        JWTs so the auth-on path is testable without a real IdP.
+        With AUTH_MODE=off the
         endpoint still answers (a dev-user token) so the login flow stays
         testable, but the app never needs it — /me answers without a token
         and no component branches on the mode.
@@ -344,9 +338,8 @@ paths:
       x-requires: none
       summary: Invalidate the current token
       description: |
-        feature-spec.md:116 "POST /auth/logout"; the session is shown in
-        Settings "with sign-out" (feature-spec.md:18). Invalidates the
-        presented bearer token server-side; the client then drops it and
+        The session is shown in Settings with a sign-out control. Invalidates
+        the presented bearer token server-side; the client then drops it and
         returns to login. With AUTH_MODE=off this is a no-op 204 (nothing to
         invalidate) — clients call it unconditionally, never branching on
         the mode.
@@ -362,13 +355,11 @@ paths:
       x-requires: none
       summary: Current user and per-tree permissions
       description: |
-        feature-spec.md:116: "GET /me (user + per-tree permissions; answers in
-        both auth modes)". Always called on boot — invariant
-        ("/me is always called"). AUTH_MODE=off: answers with the configured
-        dev user, no token needed (feature-spec.md:17 — "the backend/mock
-        just answers with the dev user, so permission code paths run
-        identically"). AUTH_MODE=on: requires the bearer token; 401 routes
-        to login (feature-spec.md:18).
+        The current user plus per-tree permissions; answers in both auth
+        modes. Always called on boot — invariant ("/me is always called").
+        AUTH_MODE=off: answers with the configured dev user, no token needed,
+        so permission code paths run identically. AUTH_MODE=on: requires the
+        bearer token; 401 routes to login.
       responses:
         "200":
           description: The current user (AUTH_MODE=off = the dev user).
@@ -385,12 +376,11 @@ paths:
       x-requires: admin
       summary: All users (Settings → Members)
       description: |
-        feature-spec.md:19: "Admin UI (visible when /me grants admin):
-        Settings → Members — user list, per-tree permission matrix (view/
-        tune/evaluate checkboxes), invite by email. API: GET/PUT
-        /admin/users, GET/PUT /admin/users/{id}/permissions." Requires the
-        admin role (403 otherwise). Paged: "invite by email" means the user
-        list grows without bound.
+        The admin UI is visible when /me grants admin: Settings → Members
+        shows the user list, the per-tree permission matrix (view/tune/
+        evaluate checkboxes) and invite-by-email. Requires the admin role
+        (403 otherwise). Paged: inviting by email means the user list grows
+        without bound.
       parameters:
         - name: page
           in: query
@@ -413,9 +403,8 @@ paths:
       x-requires: admin
       summary: Upsert users (invite by email)
       description: |
-        The PUT half of feature-spec.md:19 "GET/PUT /admin/users" — upsert
-        keyed by email: a new email creates an invited user
-        (feature-spec.md:19 "invite by email"), an existing email updates
+        Upsert keyed by email: a new email creates an invited user
+        (this is invite-by-email), an existing email updates
         name/roles. Users absent from the body are untouched, and there is
         no user delete — conversations and judgments keep their author
         references forever.
@@ -449,11 +438,9 @@ paths:
       x-requires: admin
       summary: One user's per-tree permission matrix
       description: |
-        feature-spec.md:19: "GET/PUT /admin/users/{id}/permissions" — the
-        per-tree view/tune/evaluate matrix behind the Settings → Members
+        The per-tree view/tune/evaluate matrix behind the Settings → Members
         checkboxes. Same shape as Me.permissions so the admin UI and /me
-        agree exactly (feature-spec.md:32 "Permissions per tree (view / tune
-        / evaluate)").
+        agree exactly — permissions are per tree (view / tune / evaluate).
       parameters: [{ $ref: "#/components/parameters/userId" }]
       responses:
         "200":
@@ -470,11 +457,10 @@ paths:
       x-requires: admin
       summary: Replace one user's per-tree permission matrix
       description: |
-        Full replacement of the matrix (feature-spec.md:19). Takes effect on
-        the user's next request — their GET /me reflects it, and unpermitted
-        trees stop rendering (feature-spec.md:32 "unpermitted trees never
-        render"). E2e checklist 12: "admin permission matrix edit takes
-        effect" (feature-spec.md:213).
+        Full replacement of the matrix. Takes effect on the user's next
+        request — their GET /me reflects it, and unpermitted trees stop
+        rendering. An admin permission-matrix edit taking effect is one of the
+        end-to-end journeys.
       parameters: [{ $ref: "#/components/parameters/userId" }]
       requestBody:
         required: true
@@ -499,13 +485,12 @@ paths:
       x-requires: admin
       summary: Enable/disable an agent tree (history stays read-only)
       description: |
-        feature-spec.md:20: "Admin → Agent trees: … enable/disable toggle per
-        tree (PATCH /admin/agenttrees/{id} {enabled}). Disabled tree: hidden
-        from GET /agenttrees for non-admins (admins see it greyed with a
-        'disabled' badge); new chat/replay/judge against it return 409
-        tree_disabled; queued tasks on it are cancelled; existing
-        conversations stay READABLE (read-only banner) so history and traces
-        aren't lost. Re-enabling restores everything" (feature-spec.md:21).
+        Admin → Agent trees carries an enable/disable toggle per tree. A
+        disabled tree is hidden from GET /agenttrees for non-admins (admins
+        see it greyed with a "disabled" badge); new chat/replay/judge against
+        it return 409 tree_disabled; queued tasks on it are cancelled; and
+        existing conversations stay READABLE behind a read-only banner, so
+        history and traces aren't lost. Re-enabling restores everything.
         Nothing is deleted by disabling — this toggles availability, never
         data.
       parameters: [{ $ref: "#/components/parameters/treeId" }]
@@ -532,17 +517,13 @@ paths:
       x-requires: inspect
       summary: Inspector — every conversation, cross-user
       description: |
-        feature-spec.md:113: "Inspector/Casebooks: GET /admin/conversations
-        (cross-user)". This endpoint is how you "Inspect every conversation in
-        the system as a super user — filter by user, tree, date, or score in
-        a dense keyboard-driven table … requires the inspect role,
-        audit-logged." Requires the inspect role (403 otherwise); EVERY
-        access is audit-logged server-side. Paginated like the tree-scoped
-        listing; rows add the owning user and a latest-score column for the
-        score filter. Feed the ⊞ collect action from here
-        (feature-spec.md:236 "Inspector | GET /admin/conversations,
-        POST /casebooks/{id}/items" — quoted as written; since Casebook and
-        EvalBenchmark merged, that POST is POST /eval/benchmarks/{benchmarkId}/items).
+        The Inspector: every conversation in the system, cross-user, for a
+        super user to filter by user, tree, date or score in a dense
+        keyboard-driven table. Requires the inspect role (403 otherwise);
+        EVERY access is audit-logged server-side. Paginated like the
+        tree-scoped listing; rows add the owning user and a latest-score
+        column for the score filter. The ⊞ collect action is fed from here,
+        into POST /eval/benchmarks/{benchmarkId}/items.
       parameters:
         - name: user_id
           in: query
@@ -559,7 +540,7 @@ paths:
           schema: { type: string, format: date }
         - name: score_min
           in: query
-          description: Latest-judgment score filter (triage worst-first, feature-spec.md:64).
+          description: Latest-judgment score filter (triage worst-first).
           schema: { type: number }
         - name: score_max
           in: query
@@ -587,16 +568,13 @@ paths:
       x-requires: admin
       summary: Control the data generator (seed / drip / stop)
       description: |
-        feature-spec.md:118: "Generator: POST /admin/generator ({mode:
-        seed|drip|stop, seed?, rates?})"; modes per feature-spec.md:182-184 —
-        seed = one-shot baseline dataset, "Deterministic from --seed N (e2e
-        depends on this)"; drip = continuous background loop with
-        configurable rates; stop = halt the drip. The generator writes ONLY
-        through this public API (invariant;
-        feature-spec.md:181 "never directly to the DB"), so everything it
-        produces flows through the same queues and SSE streams as real
-        usage. Surfaced in Settings → Backend for the mock and Settings →
-        Admin for staging; "Prod hides it" (feature-spec.md:185).
+        Modes: seed = one-shot baseline dataset, deterministic from --seed N
+        (the e2e suite depends on that); drip = continuous background loop
+        with configurable rates; stop = halt the drip. The generator writes
+        ONLY through this public API, never directly to the DB (invariant),
+        so everything it produces flows through the same queues and SSE
+        streams as real usage. Surfaced in Settings → Backend for the mock
+        and Settings → Admin for staging; prod hides it.
       requestBody:
         required: true
         content:
@@ -619,10 +597,8 @@ paths:
       x-requires: admin
       summary: Generator status — counts produced, current rates
       description: |
-        feature-spec.md:185: "GET /admin/generator/status (counts produced,
-        current rates)". Backs the drip toggle + rate sliders in Settings
-        (feature-spec.md:185) and the "visible liveness" loop
-        (feature-spec.md:186).
+        Counts produced and current rates. Backs the drip toggle and rate
+        sliders in Settings, and the visible-liveness loop.
       responses:
         "200":
           description: Current generator state.
@@ -641,12 +617,12 @@ paths:
       summary: Liveness / server info
       security: []
       description: |
-        feature-spec.md:118 "GET /healthz (backend switcher)"; feature-spec.md:155
-        "shows status, latency, server version, and (for mock) the loaded seed"
-        (latency is client-measured). Open endpoint (security: []): the
-        backend switcher probes candidate targets BEFORE any login
-        (feature-spec.md:155 "Health check: GET {base}/healthz on select"),
-        so liveness must be checkable without a token in either AUTH_MODE.
+        Backs the backend switcher, which shows status, latency, server
+        version and — for the mock — the loaded seed (latency is
+        client-measured). Open endpoint (security: []): the switcher probes
+        candidate targets with GET {base}/healthz on select, BEFORE any
+        login, so liveness must be checkable without a token in either
+        AUTH_MODE.
       responses:
         "200":
           description: Server is up.
@@ -661,7 +637,7 @@ paths:
       x-requires: none
       summary: Available models
       description: |
-        feature-spec.md:118: "GET /models (chat/run/judge model dropdowns)".
+        Backs the chat, evaluation and judge model dropdowns.
       responses:
         "200":
           description: >-
@@ -682,10 +658,10 @@ paths:
       x-requires: none
       summary: Permitted agent trees
       description: |
-        feature-spec.md:117: "GET /agenttrees (permitted + enabled; admins also
-        see disabled)". Disabled trees (PATCH /admin/agenttrees/{id}) are
-        omitted for non-admins; admins see them with enabled=false, rendered
-        "greyed with a 'disabled' badge" (feature-spec.md:20).
+        Permitted and enabled trees; admins also see disabled ones. Trees
+        disabled via PATCH /admin/agenttrees/{id} are omitted for non-admins;
+        admins see them with enabled=false, rendered greyed with a "disabled"
+        badge.
       responses:
         "200":
           description: >-
@@ -705,11 +681,10 @@ paths:
       x-requires: none
       summary: Create an agent tree (generator seed path)
       description: |
-        Generator seed mode "builds the baseline dataset — trees, agents +
-        versions" (feature-spec.md:184) and "writes through the public API,
-        never directly to the DB" (feature-spec.md:181; invariant).
-        Admin tree management UI is Phase 2
-        (feature-spec.md:20); this write exists for API completeness and seeding.
+        Generator seed mode builds the baseline dataset — trees, agents and
+        versions — writing through the public API, never directly to the DB
+        (invariant). Admin tree management UI is Phase 2; this write exists
+        for API completeness and seeding.
       requestBody:
         required: true
         content:
@@ -730,9 +705,8 @@ paths:
       x-requires: view
       summary: Deploy targets for replay
       description: |
-        feature-spec.md:117: "GET /agenttrees/{tree}/endpoints (deploy targets
-        for replay)". Multi-selected in a Variant for turn re-fire
-        (feature-spec.md:67).
+        Deploy targets for replay. Multi-selected in a Variant for turn
+        re-fire.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
@@ -755,10 +729,9 @@ paths:
       x-requires: view
       summary: Agent hierarchy for the tree view
       description: |
-        feature-spec.md:28: "Data: GET /agenttrees/{tree}/agents (returns
-        hierarchy + version + tools per agent)". Node shows "agent name, live
-        instruction version, tools attached (icons), enabled state"
-        (feature-spec.md:25).
+        Returns the hierarchy plus version and tools per agent. A node shows
+        the agent name, live instruction version, tools attached (icons) and
+        enabled state.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
@@ -781,13 +754,12 @@ paths:
       x-requires: tune
       summary: Create an agent (add sub-agent under a node)
       description: |
-        Tree-view node context menu: "add sub-agent (opens New-agent wizard
-        pre-placed)" (feature-spec.md:26); Phase 1 capability "click any node
-        to edit it or add a sub-agent under it". Also the
-        generator's seed path for "agents + versions" (feature-spec.md:184).
+        Tree-view node context menu: add sub-agent, which opens the New-agent
+        wizard pre-placed — click any node to edit it or add a sub-agent under
+        it. Also the generator's seed path for agents and versions.
         The created agent has no instruction versions yet; save v1 via
         PUT …/{agentId}/instructions. The AI-drafted wizard (POST /assist) is
-        Phase 3 (feature-spec.md:235).
+        Phase 3.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
         required: true
@@ -812,10 +784,9 @@ paths:
       x-requires: view
       summary: Instruction versions for an agent
       description: |
-        feature-spec.md:120: "GET /agenttrees/{tree}/agents/{id}/instructions
-        + POST …/instructions/versions (versioned; carries format…)". Versions
-        are append-only: "save = new version, never overwrite. Diff view +
-        rollback" (feature-spec.md:33). This half is the READ — the history.
+        Instructions are versioned and carry a format. Versions are
+        append-only: save = new version, never overwrite, with diff view and
+        rollback. This half is the READ — the history.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -834,17 +805,15 @@ paths:
       x-requires: tune
       summary: Append the next instruction version (append-only)
       description: |
-        Never overwrites (feature-spec.md:33, :120). A save that mints v16 and
+        Never overwrites. A save that mints v16 and
         answers 201 is a creation, not a replacement, so the write is POST
         against the version sub-collection and the parent GET stays the
         history. If snapshot_id is supplied, this save promotes that draft
-        snapshot: "On save, the snapshot is promoted to the next version (e.g.
-        v16) and all runs referencing that snapshot_id relabel to v16"
-        (feature-spec.md:86, API at :85 "snapshot promotion on PUT
-        /agents/{id}/instructions"). Rollback = post the old version's content
-        again (which creates a new version). format field per
-        feature-spec.md:34; YAML schema validation is Phase 2 and not part of
-        this contract.
+        snapshot: on save, the snapshot is promoted to the next version (say
+        v16) and every evaluation referencing that snapshot_id relabels to
+        v16. Rollback = post the old version's content again (which creates a
+        new version). YAML schema validation of the format field is Phase 2
+        and not part of this contract.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -871,11 +840,10 @@ paths:
       x-requires: tune
       summary: Immutable draft snapshot (for Test as evaluation)
       description: |
-        feature-spec.md:89: "POST /agents/{id}/snapshots (immutable draft
-        snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
-        snapshotted immutably into the run config (snapshot_id), so the tested
-        text is exactly what ran even if editing continues… Unsaved snapshots
-        display as 'v15-draft (a3f2)'." Append-only invariant.
+        An immutable draft snapshot, yielding a snapshot_id. The draft text is
+        snapshotted immutably into the evaluation config, so the tested text is
+        exactly what ran even if editing continues. Unsaved snapshots display
+        as "v15-draft (a3f2)". Append-only invariant.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -902,9 +870,8 @@ paths:
       x-requires: view
       summary: Last-used conversation selection for this agent
       description: |
-        feature-spec.md:87: "the previous conversation set is remembered per
-        agent (GET/PUT /agents/{id}/last-selection). Repeat testing = Test as
-        evaluation → Queue, two taps."
+        The previous conversation set is remembered per agent, so repeat
+        testing is Test as evaluation → Queue, two taps.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -947,9 +914,8 @@ paths:
       x-requires: view
       summary: Conversations (paginated, searchable, fork-filterable)
       description: |
-        feature-spec.md:121: "GET /agenttrees/{tree}/conversations (paginated,
-        ?search=, ?forks_of={id}, sorted by last activity; incl. turns; lineage
-        on forks)" — quoted as written; "incl. turns" no longer holds. A
+        Paginated, ?search=, ?forks_of={id}, sorted by last activity, with
+        lineage on forks. Turns are NOT inlined: a
         conversation row is metadata plus `turn_count`; the transcript is its
         own paged collection at
         GET /agenttrees/{tree}/conversations/{id}/turns. A listing that
@@ -957,8 +923,7 @@ paths:
         page size and conversation length.
 
         Default listing returns ROOT conversations only (lineage null) so the
-        sidebar can nest forks under their parent without duplicates
-        (feature-spec.md:5 "Forked conversations nest under their parent");
+        sidebar can nest forks under their parent without duplicates;
         pass forks_of to list a conversation's forks.
       parameters:
         - { $ref: "#/components/parameters/tree" }
@@ -1008,14 +973,14 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
         - name: forks_of
           in: query
-          description: Only forks of this conversation id (feature-spec.md:73).
+          description: Only forks of this conversation id.
           schema: { type: string }
         - name: agent_id
           in: query
           description: >-
             Only conversations that used this agent — node ⋯ "view recent
-            conversations for this agent" (feature-spec.md:26) and the
-            Test-as-evaluation prefilter (feature-spec.md:87).
+            conversations for this agent" and the
+            Test-as-evaluation prefilter.
           schema: { type: string }
         - name: origin
           in: query
@@ -1049,8 +1014,7 @@ paths:
       summary: One conversation (metadata; turns are a separate collection)
       description: |
         Single-resource fetch backing "Open in Chat: any fork can be opened in
-        the main Chat page and continued there like any conversation"
-        (feature-spec.md:70), "open parent (if fork)" (feature-spec.md:6), the
+        the main Chat page and continued there like any conversation", "open parent (if fork)", the
         queue panel's Open-in-Chat link, and deep links from search results —
         none of which can rely on re-paging the list. Lineage present iff fork.
 
@@ -1082,8 +1046,7 @@ paths:
       x-requires: view
       summary: Rename a conversation
       description: |
-        feature-spec.md:121 "PATCH/DELETE /agenttrees/{tree}/conversations/{id}";
-        action source: sidebar ⋯ menu "rename, delete" (feature-spec.md:6).
+        Action source: the sidebar ⋯ menu's rename and delete.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/conversationId" }
@@ -1111,8 +1074,8 @@ paths:
       summary: Delete a conversation (soft — history invariants survive)
       description: |
         Delete is a tombstone: the conversation disappears from listings and
-        chat, but judgments referencing its turns are "persisted forever, never
-        overwritten" (feature-spec.md:59; invariant), eval
+        chat, but judgments referencing its turns are persisted forever and
+        never overwritten (invariant), eval
         cases keep their source refs, and forks keep their lineage (the parent
         link renders as deleted). No cascade to judgments, cases, or forks.
 
@@ -1146,8 +1109,7 @@ paths:
       description: |
         The transcript, separated from the conversation resource so that
         opening a long one costs a bounded response instead of every turn ever
-        written into it. Turns carry envelopes (feature-spec.md:81 "envelope on
-        turn objects").
+        written into it. Turns carry context envelopes on the turn objects.
 
         ORDER IS CHRONOLOGICAL, oldest first — the domain order of a
         transcript, and the one that makes offset paging STABLE here: a
@@ -1208,12 +1170,11 @@ paths:
       x-requires: view
       summary: The tree's memory document
       description: |
-        feature-spec.md:114: "Memory: GET/PUT/DELETE /agenttrees/{tree}/memory".
-        It is how you "See and control what the app remembers about
-        your conversations per agent tree — view, edit, or clear the memory
-        document; compaction runs as a visible queued task — using the
-        Memory panel." One document per tree. A tree that has never
-        remembered anything returns content "" (not 404).
+        See and control what the app remembers about your conversations per
+        agent tree — view, edit or clear the memory document, with compaction
+        running as a visible queued task, from the Memory panel. One document
+        per tree. A tree that has never remembered anything returns
+        content "" (not 404).
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
         "200":
@@ -1270,13 +1231,12 @@ paths:
       x-requires: tune
       summary: Compact conversations into memory (queued task)
       description: |
-        feature-spec.md:114: "POST /agenttrees/{tree}/memory/compact
-        (queued)". Enqueued like all backend work (feature-spec.md:102
-        "every request returns task_id"): 202 + TaskRef; the task has type
+        Enqueued like all backend work — every such request returns a
+        task_id: 202 + TaskRef; the task has type
         "compact" and streams progress on GET /tasks/stream. On completion
-        the memory document holds the merged summary —
-        "LLM summarization merges what matters into the tree's memory
-        document". Compaction rewrites memory, not conversations —
+        the memory document holds the merged summary, LLM summarization
+        having merged what matters into the tree's memory
+        document. Compaction rewrites memory, not conversations —
         transcripts, traces and judgments are untouched.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
@@ -1296,36 +1256,35 @@ paths:
       x-requires: view
       summary: Send a message (SSE stream or single JSON, flag in body)
       description: |
-        feature-spec.md:119: "POST /agenttrees/{tree}/chat (SSE; queued →
-        returns task_id), stop = DELETE /tasks/{task_id}".
+        SSE, queued, returns a task_id; stop = DELETE /tasks/{task_id}.
 
-        Both modes on this one endpoint: "stream: true (SSE
+        Both modes on this one endpoint: stream: true (SSE
         token stream, the UI default) and stream: false (single JSON response,
         for curl/scripts/backends that can't stream) — same endpoint, flag in
-        the request body".
+        the request body.
 
         stream=true → 200 text/event-stream with events:
-          - event: task   — data: ChatTaskEvent (first event; carries the
+          - event: task — data: ChatTaskEvent (first event; carries the
             task_id used for stop = DELETE /tasks/{task_id}, plus conversation
             and turn ids)
-          - event: token  — data: TokenEvent (one per streamed token/delta)
-          - event: done   — data: ChatDoneEvent (terminal event, always sent:
+          - event: token — data: TokenEvent (one per streamed token/delta)
+          - event: done — data: ChatDoneEvent (terminal event, always sent:
             status completed = the finished assistant Turn; status cancelled =
             stop-generation fired mid-stream and the turn carries the partial
             content generated so far, which IS persisted. Envelope included —
-            captured at generation, feature-spec.md:76)
-          - event: error  — data: Error
-        Trace spans do NOT stream here; they stream on GET /tasks/stream ("same
-        SSE channel as tasks", feature-spec.md:146).
+            captured at generation)
+          - event: error — data: Error
+        Trace spans do NOT stream here; they stream on GET /tasks/stream, the
+        same SSE channel as tasks.
 
         stream=false → 200 application/json (ChatResponse) once generation
         completes; still carries task_id for symmetry. Stop-generation is a
         stream-mode affordance only: with stream=false the task_id arrives
-        after completion, too late to cancel (feature-spec.md:13 scopes stop
-        to "while streaming").
+        after completion, too late to cancel — stop is scoped to while
+        streaming.
 
         Session-scoped chat settings (model, temperature, system prompt) are
-        "sent with each /chat call" (feature-spec.md:274). Omitting
+        "sent with each /chat call". Omitting
         conversation_id starts a new conversation.
 
         Machine callers (generator, pipelines): set origin:machine on the
@@ -1371,9 +1330,8 @@ paths:
       x-requires: none
       summary: Upload an attachment before send
       description: |
-        feature-spec.md:119 "POST /upload"; composer flow (feature-spec.md:273,
-        dev prompt #4): "multipart upload to /upload before send".
-        Global (not tree-scoped) per the API section grouping.
+        Composer flow: a multipart upload to /upload before send.
+        Global, not tree-scoped.
 
         Type/size limits: /settings is deferred (Phase 2), so in Phase 1 the
         limits live in the single config artifact and the server enforces them
@@ -1406,11 +1364,9 @@ paths:
       x-requires: none
       summary: 👍/👎 on an assistant message
       description: |
-        feature-spec.md:119: "POST /feedback (writes a scorer: human judgment —
-        single store with /eval/judgments)". Body per dev prompt #3
-        (feature-spec.md:272): "POST {message_id, rating} to
-        /feedback". Thumbs "also persist as lightweight judgments, scorer: human"
-        (feature-spec.md:60). Judgments are append-only.
+        Writes a scorer: human judgment, sharing a single store with
+        /eval/judgments. Thumbs persist as lightweight judgments with
+        scorer: human. Judgments are append-only.
 
         message_id = Turn.id. The returned judgment has subject
         {kind: turn, id: message_id} and scorer {kind: human} with ref,
@@ -1440,21 +1396,19 @@ paths:
       x-requires: evaluate
       summary: Replay selected conversations/turns under a changed config
       description: |
-        feature-spec.md:122: "POST /agenttrees/{tree}/replay". Engine
-        (feature-spec.md:41): "take stored conversations or individual turns,
-        re-execute them under a changed config, optionally judge them, queue the
-        work, compare outputs." Enqueued: "All backend work enqueued; every
-        request returns task_id" (feature-spec.md:102); batch = parent task +
-        child per unit (feature-spec.md:103).
+        The engine: take stored conversations or individual turns, re-execute
+        them under a changed config, optionally judge them, queue the work and
+        compare outputs. All backend work is enqueued and every request
+        returns a task_id; a batch is a parent task plus one child per unit.
 
-        Phase 1 context rule: replays always run frozen — "replay under each
-        turn's original envelope" (feature-spec.md:77). context_policy is in
+        Phase 1 context rule: replays always run frozen, under each turn's
+        original envelope. context_policy is in
         the schema pinned to enum [frozen] (default frozen) so the invariant
         is machine-checkable; Phase 2 widens the enum and adds
-        context_override / tools_mode (feature-spec.md:82) backward-compatibly.
+        context_override / tools_mode backward-compatibly.
 
         The grid is "baseline column + one column per run config, row per
-        turn" (feature-spec.md:49): configs[] yields one column each, after
+        turn": configs[] yields one column each, after
         the baseline column (the original stored outputs, or baseline_evaluation_id's
         outputs when re-comparing).
       parameters: [{ $ref: "#/components/parameters/tree" }]
@@ -1482,16 +1436,14 @@ paths:
       x-requires: evaluate
       summary: Re-fire one turn against one or many endpoints (forks)
       description: |
-        feature-spec.md:122: "POST /agenttrees/{tree}/replay/turn (endpoints[] →
-        task + conversation per endpoint)". Semantics (feature-spec.md:68):
-        "Each (turn × endpoint × config) forks a new conversation: original
+        endpoints[] yields a task and a conversation per endpoint. Each
+        (turn × endpoint × config) forks a new conversation: original
         history up to that turn is copied, the turn is re-generated by the
-        chosen endpoint, and the result is stored as a normal conversation."
-        Return shape (feature-spec.md:71): "returns one task_id + new
-        conversation_id per endpoint." Forks carry lineage metadata
-        (feature-spec.md:69). Also returns evaluation_id: a turn re-fire is an evaluation
-        whose grid pivots to "compare forks of the same turn across endpoints
-        (column per endpoint)" (feature-spec.md:73) — fetch it via
+        chosen endpoint, and the result is stored as a normal conversation.
+        Returns one task_id and one new conversation_id per endpoint. Forks
+        carry lineage metadata. Also returns evaluation_id: a turn re-fire is
+        an evaluation whose grid pivots to compare forks of the same turn
+        across endpoints, a column per endpoint — fetch it via
         GET …/evaluations/{evaluationId}. Replays run frozen (context_policy as on /replay).
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
@@ -1518,8 +1470,8 @@ paths:
       x-requires: view
       summary: List evaluations
       description: |
-        feature-spec.md:122 "GET /agenttrees/{tree}/runs". Paged: a tree
-        accumulates evaluations forever and nothing ever removes one.
+        Paged: a tree accumulates evaluations forever and nothing ever
+        removes one.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - name: page
@@ -1544,10 +1496,9 @@ paths:
       x-requires: view
       summary: Evaluation detail — one page of the comparison grid
       description: |
-        feature-spec.md:122 "GET /agenttrees/{tree}/runs/{id}". Grid shape
-        (feature-spec.md:49): "baseline column + one column per run config, row
-        per turn." Cells fill incrementally as child tasks finish
-        (feature-spec.md:108); live fill arrives via GET /tasks/stream.
+        Grid shape: a baseline column plus one column per evaluation config,
+        one row per turn. Cells fill incrementally as child tasks finish; live
+        fill arrives via GET /tasks/stream.
 
         ROWS ARE PAGED (`rows` is an EvaluationRowPage) because the body is a
         product: rows × columns × cells, and a replay of fifty conversations
@@ -1612,13 +1563,10 @@ paths:
       x-requires: view
       summary: Span tree for a turn
       description: |
-        feature-spec.md:123: "GET /agenttrees/{tree}/turns/{turn_id}/trace".
-        Span model (feature-spec.md:140): "Span = {id, parent_id, type:
-        agent|llm|tool, name, start, end, tokens_in?, tokens_out?, cost?,
-        model?, status, payload_ref}". Header shows turn totals (wall time,
-        tokens in/out, cost) (feature-spec.md:143) and the turn's context
-        envelope (feature-spec.md:76 "shown in trace header"). Live spans
-        stream on GET /tasks/stream (feature-spec.md:146).
+        Span model: {id, parent_id, type: agent|llm|tool, name, start, end,
+        tokens_in?, tokens_out?, cost?, model?, status, payload_ref}. The
+        header shows turn totals (wall time, tokens in/out, cost) and the
+        turn's context envelope. Live spans stream on GET /tasks/stream.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - name: turnId
@@ -1640,10 +1588,8 @@ paths:
       x-requires: none
       summary: Lazy-loaded span payload
       description: |
-        feature-spec.md:123 / :147: "GET /spans/{id}/payload (lazy-loaded
-        prompt/response bodies)". Global per feature-spec.md:111 ("Global:
-        tasks, span payloads…"). Full prompt/response for LLM spans,
-        args/result for tool spans (feature-spec.md:145).
+        Lazy-loaded prompt/response bodies. Global, not tree-scoped, like
+        tasks. Full prompt/response for LLM spans, args/result for tool spans.
       parameters:
         - name: spanId
           in: path
@@ -1665,8 +1611,7 @@ paths:
       x-requires: none
       summary: List tasks (polling fallback + sidebar badge)
       description: |
-        feature-spec.md:131 "GET /tasks"; polling fallback for the SSE stream
-        (feature-spec.md:104); sidebar badge counts pending (feature-spec.md:107).
+        Polling fallback for the SSE stream; the sidebar badge counts pending.
         `limit` is GONE — it was a bare top-N with no way to ask for the rest
         and no way to know there was a rest; `page`/`page_size`/`total` say
         both (Collections rule, info.description).
@@ -1701,20 +1646,18 @@ paths:
       x-requires: none
       summary: SSE — task status/progress + live trace spans
       description: |
-        feature-spec.md:131: "GET /tasks/stream (SSE: status + progress)".
-        "Live updates via SSE: status changes and progress events push as they
-        happen — no refresh" (feature-spec.md:104). Also carries live trace
-        spans: "spans appear live while the turn is generating (same SSE channel
-        as tasks)" (feature-spec.md:146).
+        Live updates via SSE: status changes and progress events push as they
+        happen, no refresh. Also carries live trace spans — they appear while
+        the turn is generating, on this same channel.
 
         Events:
-          - event: task      — data: Task (status change; includes progress)
-          - event: progress  — data: TaskProgressEvent (per-unit ticks, e.g.
-            "Conversation 3/10 · turn 2/6", feature-spec.md:105)
-          - event: span      — data: SpanEvent (a span for a generating turn)
-          - event: judgment  — data: JudgmentEvent ("scores stream into the
-            grid live as judging tasks finish (SSE)", feature-spec.md:64;
-            summary header updates live)
+          - event: task — data: Task (status change; includes progress)
+          - event: progress — data: TaskProgressEvent (per-unit ticks, e.g.
+            "Conversation 3/10 · turn 2/6")
+          - event: span — data: SpanEvent (a span for a generating turn)
+          - event: judgment — data: JudgmentEvent (scores stream into the
+            grid live as judging tasks finish; the summary header updates
+            live too)
       responses:
         "200":
           description: SSE stream; one frame per event (see x-sse-events).
@@ -1740,9 +1683,8 @@ paths:
       x-requires: none
       summary: Task detail including children
       description: |
-        feature-spec.md:131 "GET /tasks/{id} (incl. children)". Task model
-        (feature-spec.md:103): "{id, type, status, progress: {done, total,
-        stage}, parent_id?, error?, created/started/finished_at}".
+        Task model: {id, type, status, progress: {done, total, stage},
+        parent_id?, error?, created/started/finished_at}.
       parameters: [{ $ref: "#/components/parameters/taskId" }]
       responses:
         "200":
@@ -1757,9 +1699,8 @@ paths:
       x-requires: none
       summary: Cancel a task (cascades to children); also stop-generation
       description: |
-        feature-spec.md:131 "DELETE /tasks/{id} (cancel, cascades)"; parent
-        cancels children (feature-spec.md:106). Doubles as chat
-        stop-generation: "stop = DELETE /tasks/{task_id}" (feature-spec.md:119).
+        Cancelling a parent cascades to its children. Doubles as chat
+        stop-generation: stop = DELETE /tasks/{task_id}.
       parameters: [{ $ref: "#/components/parameters/taskId" }]
       responses:
         "200":
@@ -1776,9 +1717,8 @@ paths:
       x-requires: none
       summary: Retry only the failed children of a batch
       description: |
-        feature-spec.md:131 "POST /tasks/{id}/retry-failed". "Failed children
-        don't kill the batch — shown as partial failure with retry-failed
-        button" (feature-spec.md:106).
+        Failed children don't kill the batch — it shows as a partial failure
+        with a retry-failed button.
       parameters: [{ $ref: "#/components/parameters/taskId" }]
       responses:
         "202":
@@ -1796,11 +1736,10 @@ paths:
       x-requires: none
       summary: Rubrics (for the Variant judge section)
       description: |
-        feature-spec.md:128 "GET/POST /eval/rubrics". Rubric EDITOR UI is
-        Phase 2 (eval workbench); the POST exists so the
-        generator can seed "judgments across 2 rubrics" (feature-spec.md:164)
-        through the public API (feature-spec.md:181). Consumed by
-        Evaluations · Configure (feature-spec.md:226). Paged: rubrics are
+        The rubric EDITOR UI is Phase 2 (eval workbench); the POST exists so
+        the generator can seed judgments across rubrics
+        through the public API. Consumed by
+        Evaluations · Configure. Paged: rubrics are
         user-created and never deleted. A caller filling a rubric PICKER
         should ask for a full page and compare `total` — a picker that
         silently omits a rubric is worse than one that says it is showing the
@@ -1825,9 +1764,8 @@ paths:
       x-requires: none
       summary: Create a rubric (append-only; new name = v1)
       description: |
-        feature-spec.md:128 "GET/POST /eval/rubrics" — versioned, "save = new
-        version". Posting an existing rubric's name appends the next version;
-        no update/delete exists (append-only).
+        Versioned — save = new version. Posting an existing rubric's name
+        appends the next version; no update/delete exists (append-only).
       requestBody:
         required: true
         content:
@@ -1848,14 +1786,12 @@ paths:
       x-requires: none
       summary: Append the next rubric version (append-only)
       description: |
-        feature-spec.md:128: "POST /eval/rubrics/{id}/versions (save = new
-        version)" — each save mints a version and answers 201, which is why
+        Save = new version: each save mints a version and answers 201, which is why
         it is a POST and not a PUT on the rubric.
         Workbench rubric editor: "prompt text, save = new version, test
-        against one case" (feature-spec.md:63). Appends the next version of
+        against one case". Appends the next version of
         this rubric id — never overwrites (invariant);
-        Judgment.scorer.version keeps old scores comparable
-        (feature-spec.md:59). Complements Phase-1 POST /eval/rubrics
+        Judgment.scorer.version keeps old scores comparable. Complements Phase-1 POST /eval/rubrics
         (existing NAME appends) with the id-addressed save the editor needs.
       parameters: [{ $ref: "#/components/parameters/rubricId" }]
       requestBody:
@@ -1879,17 +1815,15 @@ paths:
       x-requires: none
       summary: Create an eval case (handcrafted or sourced from a turn)
       description: |
-        feature-spec.md:126: "POST /eval/cases (handcrafted or source: {tree,
-        conversation_id, turn_id})". Model (feature-spec.md:54-57): input =
-        "prompt + context (frozen)"; output = "candidate response";
-        reference = expected answer, "handcrafted in an editor, or sourced
+        Handcrafted, or sourced from {tree, conversation_id, turn_id}. Model:
+        input = prompt + context (frozen); output = candidate response;
+        reference = expected answer, handcrafted in an editor or sourced
         from conversation history (pick a turn → its response becomes the
-        reference)", nullable ("reference-free rubrics allowed"). Exactly
-        one creation mode (request oneOf): handcrafted = input + output
-        supplied; sourced = source supplied and the server derives input
-        (the turn's prompt + envelope) and output (its response). Entry
-        points: the workbench case editor and "add as eval case" on any turn
-        (feature-spec.md:63).
+        reference), and nullable, since reference-free rubrics are allowed.
+        Exactly one creation mode (request oneOf): handcrafted = input +
+        output supplied; sourced = source supplied and the server derives
+        input (the turn's prompt + envelope) and output (its response). Entry
+        points: the workbench case editor and "add as eval case" on any turn.
       requestBody:
         required: true
         content:
@@ -1911,12 +1845,11 @@ paths:
       x-requires: none
       summary: Bulk import cases (CSV/XLSX, column mapping, per-row errors)
       description: |
-        feature-spec.md:125: "Import: POST /eval/cases/import
-        (CSV/XLSX/pasted table, column mapping, per-row error report)".
-        Workbench rule (feature-spec.md:63): "upload CSV/XLSX (or paste a
-        table) with columns mapped to input/output/reference → creates/
-        extends a benchmark in one shot (…queued for large files; row errors
-        reported per line, not all-or-nothing)". Multipart: file (pasted
+        CSV/XLSX or a pasted table, with column mapping and a per-row error
+        report. Upload CSV/XLSX (or paste a
+        table) with columns mapped to input/output/reference → creates or
+        extends a benchmark in one shot, queued for large files, with row
+        errors reported per line rather than all-or-nothing. Multipart: file (pasted
         tables are uploaded as CSV) + agenttree (every imported case is
         stamped with this — EvalCase.agenttree is required) + mapping (JSON
         object as a string: which column feeds input/output/reference) +
@@ -1949,8 +1882,7 @@ paths:
                   description: >-
                     JSON object string, e.g.
                     {"input":"question","output":"answer","reference":"expected"}
-                    — reference optional (nullable references allowed,
-                    feature-spec.md:57).
+                    — reference optional (nullable references allowed).
                 benchmark_id:
                   type: string
                   description: Extend this benchmark (appends a new membership version).
@@ -1979,12 +1911,10 @@ paths:
       x-requires: none
       summary: One eval case (judgment drawer)
       description: |
-        feature-spec.md:126 "GET /eval/cases/{id}". Model (feature-spec.md:54):
-        "EvalCase = {input, output, reference?}". Cases arrive handcrafted
-        or imported via the workbench (feature-spec.md:63), or auto-created
-        from conversation turns during judging (feature-spec.md:61). Returns
-        the LATEST version. Consumed by the judgment drawer
-        (feature-spec.md:229).
+        Model: EvalCase = {input, output, reference?}. Cases arrive handcrafted
+        or imported via the workbench, or auto-created
+        from conversation turns during judging. Returns
+        the LATEST version. Consumed by the judgment drawer.
       parameters:
         - name: caseId
           in: path
@@ -2005,9 +1935,8 @@ paths:
       x-requires: none
       summary: Append the next eval-case version (append-only)
       description: |
-        feature-spec.md:126: "POST /eval/cases/{id}/versions (new version)" —
-        the same append-only versioning as rubrics (feature-spec.md:128) and
-        instructions (feature-spec.md:33): each save appends the next version
+        The same append-only versioning as rubrics and
+        instructions: each save appends the next version
         and never overwrites, which is why the write is a POST here and not a
         PUT on the case.
         Prior versions stay readable and existing judgments keep pointing at
@@ -2052,12 +1981,11 @@ paths:
       x-requires: none
       summary: Eval benchmarks (latest version each)
       description: |
-        feature-spec.md:127: "Benchmarks: POST/GET /eval/benchmarks". Model
-        (feature-spec.md:58): "EvalBenchmark: named collection of cases
-        (versioned, reusable across runs/models)", widened by the merge to
-        hold live turn references as well as frozen cases. Returns the
+        Model: EvalBenchmark is a named collection of cases, versioned and
+        reusable across evaluations and models, widened by the Casebook merge
+        to hold live turn references as well as frozen cases. Returns the
         latest version of each benchmark, membership included — feeds the
-        workbench benchmark manager (feature-spec.md:63), the ⊞ collect action
+        workbench benchmark manager, the ⊞ collect action
         and the judge's benchmark picker. Global, not
         tree-scoped: a benchmark may reference turns across trees, and per-item
         visibility still follows the viewer's tree permissions.
@@ -2085,8 +2013,8 @@ paths:
       x-requires: none
       summary: Create an eval benchmark (version 1)
       description: |
-        feature-spec.md:127 "POST/GET /eval/benchmarks"; workbench benchmark manager:
-        "create/name/version benchmarks, drag cases in" (feature-spec.md:63).
+        The workbench benchmark manager: create, name and version benchmarks,
+        dragging cases in.
         Starts empty unless items are supplied. Membership changes after
         creation go through POST /eval/benchmarks/{id}/versions, POST …/items or
         POST …/freeze — each appends a new version.
@@ -2112,7 +2040,7 @@ paths:
       summary: One eval benchmark (latest membership version)
       description: |
         The benchmark with its items. Reference items are turn REFERENCES, never
-        copies (feature-spec.md:285 "Quote the reference-not-copy rule") —
+        copies — reference, not copy —
         render their transcripts by following each item's
         source.tree/conversation_id/turn_id; the transcript stays in its
         conversation. Frozen items name an EvalCase instead, read via
@@ -2173,8 +2101,7 @@ paths:
       x-requires: none
       summary: Append the next membership version (append-only)
       description: |
-        feature-spec.md:127: "POST /eval/benchmarks/{id}/versions (versioned
-        membership)". Each save is a new version carrying its FULL item
+        Membership is versioned. Each save is a new version carrying its FULL item
         list; earlier versions
         remain queryable so judgments made against version N stay
         attributable to exactly that membership. Metadata is NOT here: a
@@ -2286,7 +2213,7 @@ paths:
       description: |
         The benchmark doubles as "a replay regression suite". Replays every
         REFERENCE item's turn under the given configs — same engine as
-        POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
+        POST /agenttrees/{tree}/replay, same context
         fields and frozen default. Frozen items are skipped: a frozen case
         is content, not a turn in a conversation, so there is nothing to
         re-fire (judge those with POST /eval/judge instead). A benchmark may
@@ -2317,13 +2244,13 @@ paths:
       x-requires: none
       summary: Enqueue LLM judging
       description: |
-        feature-spec.md:129: "POST /eval/judge ({benchmark_id | case_ids | evaluation_id,
-        judge_model, rubric_id} → enqueued), judgments append-only". Exactly
-        one selector (oneOf): evaluation_id ("Judge this evaluation"… auto-creating cases
-        from conversation turns if none exist", feature-spec.md:61),
+        Takes {benchmark_id | case_ids | evaluation_id, judge_model,
+        rubric_id} and enqueues; judgments are append-only. Exactly
+        one selector (oneOf): evaluation_id ("Judge this evaluation",
+        auto-creating cases from conversation turns if none exist),
         explicit case_ids, or — since v0.3.0, with EvalBenchmarks — benchmark_id
         (latest membership version unless benchmark_version pins one). Judge
-        prompt receives the case's envelope (feature-spec.md:81).
+        prompt receives the case's envelope.
 
         Since the merge, a benchmark version holds reference items as well as
         frozen ones, and judging resolves each item to a case: a frozen item
@@ -2356,13 +2283,13 @@ paths:
       x-requires: none
       summary: Judgment history (append-only)
       description: |
-        feature-spec.md:130: "GET /eval/judgments?subject_id=&evaluation_id=
-        &scorer_ref= (history)". Model (feature-spec.md:59): "Judgment
-        (persisted forever, never overwritten): {subject, scorer, evaluation_id?,
+        History, filterable by subject_id, evaluation_id and scorer_ref.
+        Model: Judgment, persisted forever and never overwritten —
+        {subject, scorer, evaluation_id?,
         score, reasoning, created_at}. Re-judging appends." Thumbs live here
-        too, as scorer kind human (feature-spec.md:60, :119) — filter by
+        too, as scorer kind human — filter by
         subject or by conversation_id to re-render 👍/👎 and per-turn score
-        chips (feature-spec.md:64) on reload. Paginated: the store is
+        chips on reload. Paginated: the store is
         append-only and grows forever.
 
         Every filter is an equality match, AND-ed. subject_kind and subject_id
@@ -2413,10 +2340,8 @@ paths:
       x-requires: none
       summary: Aggregate scores for an evaluation
       description: |
-        feature-spec.md:130: "GET /eval/evaluations/{evaluation_id}/summary (aggregates)".
-        Feeds the grid's "summary header (mean, distribution sparkline)"
-        (feature-spec.md:49), updating live as judging tasks finish
-        (feature-spec.md:64).
+        Aggregates. Feeds the grid's summary header (mean, distribution
+        sparkline), updating live as judging tasks finish.
       parameters:
         - name: evaluationId
           in: path
@@ -2438,16 +2363,12 @@ paths:
       x-requires: none
       summary: User-scoped app settings
       description: |
-        feature-spec.md:119 "GET/PUT /settings"; consumed by Settings ·
-        global (feature-spec.md:241, dev prompt #6 "Settings page bound to
-        GET/PUT /settings, validation, optimistic save with rollback").
+        Consumed by Settings · global, which binds to GET/PUT /settings with
+        validation and an optimistic save that rolls back.
         User-scoped and server-persisted. Deliberately small — chat
-        defaults, the replay fallback envelope (feature-spec.md:78, :77
-        "fallback envelope in GET/PUT /settings"), and read-only upload
-        limits for the composer (feature-spec.md:273 "Enforce type/size
-        limits from settings"). The backend TARGET is deliberately NOT here:
-        "Target is device-local (not synced via /settings)"
-        (feature-spec.md:157) — it lives in the one config artifact. The
+        defaults, the replay fallback envelope, and read-only upload
+        limits the composer enforces. The backend TARGET is deliberately NOT here:
+        "Target is device-local (not synced via /settings)" — it lives in the one config artifact. The
         Phase-2 Settings UI owns this shape; widen it there, not
         speculatively here.
       responses:
@@ -2464,7 +2385,7 @@ paths:
       description: |
         Full replacement of the writable fields; readOnly fields
         (upload_limits) are server-owned and ignored if sent. UI does
-        "optimistic save with rollback" (feature-spec.md:275).
+        "optimistic save with rollback".
       requestBody:
         required: true
         content:
@@ -2485,8 +2406,8 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >
-        Bearer JWT from POST /auth/token (feature-spec.md:18 "token attached
-        by the single API client; 401 anywhere → back to login"). Applied
+        Bearer JWT from POST /auth/token, attached by the single API client;
+        a 401 anywhere sends the user back to login. Applied
         globally via the top-level security block; only GET /healthz and
         POST /auth/token opt out (security: []). AUTH_MODE=off backends do
         not ENFORCE this scheme — requests without a token succeed as the
@@ -2498,7 +2419,7 @@ components:
       name: tree
       in: path
       required: true
-      description: Agent tree id, e.g. agent1 (feature-spec.md:111).
+      description: Agent tree id, e.g. agent1.
       schema: { type: string }
     agentId:
       name: agentId
@@ -2524,7 +2445,7 @@ components:
       name: treeId
       in: path
       required: true
-      description: Tree being administered — same ids as {tree} (feature-spec.md:117).
+      description: Tree being administered — same ids as {tree}.
       schema: { type: string }
     benchmarkId:
       name: benchmarkId
@@ -2548,7 +2469,7 @@ components:
 
   responses:
     NotFound:
-      description: Resource not found (or tree not permitted — unpermitted trees never render, feature-spec.md:32).
+      description: Resource not found (or tree not permitted — unpermitted trees never render).
       headers:
         X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
@@ -2606,8 +2527,7 @@ components:
       description: >
         Missing, invalid or expired bearer token (code unauthorized).
         AUTH_MODE=on only — an off-mode backend does not enforce the scheme.
-        Clients route any 401 back to the login screen
-        (feature-spec.md:18); they never branch on the mode.
+        Clients route any 401 back to the login screen; they never branch on the mode.
       headers:
         X-Request-Id: { $ref: "#/components/headers/XRequestId" }
       content:
@@ -2634,7 +2554,7 @@ components:
       description: >
         The target is unavailable for new work, in one of two ways. code
         tree_disabled: the tree is disabled — "new chat/replay/judge against
-        it return 409 tree_disabled" (feature-spec.md:20); existing
+        it return 409 tree_disabled"; existing
         conversations stay readable and re-enabling via
         PATCH /admin/agenttrees/{id} restores everything. code
         conversation_deleted: the named conversation is a TOMBSTONE — it still
@@ -2693,8 +2613,8 @@ components:
       required: [message]
       description: >
         One specific complaint about one piece of input. The shape follows
-        the per-row import report this contract already had (feature-spec.md:63
-        "row errors reported per line, not all-or-nothing") — which now uses
+        the per-row import report this contract already had — row errors
+        reported per line, not all-or-nothing — which now uses
         THIS schema rather than a near-identical private copy, so a client
         renders "which bit of my input, and why" once. `field` and `row` are
         two coordinates on the same input and either may be absent: a bad
@@ -2734,15 +2654,15 @@ components:
           description: >
             Global roles (additive in v0.3.0, not required — Phase-1
             backends omit it): admin gates the Settings → Members / Agent
-            trees UI (feature-spec.md:19 "visible when /me grants admin");
+            trees UI, visible when /me grants admin;
             inspect gates the Inspector. Absent or
             empty = neither.
           items: { type: string, enum: [admin, inspect] }
         permissions:
           type: object
           description: >
-            Per-tree permission flags (feature-spec.md:32 "Permissions per tree
-            (view / tune / evaluate)"), keyed by tree id.
+            Per-tree permission flags (view / tune / evaluate), keyed by
+            tree id.
           additionalProperties:
             type: array
             items:
@@ -2754,7 +2674,7 @@ components:
       required: [status, version]
       properties:
         status: { type: string, enum: [ok] }
-        version: { type: string, description: Server version (feature-spec.md:155). }
+        version: { type: string, description: Server version. }
         contract_version:
           type: string
           example: 0.3.0
@@ -2780,7 +2700,7 @@ components:
         seed:
           type: string
           nullable: true
-          description: Loaded seed dataset — mock only (feature-spec.md:155).
+          description: Loaded seed dataset — mock only.
         storage:
           type: object
           description: |
@@ -2847,7 +2767,7 @@ components:
         enabled:
           type: boolean
           description: >
-            Toggled via PATCH /admin/agenttrees/{id} (feature-spec.md:20).
+            Toggled via PATCH /admin/agenttrees/{id}.
             false is only ever seen by admins (non-admin listings omit
             disabled trees); render greyed with a "disabled" badge.
 
@@ -2865,7 +2785,7 @@ components:
       type: object
       required: [id, name]
       description: >
-        "endpoint = an agent deployment/backend target" (feature-spec.md:67).
+        "endpoint = an agent deployment/backend target".
       properties:
         id: { type: string }
         name: { type: string }
@@ -2875,7 +2795,7 @@ components:
     Agent:
       type: object
       required: [id, name, parent_id, live_version, tools, enabled, format]
-      description: Node data for the tree view (feature-spec.md:25, :28).
+      description: Node data for the tree view.
       properties:
         id: { type: string }
         name: { type: string }
@@ -2894,13 +2814,13 @@ components:
           type: string
           enum: [text, yaml]
           description: >
-            Instruction format metadata (feature-spec.md:34). Phase 1 treats
+            Instruction format metadata. Phase 1 treats
             both as plain text; YAML schema validation is Phase 2.
 
     AgentCreate:
       type: object
       required: [name]
-      description: Add an agent under a node (feature-spec.md:26); null parent_id = new root.
+      description: Add an agent under a node; null parent_id = new root.
       properties:
         name: { type: string }
         parent_id: { type: string, nullable: true }
@@ -2923,7 +2843,7 @@ components:
         promoted_from_snapshot_id:
           type: string
           nullable: true
-          description: Set when this version was a promoted draft snapshot (feature-spec.md:86).
+          description: Set when this version was a promoted draft snapshot.
 
     InstructionHistory:
       type: object
@@ -2934,7 +2854,7 @@ components:
         live_version: { type: integer }
         versions:
           type: array
-          description: All versions, ascending — append-only (feature-spec.md:33).
+          description: All versions, ascending — append-only.
           items: { $ref: "#/components/schemas/InstructionVersion" }
 
     InstructionSave:
@@ -2949,7 +2869,7 @@ components:
           description: >
             Promote this draft snapshot to the new version; evaluations
             referencing it
-            relabel (feature-spec.md:86, :85).
+            relabel.
 
     SnapshotCreate:
       type: object
@@ -2970,13 +2890,13 @@ components:
         label:
           type: string
           example: v15-draft (a3f2)
-          description: Display label until promoted (feature-spec.md:86).
+          description: Display label until promoted.
         created_at: { type: string, format: date-time }
 
     Selection:
       type: object
       required: [items]
-      description: Conversation/turn selection remembered per agent (feature-spec.md:87).
+      description: Conversation/turn selection remembered per agent.
       properties:
         items:
           type: array
@@ -2990,7 +2910,7 @@ components:
         turn_ids:
           type: array
           nullable: true
-          description: Absent/null = whole conversation; present = just these turns (feature-spec.md:44).
+          description: Absent/null = whole conversation; present = just these turns.
           items: { type: string }
 
     # ---------------------------------------------------------- conversations
@@ -2998,9 +2918,9 @@ components:
       type: object
       required: [system_date, timezone, region, locale]
       description: >
-        Captured at generation, never reconstructed (feature-spec.md:76):
+        Captured at generation, never reconstructed:
         "{system_date, timezone, region, locale, user_profile_ref?}". Phase 1
-        replays always run under this frozen envelope (feature-spec.md:77, :78).
+        replays always run under this frozen envelope.
       properties:
         system_date: { type: string, format: date, example: "2026-08-02" }
         timezone: { type: string, example: Europe/London }
@@ -3034,7 +2954,7 @@ components:
         content:
           type: string
           description: >
-            Markdown (feature-spec.md:10), or a serialized structured payload
+            Markdown, or a serialized structured payload
             when content_type is json.
         content_type:
           type: string
@@ -3052,19 +2972,18 @@ components:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
           description: >
-            "Every turn captures an envelope at generation" (feature-spec.md:76;
-            "every turn records its context"). The key is
-            required; null is permitted ONLY on legacy/imported turns
-            (feature-spec.md:78). The server stamps assistant turns at
+            Every turn captures an envelope at generation — every turn
+            records its context. The key is
+            required; null is permitted ONLY on legacy/imported turns. The server stamps assistant turns at
             generation and inbound (user/machine) turns at receipt; on turn
-            objects in conversation listings (feature-spec.md:81).
+            objects in conversation listings.
 
     Lineage:
       type: object
       required: [parent_conversation_id, fork_turn_id]
       description: >
-        feature-spec.md:69: "Forks carry lineage metadata: parent conversation
-        id, fork turn, endpoint + config used."
+        Forks carry lineage metadata: parent conversation id, fork turn, and
+        the endpoint and config used.
       properties:
         parent_conversation_id: { type: string }
         fork_turn_id: { type: string }
@@ -3095,7 +3014,7 @@ components:
         agent_id:
           type: string
           nullable: true
-          description: Entry agent that handled this conversation — backs ?agent_id= filtering (feature-spec.md:26, :87).
+          description: Entry agent that handled this conversation — backs ?agent_id= filtering.
         created_at: { type: string, format: date-time }
         last_activity_at: { type: string, format: date-time }
         lineage:
@@ -3105,7 +3024,7 @@ components:
         fork_count:
           type: integer
           default: 0
-          description: Number of direct forks — drives the "N forks" chip (feature-spec.md:5).
+          description: Number of direct forks — drives the "N forks" chip.
         turn_count:
           type: integer
           default: 0
@@ -3217,12 +3136,12 @@ components:
         system_prompt:
           type: string
           nullable: true
-          description: Session-scoped chat settings, sent per call (feature-spec.md:7, :274).
+          description: Session-scoped chat settings, sent per call.
         memory:
           type: boolean
           nullable: true
           description: >
-            feature-spec.md:114: "/chat accepts memory flag". true = include
+            /chat accepts a memory flag. true = include
             the tree's memory document (GET /agenttrees/{tree}/memory) in
             the agent's context for this call; false = exclude it;
             omitted/null = backend default. Additive in v0.3.0 — Phase-1
@@ -3245,7 +3164,7 @@ components:
     ChatTaskEvent:
       type: object
       required: [task_id, conversation_id, user_turn_id, assistant_turn_id]
-      description: First SSE event; task_id enables stop = DELETE /tasks/{task_id} (feature-spec.md:119).
+      description: First SSE event; task_id enables stop = DELETE /tasks/{task_id}.
       properties:
         task_id: { type: string }
         conversation_id: { type: string }
@@ -3274,7 +3193,7 @@ components:
       type: object
       required: [message_id, rating]
       properties:
-        message_id: { type: string, description: "= Turn.id (spec wording per feature-spec.md:272)." }
+        message_id: { type: string, description: "= Turn.id." }
         rating: { type: string, enum: [up, down] }
         comment:
           type: string
@@ -3282,14 +3201,13 @@ components:
           description: >
             Optional free-text note the rater adds alongside the thumb. Stored
             as the appended judgment's `reasoning` — the same field the LLM
-            judge writes its explanation into (feature-spec.md:59) — so thumbs
-            and their reasons stay in the one judgment store
-            (feature-spec.md:60, :119).
+            judge writes its explanation into — so thumbs
+            and their reasons stay in the one judgment store.
 
             The comment is deliberately NOT a Turn: turns are the unit that
-            gets replayed and re-judged ("take stored conversations or
-            individual turns, re-execute them under a changed config",
-            feature-spec.md:41) and Turn.role is user|assistant, so feedback
+            gets replayed and re-judged — stored conversations or
+            individual turns re-executed under a changed config — and
+            Turn.role is user|assistant, so feedback
             in that stream would be re-executed on replay and imported into
             eval cases. As a judgment it renders beneath its assistant turn
             and survives reload via GET /eval/judgments?conversation_id=.
@@ -3303,11 +3221,10 @@ components:
     Variant:
       type: object
       description: >
-        Variant — the Run Config drawer's fields (feature-spec.md:46-48): "Agent tree +
+        Variant — the Run Config drawer's fields: "Agent tree +
         instruction version · Model, temperature · Judge (optional…)".
-        instruction_version XOR snapshot_id — a snapshot is an untested draft
-        (feature-spec.md:86); neither = the live version. endpoint_ids only
-        applies to turn re-fire (feature-spec.md:67).
+        instruction_version XOR snapshot_id — a snapshot is an untested draft; neither = the live version. endpoint_ids only
+        applies to turn re-fire.
       not:
         description: instruction_version and snapshot_id are mutually exclusive.
         required: [instruction_version, snapshot_id]
@@ -3328,7 +3245,7 @@ components:
     JudgeConfig:
       type: object
       required: [judge_model, rubric_id]
-      description: Judge section, collapsed by default (feature-spec.md:48).
+      description: Judge section, collapsed by default.
       properties:
         judge_model: { type: string }
         rubric_id: { type: string }
@@ -3341,15 +3258,13 @@ components:
           type: array
           minItems: 1
           description: >
-            Conversations, optionally narrowed to individual turns
-            (feature-spec.md:44 "expandable to pick individual turns").
+            Conversations, expandable to pick individual turns.
           items: { $ref: "#/components/schemas/SelectionItem" }
         configs:
           type: array
           minItems: 1
           description: >
-            One grid column per config (feature-spec.md:49 "baseline column +
-            one column per run config").
+            One grid column per config, beside the baseline column.
           items: { $ref: "#/components/schemas/Variant" }
         baseline_evaluation_id:
           type: string
@@ -3362,10 +3277,10 @@ components:
           enum: [frozen, current, custom]
           default: frozen
           description: >
-            feature-spec.md:77: "frozen (default — replay under each turn's
-            original envelope) · current (today's context, for time-drift
-            testing) · custom (explicit values)". Widened from the Phase-1
-            pin [frozen] (feature-spec.md:82); the DEFAULT stays frozen, so
+            frozen (default — replay under each turn's original envelope) ·
+            current (today's context, for time-drift testing) · custom
+            (explicit values). Widened from the Phase-1
+            pin [frozen]; the DEFAULT stays frozen, so
             Phase-1 requests are valid and behave unchanged. The grid
             labels each column's policy; mixed-policy comparisons get a
             warning badge.
@@ -3373,10 +3288,8 @@ components:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
           description: >
-            The explicit envelope for context_policy custom
-            (feature-spec.md:77 "custom (explicit values)";
-            feature-spec.md:81 "accepts {context_policy,
-            context_override?, tools_mode}"). REQUIRED when policy is
+            The explicit envelope for context_policy custom; replay accepts
+            {context_policy, context_override?, tools_mode}. REQUIRED when policy is
             custom; 422 if custom without it or if sent under another
             policy.
         fallback_policy:
@@ -3386,9 +3299,9 @@ components:
           description: >
             What to do when the resolved policy reads a turn's envelope and
             it is null (legacy/imported turns). settings = apply the
-            settings-level fallback envelope (feature-spec.md:78: "a
+            settings-level fallback envelope (a
             settings-level default envelope applied to turns that have
-            none… Applied explicitly — the grid marks such cells env:
+            none — applied explicitly, and the grid marks such cells env:
             fallback, never silently 'now'"; stored as
             Settings.fallback_envelope); error = fail that cell instead.
             Only meaningful under frozen — current/custom never read the
@@ -3398,22 +3311,21 @@ components:
           enum: [live, replay_recorded]
           default: live
           description: >
-            feature-spec.md:79 "Tools mode": replay_recorded = "replay tool
-            spans' recorded results from the original trace — true
-            counterfactual: only instructions/model/endpoint vary"; a tool
+            Tools mode. replay_recorded = replay the tool spans' recorded
+            results from the original trace — a true counterfactual, where
+            only instructions/model/endpoint vary; a tool
             absent from the trace falls back per-call to live or mock,
             logged in the new trace. live = re-execute tools. The WIRE
             default stays live so Phase-1 requests behave unchanged; the
-            Variant UI preselects replay_recorded under frozen
-            (feature-spec.md:79 "Playback is the default under frozen") —
-            a UI default, not a wire default.
+            Variant UI preselects replay_recorded under frozen — playback is
+            the default there — a UI default, not a wire default.
 
     ReplayAccepted:
       type: object
       required: [task_id, evaluation_id]
-      description: Every request returns task_id (feature-spec.md:102).
+      description: Every request returns task_id.
       properties:
-        task_id: { type: string, description: Parent task; children per conversation/turn (feature-spec.md:103). }
+        task_id: { type: string, description: Parent task; children per conversation/turn. }
         evaluation_id: { type: string, description: "Fetch via GET /agenttrees/{tree}/evaluations/{id} for the grid." }
 
     ReplayTurnRequest:
@@ -3425,7 +3337,7 @@ components:
         endpoints:
           type: array
           minItems: 1
-          description: feature-spec.md:71 "body includes endpoints[]".
+          description: The endpoints to re-fire the turn against.
           items: { type: string }
         config:
           allOf: [{ $ref: "#/components/schemas/Variant" }]
@@ -3434,7 +3346,7 @@ components:
           type: string
           enum: [frozen, current, custom]
           default: frozen
-          description: As on ReplayRequest — widened in v0.3.0, default stays frozen (feature-spec.md:77, :78).
+          description: As on ReplayRequest — widened in v0.3.0, default stays frozen.
         context_override:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
@@ -3443,23 +3355,23 @@ components:
           type: string
           enum: [settings, error]
           default: settings
-          description: As on ReplayRequest — settings applies Settings.fallback_envelope, cell marked env:fallback (feature-spec.md:78).
+          description: As on ReplayRequest — settings applies Settings.fallback_envelope, cell marked env:fallback.
         tools_mode:
           type: string
           enum: [live, replay_recorded]
           default: live
-          description: As on ReplayRequest (feature-spec.md:79) — wire default live; UI preselects replay_recorded under frozen.
+          description: As on ReplayRequest — wire default live; UI preselects replay_recorded under frozen.
 
     ReplayTurnAccepted:
       type: object
       required: [evaluation_id, results]
-      description: feature-spec.md:71 "returns one task_id + new conversation_id per endpoint".
+      description: One task_id and one new conversation_id per endpoint.
       properties:
         evaluation_id:
           type: string
           description: >
-            The evaluation backing the fork-comparison pivot (feature-spec.md:73
-            "column per endpoint") — fetch via GET …/evaluations/{evaluationId}.
+            The evaluation backing the fork-comparison pivot, a column per
+            endpoint — fetch via GET …/evaluations/{evaluationId}.
         results:
           type: array
           items:
@@ -3503,7 +3415,7 @@ components:
       required: [id, tree_id, status, created_at, task_id, columns, rows]
       description: >
         Comparison-grid data: "baseline column + one column per run config, row
-        per turn" (feature-spec.md:49).
+        per turn".
       properties:
         id: { type: string }
         tree_id: { type: string }
@@ -3533,7 +3445,7 @@ components:
         task_id: { type: string }
         columns:
           type: array
-          description: Index 0 = baseline. Column labels relabel when a snapshot promotes (feature-spec.md:86).
+          description: Index 0 = baseline. Column labels relabel when a snapshot promotes.
           items:
             type: object
             required: [label, config]
@@ -3560,7 +3472,7 @@ components:
             turn_id: { type: string }
         cells:
           type: array
-          description: One per column, same order; fills incrementally (feature-spec.md:108).
+          description: One per column, same order; fills incrementally.
           items: { $ref: "#/components/schemas/Result" }
 
     EvaluationRowPage:
@@ -3581,7 +3493,7 @@ components:
         status: { type: string, enum: [pending, running, done, failed] }
         content: { type: string, nullable: true, description: The (re)generated assistant output. }
         conversation_id: { type: string, nullable: true, description: "Fork holding this result, when applicable." }
-        turn_id: { type: string, nullable: true, description: Replayed turn id — trace entry point (feature-spec.md:141). }
+        turn_id: { type: string, nullable: true, description: Replayed turn id — trace entry point. }
         task_id: { type: string, nullable: true }
         case_id:
           type: string
@@ -3589,7 +3501,7 @@ components:
           description: >
             Set once judging auto-creates a case for this cell — the join key
             for "score column reads latest judgment per (case, rubric)" and
-            the judgment drawer (feature-spec.md:62, :64, :229).
+            the judgment drawer.
         latest_score:
           type: number
           nullable: true
@@ -3603,8 +3515,7 @@ components:
             original = the turn's frozen envelope; current = policy current;
             override = policy custom's context_override; fallback = the
             settings fallback envelope was applied — "the grid marks such
-            cells env: fallback, never silently 'now'"
-            (feature-spec.md:78). null on Phase-1 rows (implicitly
+            cells env: fallback, never silently 'now'". null on Phase-1 rows (implicitly
             original).
         error: { type: string, nullable: true }
 
@@ -3613,8 +3524,8 @@ components:
       type: object
       required: [id, parent_id, type, name, start, end, status, payload_ref]
       description: >
-        feature-spec.md:140: "Span = {id, parent_id, type: agent|llm|tool, name,
-        start, end, tokens_in?, tokens_out?, cost?, model?, status, payload_ref}".
+        Span = {id, parent_id, type: agent|llm|tool, name, start, end,
+        tokens_in?, tokens_out?, cost?, model?, status, payload_ref}.
       properties:
         id: { type: string }
         parent_id: { type: string, nullable: true }
@@ -3630,7 +3541,7 @@ components:
         error:
           type: string
           nullable: true
-          description: Error message when status is error — "Errors mark the span red" (feature-spec.md:145).
+          description: Error message when status is error — "Errors mark the span red".
         payload_ref: { type: string, description: "Id for GET /spans/{id}/payload." }
 
     Trace:
@@ -3641,10 +3552,10 @@ components:
         envelope:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
-          description: Shown in the trace header (feature-spec.md:76).
+          description: Shown in the trace header.
         totals:
           type: object
-          description: Turn totals — wall time, total tokens in/out, cost (feature-spec.md:143).
+          description: Turn totals — wall time, total tokens in/out, cost.
           required: [wall_time_ms, tokens_in, tokens_out, cost]
           properties:
             wall_time_ms: { type: integer }
@@ -3658,7 +3569,7 @@ components:
     SpanPayload:
       type: object
       required: [span_id]
-      description: LLM spans carry prompt/response; tool spans carry args/result (feature-spec.md:145).
+      description: LLM spans carry prompt/response; tool spans carry args/result.
       properties:
         span_id: { type: string }
         prompt: { type: string, nullable: true }
@@ -3671,9 +3582,9 @@ components:
       type: object
       required: [id, type, status, progress, created_at]
       description: >
-        feature-spec.md:103: "Task model: {id, type, status, progress: {done,
-        total, stage}, parent_id?, error?, created/started/finished_at}. Batch
-        work = parent task + child task per unit."
+        Task model: {id, type, status, progress: {done, total, stage},
+        parent_id?, error?, created/started/finished_at}. Batch work = parent
+        task + child task per unit.
       properties:
         id: { type: string }
         type:
@@ -3682,10 +3593,9 @@ components:
           example: replay
           description: >
             compact and import are additive in v0.3.0: compact = memory
-            compaction (POST /agenttrees/{tree}/memory/compact, queued —
-            feature-spec.md:114); import = a large POST /eval/cases/import
-            processed in the background (feature-spec.md:63 "queued for
-            large files").
+            compaction (POST /agenttrees/{tree}/memory/compact, queued);
+            import = a large POST /eval/cases/import processed in the
+            background, since large files are queued.
         status: { type: string, enum: [queued, running, done, failed, cancelled] }
         progress: { $ref: "#/components/schemas/TaskProgress" }
         parent_id: { type: string, nullable: true }
@@ -3694,8 +3604,7 @@ components:
           nullable: true
           description: >
             What the task produced, for queue-panel deep links — "View
-            results" to the grid, "Open in Chat" to the fork
-            (feature-spec.md:64; sketch 05).
+            results" to the grid, "Open in Chat" to the fork (sketch 05).
           properties:
             evaluation_id: { type: string, nullable: true }
             conversation_id: { type: string, nullable: true }
@@ -3706,7 +3615,7 @@ components:
               description: >
                 For type import (additive in v0.3.0) — the same per-row
                 report a small synchronous POST /eval/cases/import returns
-                inline (feature-spec.md:63).
+                inline.
         error: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         started_at: { type: string, format: date-time, nullable: true }
@@ -3714,7 +3623,7 @@ components:
         children:
           type: array
           nullable: true
-          description: Populated on GET /tasks/{id} (feature-spec.md:131).
+          description: Populated on GET /tasks/{id}.
           items: { $ref: "#/components/schemas/Task" }
 
     TaskPage:
@@ -3738,7 +3647,7 @@ components:
           type: string
           nullable: true
           example: "Conversation 3/10 · turn 2/6"
-          description: Stage label shown next to the bar (feature-spec.md:105).
+          description: Stage label shown next to the bar.
 
     TaskRef:
       type: object
@@ -3756,7 +3665,7 @@ components:
     SpanEvent:
       type: object
       required: [turn_id, span]
-      description: Live trace span on the tasks channel (feature-spec.md:146).
+      description: Live trace span on the tasks channel.
       properties:
         turn_id: { type: string }
         span: { $ref: "#/components/schemas/Span" }
@@ -3766,7 +3675,7 @@ components:
       required: [judgment]
       description: >
         A judgment appended by a finished judging task — "scores stream into
-        the grid live" (feature-spec.md:64). The join keys are on the judgment
+        the grid live". The join keys are on the judgment
         itself: subject (what was scored) and evaluation_id (which grid).
       properties:
         judgment: { $ref: "#/components/schemas/Judgment" }
@@ -3775,7 +3684,7 @@ components:
     Rubric:
       type: object
       required: [id, name, version, prompt, created_at]
-      description: Versioned; save = new version (feature-spec.md:128) — editor UI is Phase 2.
+      description: Versioned; save = new version — editor UI is Phase 2.
       properties:
         id: { type: string }
         name: { type: string }
@@ -3805,9 +3714,9 @@ components:
       type: object
       required: [id, input, output, agenttree]
       description: >
-        feature-spec.md:54-58: "EvalCase = {input, output, reference?}" —
-        input "prompt + context (frozen)", reference nullable (reference-free
-        rubrics allowed).
+        EvalCase = {input, output, reference?} — input is prompt + context
+        (frozen), and reference is nullable, since reference-free rubrics are
+        allowed.
       properties:
         id: { type: string }
         agenttree:
@@ -3827,15 +3736,15 @@ components:
             envelope:
               allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
               nullable: true
-              description: The judge prompt receives the case's envelope (feature-spec.md:81).
+              description: The judge prompt receives the case's envelope.
         output: { type: string, description: Candidate response. }
         reference: { type: string, nullable: true }
         source:
           type: object
           nullable: true
           description: >-
-            Set when auto-created from a conversation turn (feature-spec.md:126
-            "source: {tree, conversation_id, turn_id}").
+            Set when auto-created from a conversation turn:
+            {tree, conversation_id, turn_id}.
           properties:
             tree: { type: string }
             conversation_id: { type: string }
@@ -3844,19 +3753,17 @@ components:
           type: integer
           description: >
             Additive in v0.3.0 (not required — Phase-1 backends omit it,
-            read as 1): versions append on POST /eval/cases/{id}/versions
-            (feature-spec.md:126 "PUT (new version)"); GET returns the
-            latest.
+            read as 1): versions append on POST /eval/cases/{id}/versions;
+            GET returns the latest.
         created_at: { type: string, format: date-time }
 
     JudgeRequest:
       type: object
       required: [judge_model, rubric_id]
       description: >
-        Exactly one of evaluation_id / case_ids / benchmark_id (feature-spec.md:129
-        "{benchmark_id | case_ids | evaluation_id, judge_model, rubric_id}") — enforced
+        Exactly one of evaluation_id / case_ids / benchmark_id — enforced
         by the oneOf. evaluation_id = "Judge this evaluation", auto-creating cases from
-        turns if none exist (feature-spec.md:61). benchmark_id (added in v0.3.0
+        turns if none exist. benchmark_id (added in v0.3.0
         with EvalBenchmarks) judges the benchmark's latest membership version unless
         benchmark_version pins one.
       oneOf:
@@ -3872,17 +3779,17 @@ components:
         benchmark_id:
           type: string
           nullable: true
-          description: Judge every case in this eval benchmark (feature-spec.md:129).
+          description: Judge every case in this eval benchmark.
         benchmark_version:
           type: integer
           nullable: true
-          description: Pin a benchmark membership version; omit for latest (feature-spec.md:127 "versioned membership").
+          description: Pin a benchmark membership version; omit for latest.
         judge_model: { type: string }
         rubric_id: { type: string }
         rubric_version:
           type: integer
           nullable: true
-          description: Pin a specific rubric version; omit for latest. Judgment records what ran (feature-spec.md:59).
+          description: Pin a specific rubric version; omit for latest. Judgment records what ran.
 
     JudgmentSubject:
       type: object
@@ -3891,7 +3798,7 @@ components:
         WHAT was judged, named by a discriminator instead of by whichever of
         several nullable id columns happened to be set. kind case = an eval
         case, the unit an LLM judge scores; kind turn = a live conversation
-        turn, which is what a 👍/👎 annotates (feature-spec.md:60).
+        turn, which is what a 👍/👎 annotates.
 
         Only the kinds something produces today are declared. A later kind —
         evaluation, for a pairwise preference between two evaluations — is an
@@ -3910,8 +3817,8 @@ components:
       description: >
         WHO or WHAT produced the score. kind llm = an LLM judge: ref is the
         rubric id, version the rubric version that ran, model the judge model
-        (feature-spec.md:59 "judge_model, rubric_id+version"). kind human = a
-        👍/👎 from a person (feature-spec.md:60, :119): ref, version and model
+        — judge_model plus rubric_id and version. kind human = a
+        👍/👎 from a person: ref, version and model
         are all null, because a thumb runs no rubric and no model — nothing is
         invented to stand in for one.
 
@@ -3938,7 +3845,7 @@ components:
       type: object
       required: [id, subject, scorer, score, created_at]
       description: >
-        Append-only, never overwritten (feature-spec.md:59; invariant).
+        Append-only, never overwritten (invariant).
         One row is one score, addressed by a subject
         (what was judged) and a scorer (what produced the score) — the
         discriminated pair that replaced four mutually exclusive nullable
@@ -3982,8 +3889,7 @@ components:
       type: object
       required: [evaluation_id, scorers]
       description: >
-        Feeds "summary header (mean, distribution sparkline)"
-        (feature-spec.md:49). One group per SCORER IDENTITY — kind + ref +
+        Feeds "summary header (mean, distribution sparkline)". One group per SCORER IDENTITY — kind + ref +
         version — so a rubric and a future deterministic check aggregate
         through the same field, and the header stops being rubric-only.
         The judge model is NOT part of the group key (two judge models against
@@ -4010,8 +3916,8 @@ components:
       type: object
       required: [email, password]
       description: >
-        Login credentials (feature-spec.md:18 "email + password"). Mock
-        seeds admin@demo / restricted@demo (feature-spec.md:21). SSO
+        Login credentials: email + password. Mock
+        seeds admin@demo / restricted@demo. SSO
         redirect flows land on the same endpoint server-side.
       properties:
         email: { type: string, format: email, example: admin@demo }
@@ -4021,7 +3927,7 @@ components:
       type: object
       required: [access_token, token_type, me]
       description: >
-        Real-shaped JWT (feature-spec.md:21) plus the authenticated user so
+        Real-shaped JWT plus the authenticated user so
         the login screen can hydrate immediately — the app still calls
         GET /me on every boot regardless (invariant:
         "/me is always called").
@@ -4030,7 +3936,7 @@ components:
           type: string
           description: >
             JWT, sent as "Authorization: Bearer <token>" by the single API
-            client on every subsequent call (feature-spec.md:18).
+            client on every subsequent call.
         token_type: { type: string, enum: [bearer] }
         expires_in:
           type: integer
@@ -4042,7 +3948,7 @@ components:
     AdminUser:
       type: object
       required: [id, name, email, roles]
-      description: Row in Settings → Members (feature-spec.md:19 "user list").
+      description: Row in the Settings → Members user list.
       properties:
         id: { type: string }
         name: { type: string }
@@ -4054,7 +3960,7 @@ components:
         invited:
           type: boolean
           default: false
-          description: True until an invited user first signs in (feature-spec.md:19 "invite by email").
+          description: True until an invited user first signs in.
         created_at: { type: string, format: date-time }
 
     AdminUserPage:
@@ -4072,9 +3978,8 @@ components:
       type: object
       required: [email]
       description: >
-        Upsert keyed by email: a new email creates an invited user
-        (feature-spec.md:19 "invite by email"); an existing email updates
-        name/roles. Null name/roles = leave unchanged.
+        Upsert keyed by email: a new email creates an invited user; an
+        existing email updates name/roles. Null name/roles = leave unchanged.
       properties:
         email: { type: string }
         name: { type: string, nullable: true }
@@ -4087,8 +3992,8 @@ components:
       type: object
       required: [user_id, permissions]
       description: >
-        Per-tree matrix for one user (feature-spec.md:19 "per-tree
-        permission matrix (view/tune/evaluate checkboxes)"), keyed by tree
+        Per-tree matrix for one user — the view/tune/evaluate checkboxes —
+        keyed by tree
         id — the same shape as Me.permissions so the admin UI and /me agree
         exactly. Trees absent from the map grant nothing.
       properties:
@@ -4106,8 +4011,7 @@ components:
       required: [permissions]
       description: >
         Full replacement of the user's matrix (PUT semantics). Takes effect
-        on the user's next request — their GET /me reflects it
-        (feature-spec.md:213, e2e checklist 12).
+        on the user's next request — their GET /me reflects it.
       properties:
         permissions:
           type: object
@@ -4121,8 +4025,7 @@ components:
       type: object
       required: [enabled]
       description: >
-        feature-spec.md:20: "PATCH /admin/agenttrees/{id} ({enabled})" —
-        the only mutable field; disabling never deletes anything.
+        enabled is the only mutable field; disabling never deletes anything.
       properties:
         enabled: { type: boolean }
 
@@ -4158,9 +4061,8 @@ components:
     GeneratorRates:
       type: object
       description: >
-        feature-spec.md:184: "Rates configurable (conversations/hr, runs/hr,
-        fail %)" — drip-mode knobs, surfaced as rate sliders in Settings
-        (feature-spec.md:185).
+        Configurable rates — conversations/hr, evaluations/hr, fail % —
+        the drip-mode knobs, surfaced as rate sliders in Settings.
       properties:
         conversations_per_hour: { type: number, nullable: true }
         evaluations_per_hour: { type: number, nullable: true }
@@ -4169,22 +4071,21 @@ components:
           nullable: true
           minimum: 0
           maximum: 100
-          description: Injected child-task failure rate — exercises retry-failed (feature-spec.md:165).
+          description: Injected child-task failure rate — exercises retry-failed.
 
     GeneratorCommand:
       type: object
       required: [mode]
       description: >
-        feature-spec.md:118: "POST /admin/generator ({mode: seed|drip|stop,
-        seed?, rates?})".
+        {mode: seed|drip|stop, seed?, rates?}.
       properties:
         mode: { type: string, enum: [seed, drip, stop] }
         seed:
           type: string
           nullable: true
           description: >
-            For mode seed — deterministic dataset id ("Deterministic from
-            --seed N (e2e depends on this)", feature-spec.md:183).
+            For mode seed — deterministic dataset id; the dataset is
+            deterministic from --seed N, and the e2e suite depends on that.
         rates:
           allOf: [{ $ref: "#/components/schemas/GeneratorRates" }]
           nullable: true
@@ -4194,8 +4095,7 @@ components:
       type: object
       required: [mode, rates, counts]
       description: >
-        feature-spec.md:185: "GET /admin/generator/status (counts produced,
-        current rates)".
+        Counts produced and current rates.
       properties:
         mode: { type: string, enum: [idle, seeding, drip] }
         seed:
@@ -4220,12 +4120,12 @@ components:
       type: object
       required: [agenttree]
       description: >
-        Exactly one creation mode (oneOf; feature-spec.md:126 "handcrafted
-        or source: {tree, conversation_id, turn_id}"): handcrafted = input +
+        Exactly one creation mode (oneOf) — handcrafted, or sourced from
+        {tree, conversation_id, turn_id}: handcrafted = input +
         output typed in the editor; sourced = the server derives input (the
         turn's prompt + envelope) and output (its response) from the
-        referenced turn. reference optional in both (feature-spec.md:57
-        "Nullable (reference-free rubrics allowed)"); "pick a turn → its
+        referenced turn. reference is optional in both, since reference-free
+        rubrics are allowed; "pick a turn → its
         response becomes the reference" is the reference-from-turn picker
         filling the field client-side. agenttree is required regardless of
         mode (own top-level `required`, not inside either oneOf branch —
@@ -4260,9 +4160,8 @@ components:
       type: object
       required: [input, output]
       description: >
-        Full content for the NEW version (append-only,
-        feature-spec.md:126 "PUT (new version)") — prior versions and the
-        judgments recorded against them are untouched.
+        Full content for the NEW version (append-only) — prior versions and
+        the judgments recorded against them are untouched.
       properties:
         input:
           type: object
@@ -4279,9 +4178,8 @@ components:
       type: object
       required: [rows_total, rows_imported, created_case_ids, errors]
       description: >
-        Per-row error report (feature-spec.md:125; :63 "row errors reported
-        per line, not all-or-nothing") — valid rows import even when others
-        fail.
+        Per-row error report — errors are reported per line, not
+        all-or-nothing, so valid rows import even when others fail.
       properties:
         benchmark_id:
           type: string
@@ -4306,12 +4204,12 @@ components:
       type: object
       required: [id, name, version, items, created_at]
       description: >
-        feature-spec.md:58: "EvalBenchmark: named collection of cases (versioned,
-        reusable across runs/models)", merged with the Casebook —
-        "a named collection of turn REFERENCES" — into
+        EvalBenchmark: a named collection of cases, versioned and reusable
+        across evaluations and models, merged with the Casebook —
+        a named collection of turn REFERENCES — into
         the one noun. A member is either kind, so the collection is both:
         the raw material you collect with ⊞ and the reusable suite you judge.
-        Membership is versioned (feature-spec.md:127): every change appends a
+        Membership is versioned: every change appends a
         new version with its own full item list, so judgments made against
         version N stay attributable to exactly that membership. name and
         description are NOT versioned — they belong to the benchmark, not to a
@@ -4345,11 +4243,10 @@ components:
       required: [id, kind, added_at]
       description: >
         One member. kind is the whole difference the merge collapsed:
-        `reference` is a REFERENCE to a live turn, never a copy (dev prompt
-        12a, feature-spec.md:285 "Quote the reference-not-copy rule") — the
+        `reference` is a REFERENCE to a live turn, never a copy — the
         transcript stays in its conversation and nothing about its text is
         stored here; `frozen` names an EvalCase, the {input, output,
-        reference?} record of feature-spec.md:54-58, which carries its own
+        reference?} record, which carries its own
         append-only version (POST /eval/cases/{id}/versions). A frozen item holds the
         case id rather than a copy of the content for the same reason
         judgments do: Judgment.case_id has to keep naming something.
@@ -4368,8 +4265,8 @@ components:
           type: object
           nullable: true
           description: >-
-            The referenced turn (feature-spec.md:126 "source: {tree,
-            conversation_id, turn_id}"). Non-null for kind reference.
+            The referenced turn: {tree, conversation_id, turn_id}. Non-null
+            for kind reference.
           required: [tree, conversation_id, turn_id]
           properties:
             tree: { type: string }
@@ -4417,8 +4314,8 @@ components:
       type: object
       required: [items]
       description: >
-        The full membership for the NEW version (append-only,
-        feature-spec.md:127) — items absent from this list leave the benchmark.
+        The full membership for the NEW version (append-only) — items absent
+        from this list leave the benchmark.
         Metadata is not carried here; PATCH renames without a version.
       properties:
         items:
@@ -4447,7 +4344,7 @@ components:
       type: object
       required: [configs]
       description: >
-        Same engine as ReplayRequest (feature-spec.md:41) applied to the
+        Same engine as ReplayRequest applied to the
         benchmark's REFERENCE items; context fields carry ReplayRequest's enums and
         defaults (frozen / settings / live), so Phase-1-shaped requests
         behave identically.
@@ -4455,13 +4352,13 @@ components:
         configs:
           type: array
           minItems: 1
-          description: One grid column per config, as on ReplayRequest (feature-spec.md:49).
+          description: One grid column per config, as on ReplayRequest.
           items: { $ref: "#/components/schemas/Variant" }
         context_policy:
           type: string
           enum: [frozen, current, custom]
           default: frozen
-          description: As on ReplayRequest (feature-spec.md:77, :78).
+          description: As on ReplayRequest.
         context_override:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
@@ -4470,20 +4367,20 @@ components:
           type: string
           enum: [settings, error]
           default: settings
-          description: As on ReplayRequest (feature-spec.md:78).
+          description: As on ReplayRequest.
         tools_mode:
           type: string
           enum: [live, replay_recorded]
           default: live
-          description: As on ReplayRequest (feature-spec.md:79).
+          description: As on ReplayRequest.
 
     EvalBenchmarkReplayAccepted:
       type: object
       required: [task_id, evaluations]
       description: >
         One parent task; one evaluation per tree the benchmark's reference items
-        touch (evaluations are tree-scoped, feature-spec.md:111 — a
-        cross-tree benchmark therefore yields several). Fetch each grid via
+        touch (evaluations are tree-scoped, so a cross-tree benchmark yields
+        several). Fetch each grid via
         GET /agenttrees/{tree_id}/evaluations/{evaluation_id}.
       properties:
         task_id: { type: string }
@@ -4501,8 +4398,8 @@ components:
       type: object
       required: [prompt]
       description: >
-        The prompt text for the NEW rubric version (feature-spec.md:63
-        "rubric editor (prompt text, save = new version…)").
+        The prompt text for the NEW rubric version — in the rubric editor,
+        save = new version.
       properties:
         prompt: { type: string }
 
@@ -4535,16 +4432,15 @@ components:
       type: object
       required: [chat_defaults, fallback_envelope, upload_limits]
       description: >
-        User-scoped app settings (feature-spec.md:119). Deliberately small —
+        User-scoped app settings. Deliberately small —
         the Phase-2 Settings UI owns this shape. The backend target is NOT
-        here: device-local by design (feature-spec.md:157).
+        here: device-local by design.
       properties:
         chat_defaults:
           type: object
           description: >
-            Defaults for the chat settings submenu (feature-spec.md:7);
-            each /chat call still sends its session-scoped values
-            (feature-spec.md:274) — these only seed new sessions.
+            Defaults for the chat settings submenu;
+            each /chat call still sends its session-scoped values — these only seed new sessions.
           properties:
             model: { type: string, nullable: true }
             temperature: { type: number, nullable: true }
@@ -4553,18 +4449,17 @@ components:
           allOf: [{ $ref: "#/components/schemas/ContextEnvelope" }]
           nullable: true
           description: >
-            feature-spec.md:78: "a settings-level default envelope applied
-            to turns that have none (legacy/imported). Applied explicitly —
-            the grid marks such cells env: fallback, never silently 'now'."
+            A settings-level default envelope applied to turns that have
+            none (legacy/imported). Applied explicitly — the grid marks such
+            cells env: fallback, never silently "now".
             Consumed when a replay's fallback_policy is settings; null =
             unset (fallback_policy settings then errors the affected cell).
         upload_limits:
           type: object
           readOnly: true
           description: >
-            Server-owned composer limits, surfaced read-only
-            (feature-spec.md:273 "Enforce type/size limits from settings");
-            ignored if sent on PUT.
+            Server-owned composer limits, surfaced read-only — the composer
+            enforces type/size limits from settings; ignored if sent on PUT.
           required: [max_size_bytes, accepted_types]
           properties:
             max_size_bytes: { type: integer }
