@@ -9,6 +9,7 @@ import {
   Indicator,
   Loader,
   NavLink,
+  Select,
   Stack,
   Text,
   Tooltip,
@@ -30,7 +31,7 @@ import { api } from "../api/client";
 import { clearAuthToken, useAuthToken } from "../api/auth";
 import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
-import { familyAnswer, isRouteHidden, isStudioHidden } from "../lib/families";
+import { familyAnswer, isRouteHidden, isStudioHidden, landingRoute } from "../lib/families";
 import { ConversationList } from "./ConversationList";
 
 // Doors: Chat (talk to the agent), Studio (cases/sets/rubrics, the
@@ -139,13 +140,24 @@ export function Sidebar({
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }) {
-  const { tree, me } = useApp();
+  const { tree, trees, setTree, me } = useApp();
   const navigate = useNavigate();
   const nav = visibleNav();
   // The recent list is conversation history; hiding that family hides the
   // list, and hiding chat hides the button that starts one.
   const showRecent = !isRouteHidden("/chat") && familyAnswer("conversations") !== "hide";
   const { pendingCount, running } = useQueue();
+
+  // Switching trees invalidates every tree-scoped id already in the URL
+  // (a conversation, an agent, a turn — all belong to the OLD tree), so a
+  // switch always lands on the landing route rather than trying to carry the
+  // current page across trees. No-op on the id already active (Select fires
+  // onChange even for a no-op re-pick).
+  const switchTree = (id: string | null) => {
+    if (!id || id === tree) return;
+    setTree(id);
+    navigate(landingRoute());
+  };
 
   // Session row: user name from /me; "Sign out" shows EXACTLY when a
   // login token exists for the active target (the no-branch rule from the
@@ -229,6 +241,32 @@ export function Sidebar({
                 />
               ))}
         </Stack>
+        {/* Tree switcher — same room constraint as Recent below, hidden on
+            the rail. Nothing to switch BETWEEN with only one tree, so it
+            stays out of the way for single-tree checkouts. Disabled trees
+            (AgentTree.enabled — only an admin viewer ever sees one at all,
+            openapi.yaml AgentTree.enabled) are listed but unselectable,
+            "rendered greyed with a disabled badge" per that field's own
+            description. */}
+        {!collapsed && trees.length > 1 && (
+          <>
+            <Divider my="xs" />
+            <Select
+              size="xs"
+              label="Tree"
+              px={4}
+              data={trees.map((t) => ({
+                value: t.id,
+                label: t.enabled ? t.name : `${t.name} (disabled)`,
+                disabled: !t.enabled,
+              }))}
+              value={tree}
+              onChange={switchTree}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: false }}
+            />
+          </>
+        )}
         {/* The recent-conversations list needs room a rail doesn't have —
             hidden while collapsed rather than crammed in; expand to see it. */}
         {showRecent && !collapsed && (

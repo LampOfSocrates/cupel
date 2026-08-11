@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes, useLocation } from "react-router";
-import { renderApp } from "../test/render";
+import { renderApp, type AppStateOverrides } from "../test/render";
 import { logoutRequests, mockTasks, taskStreamRig } from "../test/msw/handlers";
 import { getAuthToken, setAuthToken } from "../api/auth";
 import { Shell } from "./Shell";
@@ -22,14 +22,14 @@ function LocationProbe() {
   );
 }
 
-const renderShell = () =>
+const renderShell = (overrides: AppStateOverrides & { route?: string } = {}) =>
   renderApp(
     <Routes>
       <Route element={<Shell />}>
         <Route path="*" element={<LocationProbe />} />
       </Route>
     </Routes>,
-    { route: "/chat", queue: true },
+    { route: "/chat", queue: true, ...overrides },
   );
 
 describe("Sidebar queue badge", () => {
@@ -160,5 +160,70 @@ describe("Sidebar session row (P2-T07)", () => {
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/login"));
     // Token gone → the affordance disappears (token presence is the signal).
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+  });
+});
+
+// Tree switcher (built on request, alongside the EvalSet->EvalBenchmark
+// rename session) — AppContext.tree used to be a fixed boot-time value with
+// no setter; this is the first UI that lets it change. AgentTree.enabled
+// (openapi.yaml) gates selectability: "false is only ever seen by admins ...
+// render greyed with a disabled badge".
+describe("Sidebar tree switcher", () => {
+  it("lists every tree and switches: setTree fires, then a landing-route navigation", async () => {
+    const setTree = vi.fn();
+    const user = userEvent.setup();
+    renderShell({ route: "/agents", setTree });
+
+    await user.click(screen.getByRole("combobox", { name: "Tree" }));
+    await user.click(await screen.findByRole("option", { name: "Agent 2" }));
+
+    expect(setTree).toHaveBeenCalledWith("agent2");
+    // Every tree-scoped id in the old URL belonged to the OLD tree, so a
+    // switch always lands on the landing route rather than trying to carry
+    // the current page across trees.
+    expect(screen.getByTestId("loc")).toHaveTextContent("/chat|null");
+  });
+
+  it("re-picking the already-active tree is a no-op — no setTree, no navigation", async () => {
+    const setTree = vi.fn();
+    const user = userEvent.setup();
+    renderShell({ route: "/agents", setTree });
+
+    await user.click(screen.getByRole("combobox", { name: "Tree" }));
+    await user.click(await screen.findByRole("option", { name: "Agent 1" }));
+
+    expect(setTree).not.toHaveBeenCalled();
+    expect(screen.getByTestId("loc")).toHaveTextContent("/agents|null");
+  });
+
+  it("a disabled tree is listed but not selectable", async () => {
+    const setTree = vi.fn();
+    const user = userEvent.setup();
+    renderShell({
+      setTree,
+      trees: [
+        { id: "agent1", name: "Agent 1", enabled: true },
+        { id: "agent2", name: "Agent 2", enabled: false },
+      ],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Tree" }));
+    const disabledOption = await screen.findByRole("option", { name: "Agent 2 (disabled)" });
+    expect(disabledOption).toHaveAttribute("data-combobox-disabled", "true");
+    await user.click(disabledOption);
+
+    expect(setTree).not.toHaveBeenCalled();
+  });
+
+  it("hides the switcher when there is only one tree to switch to", () => {
+    renderShell({ trees: [{ id: "agent1", name: "Agent 1", enabled: true }] });
+    expect(screen.queryByRole("combobox", { name: "Tree" })).not.toBeInTheDocument();
+  });
+
+  it("hides the switcher on the collapsed rail — no room, same as Recent", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.queryByRole("combobox", { name: "Tree" })).not.toBeInTheDocument();
   });
 });

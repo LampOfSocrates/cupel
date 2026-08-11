@@ -13,6 +13,10 @@ export const testAppState = {
   me: mockMe,
   trees: mockTrees,
   tree: "agent1",
+  // A no-op by default — tests asserting the switch itself pass their own
+  // spy via AppContext.Provider directly (same pattern refreshConversations
+  // already uses).
+  setTree: () => {},
 };
 
 // Boot-state overrides. The admin sections are gated on /me.roles and
@@ -21,6 +25,8 @@ export const testAppState = {
 export interface AppStateOverrides {
   me?: Me;
   trees?: AgentTree[];
+  tree?: string;
+  setTree?: (id: string) => void;
 }
 
 // Working refreshConversations, so tests exercise the real sidebar-reload
@@ -54,6 +60,8 @@ function TestAppProvider({
         // ?? not spread: an explicitly-passed `undefined` must keep the default.
         me: overrides.me ?? testAppState.me,
         trees: overrides.trees ?? testAppState.trees,
+        tree: overrides.tree ?? testAppState.tree,
+        setTree: overrides.setTree ?? testAppState.setTree,
         conversationsVersion,
         refreshConversations,
         models,

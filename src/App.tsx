@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
+import { useLocalStorage } from "@mantine/hooks";
 import { api, ApiError } from "./api/client";
 import { agenticConfig } from "../agentic.config";
 import { resolveDefaultTargetId, setActiveTarget, useBackendTarget } from "./api/target";
@@ -140,6 +141,16 @@ export function App() {
   );
   const me = boot?.[0] ?? null;
   const trees = boot?.[1] ?? null;
+
+  // The user's last pick, device-locally persisted like the backend-target
+  // picker (src/api/target.ts) and the sidebar-rail-collapsed flag
+  // (Shell.tsx) — same convention, same mechanism. Hook called unconditionally
+  // (before the early returns below) so render order never changes; the
+  // ENABLED check happens once `trees` is known, just below.
+  const [storedTree, setStoredTree] = useLocalStorage({
+    key: "cupel-active-tree",
+    defaultValue: DEFAULT_TREE,
+  });
   const rebootIfBooted = useEffectEvent(() => {
     if (me !== null) setBootNonce((n) => n + 1);
   });
@@ -211,9 +222,27 @@ export function App() {
     );
   }
 
-  const tree = trees.some((t) => t.id === DEFAULT_TREE)
-    ? DEFAULT_TREE
-    : (trees[0]?.id ?? DEFAULT_TREE);
+  // AgentTree.enabled (openapi.yaml) is toggled via PATCH /admin/agenttrees —
+  // "false is only ever seen by admins (non-admin listings omit disabled
+  // trees)". So a disabled tree can only reach this list for an admin viewer,
+  // and it must never become the ACTIVE one regardless: prefer the stored
+  // pick if it's currently enabled, else DEFAULT_TREE if enabled, else the
+  // first enabled tree, else — no enabled tree at all, an edge case the old
+  // code didn't consider either — fall back the same way it used to.
+  const enabledTrees = trees.filter((t) => t.enabled);
+  const tree = enabledTrees.some((t) => t.id === storedTree)
+    ? storedTree
+    : (enabledTrees.find((t) => t.id === DEFAULT_TREE)?.id ??
+      enabledTrees[0]?.id ??
+      trees[0]?.id ??
+      DEFAULT_TREE);
+  // Not memoized — deliberately a plain closure defined post-null-check
+  // (trees is narrowed to non-null here), same as `tree` above. The Provider
+  // value below is already a fresh object every render, so a stable identity
+  // here would buy nothing.
+  const setTree = (id: string) => {
+    if (trees.some((t) => t.id === id && t.enabled)) setStoredTree(id);
+  };
 
   return (
     <AppContext.Provider
@@ -221,6 +250,7 @@ export function App() {
         me,
         trees,
         tree,
+        setTree,
         conversationsVersion,
         refreshConversations,
         models,
