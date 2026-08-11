@@ -27,6 +27,10 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.115" "uvicorn[standard]>=0.30" "python-multipart>=0.0.9" "httpx>=0.27"
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY mock ./mock
+# The contract, served as-is at /openapi.yaml and rendered by Swagger UI at
+# /docs (mock/docs.py). Read from disk per request, so the hosted demo
+# documents exactly the contract this image was built from.
+COPY openapi.yaml ./openapi.yaml
 # mock/root.py serves docs/index.html (the landing page) at "/" and mounts
 # docs/assets/ at /assets — only these two paths, not the whole docs/ folder
 # (which also holds internal planning docs that don't belong in the image).

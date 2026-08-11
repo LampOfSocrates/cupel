@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.datastructures import MutableHeaders
 
 from . import auth, capabilities, config, llm, permissions, storage, tabular
+from .docs import register_docs
 from .agents.financial_advisor import engine as financial_advisor_engine
 from .agents.financial_advisor.tree import TREE_ID as FINANCIAL_ADVISOR_TREE_ID
 from .db import Db, j, unj
@@ -253,10 +254,16 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # first conformance test. FastAPI auto-generates the spec from the
     # routes; handlers have no response_model, so schemas are loose ({}) and
     # conformance sees path/method/param presence (documented in
-    # docs/readiness.md). Docs UI stays off.
+    # docs/readiness.md).
+    #
+    # FastAPI's OWN docs UI stays off, and that is the point of mock/docs.py:
+    # this schema describes the mock, so rendering it would document the
+    # implementation instead of the contract. register_docs below serves
+    # openapi.yaml itself at /docs, read from disk per request.
     app = FastAPI(title="Cupel mock", version=config.VERSION,
                   openapi_url="/openapi.json", docs_url=None, redoc_url=None)
     db = Db(db_path or config.DB_PATH)
+    register_docs(app)
     # add_middleware PREPENDS, so registration order is inner→outer. Final
     # stack: RequestId (outermost — so even a gate's 401 is traceable) → CORS
     # (preflight answered early; every 401 still carries CORS headers) →

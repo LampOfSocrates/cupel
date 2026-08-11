@@ -1,5 +1,5 @@
 # Build context = package manifests, src/, index.html, vite/ts config,
-# agentic.config.ts (src imports it), mock/.
+# agentic.config.ts (src imports it), mock/, openapi.yaml.
 node_modules/
 .git/
 dist/
@@ -26,5 +26,7 @@ autorun/
 .claude/
 cupel-starter.zip
 *.md
-openapi.yaml
+# openapi.yaml IS in the context now: the runtime stage COPYs it so /docs can
+# render the contract this image was built from (mock/docs.py). It was excluded
+# while nothing in the image read it.
 vitest.config.ts

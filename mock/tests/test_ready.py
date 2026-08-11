@@ -66,8 +66,10 @@ def test_openapi_served_docs_stay_off():
             spec = r.json()
             assert spec["info"]["title"] == "Cupel mock"
             assert "/agenttrees/{tree}/chat" in spec["paths"]
-            # docs UIs remain disabled (openapi exposure only)
-            assert (await c.get("/docs")).status_code == 404
+            # FastAPI's OWN docs UIs stay disabled: this schema describes the
+            # MOCK, and rendering it would document the implementation instead
+            # of the contract. /docs is served by mock/docs.py from
+            # openapi.yaml itself — covered in test_docs.py.
             assert (await c.get("/redoc")).status_code == 404
     run(case())
 
