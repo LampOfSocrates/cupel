@@ -1,0 +1,3 @@
+## 2026-08-11 - Deferred Database Index Creation during Schema Migrations
+**Learning:** Adding indexes directly inside the `SCHEMA` script block executed via `executescript(SCHEMA)` at the start of `Db.__init__` will fail on legacy databases requiring migrations. This is because `SCHEMA` is executed before migration functions (e.g., `_migrate_run_to_evaluation`, `_migrate_judgment_subject_scorer`) can reshape columns. When an index references columns only created during migration, SQLite throws an `OperationalError` ("no such column").
+**Action:** Always create indexes at the very end of database initialization, after all migrations have safely run and committed their schema modifications, but within the same startup transaction.
