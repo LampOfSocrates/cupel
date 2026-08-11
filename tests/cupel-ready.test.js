@@ -16,6 +16,7 @@ import {
   detectAuth,
   buildInit,
   renderInitBlock,
+  describeError,
   main,
 } from "../scripts/cupel-ready.mjs";
 
@@ -460,6 +461,51 @@ describe("cupel-ready --init", () => {
       expect(init.block).toContain('remap: (p) => "/nabu-service" + p,');
     } finally {
       log.mockRestore();
+    }
+  });
+});
+
+// Node's fetch wraps every network failure as TypeError("fetch failed") with
+// the real reason on .cause — printing error.message alone made a bad cert,
+// a refused connection and a DNS failure all look identical.
+describe("cupel-ready error reporting", () => {
+  it("describeError walks a .cause chain into readable lines", () => {
+    const inner = new Error("self-signed certificate");
+    const outer = new Error("fetch failed", { cause: inner });
+    expect(describeError(outer)).toBe(
+      "fetch failed\n  caused by: self-signed certificate",
+    );
+  });
+
+  it("describeError handles a plain error with no cause", () => {
+    expect(describeError(new Error("plain"))).toBe("plain");
+  });
+
+  it("describeError walks a chain more than one level deep", () => {
+    const root = new Error("ECONNREFUSED");
+    const mid = new Error("connect failed", { cause: root });
+    const top = new Error("fetch failed", { cause: mid });
+    expect(describeError(top)).toBe(
+      "fetch failed\n  caused by: connect failed\n  caused by: ECONNREFUSED",
+    );
+  });
+
+  it("parseArgs: --insecure", () => {
+    expect(parseArgs(["spec.json"]).insecure).toBe(false);
+    expect(parseArgs(["spec.json", "--insecure"]).insecure).toBe(true);
+  });
+
+  it("main: a load failure prints describeError's output and exits 2", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const code = await main(["/no/such/file/openapi.json"]);
+      expect(code).toBe(2);
+      const printed = err.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(printed).toContain("cupel-ready:");
+      // A plain ENOENT has no .cause — describeError must not choke on that.
+      expect(printed).toMatch(/ENOENT|no such file/i);
+    } finally {
+      err.mockRestore();
     }
   });
 });

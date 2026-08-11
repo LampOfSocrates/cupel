@@ -11,6 +11,14 @@
 //                         e.g. --prefix /nabu-service (cupel-phases.md:75)
 //   --header k:v          extra header for fetching a URL target (repeatable),
 //                         e.g. --header "X-Demo-Token: secret" for gated demos
+//   --insecure            skip TLS certificate verification when fetching a
+//                         URL target (curl -k equivalent) — for a self-signed
+//                         or incomplete-chain cert on a target you trust
+//                         (staging, internal). Node's fetch is stricter about
+//                         chains than curl, so "curl works, this doesn't" is
+//                         almost always exactly this; try it before assuming
+//                         a real network problem. Process-wide for the run,
+//                         since this script makes exactly one fetch.
 //   --phase1-only         restrict checks to the Phase-1 surface (see
 //                         PHASE1_PATHS in scripts/conformance.mjs)
 //   --json                machine-readable report on stdout
@@ -45,11 +53,11 @@ import { compare, renderReport } from "./conformance.mjs";
 
 const USAGE =
   "usage: cupel-ready <openapi-url-or-file> [--contract openapi.yaml] " +
-  "[--prefix /p] [--header k:v]... [--phase1-only] [--json] " +
+  "[--prefix /p] [--header k:v]... [--insecure] [--phase1-only] [--json] " +
   '[--init [--id myid] [--label "My API"]]';
 
 export function parseArgs(argv) {
-  const options = { contract: "openapi.yaml", prefix: "", headers: {}, json: false, phase1Only: false, init: false, id: null, label: null, target: null };
+  const options = { contract: "openapi.yaml", prefix: "", headers: {}, insecure: false, json: false, phase1Only: false, init: false, id: null, label: null, target: null };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--contract") options.contract = argv[++i];
@@ -59,7 +67,8 @@ export function parseArgs(argv) {
       const colon = raw.indexOf(":");
       if (colon < 1) throw new Error(`--header expects "Name: value", got "${raw}"`);
       options.headers[raw.slice(0, colon).trim()] = raw.slice(colon + 1).trim();
-    } else if (arg === "--json") options.json = true;
+    } else if (arg === "--insecure") options.insecure = true;
+    else if (arg === "--json") options.json = true;
     else if (arg === "--phase1-only") options.phase1Only = true;
     else if (arg === "--init") options.init = true;
     else if (arg === "--id") options.id = argv[++i];
@@ -74,12 +83,36 @@ export function parseArgs(argv) {
   return options;
 }
 
-export async function loadTarget(source, headers) {
+// Node's fetch (undici) wraps every network failure in a generic
+// TypeError("fetch failed") and puts the actual reason on `.cause` — a bad
+// cert, a refused connection, DNS failure, whatever. Printing only
+// error.message (the old behavior) meant every one of those looked
+// identical and undiagnosable. `.cause` can itself chain (rare, but
+// AggregateError-wrapped causes do), so walk it rather than reading one level.
+export function describeError(error) {
+  const parts = [error.message];
+  let cause = error.cause;
+  while (cause) {
+    parts.push(cause.message ?? String(cause));
+    cause = cause.cause;
+  }
+  return parts.join("\n  caused by: ");
+}
+
+export async function loadTarget(source, headers, { insecure = false } = {}) {
   let text;
   if (/^https?:\/\//.test(source)) {
-    const res = await fetch(source, { headers });
-    if (!res.ok) throw new Error(`GET ${source} → ${res.status} ${res.statusText}`);
-    text = await res.text();
+    // Process-wide and only for this one call the script ever makes — see
+    // the --insecure usage comment above for why this is curl -k's
+    // equivalent rather than a security regression in general use.
+    const restoreTls = insecure ? disableTlsVerification() : null;
+    try {
+      const res = await fetch(source, { headers });
+      if (!res.ok) throw new Error(`GET ${source} → ${res.status} ${res.statusText}`);
+      text = await res.text();
+    } finally {
+      restoreTls?.();
+    }
   } else {
     text = readFileSync(source, "utf8");
   }
@@ -89,6 +122,21 @@ export async function loadTarget(source, headers) {
     throw new Error(`${source} does not look like an OpenAPI document (no paths)`);
   }
   return SwaggerParser.dereference(doc);
+}
+
+/** Returns a restore function so --insecure never leaks past this one fetch. */
+function disableTlsVerification() {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  console.error(
+    "cupel-ready: --insecure set — TLS certificate verification is OFF for this request. " +
+      "Only use this against a target you trust (self-signed/incomplete-chain staging, not an " +
+      "arbitrary internet host).",
+  );
+  return () => {
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  };
 }
 
 // ---------------------------------------------------------------- --init mode
@@ -250,7 +298,7 @@ export async function main(argv = process.argv.slice(2)) {
   try {
     options = parseArgs(argv);
   } catch (error) {
-    console.error(`cupel-ready: ${error.message}\n${USAGE}`);
+    console.error(`cupel-ready: ${describeError(error)}\n${USAGE}`);
     return 2;
   }
   if (options.help) {
@@ -261,9 +309,15 @@ export async function main(argv = process.argv.slice(2)) {
   let contract, target;
   try {
     contract = await SwaggerParser.dereference(options.contract);
-    target = await loadTarget(options.target, options.headers);
+    target = await loadTarget(options.target, options.headers, { insecure: options.insecure });
   } catch (error) {
-    console.error(`cupel-ready: ${error.message}`);
+    console.error(`cupel-ready: ${describeError(error)}`);
+    if (error.message === "fetch failed" && !options.insecure) {
+      console.error(
+        "  (a bare \"fetch failed\" with a TLS-shaped cause above is usually a cert chain " +
+          "curl tolerates and Node doesn't — try again with --insecure if you trust this target)",
+      );
+    }
     return 2;
   }
 

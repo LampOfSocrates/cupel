@@ -2,13 +2,19 @@
 
 P2-READY (cupel-phases.md:74): before pointing Cupel at your backend, check
 whether it is ready — `cupel-ready` compares your backend's OpenAPI document
-against Cupel's contract (`openapi.yaml`, v0.4.0) and reports every missing
+against Cupel's contract (`openapi.yaml`, v0.5.0) and reports every missing
 endpoint or mismatched shape.
 
 ## Usage
 
 ```
-npm run ready -- <openapi-url-or-file> [options]   # or: npx cupel-ready ...
+npm run ready -- <openapi-url-or-file> [options]
+
+# equivalent, no npm involved — it's a plain Node script with a shebang:
+node scripts/cupel-ready.mjs <openapi-url-or-file> [options]
+
+# equivalent, after `npm install` (the package declares its own bin):
+npx cupel-ready <openapi-url-or-file> [options]
 ```
 
 The target may be a URL (`http://localhost:4010/openapi.json`) or a local
@@ -19,6 +25,7 @@ file, JSON or YAML.
 | `--contract <path>` | contract to validate against (default `./openapi.yaml`) |
 | `--prefix <p>` | remap: prepend `p` to every contract path before lookup |
 | `--header k:v` | extra request header when fetching a URL target (repeatable) |
+| `--insecure` | skip TLS certificate verification when fetching a URL target (`curl -k` equivalent) — see "Self-signed or incomplete-chain certs" below |
 | `--phase1-only` | check only the Phase-1 surface (see below) |
 | `--json` | machine-readable report on stdout |
 | `--init` | also emit a ready-to-paste `agentic.config.ts` target block (see below) |
@@ -115,6 +122,24 @@ token, no auth) — it's a plain fetch:
 ```
 npm run ready -- https://cupel-site.onrender.com/cupel-demo/openapi.json
 ```
+
+### Self-signed or incomplete-chain certs — `curl` works but this doesn't
+
+Node's `fetch` is stricter about certificate chains than `curl` — a
+self-signed cert or one missing an intermediate is a common "curl works,
+this fails" gap, and it always prints as a bare `fetch failed` with the real
+reason folded into `.cause` (which the tool now prints on its own line:
+`caused by: ...`). If that cause line looks TLS-shaped and the target is one
+you trust (a staging box, an internal service — not an arbitrary host on the
+internet), retry with `--insecure`:
+
+```
+npm run ready -- https://staging.internal.example.com/openapi.json --insecure
+```
+
+`--insecure` disables certificate verification for exactly the one request
+this script makes, for this run only — it does not change how any other tool
+or a later run behaves.
 
 ## `--init` — generate an `agentic.config.ts` target block (P2-INIT)
 
