@@ -238,6 +238,22 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+
+            # Create performance indexes targeting frequently queried columns,
+            # especially columns generated/modified by schema migrations.
+            # This improves search, turns, tasks, spans, and judgments performance.
+            self.conn.executescript("""
+              CREATE INDEX IF NOT EXISTS idx_turns_conversation_id ON turns(conversation_id);
+              CREATE INDEX IF NOT EXISTS idx_turns_invocation_id ON turns(invocation_id);
+              CREATE INDEX IF NOT EXISTS idx_turns_task_id ON turns(task_id);
+              CREATE INDEX IF NOT EXISTS idx_conversations_tree_id_deleted ON conversations(tree_id, deleted);
+              CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+              CREATE INDEX IF NOT EXISTS idx_spans_turn_id ON spans(turn_id);
+              CREATE INDEX IF NOT EXISTS idx_judgments_conversation_id ON judgments(conversation_id);
+              CREATE INDEX IF NOT EXISTS idx_judgments_evaluation_id ON judgments(evaluation_id);
+              CREATE INDEX IF NOT EXISTS idx_judgments_subject ON judgments(subject_kind, subject_id);
+              CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
+            """)
             self.conn.commit()
 
     def _migrate_eval_cases(self):
