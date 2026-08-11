@@ -30,19 +30,26 @@ services:
         value: "1"
       - key: CUPEL_SEED
         value: "42"
-      # P2-PERSIST storage mode. "local" = plain SQLite on the container's
-      # ephemeral disk: every restart/cold start starts from nothing and the
-      # boot seed refills it. That is the current, working default.
+      # P2-PERSIST storage mode. "s3" = the same SQLite file, continuously
+      # replicated to an R2 bucket by Litestream and restored from it on boot,
+      # so the demo's data survives the free tier's ephemeral disk.
+      #
+      # This value lives here, not only in the dashboard, because a blueprint
+      # apply rewrites the service's env from this file — pinning "local" here
+      # would silently revert a dashboard flip and put the demo back to wiping
+      # itself on every restart, with no error (degradation is deliberate).
       - key: CUPEL_STORAGE
-        value: local
-      # To make the demo's data SURVIVE restarts, set CUPEL_STORAGE=s3 and add
-      # these in the Render dashboard (Environment tab — secrets do not belong
-      # in this file, and sync:false here would block blueprint applies).
+        value: s3
+      # The rest are SECRETS and must be set in the Render dashboard
+      # (Environment tab) — they do not belong in a public repo, and sync:false
+      # here would block blueprint applies. Without them mock/boot.py logs the
+      # missing names and runs LOCAL and UNREPLICATED; /cupel-demo/healthz then
+      # reports mode:"local", which is the signal that this happened.
       # Full walkthrough incl. R2 bucket creation: docs/deployment.md
       # "Storage modes".
       #   CUPEL_S3_BUCKET             cupel-demo
       #   CUPEL_S3_ENDPOINT           https://<account>.r2.cloudflarestorage.com
       #   CUPEL_S3_ACCESS_KEY_ID      <R2 API token access key id>
       #   CUPEL_S3_SECRET_ACCESS_KEY  <R2 API token secret>
-      #   CUPEL_S3_PATH               cupel-mock          (optional, default)
+      #   CUPEL_S3_PATH               sample-cupel-data
       #   CUPEL_S3_REGION             auto                (optional, default)
