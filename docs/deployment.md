@@ -62,18 +62,26 @@ service.)
 - Upgrade path: Fly.io ~$2/mo machine + volume when always-on is wanted.
   AWS only if the client's org requires it, or for the Phase-3 Helm/k8s story.
 
-## Storage modes (P2-PERSIST, 2026-08-06)
+## Storage modes (P2-PERSIST, 2026-08-06; live on the demo 2026-08-11)
 **SQLite is the database in both roles. Only the DURABILITY of the file
 changes**, and it is selected by one environment variable:
 
 | `CUPEL_STORAGE` | What it is | Who runs it |
 | --- | --- | --- |
-| `local` (default) | A plain SQLite file at `CUPEL_MOCK_DB`. No S3 code path, no extra env, no extra process. | Every developer checkout. Also the current, working Render default. |
-| `s3` | The same SQLite file, continuously replicated to an S3-compatible bucket by [Litestream](https://litestream.io) and restored from it on boot. | The hosted demo, where the mock IS the whole backend and the disk is ephemeral. |
+| `local` (default) | A plain SQLite file at `CUPEL_MOCK_DB`. No S3 code path, no extra env, no extra process. | Every developer checkout. |
+| `s3` | The same SQLite file, continuously replicated to an S3-compatible bucket by [Litestream](https://litestream.io) and restored from it on boot. | The hosted demo, where the mock IS the whole backend and the disk is ephemeral. This is what `cupel-site` runs (`render.yaml`). |
 
 Nothing about the app changes between the two: the same FastAPI process, the
 same schema, the same endpoints. `local` is exactly the behaviour that shipped
 before this task.
+
+`CUPEL_STORAGE` lives in `render.yaml`, not only in the Render dashboard,
+because a blueprint apply rewrites the service's environment from that file —
+pinning `local` there would silently revert a dashboard flip and put the demo
+back to wiping itself, with nothing raised, since degradation is deliberate
+(`mock/boot.py:24-29`). The four credentials stay dashboard-only; a per-key
+`PUT /v1/services/{id}/env-vars/{key}` was observed to leave the service's
+other variables untouched.
 
 ### How s3 mode boots
 `mock/boot.py` is the container's `CMD`. In `local` mode it simply execs
@@ -125,22 +133,37 @@ demo database comfortably.
 
    | Variable | Value | Required |
    | --- | --- | --- |
-   | `CUPEL_STORAGE` | `s3` | yes |
    | `CUPEL_S3_BUCKET` | `cupel-demo` | yes |
    | `CUPEL_S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` | yes |
    | `CUPEL_S3_ACCESS_KEY_ID` | R2 token access key id | yes |
    | `CUPEL_S3_SECRET_ACCESS_KEY` | R2 token secret | yes |
-   | `CUPEL_S3_PATH` | key prefix inside the bucket (default `cupel-mock`) | no |
+   | `CUPEL_S3_PATH` | key prefix inside the bucket — the demo uses `sample-cupel-data` | in practice |
    | `CUPEL_S3_REGION` | `auto` for R2; the real region for AWS | no |
+
+   `CUPEL_STORAGE=s3` is NOT set here — it comes from `render.yaml` (above).
+   The four credentials are secrets and belong in the dashboard only.
+
+   `CUPEL_S3_PATH` is marked optional by the code (`mock/storage.py:41` defaults
+   it to `cupel-mock`) but is effectively required by any deployment that has
+   already chosen a prefix: omit it and the demo silently starts a SECOND,
+   empty replica alongside the real one rather than failing.
 
    Keep `CUPEL_SEED_ON_BOOT=1` and `CUPEL_SEED=42` — they now mean *seed if
    empty* (below), so they are safe to leave on with a durable database.
-   These are secrets: set them in the dashboard, **not** in `render.yaml`.
-5. Redeploy and check `GET /cupel-demo/healthz`:
+5. **Deploy explicitly. Setting environment variables does not restart the
+   service.** Until you do, the old container keeps serving and keeps
+   reporting `mode:"local"` — indistinguishable from a degraded boot unless
+   you compare the running deploy's creation time against when you set the
+   variables. Trigger one (`POST /v1/services/{id}/deploys`, or *Manual
+   Deploy* in the dashboard) and wait for `live`.
+6. Check `GET /cupel-demo/healthz`:
    `{"status":"ok", ..., "storage":{"mode":"s3","restored":true}}`.
    `restored:false` on the very first boot is correct (the bucket was empty);
    `"mode":"local"` when you asked for `s3` means the boot degraded — read the
    logs, `mock/boot.py` names the missing variable.
+7. Confirm the bucket is actually receiving writes before trusting any of it:
+   `aws s3 ls s3://cupel-demo/ --recursive --endpoint-url <endpoint> --region auto`
+   should show `<prefix>/0000/*.ltx` objects with timestamps from this boot.
 
 For **AWS S3** instead: same variables, `CUPEL_S3_ENDPOINT` =
 `https://s3.<region>.amazonaws.com`, `CUPEL_S3_REGION` = the real region, and
@@ -173,11 +196,38 @@ take it down to protect data that by definition was not there:
 `/cupel-demo/healthz` is the fastest check — it reports the **effective**
 mode, not the requested one. `npm start` prints the same thing in its banner.
 
+### `restored:true` is necessary, not sufficient
+It answers "did a file come back from the replica?" — not "was that file
+current?". And because seeding is now seed-**if-empty**, a restore that fails
+outright leaves an empty database that the boot seed refills with the same
+deterministic `--seed 42` dataset, so a *broken* demo and a *working* one look
+alike from the outside: same rubrics, same conversations, same counts.
+
+To distinguish them, compare a value the generator cannot reproduce — a row's
+creation timestamp — across the restart:
+
+```
+GET /cupel-demo/eval/rubrics?page_size=100     # before, note created
+<restart>
+GET /cupel-demo/eval/rubrics?page_size=100     # after, must be IDENTICAL
+```
+Unchanged timestamps mean the database was restored. Changed ones mean it was
+re-seeded, whatever `restored` says.
+
+Check a new bucket's credentials independently before trusting a deploy to
+exercise them: an `aws s3` put/get/delete round trip covers the three
+operations Litestream needs.
+
 ### Running s3 mode on your machine (verification, not routine use)
 `CUPEL_STORAGE=s3` plus the `CUPEL_S3_*` variables makes `npm start` boot
 `python -m mock.boot` instead of uvicorn directly, and the banner names the
-replica. You need the `litestream` binary on `PATH`. **Use a different
-`CUPEL_S3_PATH` than the deployed demo** — see the single-writer rule.
+replica. You need the `litestream` binary on `PATH` — it ships a Windows build
+too, so this needs no container. **Use a different `CUPEL_S3_PATH` than the
+deployed demo** — see the single-writer rule.
+
+On Windows, Litestream logs one `sync error … Access is denied` against the
+local sidecar directory and recovers a second later. That is a directory-fsync
+difference, not a replication failure, and it does not occur on the Linux image.
 
 ## How to deploy (P1-TDEPLOY)
 Everything ships in-repo: `Dockerfile` (stage 1 builds the Vite bundle with
