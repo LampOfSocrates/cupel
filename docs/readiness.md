@@ -1,8 +1,8 @@
 # cupel-ready — backend readiness / conformance report
 
-P2-READY (cupel-phases.md:74): before pointing Cupel at your backend, check
-whether it is ready — `cupel-ready` compares your backend's OpenAPI document
-against Cupel's contract (`openapi.yaml`, v0.5.0) and reports every missing
+Before pointing Cupel at your backend, check whether it is ready —
+`cupel-ready` compares your backend's OpenAPI document
+against Cupel's contract (`openapi.yaml`, v0.6.0) and reports every missing
 endpoint or mismatched shape.
 
 ## Usage
@@ -37,8 +37,8 @@ what you'd get after pasting the block.)
 
 ### First conformance test: the mock
 
-The mock ships its own OpenAPI at `/openapi.json` (cupel-phases.md:98) and is
-the script's first target:
+The mock ships its own OpenAPI at `/openapi.json` and is the script's first
+target:
 
 ```
 npm run mock
@@ -46,11 +46,41 @@ npm run ready -- http://localhost:4010/openapi.json --phase1-only
 # ... conformance: PASS
 ```
 
-While the mock is mid-Phase-2, the default (full-contract) run intentionally
-FAILs, listing the not-yet-implemented Phase-2 endpoints; `--phase1-only`
+The mock does not implement the whole contract, so the default (full-contract)
+run intentionally FAILs, listing what it has not built; `--phase1-only`
 restricts the check to the Phase-1 surface (a maintained operation list in
 `scripts/conformance.mjs` mirroring `tests/openapi-contract.test.js` — a tag
 heuristic was rejected because contract tags group by resource, not phase).
+
+### Backends that enumerate their agents
+
+Plenty of real backends spell every agent out as its own route rather than
+templating one:
+
+```
+/nabu-service/agent1/chat      /nabu-service/agent2/chat
+/nabu-service/agent1/sessions  /nabu-service/agent2/sessions
+```
+
+The comparator matches path *templates*, so nothing there can match the
+contract's `/agenttrees/{tree}/chat` — and a backend implementing every
+operation three times over would report **0/67**, the most misleading answer
+this tool can give. So before comparing, `cupel-ready` looks for the agent
+slot (anchored on your `chat` routes: the segment before `chat` is an agent,
+what precedes it is the prefix), collapses those ids onto one `{tree}` path,
+declares the path parameter the enumeration stood in for, and puts the
+contract into the same shape. It says so rather than rewriting your spec
+silently:
+
+```
+note: your spec lists 3 agents under /nabu-service (agent1, agent2, agent3);
+comparing them as one {tree} so the counts below are per-operation, not per-agent.
+```
+
+Passing `--prefix` turns this off — an explicit prefix means you have already
+said how your routes map, so it wins. `--json` reports the same under a
+`folded_agents` key. The same detection drives `npm run create`'s browser
+mapper, so the two agree on what your backend implements.
 
 ### The report is grouped by family
 
@@ -100,8 +130,8 @@ hide and plenty left to explain.
 
 ### Remapped backends
 
-Backends whose routes are named differently (cupel-phases.md:75), e.g.
-everything under `/nabu-service`:
+Backends whose routes are named differently, e.g. everything under
+`/nabu-service`:
 
 ```
 npm run ready -- https://nabu.example.com/openapi.json --prefix /nabu-service
@@ -167,8 +197,7 @@ Derivations:
 - **id / label** — `--id` / `--label` flags, else derived from the baseUrl
   hostname; plus a non-prod `banner` suggestion (`banner: false` for prod).
 
-Worked example — a backend whose routes live under `/nabu-service`
-(cupel-phases.md:75):
+Worked example — a backend whose routes live under `/nabu-service`:
 
 ```
 npm run ready -- https://nabu.example.com/openapi.json --init --id nabu --label "Nabu"

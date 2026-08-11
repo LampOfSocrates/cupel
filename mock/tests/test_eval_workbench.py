@@ -7,7 +7,7 @@ and JudgeRequest.benchmark_id (+ benchmark_version).
 
 Run: npm run test:mock.
 
-The append-only rules under test (invariant cupel-phases.md:160):
+The append-only rules under test (invariant):
 - "each save appends the next version, never overwrites. Prior versions stay
   readable and existing judgments keep pointing at the content they actually
   judged" (openapi.yaml:1459-1466)
@@ -111,7 +111,7 @@ def test_create_case_requires_agenttree():
 def test_create_case_sourced_from_a_real_turn():
     """"sourced = the server derives input (the turn's prompt + envelope) and
     output (its response)" (openapi.yaml:3322-3326) — the workbench's "pull
-    from a real turn" (cupel-phases.md:80)."""
+    from a real turn"."""
     async def case():
         async with client_pair() as c:
             conv_id = await seed_conversation(c, n=1)

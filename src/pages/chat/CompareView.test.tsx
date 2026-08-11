@@ -9,7 +9,7 @@ import { api } from "../../api/client";
 import { renderApp, type AppStateOverrides } from "../../test/render";
 import { mockEndpoints, mockMe, replayTurnRequests } from "../../test/msw/handlers";
 
-// A/B compare in chat within one backend (docs/plan-ab-compare.md §3).
+// A/B compare in chat within one backend (docs/plans/plan-ab-compare.md §3).
 // The four things the plan pins: the `tune` gate (§3 "Do not invent a 'dev'
 // role"), the column cap (§5.3), the cost warning BEFORE the send (§5.2), and
 // "the result IS a run" — the fan-out lands in the existing grid unchanged

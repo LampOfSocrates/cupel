@@ -25,7 +25,7 @@ import {
 import { renderReadme } from "../scripts/generated-readme.mjs";
 
 // `npm run create` — one command, a folder the adopter owns
-// (docs/plan-adopter-onboarding.md). The questionnaire is per FAMILY, and the
+// (docs/plans/plan-adopter-onboarding.md). The questionnaire is per FAMILY, and the
 // family list is the contract's, so nothing here restates one.
 
 const contract = YAML.parse(readFileSync("openapi.yaml", "utf8"));
@@ -111,13 +111,13 @@ describe("suggested answers", () => {
       families: [
         { name: "chat", status: "full", operations: 3, conformant: 3 },
         { name: "conversations", status: "partial", operations: 5, conformant: 2 },
-        { name: "eval", status: "none", operations: 19, conformant: 0 },
+        { name: "datasets", status: "none", operations: 13, conformant: 0 },
       ],
     };
     const suggested = suggestAnswers(FAMILIES, { report });
     expect(suggested.chat).toMatchObject({ answer: "mine" });
     expect(suggested.conversations).toMatchObject({ answer: "mock", source: "your backend has 2/5" });
-    expect(suggested.eval.answer).toBe("mock");
+    expect(suggested.datasets.answer).toBe("mock");
     // A family the spec does not mention at all still gets an answer.
     expect(suggested.memory.answer).toBe("mock");
   });
@@ -125,7 +125,7 @@ describe("suggested answers", () => {
   it("lets a flag override the suggestion, and `all` cover the rest", () => {
     const suggested = suggestAnswers(FAMILIES, { flags: { all: "hide", chat: "mine" } });
     expect(suggested.chat.answer).toBe("mine");
-    expect(suggested.eval.answer).toBe("hide");
+    expect(suggested.datasets.answer).toBe("hide");
   });
 });
 
@@ -192,13 +192,13 @@ describe("the generated package.json", () => {
 
 describe("the generated config", () => {
   const source = readFileSync("agentic.config.ts", "utf8");
-  const answers = { chat: "mine", conversations: "mock", eval: "hide" };
+  const answers = { chat: "mine", conversations: "mock", datasets: "hide" };
   const product = { name: "acme", label: "Acme", trees: { one: "workspace", many: "workspaces" } };
 
   it("writes the answers and keeps the file's own documentation", () => {
     const out = applyGeneration(source, { product, answers });
     expect(out).toContain('"chat": "mine"');
-    expect(out).toContain('"eval": "hide"');
+    expect(out).toContain('"datasets": "hide"');
     expect(out).toContain("mockTarget:");
     // The ~150 lines of comments are the reason this is a text edit.
     expect(out).toContain("THE one config artifact");
@@ -213,7 +213,7 @@ describe("the generated config", () => {
     expect(/localMock: \{\s*\n\s*enabled: true/.test(withMock)).toBe(true);
     const withoutMock = applyGeneration(source, {
       product,
-      answers: { chat: "mine", eval: "hide" },
+      answers: { chat: "mine", datasets: "hide" },
     });
     expect(/localMock: \{\s*\n\s*enabled: false/.test(withoutMock)).toBe(true);
     expect(withoutMock).not.toContain("mockTarget:");
@@ -232,8 +232,8 @@ describe("the generated config", () => {
   });
 
   it("renders the answers sorted, so a regenerated config diffs cleanly", () => {
-    const block = renderFamiliesBlock({ eval: "hide", chat: "mine" }, "mock");
-    expect(block.indexOf('"chat"')).toBeLessThan(block.indexOf('"eval"'));
+    const block = renderFamiliesBlock({ datasets: "hide", chat: "mine" }, "mock");
+    expect(block.indexOf('"chat"')).toBeLessThan(block.indexOf('"datasets"'));
   });
 
   // item 40 — a backend whose routes need more than a prefix (renamed
@@ -352,7 +352,7 @@ describe("a full generation", () => {
     const { agenticConfig } = await import(pathToFileURL(path.join(out, "agentic.config.ts")).href);
     expect(agenticConfig.product).toMatchObject({ name: "acme", label: "Acme" });
     expect(agenticConfig.families.chat).toBe("mine");
-    expect(agenticConfig.families.eval).toBe("mock");
+    expect(agenticConfig.families.datasets).toBe("mock");
     expect(agenticConfig.localMock.enabled).toBe(true);
     expect(agenticConfig.targets.some((t) => t.id === agenticConfig.mockTarget)).toBe(true);
   });
@@ -416,35 +416,65 @@ describe("stream shape detection", () => {
   });
 });
 
-describe("backend detection with path rules (item 40)", () => {
-  it("finds a nabu-service-shaped backend a plain prefix can't reach", async () => {
+describe("backend detection reads the shape out of the spec (item 40)", () => {
+  // The user's own example: agents ALWAYS live at /XXXX/agent1, /XXXX/agent2,
+  // chat streams on its own route, "conversations" are called "sessions".
+  // Nothing here is passed in — it all comes off the document.
+  const nabuSpec = {
+    openapi: "3.0.3",
+    info: { title: "nabu", version: "1" },
+    paths: {
+      "/nabu-service/agent1/chat": { post: { responses: { 200: { description: "ok" } } } },
+      "/nabu-service/agent1/stream": { post: { responses: { 200: { description: "ok" } } } },
+      "/nabu-service/agent1/sessions": { get: { responses: { 200: { description: "ok" } } } },
+      "/nabu-service/agent2/chat": { post: { responses: { 200: { description: "ok" } } } },
+      "/nabu-service/agent2/stream": { post: { responses: { 200: { description: "ok" } } } },
+      "/nabu-service/agent2/sessions": { get: { responses: { 200: { description: "ok" } } } },
+    },
+  };
+
+  const withSpec = async (spec, fn) => {
     const dir = mkdtempSync(path.join(tmpdir(), "cupel-nabu-"));
-    const spec = {
-      openapi: "3.0.3",
-      info: { title: "nabu", version: "1" },
-      paths: {
-        "/nabu-service/{tree}/chat": { post: { responses: { 200: { description: "ok" } } } },
-        "/nabu-service/{tree}/sessions": { get: { responses: { 200: { description: "ok" } } } },
-      },
-    };
-    const specFile = path.join(dir, "openapi.json");
-    writeFileSync(specFile, JSON.stringify(spec));
+    const file = path.join(dir, "openapi.json");
+    writeFileSync(file, JSON.stringify(spec));
     try {
-      const rules = {
-        prefix: "nabu-service",
-        dropAgenttrees: true,
-        renames: [{ from: "conversations", to: "sessions" }],
-        splitStream: true,
-      };
-      const withoutRules = await detectBackend(specFile, contract);
-      const withRules = await detectBackend(specFile, contract, rules);
-      // a plain prefix alone can't bridge the dropped "agenttrees" segment or
-      // the renamed resource — the rules-aware run finds strictly more.
-      expect(withRules.init.remapRules).toEqual(rules);
-      expect(withRules.report.conformant).toBeGreaterThan(withoutRules.report?.conformant ?? -1);
+      return await fn(file);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  };
+
+  it("derives prefix, agent ids, the noun and the split stream with nothing passed in", async () => {
+    const found = await withSpec(nabuSpec, (file) => detectBackend(file, contract));
+    expect(found.rulesFrom).toBe("your spec");
+    expect(found.shape).toMatchObject({
+      prefix: "/nabu-service",
+      treeIds: ["agent1", "agent2"],
+      treeTerm: "agent",
+      splitStream: true,
+    });
+    // and those derived rules are what the generated config will carry
+    expect(found.init.remapRules).toMatchObject({ prefix: "/nabu-service", dropAgenttrees: true, splitStream: true });
+  });
+
+  it("reports the resource it could not match instead of guessing a rename", async () => {
+    const found = await withSpec(nabuSpec, (file) => detectBackend(file, contract));
+    expect(found.shape.unmatchedTheirs).toContain("sessions");
+    expect(found.shape.rules.renames).toEqual([]);
+  });
+
+  it("lets rules passed in override what the spec implied", async () => {
+    const rules = {
+      prefix: "nabu-service",
+      dropAgenttrees: true,
+      renames: [{ from: "conversations", to: "sessions" }],
+      splitStream: true,
+    };
+    const found = await withSpec(nabuSpec, (file) => detectBackend(file, contract, rules));
+    expect(found.rulesFrom).toBe("you");
+    expect(found.init.remapRules).toEqual(rules);
+    // the human-supplied rename is what closes the last gap the spec alone left
+    expect(found.report.conformant).toBeGreaterThan(0);
   });
 });
 

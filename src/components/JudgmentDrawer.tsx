@@ -5,8 +5,8 @@ import type { Judgment, Rubric } from "../api/types";
 import { EnvelopeChip } from "./EnvelopeChip";
 import { ScoreChip } from "./ScoreChip";
 
-// Judgment drawer. UNSKETCHED (cupel-phases.md:22 "judgment drawer
-// (unsketched)") — layout derived from the app's Mantine language, kept dense.
+// Judgment drawer. UNSKETCHED (no judgment-drawer sketch exists)
+// — layout derived from the app's Mantine language, kept dense.
 // Contents per feature-spec.md:64: "Tap a badge → judgment drawer: score,
 // judge reasoning, rubric+version, judge model, input/output/reference side by
 // side, and append-only history below", wired to the drawer's endpoints

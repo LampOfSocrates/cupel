@@ -1,6 +1,6 @@
 """Cupel data generator: deterministic seed + basic drip.
 
-Invariant (cupel-phases.md:160, feature-spec.md:181): the generator "writes
+Invariant (feature-spec.md:181): the generator "writes
 through the public API (POST …/chat, /replay, /eval/judge etc.), never
 directly to the DB" — this module imports httpx and nothing from the mock
 package; every write is an HTTP call against a RUNNING server.
@@ -12,8 +12,8 @@ Modes (feature-spec.md:183-184):
   drip     continuous loop: "every N seconds starts a new conversation, adds
            turns to open ones, occasionally forks, queues a replay, judges a
            finished evaluation". Phase 1 exposes only --interval (rate sliders and
-           the /admin/generator control API are Phase 2, cupel-phases.md:98).
-  simulate seed then drip — what `npm run simulate` runs (cupel-phases.md:43).
+           the /admin/generator control API are Phase 2).
+  simulate seed then drip — what `npm run simulate` runs.
 
 Start the server first: npm run mock (http://localhost:4010). The generator
 never opens the SQLite file.
@@ -38,7 +38,7 @@ Idempotency of re-running seed with the same --seed:
   - replay evaluations are skipped when the tree already has that many "Replay ·"
     (evaluations are listable but carry no idempotency key — count-based skip);
   - judging/thumbs check GET /eval/judgments first and skip when present.
-    Judgments are append-only BY DESIGN (cupel-phases.md:160), so if a judge
+    Judgments are append-only BY DESIGN (invariant), so if a judge
     call did repeat it would append a new score, never overwrite — acceptable.
 All random draws happen in plan_seed() before any HTTP, so the dataset is a
 pure function of --seed even when the skip checks fire.

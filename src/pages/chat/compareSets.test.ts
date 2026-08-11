@@ -8,7 +8,7 @@ import {
 } from "./compareSets";
 import { mockEndpoints } from "../../test/msw/handlers";
 
-// compareSets presets (docs/plan-ab-compare.md §3 "Configuration"). What the
+// compareSets presets (docs/plans/plan-ab-compare.md §3 "Configuration"). What the
 // validator is FOR: a preset that cannot run exactly as written is refused and
 // named, never quietly repaired — no truncation to fit the column cap, no
 // running an endpoints-only comparison for a set that asked for more.

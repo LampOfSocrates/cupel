@@ -19,7 +19,7 @@ import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { ApiErrorNote, errorMessage, errorTitle } from "../components/ApiErrorNote";
 import { useApp } from "../AppContext";
 
-// Evaluations 3-step flow (cupel-phases.md:19): "Replay stored conversations
+// Evaluations 3-step flow: "Replay stored conversations
 // — or a single turn — under a different instruction version, model, or
 // endpoint — using the Evaluations stepper: pick (sketch 02), configure (sketch 03),
 // compare (sketch 04)". Engine (feature-spec.md:41): "take stored
@@ -45,13 +45,14 @@ import { useApp } from "../AppContext";
 // FIRES from EvaluationPage when the evaluation reaches done (see its judge-trigger
 // note) — queueing here only records the intent in the config.
 //
-// Scope guards (never build ahead, cupel-phases.md:158):
-// - endpoints hidden (showEndpoints defaults false).
+// Scope guards (never build ahead):
+// - no endpoints picker: varying the deploy endpoint applies to turn re-fire
+//   only, which owns its own multi-select in ForkModal.
 // - baseline_evaluation_id UI skipped: the clean sketch 03 shows only a "baseline:
 //   … · prefilled" caption, no picker — baseline = the stored originals.
 //
-// Test-as-evaluation arrival (cupel-phases.md:18 "editor → Evaluations flow
-// (sketches 06 → 03)"): the editor navigates here with router state
+// Test-as-evaluation arrival (editor → Evaluations flow,
+// sketches 06 → 03): the editor navigates here with router state
 // {testInRuns: {agent_id, snapshot_id, snapshot_label}} (see EditorPage's
 // handoff note). Prefill (feature-spec.md:87 "the previous conversation set
 // is remembered per agent (GET/PUT /agents/{id}/last-selection). Repeat

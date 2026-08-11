@@ -403,7 +403,7 @@ npm <span class="a">start</span>
       <p>Your agent answers in a real chat UI. Everything else is mocked and badged until you want it.</p></div></li>
     <li><div><h3>You have a backend with an OpenAPI document</h3><p>Its per-family conformance becomes the suggested answers — full means <code>mine</code>, anything less means <code>mock</code>, because a half-reachable family is a screen that half-works.</p>
       <pre class="mono" style="margin-top:10px">npm run create -- "My Product" <span class="a">--openapi</span> https://api.example.com/openapi.json</pre></div></li>
-    <li><div><h3>Your backend already speaks the contract</h3><p>Point and go — and check it any time with <code>npm run ready -- &lt;your-openapi&gt;</code>, which reports full / partial / none per family.</p></div></li>
+    <li><div><h3>Your backend already speaks the contract</h3><p>Point and go — and check it any time with <code>npm run ready -- &lt;your-openapi&gt;</code>, which reports full / partial / none per family. What it checks, what it deliberately does not, and how it reads a backend that spells out every agent as its own route: <a href="https://github.com/LampOfSocrates/cupel/blob/master/docs/readiness.md"><b>the readiness guide</b></a>.</p></div></li>
   </ol>
   <p class="prose" style="margin-top:8px">Every answer is written into one file you can edit afterwards, and the generated folder is a <b>copy you own</b> — editable, unencumbered, and honest about the fact that it receives no upstream fixes. Your product name, not "Cupel", is what your users see.</p>
   <div class="facts">
@@ -442,6 +442,7 @@ npm <span class="a">start</span>
     <li><a href="#quickstart-local">Quick start · your machine</a></li>
     <li><a href="#quickstart-whitelabel">Quick start · make it yours</a></li>
     <li><a href="#loop">A typical day with Cupel</a></li>
+    <li><a href="https://github.com/LampOfSocrates/cupel/blob/master/docs/readiness.md">Is my backend ready? ↗</a></li>
   </ul>
 </aside>
 
@@ -450,7 +451,7 @@ npm <span class="a">start</span>
 
 <footer>
   <div class="wrap">
-    <p>Free and open source. Self-hosted. <a href="#what-is-it">Back to top</a> · <a href="/cupel-demo/">Open the live demo</a>.</p>
+    <p>Free and open source. Self-hosted. <a href="#what-is-it">Back to top</a> · <a href="/cupel-demo/">Open the live demo</a> · <a href="https://github.com/LampOfSocrates/cupel/blob/master/docs/readiness.md">Backend readiness guide</a>.</p>
   </div>
 </footer>
 

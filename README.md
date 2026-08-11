@@ -6,8 +6,8 @@ with cost. Self-hosted. Point it at your backend by editing one file.
 
 **[cupel-site.onrender.com](https://cupel-site.onrender.com)** · try the demo:
 [cupel-site.onrender.com/cupel-demo/](https://cupel-site.onrender.com/cupel-demo/)
-· what it does: [docs/features.md](docs/features.md) · how it was built, phase
-by phase: [docs/cupel-phases.md](docs/cupel-phases.md)
+· what it does: [docs/features.md](docs/features.md) · is your backend ready:
+[docs/readiness.md](docs/readiness.md)
 
 ## Why it exists
 

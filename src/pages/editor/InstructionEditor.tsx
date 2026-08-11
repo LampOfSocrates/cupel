@@ -157,8 +157,8 @@ export function InstructionEditor({
     }
   };
 
-  // "'Test as evaluation' snapshots your draft and replays your usual
-  // conversations against it" (cupel-phases.md:18). Snapshots are immutable, so an unchanged
+  // 'Test as evaluation' snapshots your draft and replays your usual
+  // conversations against it. Snapshots are immutable, so an unchanged
   // draft REUSES the last one instead of POSTing a duplicate (same rule Save
   // uses for promotion); an edited draft gets a fresh snapshot.
   const testInRuns = async () => {
@@ -193,7 +193,7 @@ export function InstructionEditor({
     setMode("edit");
   };
 
-  // Free-tier file export: serialize the already-fetched history
+  // File export: serialize the already-fetched history
   // (no server round-trip, no contract change) and hand it to the browser.
   const download = (kind: "json" | "md") => {
     const text =
@@ -415,7 +415,7 @@ export function InstructionEditor({
                 Snapshot draft
               </Button>
               {/* sketch 06 "Test ▸" — snapshot the draft, hand off to Evaluations
-                  (cupel-phases.md:18 "editor → Evaluations flow (sketches 06 → 03)"). */}
+                  (editor → Evaluations flow, sketches 06 → 03). */}
               <Button size="xs" variant="light" onClick={() => void testInRuns()} disabled={busy}>
                 Test as evaluation
               </Button>

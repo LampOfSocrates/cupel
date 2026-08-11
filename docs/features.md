@@ -22,7 +22,6 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | See forked conversations nested under the one they came from |
 | ✅ | **Send someone a link to one exact turn** — they land on it, signing in first if your instance requires it |
 | ✅ | Chat from your phone in portrait |
-| 🗓️ | Share a conversation publicly with a tokenised link — no account needed, with expiry and revocation |
 
 ## Improve the agent
 
@@ -59,11 +58,14 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | **Runs with no backend at all** — a real bundled backend, seeded with realistic data, so the whole app works before you write any server code |
 | ✅ | **One command.** `npm start` boots it and tells you which backend you are on and where your data lives |
 | ✅ | **Point it at your own backend by editing one file.** Turn the bundled one off and your backend holds all persistence — Cupel stores nothing server-side |
-| ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape — **grouped into families**, so "implement chat first, evaluations later" is a plan you can measure |
+| ✅ | Check your backend before you try: `cupel-ready` reports every missing endpoint and mismatched shape — **grouped into families**, so "implement chat first, evaluations later" is a plan you can measure ([the readiness guide](readiness.md)) |
+| ✅ | **It reads a backend that spells out every agent as its own route** — `/your-api/agent1/chat`, `/your-api/agent2/chat` — instead of reporting the whole thing as missing because it was looking for one templated path |
 | ✅ | A backend can say what it implements: its health check reports the contract version and which families it serves, so nothing has to guess |
 | ✅ | **Every error is traceable.** Anything that goes wrong carries a reference id you can quote in a bug report, and the same id is on the response header for your logs — an id your own gateway sent is kept, not replaced |
 | ✅ | An error that rejects something you typed **names the field**, so the app can point at it instead of showing you a sentence |
 | ✅ | **Generate your config from your own OpenAPI file** — base URL, route prefix and auth scheme detected for you |
+| ✅ | **It works out your shape from the spec rather than asking you to describe it.** It finds your chat routes, and the segment in front of them tells it your agents, the prefix they sit under, and what you call them — `agent1`, `agent2` means it labels the whole UI "agent", not "agent tree" |
+| ✅ | **Routes that don't match ours are mapped, not rejected** — a root prefix, a resource you call something else (`sessions` rather than `conversations`), and a chat that **streams on its own separate route** instead of one endpoint with a flag |
 | ✅ | Switch between mock, local, staging and prod live from Settings, with health checks |
 | ✅ | **Turn login on or off with one environment variable** — real tokens and a login screen, or straight in as a dev user. Same UI either way |
 | ✅ | **Per-tree permissions that explain themselves** — a tree you cannot see stays invisible, while an action you are not allowed to take says which permission you are missing, on which tree |
@@ -71,12 +73,14 @@ Everything below is free and open source. There is no paid tier and nothing is h
 | ✅ | Fill the app with realistic activity for a demo, on demand |
 | ✅ | Send a client a token-gated demo URL |
 | ✅ | **Put your own name on it** — `npm run init` asks for your product name and backend and writes the config in place, keeping your comments, extra targets and compare presets |
-| 🗓️ | **Switch between agent trees in the UI** (today the active tree comes from config) |
+| ✅ | **Switch between agent trees in the UI** — the switcher keeps your place across trees and respects a disabled one |
+| ✅ | Adopt it with a **half-built backend** — you answer once per family, and implemented families go to yours while the rest are served by the bundled one, **badged on screen** so nobody has to guess which half is real |
+| ✅ | **Generate your own project** from this repo, pointed at your backend — `npm run create` writes a folder you own |
+| ✅ | **Answer that in a browser, not a terminal questionnaire.** The command opens a page showing what it found in your spec, with every family on one screen |
+| ✅ | **It tells you what it ignored.** A 300-endpoint API is mostly not about agents; it says "used 9 of 28 paths — the other 19 aren't agent routes" and lists them, and if it picked the wrong ones, the alternatives are one click away |
 | 🗓️ | Keep a hosted instance's data across restarts — the code is written, it needs an object-storage bucket |
-| 🗓️ | Work with **any AG-UI agent** through a bridge, so an agent that already speaks that protocol needs no new endpoints for chat |
-| 🗓️ | Adopt it with a **half-built backend** — implemented endpoints go to yours, the rest are served by the bundled one |
+| 🗓️ | Work with **any AG-UI agent** through a bridge, so an agent that already speaks that protocol needs no new endpoints for chat ([why not yet](spike-agui.md)) |
 | 🗓️ | **Drive it from the terminal** — chat, replay, watch evaluations and tasks, `--json` for scripts |
-| 🗓️ | **Generate your own project** from this repo, pointed at your backend |
 | 🗓️ | Manage agents like code — instruction changes become GitHub pull requests; merging promotes the version live |
 | 🗓️ | Deploy to Kubernetes with a test job that blocks a bad release |
 

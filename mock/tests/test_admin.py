@@ -1,7 +1,7 @@
 """Admin tests — members permission matrix + tree enable/disable.
 Run: npm run test:mock.
 
-Contract under test (openapi.yaml v0.3.0):
+Contract under test (openapi.yaml):
 - :169-218 GET/PUT /admin/users ("Every user, cross-user (admin-only)";
   "upsert keyed by email ... Users absent from the body are untouched")
 - :220-265 GET/PUT /admin/users/{userId}/permissions ("Same shape as
@@ -223,7 +223,7 @@ def test_disable_blocks_writes_keeps_reads():
     replay, replay/turn, judge-on-evaluation, create agent, POST instruction
     versions, POST snapshots, PUT last-selection, conversation rename/delete → 409
     tree_disabled; every GET stays 200 — "new work blocked, history kept
-    read-only" (cupel-phases.md:77). Off mode (dev user = admin) — the
+    read-only". Off mode (dev user = admin) — the
     disable gate is mode-independent."""
     async def case():
         async with make_client() as c:

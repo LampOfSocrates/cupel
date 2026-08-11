@@ -4,7 +4,7 @@
 // A family is a top-level `tags` entry of openapi.yaml, and every operation
 // carries exactly one (scripts/conformance.mjs operationFamily). The adopter
 // answers the generator one question per family — mine / mock / hide
-// (docs/plan-adopter-onboarding.md) — so the running app needs to know which
+// (docs/plans/plan-adopter-onboarding.md) — so the running app needs to know which
 // family any given request belongs to. That table is DERIVED, never written by
 // hand: adding a family to openapi.yaml stays the whole change, and
 // src/api/families.generated.test.ts fails the build if the checked-in file

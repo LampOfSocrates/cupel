@@ -1,6 +1,6 @@
 # Plan — adopter onboarding: one command, cased by persona
 
-Supersedes the generator half of `docs/plan-agentic-app-maker.md` and absorbs the hybrid
+Supersedes the generator half of `docs/plans/plan-agentic-app-maker.md` and absorbs the hybrid
 backend fill (#25). Written 2026-08-09 from the user's description of the intended flow.
 
 ## The flow, as described
@@ -19,7 +19,7 @@ backend fill (#25). Written 2026-08-09 from the user's description of the intend
 
 **Ask per family, not per operation. APPROVED by the user 2026-08-09**, along with the
 three-answer shape **mine / mock / hide**. A stranger's backend will match almost nothing —
-the contract is 67 operations across 14 families, and the worked `cupel-ready --init`
+the contract is 67 operations across 15 families, and the worked `cupel-ready --init`
 example only reaches 37/67 because its remap was contrived for a backend already built to
 this shape. A real first run is closer to 0–5 matched operations, which means 60+ questions
 if we ask per endpoint.
@@ -31,7 +31,7 @@ Two corrections that cost this document its credibility on the point, kept as a 
 list it used to carry (chat · conversations · agents · instructions · evaluations · trace ·
 tasks · eval workbench · casebooks · settings) named `instructions`, which the contract has
 never tagged separately from `agents`, and OMITTED `memory`, which TASKS.md item 12 calls "the
-last contracted but unbuilt family". Derived, the real count is fourteen — the ten above minus
+last contracted but unbuilt family". Derived, the real count is fifteen — the ten above minus
 `casebooks` (merged into `eval` in stage B) and minus `instructions`, plus `auth`, `identity`,
 `admin`, `meta`, `trees` and `memory`.
 

@@ -3,7 +3,6 @@ import {
   Badge,
   Box,
   Group,
-  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -11,7 +10,6 @@ import {
 } from "@mantine/core";
 import type {
   Agent,
-  Endpoint,
   JudgeConfig,
   Model,
   Rubric,
@@ -32,13 +30,14 @@ import type {
 // highlighted"): fields whose value deviates from the `baseline` prop get a
 // data-changed wrapper with a highlight border.
 //
-// Data flow: dropdown data (agents/versions/models/endpoints/rubrics) is
+// Data flow: dropdown data (agents/versions/models/rubrics) is
 // passed IN as props — the panel stays pure/fetch-free so it renders in tests
 // and drawers alike; the page-level Configure step owns the fetches
-// (feature-spec.md:226: "GET …/endpoints, GET …/instructions, GET /models,
-// GET /eval/rubrics"). endpoints render only when `showEndpoints` — the
-// multi-select "only applies to turn re-fire" (openapi.yaml:1490;
-// feature-spec.md:67).
+// (feature-spec.md:226: "GET …/instructions, GET /models, GET /eval/rubrics").
+//
+// No endpoints multi-select here: varying the deploy endpoint "only applies to
+// turn re-fire" (openapi.yaml:1490; feature-spec.md:67), and turn re-fire has
+// its own picker in ForkModal.
 
 interface Props {
   value: Variant;
@@ -48,21 +47,12 @@ interface Props {
   /** Instruction versions available for the selected agent. */
   versions?: number[];
   models?: Model[];
-  endpoints?: Endpoint[];
   rubrics?: Rubric[];
-  /** Pivot flag: endpoints multi-select is only for turn re-fire. */
-  showEndpoints?: boolean;
   /** Scope flag: false keeps the judge section dormant entirely. */
   showJudge?: boolean;
   /** Display label for value.snapshot_id, e.g. "v15-draft (a3f2)" (feature-spec.md:86). */
   snapshotLabel?: string;
 }
-
-const sameArray = (a?: string[] | null, b?: string[] | null) => {
-  const x = [...(a ?? [])].sort();
-  const y = [...(b ?? [])].sort();
-  return x.length === y.length && x.every((v, i) => v === y[i]);
-};
 
 // Highlight wrapper — presence of data-changed marks a deviation from baseline.
 function Field({ changed, children }: { changed: boolean; children: ReactNode }) {
@@ -91,9 +81,7 @@ export function RunConfigPanel({
   agents = [],
   versions = [],
   models = [],
-  endpoints = [],
   rubrics = [],
-  showEndpoints = false,
   showJudge = true,
   snapshotLabel,
 }: Props) {
@@ -115,7 +103,6 @@ export function RunConfigPanel({
     model: baseline != null && (value.model ?? null) !== (baseline.model ?? null),
     temperature:
       baseline != null && (value.temperature ?? null) !== (baseline.temperature ?? null),
-    endpoints: baseline != null && !sameArray(value.endpoint_ids, baseline.endpoint_ids),
     judge:
       baseline != null &&
       JSON.stringify(value.judge ?? null) !== JSON.stringify(baseline.judge ?? null),
@@ -195,20 +182,6 @@ export function RunConfigPanel({
           onChange={(v) => set({ temperature: typeof v === "number" ? v : null })}
         />
       </Field>
-      {showEndpoints && (
-        <Field changed={changed.endpoints}>
-          <MultiSelect
-            size="xs"
-            label="Endpoints"
-            placeholder={value.endpoint_ids?.length ? undefined : "Endpoints"}
-            data={endpoints.map((e) => ({ value: e.id, label: e.name }))}
-            value={value.endpoint_ids ?? []}
-            onChange={(endpoint_ids) =>
-              set({ endpoint_ids: endpoint_ids.length > 0 ? endpoint_ids : null })
-            }
-          />
-        </Field>
-      )}
       {showJudge && (
       <Field changed={changed.judge}>
         <Switch

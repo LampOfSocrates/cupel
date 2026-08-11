@@ -18,7 +18,7 @@ vi.mock("../../agentic.config", async (importOriginal) => {
       families: {
         chat: "mine",
         conversations: "mock",
-        eval: "hide",
+        datasets: "hide",
         // not a family of this contract, and not an answer — both ignored,
         // both warned about (assertions below).
         casebooks: "mock",
@@ -87,7 +87,7 @@ describe("answers", () => {
     const { familyAnswer, isHidden, mockedFamilies } = await load();
     expect(familyAnswer("chat")).toBe("mine");
     expect(familyAnswer("conversations")).toBe("mock");
-    expect(isHidden("eval")).toBe(true);
+    expect(isHidden("datasets")).toBe(true);
     expect(mockedFamilies()).toEqual(["conversations"]);
   });
 

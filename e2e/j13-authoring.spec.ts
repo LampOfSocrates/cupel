@@ -3,11 +3,11 @@ import { seedChat } from "./helpers/seed";
 import { filmed } from "./helpers/hud";
 
 // E2E checklist journey 13 — the last numbered journey in the Phase-2 test
-// deliverable list (cupel-phases.md:98) is the "authoring/PR loop", which is
-// PRO TIER and excluded from the free build (TASKS.md: ~~P2-T20 repo/PR~~ →
-// P4-REPO). NOT APPLICABLE as written.
+// deliverable list is the "authoring/PR loop", and repo/PR integration is not
+// built yet (it is the Agents-as-Code item on TASKS.md, ordinary roadmap work
+// — there is no paid tier). NOT APPLICABLE as written.
 //
-// Its free-tier equivalent — the authoring loop this build actually ships — is
+// The authoring loop this build actually ships is
 // the eval workbench plus Inspector → eval benchmark → replay: notice
 // something in real traffic, collect it, and make it a regression suite.
 // Since Casebook and EvalBenchmark (named EvalSet before the later

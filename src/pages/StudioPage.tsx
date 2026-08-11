@@ -41,8 +41,8 @@ import type {
 
 // Eval workbench (sketch 10) — "Hand-craft expected answers and have
 // the judge score AI against them — type/paste references, pull them from real
-// turns or forks, or bulk-import a spreadsheet of input/expected pairs"
-// (cupel-phases.md:80). The workbench "manage[s] the eval domain directly:
+// turns or forks, or bulk-import a spreadsheet of input/expected pairs".
+// The workbench "manage[s] the eval domain directly:
 // case editor (input / output / reference fields; 'reference from turn'
 // picker), benchmark manager (create/name/version benchmarks, drag cases in),
 // rubric editor (prompt text, save = new version…)" (feature-spec.md:63).
@@ -79,11 +79,13 @@ function shorten(text: string, max = 64) {
 export function StudioPage() {
   const { tree, me, models, ensureModels } = useApp();
   const [searchParams] = useSearchParams();
-  // Cases/Benchmarks/Rubrics share the "eval" family; Results is "evaluations";
-  // Inspector is role-gated AND the "admin" family (App.tsx's /inspector
-  // gate, mirrored here since it is a tab now, not its own route).
-  const casesHidden = familyAnswer("eval") === "hide";
-  const resultsHidden = familyAnswer("evaluations") === "hide";
+  // One gate per contract family the screen merges: Cases/Benchmarks are
+  // "datasets", Rubrics is "judging", Results is "replay". Inspector is
+  // role-gated AND the "admin" family (App.tsx's /inspector gate, mirrored
+  // here since it is a tab now, not its own route).
+  const casesHidden = familyAnswer("datasets") === "hide";
+  const rubricsHidden = familyAnswer("judging") === "hide";
+  const resultsHidden = familyAnswer("replay") === "hide";
   const inspectorAllowed = (me.roles?.includes("inspect") ?? false) && familyAnswer("admin") !== "hide";
   // Uncontrolled after mount, same as before the merge — only the INITIAL
   // value comes from the URL, so a deep link (Test-as-evaluation handoff,
@@ -96,6 +98,7 @@ export function StudioPage() {
     const requested = searchParams.get("tab");
     if (requested) return requested;
     if (!casesHidden) return "cases";
+    if (!rubricsHidden) return "rubrics";
     if (!resultsHidden) return "results";
     return inspectorAllowed ? "inspector" : null;
   });
@@ -334,9 +337,9 @@ export function StudioPage() {
             <>
               <Tabs.Tab value="cases">Cases</Tabs.Tab>
               <Tabs.Tab value="benchmarks">Benchmarks</Tabs.Tab>
-              <Tabs.Tab value="rubrics">Rubrics</Tabs.Tab>
             </>
           )}
+          {!rubricsHidden && <Tabs.Tab value="rubrics">Rubrics</Tabs.Tab>}
           {!resultsHidden && <Tabs.Tab value="results">Results</Tabs.Tab>}
           {inspectorAllowed && <Tabs.Tab value="inspector">Inspector</Tabs.Tab>}
         </Tabs.List>
@@ -602,8 +605,11 @@ export function StudioPage() {
             onError={setError}
           />
         </Tabs.Panel>
+        </>
+        )}
 
         {/* ----------------------------------------------------- rubrics */}
+        {!rubricsHidden && (
         <Tabs.Panel value="rubrics" pt="sm">
           <RubricsTab
             rubrics={rubrics}
@@ -618,7 +624,6 @@ export function StudioPage() {
             onError={setError}
           />
         </Tabs.Panel>
-        </>
         )}
 
         {/* -------------------------------------------------------- results */}

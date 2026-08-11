@@ -55,7 +55,7 @@ async def snapshot(c):
 
 # ------------------------------------------------------- no-direct-DB (code review)
 def test_generator_writes_only_via_http():
-    """Invariant cupel-phases.md:160 / feature-spec.md:181: 'never directly to
+    """Invariant (feature-spec.md:181): 'never directly to
     the DB'. The module must speak httpx and import nothing from mock."""
     src = pathlib.Path(generator_module.__file__).read_text(encoding="utf-8")
     mods = set()

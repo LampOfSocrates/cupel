@@ -16,9 +16,9 @@ import {
 import { SettingsPage } from "./SettingsPage";
 
 // Contract under test — Settings → Members + Settings → Agent trees
-// (feature-spec.md:19-20, cupel-phases.md:77 "a per-tree view/tune/evaluate
+// (feature-spec.md:19-20) — a per-tree view/tune/evaluate
 // matrix, and disable a whole tree (new work blocked, history kept
-// read-only)"):
+// read-only):
 // - GET /admin/users (openapi.yaml:169-189) + GET /admin/users/{id}/permissions
 //   (:220-240) fill the matrix; a checkbox PUTs the FULL matrix (:241-265
 //   "Full replacement").

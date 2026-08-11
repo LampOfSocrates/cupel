@@ -4,7 +4,7 @@ import { mockedFamilies, type Family } from "../lib/families";
 // "served by mock" — the one thing a generated app must never leave implicit.
 // A folder where half the screens are the adopter's backend and half are the
 // bundled demo one is only honest if the app says which is which
-// (docs/plan-adopter-onboarding.md: "without it the adopter cannot tell which
+// (docs/plans/plan-adopter-onboarding.md: "without it the adopter cannot tell which
 // half of the screen is real").
 //
 // It is per SCREEN, not a global notice: the Shell renders it only on pages

@@ -775,6 +775,16 @@ beforeAll(async () => {
   }
 
   await Promise.all(pending);
+
+  // Stop recording. The listener is registered for the duration of the
+  // exercises ONLY: every test below reads `exchanges` as the record of what
+  // the exercises above produced, and a request made by any LATER test in this
+  // file would otherwise be appended under whatever `currentApiMethod` was
+  // last set to — the final error exercise. In declaration order that is
+  // invisible (the readers run before those tests); under `--sequence.shuffle`
+  // it put 57 unrelated 200s into the list the 422 assertion checks.
+  server.events.removeAllListeners("response:mocked");
+  currentApiMethod = "";
 }, 120_000);
 
 const exchangesFor = (label: string) => exchanges.filter((e) => e.apiMethod === label);

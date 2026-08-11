@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { buildInit, loadTarget, renderInitBlock } from "./cupel-ready.mjs";
 import { slugify, valueRange } from "./init.mjs";
 import { renderReadme } from "./generated-readme.mjs";
-import { buildInitFromRules, renderRemapField, rulesAreEmpty } from "./remap-rules.mjs";
+import { buildInitFromRules, extractAgentShape, renderRemapField, rulesAreEmpty } from "./remap-rules.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const CONTRACT_FILE = path.join(ROOT, "openapi.yaml");
@@ -136,8 +136,8 @@ export function techReport({ node = process.versions.node, python = detectPython
 // Chat first because that is the wedge persona's whole reason for being here;
 // the four near-automatic ones last.
 const ASK_ORDER = [
-  "chat", "conversations", "agents", "evaluations", "eval", "trace", "tasks",
-  "memory", "settings", "admin", "trees", "identity", "meta", "auth",
+  "chat", "conversations", "agents", "replay", "datasets", "judging", "trace",
+  "tasks", "memory", "settings", "admin", "trees", "identity", "meta", "auth",
 ];
 
 export function askOrder(names) {
@@ -197,7 +197,7 @@ export function suggestAnswers(names, { report = null, agentEndpoint = null, fla
 // The families that carry a door of their own (src/lib/families.ts
 // ROUTE_FAMILY). Hiding all of them generates an app whose every route is a
 // redirect to another redirect, so the generator refuses instead.
-const SCREEN_FAMILIES = ["chat", "evaluations", "eval", "agents", "tasks", "settings"];
+const SCREEN_FAMILIES = ["chat", "replay", "datasets", "judging", "agents", "tasks", "settings"];
 
 /** Refuse a set of answers that would produce a UI with nothing in it. */
 export function validateAnswers(answers) {
@@ -420,15 +420,15 @@ export function applyGeneration(
 /**
  * Ask the backend for its spec — bare origin or a document URL/path.
  *
- * `rules` (scripts/remap-rules.mjs), when given and non-empty, REPLACES the
- * plain prefix auto-detection (buildInit's own detectPrefix) with the
- * adopter's own path rules — a fixed prefix alone can't express "the tree id
- * sits directly under the prefix, no literal /agenttrees/ segment" or a
- * renamed resource ("conversations" -> "sessions"), both real adopter shapes
- * (item 40). With no rules, behavior is exactly what it was before rules
- * existed.
+ * The path rules are READ OUT OF THE SPEC (remap-rules.mjs
+ * extractAgentShape), not asked for: routes like `/nabu-service/agent1/chat`
+ * already carry the root prefix, the ids of every agent, and whether chat
+ * streams on its own route. `rules`, when given and non-empty, overrides that
+ * — the browser mapper passes the human's edits back down this way. Passing
+ * neither leaves a spec with no tree-shaped routes on the original
+ * plain-prefix auto-detection (buildInit's own detectPrefix), unchanged.
  */
-export async function detectBackend(source, contract, rules = null) {
+export async function detectBackend(source, contract, rules = null, { pick = null } = {}) {
   const candidates = /\.(json|ya?ml)$/i.test(source) || !/^https?:\/\//.test(source)
     ? [source]
     : [`${source.replace(/\/+$/, "")}/openapi.json`, `${source.replace(/\/+$/, "")}/openapi.yaml`];
@@ -436,15 +436,18 @@ export async function detectBackend(source, contract, rules = null) {
   for (const candidate of candidates) {
     try {
       const target = await loadTarget(candidate, {});
-      const { init, effective } = rules && !rulesAreEmpty(rules)
-        ? buildInitFromRules(contract, target, { source: candidate, rules })
+      const shape = extractAgentShape(target, contract, { pick });
+      const edited = rules && !rulesAreEmpty(rules);
+      const effectiveRules = edited ? rules : shape?.rules ?? null;
+      const { init, effective } = effectiveRules && !rulesAreEmpty(effectiveRules)
+        ? buildInitFromRules(contract, target, { source: candidate, rules: effectiveRules, shape })
         : buildInit(contract, target, { source: candidate });
-      return { init, report: effective, errors: [] };
+      return { init, report: effective, shape, rulesFrom: edited ? "you" : shape ? "your spec" : null, errors: [] };
     } catch (error) {
       errors.push(`  ${candidate} — ${error.message}`);
     }
   }
-  return { init: null, report: null, errors };
+  return { init: null, report: null, shape: null, rulesFrom: null, errors };
 }
 
 /**

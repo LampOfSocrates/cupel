@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// The Phase-1 Definition of done, walked end-to-end
-// (cupel-phases.md:64-65): "app boots on mock with seeded data → simulate
+// The Phase-1 Definition of done, walked end-to-end:
+// "app boots on mock with seeded data → simulate
 // (drip) fills sidebar/queue live → full loop works: chat → fork a turn to 2
 // endpoints → compare → judge → read reasoning → edit agent → Test as
 // evaluation → see trace with costs." Scripted as a regression asset; each DoD
@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 //
 // The "simulate" step is represented by one generator-style write (the drip
 // loop is this, repeated): an external machine-origin POST /chat through the
-// public API only (cupel-phases.md:160 invariant) — the open app must show its
+// public API only (invariant) — the open app must show its
 // task in the queue LIVE via the app-wide /tasks/stream, no reload.
 
 const MOCK = "http://localhost:4010";
@@ -181,7 +181,7 @@ test("Phase-1 DoD: boot → simulate → chat → fork ×2 → compare → judge
     await expect(page.getByTestId("span-stats")).toContainText("$");
   });
 
-  // The forked conversations remain real, continuable chats (cupel-phases.md:20).
+  // The forked conversations remain real, continuable chats.
   await test.step("fork is a real conversation (lineage banner in Chat)", async () => {
     await page.goto(conversationUrl);
     // By id, not by label: "⑂ 2 forks" repeats across the seeded dataset.

@@ -9,7 +9,7 @@ with sparse cells placed by their A1 reference. Anything outside that (an
 encrypted book, a corrupt zip, no worksheet) raises TableError, which the
 endpoint answers as the contract's whole-file 422 (openapi.yaml:1421-1425) —
 never a silent half-import. Rejecting XLSX outright would have failed the
-cupel-phases.md:80 promise ("bulk-import a spreadsheet"); adding openpyxl would
+promise of "bulk-import a spreadsheet"; adding openpyxl would
 have bought a dependency for a mock that only needs to read simple grids.
 """
 

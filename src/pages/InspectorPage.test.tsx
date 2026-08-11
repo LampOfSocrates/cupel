@@ -13,10 +13,10 @@ import {
 import { product } from "../lib/product";
 import { InspectorPage } from "./InspectorPage";
 
-// Contract under test — Inspector (cupel-phases.md:78 "Inspect every
+// Contract under test — Inspector (inspect every
 // conversation in the system as a super user — filter by user, tree, date, or
 // score in a dense keyboard-driven table with an inline transcript reader …
-// requires the inspect role, audit-logged"):
+// requires the inspect role, audit-logged):
 // - GET /admin/conversations (openapi.yaml:298-348) with user_id / tree /
 //   date_from / date_to / score_min / score_max / page / page_size
 // - AdminConversationItem's user_id + latest_score columns (:3129-3144)

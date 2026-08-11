@@ -53,8 +53,8 @@ type HealthState =
   | { kind: "fail"; latencyMs: number; message: string };
 
 // Latency/failure-injection env vars and the seed picker are Phase-2 MOCK
-// deliverables that are not built yet (cupel-phases.md:98 "failure/latency
-// injection env vars" ships with the generator work) — these controls render
+// deliverables that are not built yet (failure/latency
+// injection env vars ship with the generator work) — these controls render
 // disabled per the sketch, wired to nothing.
 const GEN_TOOLTIP = "Arrives with generator controls (P2-GEN)";
 
@@ -233,8 +233,8 @@ export function SettingsPage() {
           )}
 
           {/* Mock options — "visible when target = Mock" (feature-spec.md:156).
-              SSE streaming is REAL today (ChatPage sends stream:<flag>,
-              cupel-phases.md:43); latency / failure % / seed picker await the
+              SSE streaming is REAL today (ChatPage sends stream:<flag>);
+              latency / failure % / seed picker await the
               mock's injection env vars + generator control. */}
           {target.id === "mock" && (
             <>
@@ -276,9 +276,9 @@ export function SettingsPage() {
         </Stack>
       </Paper>
 
-      {/* Settings → Members + Settings → Agent trees (feature-spec.md:19-20;
-          cupel-phases.md:77) — unsketched, so they reuse this page's visual
-          language (Paper block, dense xs controls) per cupel-phases.md:95. */}
+      {/* Settings → Members + Settings → Agent trees (feature-spec.md:19-20)
+          — unsketched, so they reuse this page's visual
+          language (Paper block, dense xs controls). */}
       {isAdmin && (
         <>
           <MembersSection />

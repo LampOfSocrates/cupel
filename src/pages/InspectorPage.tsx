@@ -29,13 +29,13 @@ import { product } from "../lib/product";
 import type { EvalCaseSource } from "../api/types";
 
 // Inspector (UNSKETCHED — derived from the app's existing dense visual
-// language per cupel-phases.md:95: the Settings → Members table and the evaluations
+// language: the Settings → Members table and the evaluations
 // grid are the references. Paper blocks, size-xs controls, one dense Table).
 //
-// cupel-phases.md:78: "Inspect every conversation in the system as a super
+// Inspect every conversation in the system as a super
 // user — filter by user, tree, date, or score in a dense keyboard-driven table
 // with an inline transcript reader — using the Inspector (unsketched; requires
-// the `inspect` role, audit-logged)".
+// the `inspect` role, audit-logged).
 //
 // Data: GET /admin/conversations (openapi.yaml:298-348) for the table — the
 // contract's own six filters plus page/page_size — and the ordinary
@@ -403,7 +403,7 @@ export function InspectorPage() {
       )}
 
       {/* Inline transcript reader — read the conversation without leaving the
-          page (cupel-phases.md:78 "an inline transcript reader"). */}
+          page (an inline transcript reader). */}
       {selected && (
         <Paper withBorder p="xs" data-testid="inspector-reader">
           <Group justify="space-between" wrap="nowrap" mb={4}>

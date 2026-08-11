@@ -2,7 +2,7 @@
 // create-app — clone this repo, run ONE command, get a folder that `npm run`s
 // a chat + studio UI for YOUR agent. TASKS.md item 11 (terminal); item 40
 // replaced the terminal questionnaire with a local browser mapper. The flow
-// is docs/plan-adopter-onboarding.md.
+// is docs/plans/plan-adopter-onboarding.md.
 //
 // Usage: npm run create -- [name] [options]
 //   --out <dir>            where to write it (default ./<name>-ui)
@@ -34,7 +34,7 @@
 // HTTP transport, imports the same core module, never this one.
 //
 // THE ONE STRUCTURAL CHOICE: questions are per FAMILY, not per operation. The
-// contract is 67 operations across 14 families and a stranger's backend
+// contract is 67 operations across 15 families and a stranger's backend
 // matches almost none of them, so asking per endpoint would be 60+ questions
 // on a first run. Families come from the contract's own tags — this script
 // holds no list of its own.

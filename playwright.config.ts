@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
-// P1-TE2E — smoke e2e (cupel-phases.md:46,55 "npm run e2e:smoke") against the
+// P1-TE2E — smoke e2e (`npm run e2e:smoke`) against the
 // REAL mock (no MSW): webServer boots BOTH processes, mock first.
 //
 // Scratch DB: CUPEL_MOCK_DB (mock/config.py:51) points the mock at a temp

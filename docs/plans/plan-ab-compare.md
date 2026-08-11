@@ -70,9 +70,11 @@ gap-filling rather than comparison) and would pay for the same client refactor.
   well as the version/model. This is an **additive contract clarification** (relaxing a
   documented restriction), not a new endpoint — but it *is* a contract change, so it belongs
   with `P3-T00` (contract v0.4.0) rather than being smuggled in.
-- `RunConfigPanel` already renders an endpoints multi-select behind a `showEndpoints` flag
-  (built in `P1-T09`, currently passed `false` by the Evaluations stepper). Turning it on is close to
-  a one-line change once the contract allows it.
+- ~~`RunConfigPanel` already renders an endpoints multi-select behind a `showEndpoints`
+  flag; turning it on is close to a one-line change.~~ **No longer true (2026-08-11):** with
+  PAB-2 dropped, that dormant branch was deleted rather than left unreachable. The panel has
+  no endpoints picker; turn re-fire's lives in `ForkModal`. Reviving this means rebuilding
+  the multi-select.
 
 ### Configuration
 Named comparison sets in `agentic.config.ts`, so a team's usual A/B is one click and not a
@@ -104,9 +106,9 @@ toggle. `Me.permissions` is already fetched on boot.
 | `src/pages/ChatPage.tsx` | One conversation, one stream, one draft store today (`:193`). Compare mode = N parallel streams and N draft stores in columns. **The `StreamingBubble` extraction from review bucket A makes this far cheaper than it would have been** — the per-token state is already isolated | large |
 | `src/api/client.ts` | A fan-out call for compare-send; no base-URL change needed for 2a | small |
 | `agentic.config.ts` | `compareSets` presets | small |
-| `src/components/RunConfigPanel.tsx` | Flip `showEndpoints` on for the Evaluations stepper (after the contract widens) | trivial |
-| `openapi.yaml` | Widen `endpoint_ids` beyond turn re-fire — **fold into `P3-T00`** | small |
-| `src/api/target.ts` | Only for 2b: per-request target override | medium |
+| ~~`src/components/RunConfigPanel.tsx`~~ | ~~Flip `showEndpoints` on~~ — PAB-2 dropped; the flag is deleted, so this is a rebuild, not a flip | ~~trivial~~ |
+| ~~`openapi.yaml`~~ | ~~Widen `endpoint_ids` beyond turn re-fire~~ — PAB-2 dropped | — |
+| ~~`src/api/target.ts`~~ | ~~Per-request target override~~ — PAB-4 dropped | — |
 
 **Sequencing note:** this lands most cheaply *after* Stage A's `PB-1` (splitting `ChatPage`),
 because compare mode adds a second layout to a file that is already 1.1k lines and four
@@ -121,16 +123,20 @@ concerns. Building it before the split would make both jobs worse.
    bills. Say so in the UI before the send, not after.
 3. **Column count.** Three is readable on a desktop; beyond that it is a grid, and the grid
    already exists — cap the chat view and send people to Evaluations.
-4. **2b's judging story is unresolved.** Do not start cross-backend compare until "who scores
-   it, and is that labelled" has an answer.
+4. **2b has no judging story.** Cross-backend compare produces N unrelated conversations in N
+   databases, so nothing in the grid or the judge path applies to it for free. Whoever picks
+   that work up owns designing it.
 
 ## 6. Tasks to add when this is scheduled
 
 - **PAB-1** — chat compare mode within one backend: `tune`-gated toggle, N-column transcript,
   server-side fan-out, result opens the existing grid. *(deps: PB-1 ChatPage split)*
-- **PAB-2** — studio: widen `endpoint_ids` in the contract (fold into `P3-T00`), turn on the
-  endpoints multi-select in the Evaluations stepper.
+- **PAB-2 — DROPPED 2026-08-11 (user).** Was: widen `endpoint_ids` in the contract and turn
+  on the endpoints multi-select in the Evaluations stepper. The `showEndpoints` flag this
+  depended on has been **deleted** from `RunConfigPanel` rather than left dormant, so §3 and
+  §4's "close to a one-line change" no longer holds — reviving this means rebuilding the
+  multi-select, not flipping a flag.
 - **PAB-3** — `compareSets` presets in `agentic.config.ts` + the picker UI.
-- **PAB-4** *(later, separate)* — cross-backend compare: per-request target override in the
-  client, N unrelated conversations, and a decided answer on where judging happens. Overlaps
-  `P4-HYBRID`; do not start without §5.4.
+- **PAB-4 — DROPPED 2026-08-11 (user).** Was: cross-backend compare — per-request target
+  override in the client, N unrelated conversations, and a judging design of its own. It
+  depended on a judging design that was itself dropped, so it had no foundation left.

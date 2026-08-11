@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { RunConfigPanel } from "./RunConfigPanel";
-import type { Endpoint, Model, Rubric, Variant } from "../api/types";
+import type { Model, Rubric, Variant } from "../api/types";
 
 // Contract under test: Variant (openapi.yaml:1483-1506) — "instruction_
 // version XOR snapshot_id — a snapshot is an untested draft; neither = the
@@ -19,10 +19,6 @@ const models: Model[] = [
 const rubrics: Rubric[] = [
   { id: "rub-1", name: "helpfulness", version: 3, prompt: "…", created_at: "2026-08-01T00:00:00Z" },
 ];
-const endpoints: Endpoint[] = [
-  { id: "prod", name: "prod" },
-  { id: "staging", name: "staging" },
-];
 
 function renderPanel(props: Partial<Parameters<typeof RunConfigPanel>[0]> = {}) {
   const onChange = vi.fn();
@@ -34,7 +30,6 @@ function renderPanel(props: Partial<Parameters<typeof RunConfigPanel>[0]> = {}) 
         versions={[14, 15]}
         models={models}
         rubrics={rubrics}
-        endpoints={endpoints}
         {...props}
       />
     </MantineProvider>,
@@ -122,16 +117,11 @@ describe("RunConfigPanel", () => {
     expect(screen.queryByRole("switch", { name: "⚖ Judge" })).not.toBeInTheDocument();
   });
 
-  it("endpoints multi-select renders only when showEndpoints is set", () => {
+  // This panel has no endpoints picker at all: varying the deploy endpoint
+  // applies only to turn re-fire, which owns its own multi-select in
+  // ForkModal (covered by ForkModal.test.tsx).
+  it("offers no endpoints picker", () => {
     renderPanel({});
     expect(screen.queryByRole("combobox", { name: "Endpoints" })).not.toBeInTheDocument();
-  });
-
-  it("emits endpoint_ids from the multi-select when showEndpoints", async () => {
-    const user = userEvent.setup();
-    const onChange = renderPanel({ showEndpoints: true });
-    await user.click(screen.getByRole("combobox", { name: "Endpoints" }));
-    await user.click(await screen.findByRole("option", { name: "prod" }));
-    expect(onChange).toHaveBeenLastCalledWith({ endpoint_ids: ["prod"] });
   });
 });

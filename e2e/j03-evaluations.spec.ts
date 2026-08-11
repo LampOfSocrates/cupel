@@ -10,8 +10,8 @@ import { filmed } from "./helpers/hud";
 //   GET /agenttrees/{tree}/conversations · GET …/endpoints · GET …/instructions
 //   GET /models · GET /eval/rubrics · POST /agenttrees/{tree}/replay
 //   GET /agenttrees/{tree}/evaluations/{id}
-// The endpoints MULTI-SELECT is the turn re-fire pivot only (openapi.yaml:1490,
-// RunConfigPanel showEndpoints) — journey 4 drives it.
+// The endpoints MULTI-SELECT is the turn re-fire pivot only (openapi.yaml:1490)
+// and lives in ForkModal — journey 4 drives it.
 
 const CONV_A = "Evaluations journey A: parcel never arrived";
 const CONV_B = "Evaluations journey B: duplicate charge";

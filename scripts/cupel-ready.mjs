@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // cupel-ready — backend readiness/conformance report.
-// cupel-phases.md:74: "run npx cupel-ready <your-openapi> and get a report of
-// every missing endpoint or mismatched shape"; :107 "npx cupel-ready
+// Run `npx cupel-ready <your-openapi>` and get a report of
+// every missing endpoint or mismatched shape; e.g. "npx cupel-ready
 // http://localhost:4010/openapi.json → conformance: PASS".
 //
 // Usage: cupel-ready <target> [options]
 //   <target>              URL or local path of the backend's OpenAPI (JSON or YAML)
 //   --contract <path>     contract to validate against (default ./openapi.yaml)
 //   --prefix <p>          remap: prepend p to contract paths before lookup,
-//                         e.g. --prefix /nabu-service (cupel-phases.md:75)
+//                         e.g. --prefix /nabu-service
 //   --header k:v          extra header for fetching a URL target (repeatable),
 //                         e.g. --header "X-Demo-Token: secret" for gated demos
 //   --insecure            skip TLS certificate verification when fetching a
@@ -50,6 +50,7 @@ import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { compare, renderReport } from "./conformance.mjs";
+import { extractAgentShape, foldTreeIds, remapContract } from "./remap-rules.mjs";
 
 const USAGE =
   "usage: cupel-ready <openapi-url-or-file> [--contract openapi.yaml] " +
@@ -319,9 +320,29 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   let contract, target;
+  let folded = null;
   try {
     contract = await SwaggerParser.dereference(options.contract);
     target = await loadTarget(options.target, options.headers, { insecure: options.insecure });
+
+    // A spec that ENUMERATES its agents (`/svc/agent1/chat`, `/svc/agent2/chat`)
+    // has no `{tree}` template for the comparator to match, so without this
+    // every tree-scoped operation reports missing and a backend implementing
+    // the lot scores 0/67 — the single most misleading answer this tool can
+    // give. Two halves are needed: collapse the ids onto one template (and
+    // declare the path param the enumeration stood in for), AND put the
+    // contract into the same shape, since folding alone still leaves
+    // `/agenttrees/{tree}/chat` looking for a path their spec spells
+    // `/svc/{tree}/chat`. An explicit --prefix means the human has already
+    // said how their routes map, so it wins and none of this runs.
+    if (!options.prefix) {
+      const shape = extractAgentShape(target, contract);
+      if (shape?.treeIds?.length) {
+        target = foldTreeIds(target, shape);
+        contract = remapContract(contract, shape.rules);
+        folded = shape;
+      }
+    }
   } catch (error) {
     console.error(`cupel-ready: ${describeError(error)}`);
     if (error.message === "fetch failed" && !options.insecure) {
@@ -354,9 +375,20 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (options.json) {
     const payload = { ...meta, ...report };
+    if (folded) {
+      payload.folded_agents = { prefix: folded.prefix, ids: folded.treeIds, param: folded.treeParam };
+    }
     if (initMode) payload.init = { ...initMode.init, block: renderInitBlock(initMode.init) };
     console.log(JSON.stringify(payload, null, 2));
   } else {
+    if (folded) {
+      console.log(
+        `note: your spec lists ${folded.treeIds.length} agents under ` +
+          `${folded.prefix || "/"} (${folded.treeIds.slice(0, 4).join(", ")}` +
+          `${folded.treeIds.length > 4 ? ", …" : ""}); comparing them as one ` +
+          `{${folded.treeParam}} so the counts below are per-operation, not per-agent.\n`,
+      );
+    }
     console.log(renderReport(report, {
       contractLabel: `${options.contract} v${meta.contract.version ?? "?"} (${report.contract_paths.length} paths)`,
       targetLabel: options.target,

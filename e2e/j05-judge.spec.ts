@@ -127,7 +127,7 @@ test("judge: evaluation with the judge on → scores stream in → drawer reason
     await api.expectCalled("POST /eval/judge");
 
     // The same cell now carries TWO judgments — the invariant the drawer
-    // advertises ("judgments are append-only", cupel-phases.md:160).
+    // advertises ("judgments are append-only").
     await expect(async () => {
       await page.locator('[data-testid^="score-chip-"]').first().click();
       await expect(page.getByTestId("judgment-entry")).toHaveCount(2, { timeout: 5_000 });

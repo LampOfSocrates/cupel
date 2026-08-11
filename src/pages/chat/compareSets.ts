@@ -3,7 +3,7 @@ import type { Endpoint } from "../../api/types";
 
 // Saved A/B comparisons from agentic.config.ts (the one config artifact) —
 // "config supplies the presets; the UI still allows an ad-hoc selection"
-// (docs/plan-ab-compare.md §3).
+// (docs/plans/plan-ab-compare.md §3).
 //
 // Two rules this module exists to enforce, both of them about not lying to the
 // user about what a preset does:

@@ -44,7 +44,7 @@ describe("TracePage", () => {
     const heading = await screen.findByRole("heading", { level: 4 });
     // sketch 08 density: "Trace · turn 2 · 4.9s · 6,410→1,240 tok · $0.011"
     expect(heading).toHaveTextContent("Trace · t2 · 4.9s · 6410→1240 tok · $0.0110");
-    // envelope "shown in the trace header" (openapi.yaml:1700; cupel-phases.md:25)
+    // envelope "shown in the trace header" (openapi.yaml:1700)
     expect(screen.getByTestId("envelope-chip")).toHaveTextContent(
       "2026-08-02 · Europe/London · GB · en-GB",
     );

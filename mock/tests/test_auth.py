@@ -1,4 +1,4 @@
-"""Auth tests — both AUTH_MODEs (cupel-phases.md:76, :98; openapi.yaml
+"""Auth tests — both AUTH_MODEs (openapi.yaml
 :21-36 AUTH_MODE semantics). Run: npm run test:mock.
 
 Off-mode (AUTH_MODE unset — the deployed demo's configuration) must behave
@@ -55,7 +55,7 @@ def test_off_mode_me_is_dev_user_unchanged():
     the dev user now carries roles ["admin", "inspect"] — roles is the
     additive OPTIONAL v0.3.0 Me field (openapi.yaml:2004-2012), and off mode
     is "instant dev as a chosen user ... default admin = all trees, all
-    rights" (feature-spec.md:17, cupel-phases.md:76), so the dev user must
+    rights" (feature-spec.md:17), so the dev user must
     advertise admin for the role-driven Settings → Members / Agent trees UI.
     Everything else stays byte-identical to the pre-auth shape."""
     async def case():

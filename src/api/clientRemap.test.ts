@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Remap hook: "Connect backends whose routes are named
-// differently (e.g. /nabu-service/…) via remap" (cupel-phases.md:75). The
+// Remap hook: connect backends whose routes are named
+// differently (e.g. /nabu-service/…) via remap. The
 // shipped config defines no remapped target, so the store is mocked to
 // resolve one; buildUrl must apply remap BEFORE prefixing baseUrl.
 // getTargetForPath is what the client asks (it routes mocked families

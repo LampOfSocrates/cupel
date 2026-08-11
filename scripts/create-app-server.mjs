@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The browser-based family mapper for `npm run create` — replaces the old
-// terminal questionnaire (item 11) with an HTML page so mapping ~14 families
+// terminal questionnaire (item 11) with an HTML page so mapping ~15 families
 // to mine/mock/hide, plus the path rules a real backend needs
 // (scripts/remap-rules.mjs, item 40), is a form instead of a sequence of
 // blocking prompts. This file is transport only: every decision (suggested
@@ -36,7 +36,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_FILE = path.join(HERE, "create-app-ui", "index.html");
 
 // No ping for this long -> the tab is gone (closed, crashed, machine slept).
-// Generous on purpose: mapping ~14 families by hand is not a 10-second job.
+// Generous on purpose: mapping ~15 families by hand is not a 10-second job.
 const DISCONNECT_MS = 90_000;
 
 /** Operations per family, straight off the contract — table context only. */
@@ -179,11 +179,21 @@ export async function runInteractive({ options, contract, names, contractVersion
         const body = await readJsonBody(req);
         if (body.mode === "openapi" && body.source) {
           const rules = readRules(body.rules);
-          const backend = await detectBackend(body.source, contract, rules);
+          // `pick` comes back from an `alternatives` entry the human clicked.
+          const pick =
+            body.pick && Number.isInteger(body.pick.depth) && typeof body.pick.prefix === "string"
+              ? { depth: body.pick.depth, prefix: body.pick.prefix }
+              : null;
+          const backend = await detectBackend(body.source, contract, rules, { pick });
           const suggested = suggestAnswers(names, { report: backend.report, flags: options.families });
           return sendJson(res, 200, {
             init: backend.init,
             report: backend.report ? { conformant: backend.report.conformant, checked: backend.report.checked } : null,
+            // What the spec itself said about their agents — prefix, ids, the
+            // noun behind those ids, the split stream route. The page renders
+            // this instead of asking for any of it.
+            shape: backend.shape,
+            rulesFrom: backend.rulesFrom,
             errors: backend.errors,
             suggested,
           });

@@ -1,10 +1,20 @@
 # Cupel
-Read these before any work, in order:
-1. docs/react-migration.md — evidence rules: quote spec lines, cite file:line, check lockfiles
-2. docs/cupel-phases.md — we build phase by phase; NEVER build ahead of the current phase
-3. docs/feature-spec.md — the what; sketches/clean/ = target density, sketches/ = API wiring
+Evidence rules, always: quote the spec lines you are working from, cite file:line for any
+claim about existing code, check lockfile versions before using an API. Flag ambiguity
+instead of guessing.
 
-Current phase: 2. Current task: Phase 2 COMPLETE — FULL STOP. Next: UX polish phase, planned with the user (see docs/TASKS.md).
+**Cite code and the contract by file:line — never a prose doc.** `openapi.yaml:NN` and
+`src/…:NN` point at artifacts a reader can verify and a test can guard. A line number into
+a Markdown document rots the moment a paragraph moves: 226 such citations had to be
+re-pointed across 83 files after one doc lost five lines. When a doc explains WHY, quote
+the sentence into the comment and drop the pointer — the quote survives, the number doesn't.
+
+Read before any work: **docs/feature-spec.md** — the what; sketches/clean/ = target
+density, sketches/ = API wiring. docs/TASKS.md is the work queue, and its numbering is the
+commit convention (`N: <summary>`).
+
+Status: feature build-out COMPLETE — FULL STOP. Work is user-directed; build what the
+current task asks for and nothing beyond it.
 Invariants (never break): versions/judgments/snapshots append-only ·
 generator writes only via public API · /me always called ·
 no AUTH_MODE branches · one config artifact.

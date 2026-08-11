@@ -94,7 +94,7 @@ function LegacyInspectorRedirect() {
 }
 
 export function App() {
-  // Boot: GET /me is always called (invariant, cupel-phases.md:160) alongside
+  // Boot: GET /me is always called (invariant) alongside
   // GET /agenttrees (feature-spec.md:221 "App shell / sidebar | GET /me, GET /agenttrees").
   const [conversationsVersion, setConversationsVersion] = useState(0);
   const refreshConversations = useCallback(() => {
@@ -120,13 +120,13 @@ export function App() {
   // and the whole page tree (Shell, QueueProvider's /tasks/stream, every
   // page's mount fetch) unmounts; when /me + /agenttrees resolve against the
   // new base, everything remounts fresh and refetches there. /me is always
-  // called — including once per switch (invariant, cupel-phases.md:160); a
+  // called — including once per switch (invariant); a
   // failing new target lands in the boot error state below, which names it.
   // `target` is referentially stable per id (target.ts snapshot contract),
   // so the effect fires only on real changes (or a custom-URL edit).
   // ALSO keyed on the login token — login (token set) and logout
   // (token cleared) re-run the boot fetch, so /me is called again with the
-  // new credentials (invariant "/me is always called", cupel-phases.md:160).
+  // new credentials (invariant "/me is always called").
   const target = useBackendTarget();
   const authToken = useAuthToken();
   // A MID-SESSION auth-required signal also re-runs the boot check (covers a

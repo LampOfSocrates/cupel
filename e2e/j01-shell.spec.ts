@@ -38,7 +38,7 @@ test("shell: boot → sidebar → search → fork nesting expands", async ({
     await page.goto("/");
     await expect(page.getByRole("button", { name: "+ New chat" })).toBeVisible();
     await expect(page.getByText("agent1 · Recent")).toBeVisible();
-    await api.expectCalled("GET /me"); // cupel-phases.md:160 invariant
+    await api.expectCalled("GET /me"); // invariant
     await api.expectCalled("GET /agenttrees");
     await api.expectCalled("GET /agenttrees/{tree}/conversations");
     await api.expectCalled("GET /tasks/stream"); // one app-wide SSE

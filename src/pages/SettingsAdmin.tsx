@@ -19,7 +19,7 @@ import { useApp } from "../AppContext";
 import { product } from "../lib/product";
 
 // The two admin Settings sections (unsketched; derived from the
-// existing SettingsPage visual language per cupel-phases.md:95 — Paper blocks,
+// existing SettingsPage visual language — Paper blocks,
 // dense xs controls):
 // - Members (feature-spec.md:19): "user list, per-tree permission matrix
 //   (view/tune/evaluate checkboxes)". Data = GET /admin/users + one

@@ -1,4 +1,4 @@
-// cupel-ready comparator engine (cupel-phases.md:74).
+// cupel-ready comparator engine.
 // Compares a DEREFERENCED contract OpenAPI doc against a DEREFERENCED target
 // doc, contract -> target direction only (extra target paths are ignored).
 //

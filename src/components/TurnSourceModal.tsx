@@ -16,7 +16,7 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
 import type { Turn } from "../api/types";
 
-// "Pull them from real turns or forks" (cupel-phases.md:80). Two jobs
+// Pull them from real turns or forks. Two jobs
 // in one picker, chosen by `mode`:
 //
 // - mode "case": the whole turn becomes a case. The caller POSTs

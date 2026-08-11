@@ -200,9 +200,9 @@ describe("EditorPage", () => {
     expect(screen.getByText("v2 · draft")).toBeInTheDocument();
   });
 
-  // "Test an instruction change in one click: 'Test as evaluation'
+  // Test an instruction change in one click: 'Test as evaluation'
   // snapshots your draft and replays your usual conversations against it —
-  // using the editor → Evaluations flow (sketches 06 → 03)" (cupel-phases.md:18).
+  // using the editor → Evaluations flow (sketches 06 → 03).
   // Real StudioPage mounted at /studio (Results tab, formerly the bare
   // /evaluations route — UX polish 2026-08-10) so the router-state handoff is
   // exercised end to end, not against a probe.
@@ -256,7 +256,7 @@ describe("EditorPage", () => {
     });
   });
 
-  // Free-tier export: pure client-side Blob download of the
+  // Export: pure client-side Blob download of the
   // already-fetched history; no request leaves the page (MSW would error on
   // any unhandled one — contract untouched).
   it("Download → JSON triggers a client-side download with the right filename", async () => {

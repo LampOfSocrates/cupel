@@ -220,7 +220,7 @@ export interface ConversationListParams extends PageParams {
 }
 
 // openapi.yaml:3129 AdminConversationItem — "Inspector row = an ordinary
-// conversation plus the cross-user dimension (cupel-phases.md:78 'filter by
+// conversation plus the cross-user dimension ('filter by
 // user, tree, date, or score')" (:3134-3137). The mock omits `turns` on these
 // rows: the table is a dense index and the inline reader fetches the
 // transcript for the selected row.
@@ -271,7 +271,7 @@ export interface ErrorBody {
 
 // openapi.yaml:1391 ChatRequest — ":1398 Omit [conversation_id] to start a new
 // conversation"; ":1431-1436 stream: true = SSE token stream (UI default);
-// false = single JSON response (cupel-phases.md:43)".
+// false = single JSON response".
 export interface ChatRequest {
   conversation_id?: string | null;
   message: string;

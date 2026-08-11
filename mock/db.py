@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS agents (
   parent_id TEXT, tools TEXT NOT NULL DEFAULT '[]',
   enabled INTEGER NOT NULL DEFAULT 1, format TEXT NOT NULL DEFAULT 'text');
 
--- Append-only (cupel-phases.md:160); live version = MAX(version).
+-- Append-only (invariant); live version = MAX(version).
 CREATE TABLE IF NOT EXISTS instruction_versions (
   agent_id TEXT NOT NULL, version INTEGER NOT NULL,
   content TEXT NOT NULL, format TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS rubrics (
 -- SAME append-only shape rubrics already use — composite PRIMARY KEY
 -- (id, version), latest = MAX(version) — rather than a mutated "latest" row
 -- plus a history side-table. One shape for every versioned store keeps the
--- invariant machine-obvious ("versions append-only", cupel-phases.md:160) and
+-- invariant machine-obvious ("versions append-only") and
 -- GET /eval/cases/{id} "Returns the LATEST version" (openapi.yaml:1442) is one
 -- ORDER BY. Pre-existing databases are migrated in Db._migrate_eval_cases
 -- below: every existing row becomes version 1, so Phase-1 cases (and the
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS eval_cases (
 -- the MEMBERSHIP is append-only ("each save is a new version carrying its
 -- FULL item list"). Splitting them is what lets a rename leave every
 -- recorded version untouched, so the append-only invariant
--- (cupel-phases.md:160) needs no exception for metadata.
+-- needs no exception for metadata.
 --
 -- A benchmark is GLOBAL, not tree-scoped: its reference items may point at
 -- turns across trees, and per-item visibility follows the viewer's
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS inspect_audit (
   filters TEXT NOT NULL, result_count INTEGER NOT NULL,
   created_at TEXT NOT NULL);
 
--- Append-only (cupel-phases.md:160); human thumbs share this store.
+-- Append-only (invariant); human thumbs share this store.
 --
 -- One row = one score, addressed by a SUBJECT (what was judged) and a SCORER
 -- (what produced the score) — openapi.yaml JudgmentSubject / Scorer. That pair

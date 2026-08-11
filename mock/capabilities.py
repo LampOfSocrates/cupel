@@ -27,7 +27,7 @@ partial and `memory`/`settings` are `none` rather than quietly absent.
 
 # openapi.yaml info.version — the contract this backend was built against, NOT
 # config.VERSION, which is the server's own version.
-CONTRACT_VERSION = "0.5.0"
+CONTRACT_VERSION = "0.6.0"
 
 CAPABILITIES: dict[str, dict] = {
     "auth": {"status": "full", "implemented": 2, "operations": 2},
@@ -53,10 +53,11 @@ CAPABILITIES: dict[str, dict] = {
         ],
     },
     "chat": {"status": "full", "implemented": 3, "operations": 3},
-    "evaluations": {"status": "full", "implemented": 4, "operations": 4},
+    "replay": {"status": "full", "implemented": 4, "operations": 4},
     "trace": {"status": "full", "implemented": 2, "operations": 2},
     "tasks": {"status": "full", "implemented": 5, "operations": 5},
-    "eval": {"status": "full", "implemented": 19, "operations": 19},
+    "datasets": {"status": "full", "implemented": 13, "operations": 13},
+    "judging": {"status": "full", "implemented": 6, "operations": 6},
     "settings": {
         "status": "none", "implemented": 0, "operations": 2,
         "missing": ["GET /settings", "PUT /settings"],

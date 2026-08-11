@@ -25,7 +25,6 @@ sketches/
 autorun/
 .claude/
 cupel-starter.zip
-cupel-run.sh
 *.md
 openapi.yaml
 vitest.config.ts

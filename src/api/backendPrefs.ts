@@ -27,9 +27,9 @@ export function setProdToken(token: string): void {
 }
 
 // "SSE streaming on/off" (feature-spec.md:156) — the one mock option that is
-// real today: ChatPage sends stream:<flag> and "the UI degrades gracefully to
-// non-streaming when the SSE toggle is off in mock options"
-// (cupel-phases.md:43). Default ON; only the off state is stored.
+// real today: ChatPage sends stream:<flag> and the UI degrades gracefully to
+// non-streaming when the SSE toggle is off in mock options.
+// Default ON; only the off state is stored.
 export const SSE_STORAGE_KEY = "cupel.backend.sse";
 
 export function getSseEnabled(): boolean {

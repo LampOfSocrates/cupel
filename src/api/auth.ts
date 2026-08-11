@@ -1,6 +1,6 @@
 // Login-token store + central auth signals. The client always
 // attaches a token when it has one and routes any 401 to the login screen;
-// NO component branches on the auth mode (invariant, cupel-phases.md:160 —
+// NO component branches on the auth mode (invariant —
 // machine-checked by tests/no-authmode-branches.test.js;
 // openapi.yaml:30-32 "Clients never branch on the mode: they always attach a
 // token when they have one, and route any 401 to the login screen").

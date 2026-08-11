@@ -18,7 +18,7 @@ import type { ReplayTurnAccepted, Variant } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 
-// Turn re-fire as forks (cupel-phases.md:20): "Re-fire one turn
+// Turn re-fire as forks: "Re-fire one turn
 // against several endpoints at once, each becoming a real new conversation you
 // can open and continue in Chat — from any results cell or any chat turn".
 // Semantics (feature-spec.md:68): "Each (turn × endpoint × config) forks a new

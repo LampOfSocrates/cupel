@@ -1,6 +1,6 @@
 // The README that ships INSIDE a generated folder — the adopter's first and
 // often only document, so it is written for someone who has never read this
-// repo (docs/plan-adopter-onboarding.md "The adoption ladder").
+// repo (docs/plans/plan-adopter-onboarding.md "The adoption ladder").
 //
 // Two things it must say plainly, because burying either would be dishonest:
 //   1. this folder is a COPY they own and it will NOT receive upstream fixes
@@ -42,7 +42,7 @@ export const LADDER = [
   },
   {
     title: "Evaluations and traces",
-    families: ["evaluations", "trace", "tasks", "eval"],
+    families: ["replay", "trace", "tasks", "datasets", "judging"],
     body:
       "Replay, the comparison grid, the span tree behind a turn, the background queue,\n" +
       "and the eval workbench. Payoff: the reason to keep the thing.",

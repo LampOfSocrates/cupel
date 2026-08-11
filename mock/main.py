@@ -1,4 +1,9 @@
-"""Cupel Phase-1 mock server — implements openapi.yaml v0.2.0 exactly.
+"""Cupel mock server — implements openapi.yaml.
+
+Which families it actually serves is DECLARED, not described here:
+mock/capabilities.py holds CONTRACT_VERSION and the per-family map, and a
+pytest recomputes it from the contract so it cannot go stale. Pinning a
+version in this docstring would just be a second copy to forget.
 
 Run: npm run mock  (uvicorn mock.main:app --port 4010, openapi.yaml:46)
 """
@@ -243,9 +248,9 @@ async def body_json(request: Request) -> dict:
 
 def create_app(db_path: str | None = None, token_delay: float | None = None,
                step_delay: float | None = None, static_dir: str | None = None) -> FastAPI:
-    # cupel-phases.md:98: the mock "ships its own OpenAPI file —
-    # which the readiness script validates against Cupel's contract as the
-    # first conformance test". FastAPI auto-generates the spec from the
+    # The mock ships its own OpenAPI file, which the readiness script
+    # validates against Cupel's contract as the
+    # first conformance test. FastAPI auto-generates the spec from the
     # routes; handlers have no response_model, so schemas are loose ({}) and
     # conformance sees path/method/param presence (documented in
     # docs/readiness.md). Docs UI stays off.
@@ -868,7 +873,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
            tree, so the demo shows everything.
         2. Rows are ALL conversations, forks included (unlike the sidebar
            listing, which is roots-only, openapi.yaml:346-349) — "Inspect
-           every conversation in the system" (cupel-phases.md:78). Deleted
+           every conversation in the system". Deleted
            conversations stay hidden; a tombstone is not history to browse.
         """
         page, page_size = clamp_page(page, page_size, 100)
@@ -1637,7 +1642,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         from limited callers rather than leaked.
 
         Subscription-side filters (tree/evaluation_id/task_id query params) are a
-        contract change and stay open for v0.4.0 (bucket C)."""
+        contract change and remain open."""
         permitted = permitted_trees(request)
 
         async def gen():

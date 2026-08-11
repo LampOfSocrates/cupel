@@ -7,7 +7,7 @@ import { InstructionEditor } from "./editor/InstructionEditor";
 
 // Instruction editor (sketch 06): "Edit an agent's instructions
 // safely: every save is a new version, with diff view and rollback, never an
-// overwrite" (cupel-phases.md:17); "save = new version, never overwrite. Diff
+// overwrite"; "save = new version, never overwrite. Diff
 // view + rollback" (feature-spec.md:33).
 //
 // This file is the LOADER half only: GET the history, show the loader/load

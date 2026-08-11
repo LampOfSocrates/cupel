@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// THE smoke e2e (cupel-phases.md:46): "boot on mock → send chat turn
+// THE smoke e2e: "boot on mock → send chat turn
 // (SSE renders) → queue a 2-conversation replay → grid fills → judge one →
 // score appears". Runs against the real mock on :4010 (no MSW) with a fresh
 // scratch DB per evaluation (playwright.config.ts), so all history is created here.
@@ -25,7 +25,7 @@ test("smoke: boot → chat SSE → 2-conversation replay → grid fills → judg
   expect(rubricRes.status()).toBe(201);
   const rubric = await rubricRes.json();
 
-  // --- Boot on mock: /me is always called (cupel-phases.md:160 invariant) ---
+  // --- Boot on mock: /me is always called (invariant) ---
   const meResponse = page.waitForResponse((r) => new URL(r.url()).pathname === "/me");
   await page.goto("/");
   expect((await meResponse).status()).toBe(200);

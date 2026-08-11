@@ -1,5 +1,5 @@
-// agentic.config.ts — THE one config artifact (CLAUDE.md invariant; cupel-phases.md:73
-// "Point Cupel at your own backend by editing one file (agentic.config.ts)").
+// agentic.config.ts — THE one config artifact (CLAUDE.md invariant):
+// point Cupel at your own backend by editing one file (agentic.config.ts).
 //
 // This is the file YOU hand-edit to point Cupel at your backends. Everything
 // the app needs to know about where its API lives is declared here; no other
@@ -65,7 +65,7 @@ export interface BackendTarget {
   banner?: { label: string; color?: string } | false;
   /**
    * Route remapping for backends whose routes are NAMED DIFFERENTLY
-   * (cupel-phases.md:75 — e.g. everything lives under "/nabu-service/…").
+   * (e.g. everything lives under "/nabu-service/…").
    * Receives the contract path ("/agenttrees/agent1/chat") and returns the
    * path your backend expects. Applied by the client before prefixing
    * baseUrl. Example:
@@ -81,8 +81,8 @@ export interface BackendTarget {
   remap?: (path: string, opts?: { stream?: boolean }) => string;
   /**
    * Escape hatch for backends that don't speak the contract at all
-   * (cupel-phases.md:75 "any backend at all via a small adapter module —
-   * with the mock filling in whatever your backend doesn't do yet").
+   * (any backend at all via a small adapter module —
+   * with the mock filling in whatever your backend doesn't do yet).
    * Module specifier of an adapter, resolved by the switcher/readiness
    * tooling (P2-T17 / P2-READY). Declared + typed now; not consumed yet.
    */
@@ -133,7 +133,7 @@ export interface LocalMockConfig {
  *
  * It is declared here so the config you write today is the config that works
  * unchanged once `ReplayTurnRequest.configs[]` lands (queued with the contract
- * bump, docs/open-items.md) — at that point the picker applies these instead
+ * bump, docs/TASKS.md) — at that point the picker applies these instead
  * of rejecting them, and no existing `compareSets` entry has to be rewritten.
  * Vary version/model across many conversations in Evaluate meanwhile.
  */
@@ -160,7 +160,7 @@ export interface CompareVariantSpec {
 
 /**
  * A named A/B comparison — "a team's usual A/B is one click and not a
- * five-field form each time" (docs/plan-ab-compare.md §3). Config supplies
+ * five-field form each time" (docs/plans/plan-ab-compare.md §3). Config supplies
  * the PRESETS; chat compare still allows an ad-hoc endpoint selection, and
  * this stays the only source of truth for the saved ones.
  *
@@ -189,7 +189,7 @@ export interface CompareSet {
  *
  * A family is a top-level tag of openapi.yaml (chat, conversations, agents,
  * eval, …) — the unit an adopter answers on, one question each, rather than
- * once per operation (docs/plan-adopter-onboarding.md).
+ * once per operation (docs/plans/plan-adopter-onboarding.md).
  *
  * - `mine` — your backend serves it, through the active target above.
  * - `mock` — the bundled demo backend serves it, and the app SAYS SO in the

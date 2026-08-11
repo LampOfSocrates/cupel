@@ -351,7 +351,7 @@ class Engine:
     async def chat_events(self, ctx: dict, streaming: bool):
         """Yield ('token', delta)* then ('done', turn, 'completed'|'cancelled').
 
-        One code path for both chat modes (cupel-phases.md:43); stream=false
+        One code path for both chat modes; stream=false
         just consumes tokens without delay.
         """
         task_id = ctx["task_id"]

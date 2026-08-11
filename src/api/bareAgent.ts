@@ -1,4 +1,4 @@
-// The bare-agent shim — persona B, the wedge (docs/plan-adopter-onboarding.md).
+// The bare-agent shim — persona B, the wedge (docs/plans/plan-adopter-onboarding.md).
 //
 // The adopter has a framework agent (ADK / LangGraph / Mastra / CrewAI /
 // PydanticAI) reachable over HTTP and NO OpenAPI document at all, so nothing

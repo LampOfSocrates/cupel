@@ -120,7 +120,7 @@ describe("ChatPage streaming", () => {
   // The Settings → Backend SSE toggle (feature-spec.md:156 "SSE
   // streaming on/off") drives ChatRequest.stream; off → the JSON path
   // renders the full reply ("the UI degrades gracefully to non-streaming when
-  // the SSE toggle is off in mock options", cupel-phases.md:43).
+  // the SSE toggle is off in mock options").
   it("sends stream:false when the device-local SSE flag is off and renders the full JSON reply", async () => {
     setSseEnabled(false);
     const user = userEvent.setup();
@@ -831,8 +831,8 @@ describe("Chat settings", () => {
   });
 });
 
-// Envelope affordance on turns. "every turn records its context
-// (date, timezone, region) at generation" (cupel-phases.md:25); envelope on
+// Envelope affordance on turns. Every turn records its context
+// (date, timezone, region) at generation; envelope on
 // turn objects in conversation listings (feature-spec.md:81). Sketch 01 shows
 // no envelope UI, so the surface is a hover tooltip on each turn's timestamp
 // showing the EnvelopeChip.
@@ -1048,7 +1048,7 @@ describe("Live LLM (BYOK) settings", () => {
 // received ?turn= scrolls + marks that turn; an unknown one is ignored; a
 // conversation the receiver can't see is 404 for BOTH "deleted" and
 // "unpermitted" (openapi.yaml:1948) and renders one friendly state.
-// Anonymous tokenized public links are not built.
+// Anonymous tokenized public links are not planned (dropped 2026-08-11).
 describe("Share links (P2-SHARE)", () => {
   it("🔗 on an assistant turn copies the conversation URL plus ?turn={id}", async () => {
     const user = userEvent.setup();

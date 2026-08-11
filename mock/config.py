@@ -25,8 +25,8 @@ STEP_DELAY = float(os.environ.get("MOCK_STEP_DELAY", "0.08"))
 
 
 def fail_marker() -> str:
-    """FAILURE INJECTION for the e2e suite (cupel-phases.md:98 "failure/latency
-    injection env vars"; feature-spec.md:199 "e2e runs with failure-injection ON
+    """FAILURE INJECTION for the e2e suite — failure/latency
+    injection env vars (feature-spec.md:199 "e2e runs with failure-injection ON
     at fixed seed, so retry-failed and error states are exercised
     reproducibly").
 
@@ -48,7 +48,8 @@ def fail_marker() -> str:
 # "Mock stays the backend of record ...; only the generation call inside
 # chat/replay/judge goes to a real provider when a key is present."
 # Headers X-LLM-Key / X-LLM-Model are transport-level by design — deliberately
-# OUTSIDE the openapi.yaml v0.2.0 contract (no /settings endpoint, Phase 2).
+# OUTSIDE the contract: they are sent per request and belong to no endpoint's
+# schema, so a BYOK key never lands in a stored settings document.
 
 
 def live_disabled() -> bool:

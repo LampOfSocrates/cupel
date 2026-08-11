@@ -109,7 +109,7 @@ export function ChatPage() {
   // Bumped when we leave a conversation: the composer drops the chips (and
   // their image previews) that were picked for the transcript being left.
   const [composerReset, setComposerReset] = useState(0);
-  // A/B compare mode (docs/plan-ab-compare.md §3) — a second LAYOUT for the
+  // A/B compare mode (docs/plans/plan-ab-compare.md §3) — a second LAYOUT for the
   // same conversation, not a second page. Off is the whole of normal chat.
   const [compare, setCompare] = useState(false);
   // Conversation the compare send landed in. Compare owns its own send, so it
@@ -304,9 +304,9 @@ export function ChatPage() {
           conversation_id: conversationId,
           // The Settings → Backend "SSE streaming on/off" mock option
           // (feature-spec.md:156) — device-local flag, read at send time.
-          // stream:false answers a single JSON ChatResponse handled below
-          // (cupel-phases.md:43 "the UI degrades gracefully to non-streaming
-          // when the SSE toggle is off in mock options").
+          // stream:false answers a single JSON ChatResponse handled below —
+          // the UI degrades gracefully to non-streaming
+          // when the SSE toggle is off in mock options.
           stream: getSseEnabled(),
           ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
           // Session-scoped settings "sent with each /chat call"
@@ -318,7 +318,7 @@ export function ChatPage() {
         { signal: abort.signal },
       );
       if (result.kind === "json") {
-        // Backend degraded to a single JSON ChatResponse (cupel-phases.md:43)
+        // Backend degraded to a single JSON ChatResponse
         attachedConvRef.current = result.response.conversation_id;
         setTurns((prev) => [...(prev ?? []), result.response.turn]);
         setStream(null);

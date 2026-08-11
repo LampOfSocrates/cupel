@@ -1,7 +1,7 @@
 # Chat App — Feature Spec (brief)
 
 ## Layout
-- Collapsible left sidebar. Two doors: **Chat** and **Evaluate** (a group holding Evaluations / Eval workbench / Casebooks), plus **Settings**. Task-queue badge in sidebar.
+- Collapsible left sidebar. Four doors: **Chat**, **Studio** (one route, five tabs — Cases · Benchmarks · Rubrics · Results · Inspector), **Queue** and **Agents**, plus **Settings**. Task-queue badge in sidebar.
 - **Expanded sidebar shows recent conversations** under Chat: title + relative time, search, infinite scroll. Forked conversations nest under their parent as a collapsed "N forks" chip (expand to list; lineage badge on each). New chat button at top. Collapsed sidebar = icons only.
 - Conversation actions (long-press/⋯): rename, delete, open parent (if fork), send to Evaluations.
 - Chat has its own **Settings submenu** (model, temperature, system prompt — session-scoped).
@@ -29,39 +29,39 @@
 
 ## Agent trees & permissions
 - Agents are organised in **trees**; multiple trees per deployment.
-- Permissions per tree (`view` / `tune` / `evaluate`), declared per operation in the contract (`x-requires`). `GET /agent-trees` returns only permitted trees; unpermitted trees never render — a tree you cannot `view` answers 404 from every operation under it, indistinguishable from one that does not exist. Inside a tree you CAN view, an action needing `tune` or `evaluate` that you do not hold answers 403, naming the permission and the tree.
+- Permissions per tree (`view` / `tune` / `evaluate`), declared per operation in the contract (`x-requires`). `GET /agenttrees` returns only permitted trees; unpermitted trees never render — a tree you cannot `view` answers 404 from every operation under it, indistinguishable from one that does not exist. Inside a tree you CAN view, an action needing `tune` or `evaluate` that you do not hold answers 403, naming the permission and the tree.
 - Instruction editing is **versioned**: save = new version, never overwrite. Diff view + rollback.
 - **Instruction format per agent**: `format: text | yaml` (agent metadata). YAML mode: syntax highlighting + **schema validation in the editor** — Phase 2 ships the **Google ADK agent-config schema**; a failing edit blocks save with inline errors, so bad config dies in the editor, not at runtime. The validation layer is schema-pluggable by design, but additional frameworks (CrewAI, LangGraph, …) are **Phase 4 scope** — do not build their schemas earlier.
 - **Model precedence rule**: Run Config's model override beats the YAML's `model:` key **for that run only** (grid column labeled with the override). The YAML remains the sole source of truth for live traffic; permanently changing the model = editing `model:` → new version → (optionally) PR → promote.
 
 ---
 
-## Evaluations workspace
+## Studio — the evaluation workspace
 
-One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* One page, one flow — there is no second, differently-configured entry into it.
+One engine: *take stored conversations **or individual turns**, re-execute them under a changed config, optionally judge them, queue the work, compare outputs.* It lives on one route, `/studio`, as five tabs over four contract families — Cases and Benchmarks are `datasets`, Rubrics is `judging`, Results is `replay`, Inspector is `admin`. Each tab vanishes on its own when its family is answered `hide`; the route vanishes only when all of them are.
 
-### Flow — 3-step stepper
+### Results tab — the 3-step stepper
 1. **Select** — ConversationPicker: search/filter/multi-select conversations, **expandable to pick individual turns** within a conversation (checkbox per turn). Scoped by permissions.
-2. **Configure** — Run Config drawer (right side), prefilled from the baseline so changing one axis = one field:
+2. **Configure** — Variant drawer, prefilled from the baseline so changing one axis = one field:
    - Agent tree + instruction version
-   - Model, temperature
+   - Model, temperature, deploy endpoints
    - **Judge (optional, collapsed by default)**: toggle on → judge model + rubric fields appear
-3. **Results** — Comparison grid: baseline column + one column per run config, row per turn. Diff highlighting. Per-cell 👍/👎 always available. If judge on: score column + summary header (mean, distribution sparkline), drill-in per turn for judge reasoning.
+3. **Results** — Comparison grid: baseline column + one column per variant, row per turn. Diff highlighting. Per-cell 👍/👎 always available. If judge on: score column + summary header (mean, distribution sparkline), drill-in per turn for judge reasoning.
 
 ### Evaluation domain (first-class, judge optional)
 Evaluation is its own domain, not a bolt-on to runs:
 
 - **EvalCase** = `{input, output, reference?, agenttree}`
   - `input`: prompt + context (frozen)
-  - `output`: candidate response (from a run, a fork, or pasted)
+  - `output`: candidate response (from an evaluation, a fork, or pasted)
   - `reference`: expected answer — **handcrafted** in an editor, or **sourced from conversation history** (pick a turn → its response becomes the reference). Nullable (reference-free rubrics allowed).
   - `agenttree`: free-form label naming the agent tree/endpoint this case evaluates. Required on every case — a sourced case defaults it from the turn's tree, a handcrafted case has the author pick it (not validated against known trees, since a case may target an endpoint this backend does not itself run).
-- **EvalBenchmark**: named collection of cases (versioned, reusable across runs/models).
+- **EvalBenchmark**: named collection of cases, membership versioned, reusable across evaluations and models. An item is either a **reference** to a live turn or a **frozen** case; freezing converts the first into the second.
 - **Judgment** (persisted forever, never overwritten): `{subject: {kind, id}, scorer: {kind, ref, version, model}, evaluation_id?, score, reasoning, created_at}`. Re-judging appends a new judgment; history per case is queryable, so scores are comparable across time/judges/rubrics.
 - Judge off: pure replay, manual eyeball + thumbs (thumbs also persist as lightweight judgments, `scorer: human`).
-- **"Judge this evaluation"** on any finished run: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
+- **"Judge this evaluation"** on any finished evaluation: maps its outputs onto eval cases (auto-creating cases from conversation turns if none exist) and enqueues judging.
 - Results grid: score column reads latest judgment per (case, rubric); history popover shows prior judgments.
-- **Eval workbench** (its own entry under **Evaluate** in the sidebar): manage the eval domain directly — case editor (input / output / reference / target-tree fields; "reference from turn" picker), benchmark manager (create/name/version benchmarks, drag cases in), rubric editor (prompt text, save = new version, test against one case). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference, plus one target tree for the whole batch → creates/extends a benchmark in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
+- **Cases · Benchmarks · Rubrics tabs**: manage the eval domain directly — case editor (input / output / reference / target-tree fields; "reference from turn" picker), benchmark manager (create/name/version benchmarks, add cases, freeze, replay), rubric editor (prompt text, save = new version). Entry also from any turn: "add as eval case". **Bulk import**: upload CSV/XLSX (or paste a table) with columns mapped to input/output/reference, plus one target tree for the whole batch → creates/extends a benchmark in one shot (`POST /eval/cases/import`, queued for large files; row errors reported per line, not all-or-nothing).
 - **Seeing results**: scores stream into the grid live as judging tasks finish (SSE), color-banded badges; summary header (mean + distribution) updates live. Tap a badge → **judgment drawer**: score, judge reasoning, rubric+version, judge model, input/output/reference side by side, and append-only history below. Conversation drill-in shows per-turn score chips with inline reasoning. Grid sortable/filterable by score (triage worst-first → re-run from the cell). Finished judging task in queue panel links "View results" to the sorted grid.
 
 ### Turn-level re-fire → forked conversations
@@ -145,7 +145,7 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
   - **Waterfall**: one row per span, bars positioned on the turn's timeline — sequence, duration, and parallel branches visible at a glance.
 - **Span drawer** (tap node or bar): full prompt/response for LLM spans, args/result for tool spans, model, exact token counts, cost, status/error. Errors mark the span red in both views.
 - Traces stream: spans appear live while the turn is generating (same SSE channel as tasks).
-- API: `GET /turns/{turn_id}/trace` (span tree), `GET /spans/{id}/payload` (lazy-loaded prompt/response bodies).
+- API: `GET /agenttrees/{tree}/turns/{turn_id}/trace` (span tree), `GET /spans/{id}/payload` (lazy-loaded prompt/response bodies).
 
 ---
 
@@ -220,30 +220,30 @@ The app should never look empty — a generator produces realistic synthetic dat
 |---|---|
 | Login (AUTH_MODE=on) | `POST /auth/token`, `GET /me` |
 | App shell / sidebar | `GET /me`, `GET /agenttrees`, `GET /tasks` (badge) |
-| Sidebar conversation list | `GET /agenttrees/{tree}/conversations` (`?search`, `?page`, `?forks_of`), `PATCH`/`DELETE …/conversations/{id}` |
+| Sidebar conversation list | `GET /agenttrees/{tree}/conversations` (`?search`, `?page`, `?origin`, `?forks_of`), `PATCH`/`DELETE …/conversations/{id}` |
 | Chat window | `POST /agenttrees/{tree}/chat` (SSE, → task_id), stop = `DELETE /tasks/{id}`, `POST /upload`, `POST /feedback`, `GET /models` |
 | Chat turn actions | `POST /feedback`, `POST /agenttrees/{tree}/replay/turn` (fork), `GET /agenttrees/{tree}/turns/{id}/trace` |
-| Evaluations · 1 Select | `GET /agenttrees/{tree}/conversations` |
-| Evaluations · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics`, `GET …/runs/{baseline}` |
-| Evaluations · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
-| Evaluations · 3 Results grid | `GET /agenttrees/{tree}/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
+| Studio · Cases | `POST /eval/cases`, `POST /eval/cases/{id}/versions`, `GET /eval/cases/{id}`, `POST /eval/cases/import` |
+| Studio · Benchmarks | `GET`/`POST /eval/benchmarks`, `GET`/`PATCH`/`DELETE /eval/benchmarks/{id}`, `POST …/{id}/versions`, `POST …/{id}/items`, `POST …/{id}/freeze`, `POST …/{id}/replay` |
+| Studio · Rubrics | `GET`/`POST /eval/rubrics`, `POST /eval/rubrics/{id}/versions` |
+| Studio · Results · 1 Select | `GET /agenttrees/{tree}/conversations`, `GET …/conversations/{id}/turns` |
+| Studio · Results · 2 Configure | `GET /agenttrees/{tree}/endpoints`, `GET …/agents/{id}/instructions`, `GET /models`, `GET /eval/rubrics` |
+| Studio · Results · queue action | `POST /agenttrees/{tree}/replay`, `POST …/replay/turn` |
+| Studio · Results · 3 grid | `GET /agenttrees/{tree}/evaluations`, `GET …/evaluations/{id}` (+ SSE fill), `GET /eval/judgments`, `GET /eval/evaluations/{id}/summary` |
+| Studio · Inspector (role `inspect`) | `GET /admin/conversations` |
+| Judge action | `POST /eval/judge` |
 | Judgment drawer | `GET /eval/judgments?subject_kind=case&subject_id=`, `GET /eval/cases/{id}` |
-| Eval workbench | `POST /eval/cases/import`, `POST /eval/cases` (+ `…/{id}/versions`), `POST/GET /eval/benchmarks` (+ `…/{id}/versions`), `GET/POST /eval/rubrics` (+ `…/{id}/versions`), `POST /eval/judge` |
-| Agent tree view | `GET /agenttrees/{tree}/agents` |
-| Instruction editor | `GET /agenttrees/{tree}/agents/{id}/instructions`, `POST …/instructions/versions`, `POST …/snapshots`, `GET/PUT …/last-selection` |
-| Editor · AI copilot | `POST /assist` (streams via task SSE) |
-| Editor · Open PR / Settings · Repo | `POST …/agents/{id}/pr`, `GET/PUT /settings/repo` |
-| New agent wizard | `POST /assist` (draft), `POST …/instructions/versions` (v1) |
-| Inspector | `GET /admin/conversations`, `POST /casebooks/{id}/items` |
-| Casebook view | `GET /casebooks/{id}`, `POST …/to-eval-set`, `POST …/replay` |
-| Memory panel | `GET/PUT/DELETE /agenttrees/{tree}/memory`, `POST …/memory/compact` |
+| Evaluation detail `/evaluations/{id}` | `GET /agenttrees/{tree}/evaluations/{id}`, `POST /feedback`, `POST …/replay/turn` (re-run cell) |
+| Fork compare `/forks/{parent}/{turn}` | `GET /agenttrees/{tree}/conversations?forks_of=`, `GET …/conversations/{id}/turns` |
+| Agent tree view | `GET /agenttrees/{tree}/agents`, `POST /agenttrees/{tree}/agents` |
+| Instruction editor | `GET /agenttrees/{tree}/agents/{id}/instructions`, `POST …/instructions/versions`, `POST …/snapshots`, `GET`/`PUT …/last-selection` |
 | Trace view | `GET /agenttrees/{tree}/turns/{id}/trace` (SSE live), `GET /spans/{id}/payload` |
 | Task queue panel | `GET /tasks`, `GET /tasks/{id}`, `GET /tasks/stream` (SSE), `DELETE /tasks/{id}`, `POST /tasks/{id}/retry-failed` |
-| Settings · global | `GET/PUT /settings` |
+| Settings · global | `GET`/`PUT /settings` |
 | Settings · Backend | `GET {base}/healthz` |
-| Settings · Members (admin) | `GET/PUT /admin/users`, `GET/PUT /admin/users/{id}/permissions` |
+| Settings · Members (admin) | `GET`/`PUT /admin/users`, `GET`/`PUT /admin/users/{id}/permissions` |
 | Settings · Agent trees (admin) | `GET /agenttrees` (incl. disabled), `PATCH /admin/agenttrees/{id}` |
-| Settings · Generator (mock/staging) | `POST /admin/generator`, `GET /admin/generator/status` |
+| **Contracted, no screen yet** | Memory panel (`GET`/`PUT`/`DELETE /agenttrees/{tree}/memory`, `POST …/memory/compact`) · Settings · Generator (`POST /admin/generator`, `GET /admin/generator/status`). The AI copilot, new-agent wizard and repo/PR surfaces below have **no contract at all** — `/assist` is deferred, repo integration is out of scope. |
 
 ---
 
@@ -260,7 +260,7 @@ The app should never look empty — a generator produces realistic synthetic dat
 | 7 | ![Conversations](sketches/07-conversations.svg) | Expanded sidebar: new chat, search, recent list, forks nested under parent with ↳ lineage |
 | 8 | ![Trace](sketches/08-trace.svg) | Per-turn trace: call tree (agent/tool/LLM nodes with time + tokens), waterfall with parallelism, span drawer |
 | 9 | ![Settings](sketches/09-settings.svg) | Backend target switcher: Mock/Local/Staging/Prod/custom URL, health check, mock options |
-| 10 | ![Eval workbench](sketches/10-eval-workbench.svg) | Cases/Sets/Rubrics tabs, case editor (input/output/reference, from-turn pickers, envelope), CSV/XLSX import, Casebook entry |
+| 10 | ![Eval workbench](sketches/10-eval-workbench.svg) | **Stale**: drawn as a standalone Cases/Sets/Rubrics workbench wired to `GET /eval/sets`. "Sets" are now Benchmarks, the route is `/eval/benchmarks`, and these are three tabs of Studio beside Results and Inspector. Redraw before building from it. |
 
 Two sets: `sketches/` (annotated — every actionable widget carries an inline endpoint tag) and `sketches/clean/` (**dense, annotation-free** versions showing target information density — build to the clean set's density, use the annotated set for API wiring). In the annotated set, every actionable widget carries an inline endpoint tag: teal `GET` = the call that feeds that widget's data, coral `POST/PUT/DELETE` = the call the action fires (`agent1` as the example tree).
 
@@ -276,7 +276,7 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 6. **Global settings**: "Settings page bound to `GET/PUT /settings`, validation, optimistic save with rollback."
 7. **Auth**: "Implement toggleable auth per the Auth section: AUTH_MODE env + Settings toggle (non-prod), no-auth dev user via GET /me (no component branches on mode), login screen + token client + 401 redirect when on, Settings → Members admin matrix. Quote the rule that /me is always called."
 7b. **Tree admin**: "Build Settings → Agent trees: admin list with enable/disable toggles via PATCH /admin/agenttrees/{id}; disabled = hidden for non-admins, greyed for admins, 409 on new work, tasks cancelled, conversations read-only with banner. Quote the disabled-tree effects from the Auth section."
-7c. **Permissions**: "Wire agent-tree permissions: `GET /agent-trees`, scope all pickers, never render unpermitted trees. Cite the permission rules."
+7c. **Permissions**: "Wire agent-tree permissions: `GET /agenttrees`, scope all pickers, never render unpermitted trees. Cite the permission rules."
 8. **Task queue**: "Global task queue with live progress: parent/child task model, SSE via `GET /tasks/stream` (polling fallback), per-task progress bar + stage text, expandable children, cancel cascades, retry-failed for partial failures, sidebar badge. Comparison grid cells populate incrementally as child tasks finish. Quote the task model and queue API from the spec first."
 9. **Shared components**: "Build ConversationPicker (turn-expandable), RunConfigPanel (diff-from-baseline, collapsed judge section), ComparisonView (pluggable annotations), RunsList. No page-specific logic inside."
 10. **Agent tree view**: "Build the tree home view: static dagre-layout node diagram from GET /agenttrees/{tree}/agents, reusing trace-view node components (structure only, no timings); node shows name/live version/tools; click opens the instruction editor; ⋯ menu (Test as evaluation, recent conversations, add sub-agent); pan/zoom + collapsible subtrees. Quote the reuse rule — same node components as trace."
@@ -288,7 +288,7 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 12b. **Evaluation domain**: "Build the eval domain: EvalCase (input/output/reference/agenttree — handcrafted editor or sourced from a conversation turn), versioned EvalBenchmarks and rubrics, append-only Judgments with full history. Wire 'Score this run' (auto-create cases from turns), score column = latest judgment, history popover. Quote the domain model and API from the spec first — judgments are never overwritten."
 13. **Turn forks**: "Implement turn re-fire as forks: `POST /replay/turn` with `endpoints[]` creates one new conversation per endpoint (history copied to fork point, lineage metadata). Entry points: Select-step turn checkboxes, results-cell 're-run with…', and 🔀 on any Chat turn. 'Open in Chat' on every fork. Cite the fork semantics from the spec."
 14. **Fork comparison**: "Add the fork pivot to ComparisonView: compare forks of one turn across endpoints, column per endpoint, baseline = original turn."
-16. **Turn trace**: "Build the trace view: ⌁ icon per turn opens call tree + waterfall from `GET /turns/{id}/trace`; nodes/bars badged with time and tokens in→out; span drawer lazy-loads payloads via `GET /spans/{id}/payload`; error spans red; spans stream live during generation. Quote the span model from the spec first."
+16. **Turn trace**: "Build the trace view: ⌁ icon per turn opens call tree + waterfall from `GET /agenttrees/{tree}/turns/{id}/trace`; nodes/bars badged with time and tokens in→out; span drawer lazy-loads payloads via `GET /spans/{id}/payload`; error spans red; spans stream live during generation. Quote the span model from the spec first."
 17. **Backend switcher**: "Build Settings → Backend: target presets + custom base URL through a single API client, `GET {base}/healthz` check with status/latency/seed display, mock options panel (latency, failure %, SSE, seed), non-prod chrome banner, device-local persistence. Quote the backend section of the spec first."
 18. **Data generator**: "Build the generator per the Data generator section: writes only through the public API, SQLite persistence in mock / Postgres in backend, deterministic seed mode, drip mode with configurable rates driving real tasks/SSE, POST /admin/generator control, Settings surfacing (mock: seed+drip controls; staging admin only). Quote the write-through-API rule first — no direct DB writes."
 18b. **Mock server**: "Build the FastAPI mock server per the 'Mock server requirements': all tree-scoped endpoints under /agenttrees/agent1 plus a second tree, SSE for chat/tasks/trace, stateful task lifecycle with children, snapshot→version promotion, fork creation with lineage, append-only judgments, seed data as specified, failure/latency injection via env vars. Cite each requirement number as you implement it."
@@ -298,3 +298,61 @@ Two sets: `sketches/` (annotated — every actionable widget carries an inline e
 20b. **Test as evaluation**: "Wire the editor's 'Test as evaluation': immutable draft snapshot via `POST /agents/{id}/snapshots`, run config prefilled (snapshot vs live baseline), last-used selection per agent for two-tap re-test, snapshot→version relabel on save, 'Back to editor' breadcrumb. Quote the draft snapshot rule from the spec — snapshots are immutable."
 
 Rule for every prompt: read the spec first, cite which spec lines you're implementing, don't add features not listed.
+
+---
+
+## Studio — the flow as it stands (2026-08-11)
+
+Written against the shipped app and the current contract. Everything above describes what
+Studio is *for*; this describes what it actually *does* today, and where it fights the user.
+
+### The flow
+
+A person arriving at `/studio` lands on **Cases**. The path through the product is:
+
+1. **Get material to judge.** Either author a case by hand, pull one out of a real
+   conversation turn, or import a spreadsheet of input/expected pairs. Cases are viewed
+   through a *bucket* selector — "Created here", meaning the cases this browser session
+   made, or the frozen members of one benchmark.
+2. **File it.** Move to **Benchmarks**, create or pick a benchmark, add the case. A benchmark
+   item is a live turn *reference* until it is *frozen* into a case; freezing is what makes a
+   benchmark reproducible, and membership is versioned so a judgment can name the exact
+   version it ran against.
+3. **Say how to score.** **Rubrics** holds the judge's criteria. Save appends a version.
+4. **Run something.** **Results** is a three-step wizard: pick conversations or individual
+   turns, configure one or more variants against a baseline, queue it. Work runs as a parent
+   task with a child per unit, and the grid fills in cell by cell over SSE.
+5. **Read the outcome.** Scores land in the grid. Drilling into one leaves Studio for
+   `/evaluations/{id}`; a turn's trace leaves for `/trace/{turn}`; comparing forks leaves for
+   `/forks/{parent}/{turn}`. Any fork opens in Chat and continues as a normal conversation.
+6. **Inspector**, for a super user, lists every conversation in the system regardless of owner.
+
+The instruction editor short-circuits all of this: **Test as evaluation** snapshots the draft
+and drops the user at Studio's Results tab with the config prefilled, remembering the
+conversation set per agent so a repeat test is two taps.
+
+### Frictions worth designing away
+
+1. **"Results" names two different things.** The Results *tab* contains a wizard whose third
+   *step* is also Results. "Go to results" is ambiguous in the UI, in the URL
+   (`/studio?tab=results` lands on step 1) and in conversation.
+2. **The payoff screen is not in Studio.** Reading an evaluation properly means leaving the
+   tab frame for a full-page route. The tabs disappear at the exact moment the user most wants
+   to get back to Cases and fix a bad reference.
+3. **"Created here" is browser state, not server state.** The session bucket is a list of ids
+   held in the page. Reload and the cases still exist but the bucket is empty. There is no
+   "cases not in a benchmark" query in the contract, so the UI keeps its own list — a gap the
+   design should either close in the contract or stop pretending is a real collection.
+4. **The commonest action crosses a tab boundary.** Make a case, then put it in a benchmark:
+   two tabs, and the second one re-selects the thing just made in the first.
+5. **Judging has almost no surface.** The `judging` family owns rubrics, the judge call,
+   judgments and score summaries, but only rubrics have a tab. Scores appear inside a grid and
+   history hides in a drawer, so "how is this agent scoring over time" has nowhere to live.
+6. **Five tabs, four families, three gating rules.** Cases and Benchmarks share a family, so
+   they hide together whether or not that makes sense. Inspector needs a role *and* a family.
+   The route needs all four families hidden before it disappears.
+7. **Hidden tabs still fetch.** Studio loads benchmarks and rubrics on mount regardless of
+   which tabs are visible, so hiding `datasets` still issues its requests.
+8. **The stepper is modal but the tabs are not.** Switching tabs mid-wizard is plain state, so
+   a half-configured evaluation can be walked away from and back into, but nothing says it is
+   still there.

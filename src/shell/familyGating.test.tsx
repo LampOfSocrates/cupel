@@ -38,9 +38,12 @@ afterEach(() => {
   vi.doUnmock("../../agentic.config");
 });
 
+// The three contract families /studio merges, as one object to hide them all.
+const STUDIO_HIDDEN = { datasets: "hide", judging: "hide", replay: "hide" };
+
 describe("hide", () => {
-  it("takes the Studio door out of the sidebar when BOTH families it merges hide", async () => {
-    await boot({ eval: "hide", evaluations: "hide" });
+  it("takes the Studio door out of the sidebar when EVERY family it merges hides", async () => {
+    await boot(STUDIO_HIDDEN);
     await screen.findByRole("link", { name: "Chat" });
     expect(screen.queryByRole("link", { name: "Studio" })).not.toBeInTheDocument();
     // Everything unanswered is still `mine`, so it stays.
@@ -49,30 +52,39 @@ describe("hide", () => {
     expect(screen.getByRole("link", { name: "Agents" })).toBeInTheDocument();
   });
 
-  it("keeps the Studio door open when only one of its two families hides — but drops that half's tabs", async () => {
-    await boot({ eval: "hide" }, "/studio");
+  it("keeps the Studio door open when only some of its families hide — but drops their tabs", async () => {
+    await boot({ datasets: "hide" }, "/studio");
     expect(await screen.findByRole("link", { name: "Studio" })).toBeInTheDocument();
-    // Cases/Sets/Rubrics share the "eval" family and are gone...
+    // Cases/Benchmarks are "datasets" and are gone...
     expect(screen.queryByRole("tab", { name: "Cases" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Sets" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Benchmarks" })).not.toBeInTheDocument();
+    // ...Rubrics ("judging") and Results ("replay") stay, and Rubrics is what
+    // the page lands on since Cases is no longer the default tab.
+    expect(await screen.findByRole("tab", { name: "Rubrics" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Results" })).toBeInTheDocument();
+  });
+
+  // The split's point: `judging` is answerable on its own, so hiding it takes
+  // the Rubrics tab and nothing else.
+  it("drops only the Rubrics tab when judging hides", async () => {
+    await boot({ judging: "hide" }, "/studio");
+    expect(await screen.findByRole("tab", { name: "Cases" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Benchmarks" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Rubrics" })).not.toBeInTheDocument();
-    // ...Results ("evaluations") stays, and is what the page lands on since
-    // Cases is no longer the default tab.
-    expect(await screen.findByRole("tab", { name: "Results" })).toBeInTheDocument();
   });
 
   // A hidden family's screen must not render — its requests would go nowhere.
   // /eval is a redirect into /studio now (App.tsx), so hitting it lands
-  // wherever /studio's OWN visibility says: still there if evaluations
-  // survives (Studio has something to show), the front door only once
-  // BOTH families — and so the route itself — are gone.
-  it("a hand-typed /eval lands on Studio if evaluations still answers", async () => {
-    await boot({ eval: "hide" }, "/eval");
+  // wherever /studio's OWN visibility says: still there while any of its three
+  // families answers (Studio has something to show), the front door only once
+  // all of them — and so the route itself — are gone.
+  it("a hand-typed /eval lands on Studio if another of its families still answers", async () => {
+    await boot({ datasets: "hide" }, "/eval");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio"));
   });
 
-  it("a hand-typed /eval lands on the front door once BOTH families hide", async () => {
-    await boot({ eval: "hide", evaluations: "hide" }, "/eval");
+  it("a hand-typed /eval lands on the front door once every Studio family hides", async () => {
+    await boot(STUDIO_HIDDEN, "/eval");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/chat"));
   });
 

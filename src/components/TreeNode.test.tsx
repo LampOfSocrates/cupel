@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { TreeBranch, TreeNode } from "./TreeNode";
 
-// Sketch-08 node reuse contract (cupel-phases.md:40 "reuse 08's node
-// components, structure-only"): kind palettes match the trace sketch's agent/
+// Sketch-08 node reuse contract (reuse 08's node
+// components, structure-only): kind palettes match the trace sketch's agent/
 // tool/llm families; dimmed = disabled styling (feature-spec.md:25).
 
 function renderNode(ui: React.ReactNode) {

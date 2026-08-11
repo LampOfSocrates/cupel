@@ -17,8 +17,8 @@ import {
 import { EvaluationsPage } from "./EvaluationsPage";
 import { EvaluationPage } from "./EvaluationPage";
 
-// Contract under test — the Evaluations stepper (cupel-phases.md:19: "pick (sketch
-// 02), configure (sketch 03), compare (sketch 04)"):
+// Contract under test — the Evaluations stepper (pick (sketch
+// 02), configure (sketch 03), compare (sketch 04)):
 // - GET /agenttrees/{tree}/evaluations "Evaluations, newest first" (openapi.yaml:663)
 // - ReplayRequest {selection, configs, context_policy} (openapi.yaml:
 //   1516-1546) — selection shapes preserved verbatim ("Absent/null = whole

@@ -1,5 +1,5 @@
-"""Structural bootstrap so a fresh server is usable: trees agent1 + agent2
-(cupel-phases.md:43), agents with instruction versions, replay endpoints.
+"""Structural bootstrap so a fresh server is usable: trees agent1 + agent2,
+agents with instruction versions, replay endpoints.
 Conversations/evaluations/judgments are the generator's job, not the server's.
 
 Each tree's structural definition lives under mock/agents/<slug>/ — this

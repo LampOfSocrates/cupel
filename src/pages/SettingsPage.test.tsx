@@ -122,6 +122,12 @@ describe("custom target (feature-spec.md:154 'custom Base URL field')", () => {
     expect(screen.getByRole("radio", { name: "Custom" })).toBeChecked();
     expect(screen.getByRole("textbox", { name: "Base URL" })).toHaveValue(LOCAL_BASE);
     expect(screen.getByRole("textbox", { name: "Base URL" })).not.toHaveAttribute("readonly");
+    // Mounting against the custom target fires a health check at LOCAL_BASE.
+    // The assertions above are synchronous, so without this the test finishes
+    // first and the handler's `healthzRequests.push("local")` lands AFTER
+    // afterEach cleared the array — i.e. inside whichever test runs next,
+    // which then sees a request it never made. Own the request you started.
+    await waitFor(() => expect(healthzRequests).toContain("local"));
   });
 });
 

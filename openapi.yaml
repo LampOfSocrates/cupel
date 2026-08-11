@@ -1,8 +1,19 @@
 openapi: 3.0.3
 info:
   title: Cupel API — Phase 2 contract
-  version: 0.5.0
+  version: 0.6.0
   description: |
+    New in v0.6.0 — a FAMILY rename, no path, schema or operation changed.
+    The `eval` tag was 19 of the contract's 67 operations behind a single
+    mine/mock/hide answer, and its name sat four characters from
+    `evaluations`, a different family. So `eval` splits along the seam a
+    backend actually implements on — `datasets` (what is evaluated: cases and
+    the benchmarks holding them, 13) and `judging` (what does the evaluating:
+    rubrics, the judge call, judgments, summaries, 6) — and `evaluations`
+    becomes `replay`. Fifteen families now, all three names distinct. A
+    backend upgrading from v0.5.0 changes only the KEYS of its
+    Health.capabilities map; every URL it serves is untouched.
+
     Phase 2 API contract for Cupel. Extends v0.2.0 (Phase 1) in place: every
     Phase-1 path and schema is unchanged or additively extended (new optional
     fields, widened enums with unchanged defaults), so Phase-1 clients keep
@@ -12,7 +23,7 @@ info:
     frozen cases — import, rubric saves), context-policy
     widening, per-tree memory, and user settings. Source of truth:
     feature-spec.md "API" section (feature-spec.md:110-131) filtered by
-    the Phase 2 plan (cupel-phases.md:69-118); pro-tier endpoints are
+    what Phase 2 covers; not-yet-built endpoints are
     excluded (see below).
 
     Vocabulary note: what feature-spec.md calls a "run" this contract calls an
@@ -65,7 +76,7 @@ info:
     (feature-spec.md:16-18): this contract declares the AUTH_MODE=on
     behaviour; with AUTH_MODE=off the backend simply does not ENFORCE the
     scheme — requests without a token succeed as the configured dev user.
-    Clients never branch on the mode (invariant cupel-phases.md:160 "no
+    Clients never branch on the mode (invariant: "no
     component branches on AUTH_MODE"): they always attach a token when they
     have one, and route any 401 to the login screen. GET /me answers in both
     modes (feature-spec.md:116). The 401 response is spelled out on /me,
@@ -168,8 +179,8 @@ info:
     `capabilities` map.
 
     Invariants encoded in this contract: instruction versions, judgments and
-    snapshots are append-only — no endpoint updates or deletes them
-    (cupel-phases.md:160). Phase 2 adds more versioned stores under the same
+    snapshots are append-only — no endpoint updates or deletes them.
+    Phase 2 adds more versioned stores under the same
     rule, and the VERB now says so. Every versioned store is written through a
     `…/versions` sub-collection that is POSTed to — POST
     /agenttrees/{tree}/agents/{id}/instructions/versions, POST
@@ -198,23 +209,24 @@ info:
     Structural seed writes (POST /agenttrees, POST /agenttrees/{tree}/agents,
     POST /eval/rubrics) exist so the generator can seed trees, agents and
     rubrics through the public API — invariant "generator writes only through
-    the public API" (cupel-phases.md:160, feature-spec.md:181, :184).
+    the public API" (feature-spec.md:181, :184).
 
-    Pro-tier exclusions (user decision 2026-08-05, TASKS.md:56-61): repo/PR
+    Unbuilt, deliberately ABSENT from this contract — the contract test
+    asserts their absence so nothing half-specified leaks in: repo/PR
     integration (POST /agenttrees/{tree}/agents/{id}/pr, GET/PUT
     /settings/repo, POST /webhooks/git, the mock git server) and public
-    tokenized share links are PRO tier and deliberately ABSENT from this
-    contract — the contract test asserts their absence. Free-tier sharing
-    (P2-SHARE, TASKS.md:47) is in-app deep links (/chat/{id}?turn=) over the
-    existing conversation GETs and needs no new endpoints.
+    tokenized share links. Both are ordinary roadmap work on TASKS.md — there
+    is no paid tier and nothing is withheld. Sharing as shipped is in-app deep
+    links (/chat/{id}?turn=) over the existing conversation GETs, which needs
+    no new endpoints.
 
     Deferred to later phases (deliberately absent): /assist — the AI
-    authoring fast path is Phase 3 (feature-spec.md:115; cupel-phases.md:128
-    "New-agent wizard" under Phase 3) — and additional YAML framework
+    authoring fast path is Phase 3 (feature-spec.md:115), the
+    "New-agent wizard" — and additional YAML framework
     schemas (Phase 4).
 servers:
   - url: http://localhost:4010
-    description: FastAPI mock (cupel-phases.md:51 "npm run mock — Python (FastAPI) mock on :4010, seeded")
+    description: FastAPI mock ("npm run mock — Python (FastAPI) mock on :4010, seeded")
 security:
   - bearerAuth: []
 # PERMISSIONS. Every operation carries `x-requires` (see the per-operation
@@ -267,14 +279,16 @@ tags:
     description: Per-tree memory — read, edit, clear, compact. Contracted, not implemented anywhere yet.
   - name: chat
     description: Sending a message and streaming the answer, plus attachments and feedback. The one family a bare agent endpoint can serve alone.
-  - name: evaluations
+  - name: replay
     description: Replaying conversations or a single turn into a comparison grid, and reading that grid back.
   - name: trace
     description: The span tree behind a turn, and span payloads.
   - name: tasks
     description: The background-work queue — listing, detail with children, live stream, cancel, retry-failed.
-  - name: eval
-    description: The eval workbench — cases, eval benchmarks, rubrics, judging and score summaries.
+  - name: datasets
+    description: What is evaluated — eval cases (with spreadsheet import) and the eval benchmarks that hold them, versioned and freezable.
+  - name: judging
+    description: What does the evaluating — rubrics and their versions, the judge call, judgments and per-evaluation score summaries.
   - name: settings
     description: Server-side settings (upload limits, context policy, fallback envelope).
 
@@ -294,10 +308,10 @@ paths:
         a client cannot hold a token before logging in. The mock serves
         seeded credentials admin@demo / restricted@demo issuing real-shaped
         JWTs so the auth-on path is testable without a real IdP
-        (feature-spec.md:21; cupel-phases.md:98). With AUTH_MODE=off the
+        (feature-spec.md:21). With AUTH_MODE=off the
         endpoint still answers (a dev-user token) so the login flow stays
         testable, but the app never needs it — /me answers without a token
-        and no component branches on the mode (cupel-phases.md:160).
+        and no component branches on the mode.
       requestBody:
         required: true
         content:
@@ -335,7 +349,7 @@ paths:
         presented bearer token server-side; the client then drops it and
         returns to login. With AUTH_MODE=off this is a no-op 204 (nothing to
         invalidate) — clients call it unconditionally, never branching on
-        the mode (cupel-phases.md:160).
+        the mode.
       responses:
         "204": { description: Token invalidated (or nothing to invalidate). }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -349,8 +363,8 @@ paths:
       summary: Current user and per-tree permissions
       description: |
         feature-spec.md:116: "GET /me (user + per-tree permissions; answers in
-        both auth modes)". Always called on boot — invariant (cupel-phases.md:160
-        "/me is always called"). AUTH_MODE=off: answers with the configured
+        both auth modes)". Always called on boot — invariant
+        ("/me is always called"). AUTH_MODE=off: answers with the configured
         dev user, no token needed (feature-spec.md:17 — "the backend/mock
         just answers with the dev user, so permission code paths run
         identically"). AUTH_MODE=on: requires the bearer token; 401 routes
@@ -519,7 +533,7 @@ paths:
       summary: Inspector — every conversation, cross-user
       description: |
         feature-spec.md:113: "Inspector/Casebooks: GET /admin/conversations
-        (cross-user)". cupel-phases.md:78: "Inspect every conversation in
+        (cross-user)". This endpoint is how you "Inspect every conversation in
         the system as a super user — filter by user, tree, date, or score in
         a dense keyboard-driven table … requires the inspect role,
         audit-logged." Requires the inspect role (403 otherwise); EVERY
@@ -578,7 +592,7 @@ paths:
         seed = one-shot baseline dataset, "Deterministic from --seed N (e2e
         depends on this)"; drip = continuous background loop with
         configurable rates; stop = halt the drip. The generator writes ONLY
-        through this public API (invariant cupel-phases.md:160;
+        through this public API (invariant;
         feature-spec.md:181 "never directly to the DB"), so everything it
         produces flows through the same queues and SSE streams as real
         usage. Surfaced in Settings → Backend for the mock and Settings →
@@ -693,8 +707,8 @@ paths:
       description: |
         Generator seed mode "builds the baseline dataset — trees, agents +
         versions" (feature-spec.md:184) and "writes through the public API,
-        never directly to the DB" (feature-spec.md:181; invariant
-        cupel-phases.md:160). Admin tree management UI is Phase 2
+        never directly to the DB" (feature-spec.md:181; invariant).
+        Admin tree management UI is Phase 2
         (feature-spec.md:20); this write exists for API completeness and seeding.
       requestBody:
         required: true
@@ -769,7 +783,7 @@ paths:
       description: |
         Tree-view node context menu: "add sub-agent (opens New-agent wizard
         pre-placed)" (feature-spec.md:26); Phase 1 capability "click any node
-        to edit it or add a sub-agent under it" (cupel-phases.md:16). Also the
+        to edit it or add a sub-agent under it". Also the
         generator's seed path for "agents + versions" (feature-spec.md:184).
         The created agent has no instruction versions yet; save v1 via
         PUT …/{agentId}/instructions. The AI-drafted wizard (POST /assist) is
@@ -861,7 +875,7 @@ paths:
         snapshot → snapshot_id)". Rule (feature-spec.md:86): "the draft text is
         snapshotted immutably into the run config (snapshot_id), so the tested
         text is exactly what ran even if editing continues… Unsaved snapshots
-        display as 'v15-draft (a3f2)'." Append-only invariant (cupel-phases.md:160).
+        display as 'v15-draft (a3f2)'." Append-only invariant.
       parameters:
         - { $ref: "#/components/parameters/tree" }
         - { $ref: "#/components/parameters/agentId" }
@@ -1098,7 +1112,7 @@ paths:
       description: |
         Delete is a tombstone: the conversation disappears from listings and
         chat, but judgments referencing its turns are "persisted forever, never
-        overwritten" (feature-spec.md:59; invariant cupel-phases.md:160), eval
+        overwritten" (feature-spec.md:59; invariant), eval
         cases keep their source refs, and forks keep their lineage (the parent
         link renders as deleted). No cascade to judgments, cases, or forks.
 
@@ -1195,7 +1209,7 @@ paths:
       summary: The tree's memory document
       description: |
         feature-spec.md:114: "Memory: GET/PUT/DELETE /agenttrees/{tree}/memory".
-        cupel-phases.md:85: "See and control what the app remembers about
+        It is how you "See and control what the app remembers about
         your conversations per agent tree — view, edit, or clear the memory
         document; compaction runs as a visible queued task — using the
         Memory panel." One document per tree. A tree that has never
@@ -1214,10 +1228,10 @@ paths:
       x-requires: tune
       summary: Edit the memory document (overwrites — mutable by design)
       description: |
-        The edit half of cupel-phases.md:85 "view, edit, or clear". Memory
+        The edit half of "view, edit, or clear". Memory
         is a MUTABLE working document — the deliberate exception to the
-        append-only stores (versions/judgments/snapshots,
-        cupel-phases.md:160): PUT replaces the content outright.
+        append-only stores (versions/judgments/snapshots):
+        PUT replaces the content outright.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       requestBody:
         required: true
@@ -1239,7 +1253,7 @@ paths:
       x-requires: tune
       summary: Clear the memory document
       description: |
-        The clear half of cupel-phases.md:85 "view, edit, or clear the
+        The clear half of "view, edit, or clear the
         memory document". Resets content to ""; subsequent GET returns the
         empty document, not 404. Conversations are untouched — only the
         distilled memory is cleared.
@@ -1260,9 +1274,9 @@ paths:
         (queued)". Enqueued like all backend work (feature-spec.md:102
         "every request returns task_id"): 202 + TaskRef; the task has type
         "compact" and streams progress on GET /tasks/stream. On completion
-        the memory document holds the merged summary (cupel-phases.md:131:
+        the memory document holds the merged summary —
         "LLM summarization merges what matters into the tree's memory
-        document"). Compaction rewrites memory, not conversations —
+        document". Compaction rewrites memory, not conversations —
         transcripts, traces and judgments are untouched.
       parameters: [{ $ref: "#/components/parameters/tree" }]
       responses:
@@ -1285,7 +1299,7 @@ paths:
         feature-spec.md:119: "POST /agenttrees/{tree}/chat (SSE; queued →
         returns task_id), stop = DELETE /tasks/{task_id}".
 
-        Both modes on this one endpoint (cupel-phases.md:43): "stream: true (SSE
+        Both modes on this one endpoint: "stream: true (SSE
         token stream, the UI default) and stream: false (single JSON response,
         for curl/scripts/backends that can't stream) — same endpoint, flag in
         the request body".
@@ -1421,7 +1435,7 @@ paths:
   # ------------------------------------------------------------- evaluations
   /agenttrees/{tree}/replay:
     post:
-      tags: [evaluations]
+      tags: [replay]
       operationId: replay
       x-requires: evaluate
       summary: Replay selected conversations/turns under a changed config
@@ -1463,7 +1477,7 @@ paths:
 
   /agenttrees/{tree}/replay/turn:
     post:
-      tags: [evaluations]
+      tags: [replay]
       operationId: replayTurn
       x-requires: evaluate
       summary: Re-fire one turn against one or many endpoints (forks)
@@ -1499,7 +1513,7 @@ paths:
 
   /agenttrees/{tree}/evaluations:
     get:
-      tags: [evaluations]
+      tags: [replay]
       operationId: listEvaluations
       x-requires: view
       summary: List evaluations
@@ -1525,7 +1539,7 @@ paths:
 
   /agenttrees/{tree}/evaluations/{evaluationId}:
     get:
-      tags: [evaluations]
+      tags: [replay]
       operationId: getEvaluation
       x-requires: view
       summary: Evaluation detail — one page of the comparison grid
@@ -1777,13 +1791,13 @@ paths:
   # -------------------------------------------------------------------- eval
   /eval/rubrics:
     get:
-      tags: [eval]
+      tags: [judging]
       operationId: listRubrics
       x-requires: none
       summary: Rubrics (for the Variant judge section)
       description: |
         feature-spec.md:128 "GET/POST /eval/rubrics". Rubric EDITOR UI is
-        Phase 2 (eval workbench, cupel-phases.md:98); the POST exists so the
+        Phase 2 (eval workbench); the POST exists so the
         generator can seed "judgments across 2 rubrics" (feature-spec.md:164)
         through the public API (feature-spec.md:181). Consumed by
         Evaluations · Configure (feature-spec.md:226). Paged: rubrics are
@@ -1806,14 +1820,14 @@ paths:
               schema: { $ref: "#/components/schemas/RubricPage" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
-      tags: [eval]
+      tags: [judging]
       operationId: createRubric
       x-requires: none
       summary: Create a rubric (append-only; new name = v1)
       description: |
         feature-spec.md:128 "GET/POST /eval/rubrics" — versioned, "save = new
         version". Posting an existing rubric's name appends the next version;
-        no update/delete exists (append-only, cupel-phases.md:160).
+        no update/delete exists (append-only).
       requestBody:
         required: true
         content:
@@ -1829,7 +1843,7 @@ paths:
 
   /eval/rubrics/{rubricId}/versions:
     post:
-      tags: [eval]
+      tags: [judging]
       operationId: createRubricVersion
       x-requires: none
       summary: Append the next rubric version (append-only)
@@ -1839,7 +1853,7 @@ paths:
         it is a POST and not a PUT on the rubric.
         Workbench rubric editor: "prompt text, save = new version, test
         against one case" (feature-spec.md:63). Appends the next version of
-        this rubric id — never overwrites (invariant cupel-phases.md:160);
+        this rubric id — never overwrites (invariant);
         Judgment.scorer.version keeps old scores comparable
         (feature-spec.md:59). Complements Phase-1 POST /eval/rubrics
         (existing NAME appends) with the id-addressed save the editor needs.
@@ -1860,7 +1874,7 @@ paths:
 
   /eval/cases:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: createEvalCase
       x-requires: none
       summary: Create an eval case (handcrafted or sourced from a turn)
@@ -1892,7 +1906,7 @@ paths:
 
   /eval/cases/import:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: importEvalCases
       x-requires: none
       summary: Bulk import cases (CSV/XLSX, column mapping, per-row errors)
@@ -1960,7 +1974,7 @@ paths:
 
   /eval/cases/{caseId}:
     get:
-      tags: [eval]
+      tags: [datasets]
       operationId: getEvalCase
       x-requires: none
       summary: One eval case (judgment drawer)
@@ -1986,7 +2000,7 @@ paths:
 
   /eval/cases/{caseId}/versions:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: createEvalCaseVersion
       x-requires: none
       summary: Append the next eval-case version (append-only)
@@ -2033,7 +2047,7 @@ paths:
   # appends a new version carrying its FULL item list.
   /eval/benchmarks:
     get:
-      tags: [eval]
+      tags: [datasets]
       operationId: listEvalBenchmarks
       x-requires: none
       summary: Eval benchmarks (latest version each)
@@ -2044,7 +2058,7 @@ paths:
         hold live turn references as well as frozen cases. Returns the
         latest version of each benchmark, membership included — feeds the
         workbench benchmark manager (feature-spec.md:63), the ⊞ collect action
-        (cupel-phases.md:79) and the judge's benchmark picker. Global, not
+        and the judge's benchmark picker. Global, not
         tree-scoped: a benchmark may reference turns across trees, and per-item
         visibility still follows the viewer's tree permissions.
 
@@ -2066,7 +2080,7 @@ paths:
               schema: { $ref: "#/components/schemas/EvalBenchmarkPage" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: createEvalBenchmark
       x-requires: none
       summary: Create an eval benchmark (version 1)
@@ -2092,7 +2106,7 @@ paths:
 
   /eval/benchmarks/{benchmarkId}:
     get:
-      tags: [eval]
+      tags: [datasets]
       operationId: getEvalBenchmark
       x-requires: none
       summary: One eval benchmark (latest membership version)
@@ -2112,7 +2126,7 @@ paths:
               schema: { $ref: "#/components/schemas/EvalBenchmark" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
-      tags: [eval]
+      tags: [datasets]
       operationId: updateEvalBenchmarkMetadata
       x-requires: none
       summary: Rename / re-describe a benchmark (NOT a new version)
@@ -2137,7 +2151,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
     delete:
-      tags: [eval]
+      tags: [datasets]
       operationId: deleteEvalBenchmark
       x-requires: none
       summary: Delete a benchmark (its items are references — nothing else is touched)
@@ -2154,7 +2168,7 @@ paths:
 
   /eval/benchmarks/{benchmarkId}/versions:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: createEvalBenchmarkVersion
       x-requires: none
       summary: Append the next membership version (append-only)
@@ -2191,12 +2205,12 @@ paths:
 
   /eval/benchmarks/{benchmarkId}/items:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: addEvalBenchmarkItem
       x-requires: none
       summary: Add one item — a turn reference (the ⊞ action) or a case
       description: |
-        cupel-phases.md:79: "Collect noteworthy turns into Casebooks with one
+        This is how you "Collect noteworthy turns into Casebooks with one
         keystroke … using the ⊞ action" — the keystroke now collects into an
         eval benchmark. Exactly one of source / case_id (request oneOf): source =
         {tree, conversation_id, turn_id} adds a REFERENCE item (nothing about
@@ -2231,12 +2245,12 @@ paths:
 
   /eval/benchmarks/{benchmarkId}/freeze:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: freezeEvalBenchmarkItems
       x-requires: none
       summary: Freeze reference items into cases
       description: |
-        What "turn a casebook into an eval benchmark" (cupel-phases.md:79) becomes
+        What "turn a casebook into an eval benchmark" becomes
         once the two nouns are one: not a conversion into another resource,
         but flipping items in place from reference to frozen. For each named
         reference item the server reuses the existing eval case for that turn
@@ -2265,12 +2279,12 @@ paths:
 
   /eval/benchmarks/{benchmarkId}/replay:
     post:
-      tags: [eval]
+      tags: [datasets]
       operationId: replayEvalBenchmark
       x-requires: none
       summary: Replay the benchmark's referenced turns as a regression suite
       description: |
-        cupel-phases.md:79 "a replay regression suite". Replays every
+        The benchmark doubles as "a replay regression suite". Replays every
         REFERENCE item's turn under the given configs — same engine as
         POST /agenttrees/{tree}/replay (feature-spec.md:41), same context
         fields and frozen default. Frozen items are skipped: a frozen case
@@ -2298,7 +2312,7 @@ paths:
 
   /eval/judge:
     post:
-      tags: [eval]
+      tags: [judging]
       operationId: judge
       x-requires: none
       summary: Enqueue LLM judging
@@ -2337,7 +2351,7 @@ paths:
 
   /eval/judgments:
     get:
-      tags: [eval]
+      tags: [judging]
       operationId: listJudgments
       x-requires: none
       summary: Judgment history (append-only)
@@ -2394,7 +2408,7 @@ paths:
 
   /eval/evaluations/{evaluationId}/summary:
     get:
-      tags: [eval]
+      tags: [judging]
       operationId: getEvaluationScoreSummary
       x-requires: none
       summary: Aggregate scores for an evaluation
@@ -2477,7 +2491,7 @@ components:
         POST /auth/token opt out (security: []). AUTH_MODE=off backends do
         not ENFORCE this scheme — requests without a token succeed as the
         dev user — but the contract declares the on-mode and clients never
-        branch (invariant cupel-phases.md:160).
+        branch (invariant).
 
   parameters:
     tree:
@@ -2604,7 +2618,7 @@ components:
         Authenticated, but lacking the capability this operation declares in
         its x-requires (code forbidden). Two shapes, one code: a missing global
         ROLE — admin for /admin/* management, inspect for the Inspector
-        (cupel-phases.md:78 "requires the inspect role") — or a missing PER-TREE
+        ("requires the inspect role") — or a missing PER-TREE
         permission on a tree the caller can already see, which is every
         operation declaring x-requires tune or evaluate. The message names the
         permission and the tree ("You do not have permission to tune agent tree
@@ -2721,7 +2735,7 @@ components:
             Global roles (additive in v0.3.0, not required — Phase-1
             backends omit it): admin gates the Settings → Members / Agent
             trees UI (feature-spec.md:19 "visible when /me grants admin");
-            inspect gates the Inspector (cupel-phases.md:78). Absent or
+            inspect gates the Inspector. Absent or
             empty = neither.
           items: { type: string, enum: [admin, inspect] }
         permissions:
@@ -3039,7 +3053,7 @@ components:
           nullable: true
           description: >
             "Every turn captures an envelope at generation" (feature-spec.md:76;
-            cupel-phases.md:25 "every turn records its context"). The key is
+            "every turn records its context"). The key is
             required; null is permitted ONLY on legacy/imported turns
             (feature-spec.md:78). The server stamps assistant turns at
             generation and inbound (user/machine) turns at receipt; on turn
@@ -3217,8 +3231,7 @@ components:
           type: boolean
           default: true
           description: >
-            true = SSE token stream (UI default); false = single JSON response
-            (cupel-phases.md:43).
+            true = SSE token stream (UI default); false = single JSON response.
 
     ChatResponse:
       type: object
@@ -3925,8 +3938,8 @@ components:
       type: object
       required: [id, subject, scorer, score, created_at]
       description: >
-        Append-only, never overwritten (feature-spec.md:59; invariant
-        cupel-phases.md:160). One row is one score, addressed by a subject
+        Append-only, never overwritten (feature-spec.md:59; invariant).
+        One row is one score, addressed by a subject
         (what was judged) and a scorer (what produced the score) — the
         discriminated pair that replaced four mutually exclusive nullable
         foreign keys plus a type enum.
@@ -4010,7 +4023,7 @@ components:
       description: >
         Real-shaped JWT (feature-spec.md:21) plus the authenticated user so
         the login screen can hydrate immediately — the app still calls
-        GET /me on every boot regardless (invariant cupel-phases.md:160
+        GET /me on every boot regardless (invariant:
         "/me is always called").
       properties:
         access_token:
@@ -4120,7 +4133,7 @@ components:
           required: [user_id]
           description: >
             Inspector row = an ordinary conversation plus the cross-user
-            dimension (cupel-phases.md:78 "filter by user, tree, date, or
+            dimension ("filter by user, tree, date, or
             score").
           properties:
             user_id: { type: string, description: Owning user. }
@@ -4194,7 +4207,7 @@ components:
           type: object
           description: >
             Produced since seed — all written through the public API
-            (invariant cupel-phases.md:160), so they flowed through the
+            (invariant), so they flowed through the
             normal queues and SSE streams.
           required: [conversations, evaluations, judgments]
           properties:
@@ -4295,7 +4308,7 @@ components:
       description: >
         feature-spec.md:58: "EvalBenchmark: named collection of cases (versioned,
         reusable across runs/models)", merged with the Casebook —
-        "a named collection of turn REFERENCES" (cupel-phases.md:79) — into
+        "a named collection of turn REFERENCES" — into
         the one noun. A member is either kind, so the collection is both:
         the raw material you collect with ⊞ and the reusable suite you judge.
         Membership is versioned (feature-spec.md:127): every change appends a
@@ -4498,7 +4511,7 @@ components:
       type: object
       required: [tree_id, content]
       description: >
-        One MUTABLE memory document per tree (cupel-phases.md:85) — the
+        One MUTABLE memory document per tree — the
         deliberate exception to the append-only stores: PUT overwrites,
         DELETE clears. content "" = nothing remembered (never 404 for an
         existing tree).

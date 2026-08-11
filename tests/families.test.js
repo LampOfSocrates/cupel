@@ -44,7 +44,9 @@ describe("path matching", () => {
     ["/agenttrees/agent1/conversations/c_42/turns", "conversations"],
     ["/agenttrees/agent1/turns/t_7/trace", "trace"],
     ["/tasks/stream", "tasks"],
-    ["/eval/cases", "eval"],
+    ["/eval/cases", "datasets"],
+    ["/eval/judgments", "judging"],
+    ["/agenttrees/agent1/evaluations", "replay"],
     ["/admin/users", "admin"],
     ["/healthz", "meta"],
   ])("%s -> %s", (path, family) => {

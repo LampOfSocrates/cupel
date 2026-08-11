@@ -212,7 +212,7 @@ def test_pagination():
 
 
 def test_forks_are_listed_too():
-    """"Inspect EVERY conversation in the system" (cupel-phases.md:78) — the
+    """"Inspect EVERY conversation in the system" — the
     Inspector is not roots-only like the sidebar listing."""
     app = make_app()
 

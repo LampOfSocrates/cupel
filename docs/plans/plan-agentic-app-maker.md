@@ -1,6 +1,6 @@
 # Plan — `agentic-app-maker` (Phase 3, PLAN ONLY — do not build yet)
 
-**SUPERSEDED.** The generator half was replaced by `docs/plan-adopter-onboarding.md`
+**SUPERSEDED.** The generator half was replaced by `docs/plans/plan-adopter-onboarding.md`
 and shipped as `npm run create` (TASKS.md item 11, 2026-08-10) — the command, its
 flags and its questions are all different from what is described here. Kept as the
 record of what was superseded, so its counts (69 operations, contract v0.3.0) and its

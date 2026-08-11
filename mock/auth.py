@@ -1,7 +1,7 @@
-"""Auth — both AUTH_MODEs (cupel-phases.md:76 "Turn auth on or off with
+"""Auth — both AUTH_MODEs. Auth turns on or off with
 one env var: off = instant dev as a chosen user; on = real login, tokens, and
-401 handling"; mock deliverable cupel-phases.md:98 "auth endpoints in both
-AUTH_MODEs (seeded admin@demo/restricted@demo, real-shaped JWTs)").
+401 handling. The mock ships auth endpoints in both
+AUTH_MODEs (seeded admin@demo/restricted@demo, real-shaped JWTs).
 
 AUTH_MODE env semantics (openapi.yaml:26-32): unset or anything but "on" =
 off = today's behavior byte-for-byte — /me answers the dev user, nothing is
@@ -39,7 +39,7 @@ from .util import now_iso
 DEFAULT_JWT_SECRET = "cupel-dev-jwt-secret"
 TOKEN_TTL_S = 12 * 3600  # exp ~12h
 
-# password "demo" for both (cupel-phases.md:98); stored as sha256 — mock-only
+# password "demo" for both; stored as sha256 — mock-only
 # hygiene, not real password storage.
 SEED_USERS = [
     {

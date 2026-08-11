@@ -16,8 +16,8 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
 import type { EvalCaseSource, EvalBenchmark } from "../api/types";
 
-// ⊞ collect — "Collect noteworthy turns into Casebooks with one
-// keystroke" (cupel-phases.md:79). Since Casebook and EvalBenchmark merged,
+// ⊞ collect — collects noteworthy turns into Casebooks with one
+// keystroke. Since Casebook and EvalBenchmark merged,
 // the keystroke collects into an EVAL BENCHMARK: one modal behind every ⊞
 // entry point (feature-spec.md:236 "Inspector | GET /admin/conversations,
 // POST /casebooks/{id}/items", now POST /eval/benchmarks/{benchmarkId}/items)

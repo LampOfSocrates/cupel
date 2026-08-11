@@ -64,6 +64,60 @@
   label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
   label:first-of-type { margin-top: 0; }
   label .opt { font-weight: 400; color: var(--muted); }
+  label.sub { font-weight: 400; font-size: 0.82rem; margin-top: 6px; color: var(--muted); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  details#path-rules { margin-top: 14px; }
+  details#path-rules > summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 6px 0;
+  }
+  .shape-found {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .shape-found h3 { margin: 0 0 8px; font-size: 0.92rem; }
+  .shape-found .summary-grid { margin: 0; }
+  .shape-found details { margin-top: 10px; }
+  .shape-found summary { cursor: pointer; font-size: 0.84rem; color: var(--muted); }
+  .ignored-list {
+    margin-top: 8px;
+    padding: 8px 10px;
+    max-height: 190px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.78rem;
+    line-height: 1.9;
+  }
+  button.alt-pick {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.84rem;
+    font-family: var(--sans);
+    cursor: pointer;
+  }
+  button.alt-pick:hover { border-color: var(--accent); }
+  button.alt-pick .alt-res { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
   input[type="text"], input[type="url"], select {
     width: 100%;
     padding: 8px 10px;
@@ -176,17 +230,6 @@
         <input type="text" id="f-name" placeholder="My Agent" />
       </div>
     </div>
-    <div class="row">
-      <div>
-        <label for="f-tree-one">One agent tree is called</label>
-        <input type="text" id="f-tree-one" placeholder="agent tree" />
-      </div>
-      <div>
-        <label for="f-tree-many">...and more than one</label>
-        <input type="text" id="f-tree-many" placeholder="agent trees" />
-      </div>
-    </div>
-
     <label>Your backend</label>
     <div class="radio-group" id="backend-mode">
       <label data-mode="none"><input type="radio" name="backend-mode" value="none" checked />No backend yet — mock everything for now</label>
@@ -198,34 +241,36 @@
       <label for="f-openapi">OpenAPI URL or local path</label>
       <input type="text" id="f-openapi" placeholder="https://api.example.com/openapi.json" />
 
-      <label>Path differences <span class="opt">(only if your routes aren't named like the contract's)</span></label>
-      <div class="row">
-        <div>
-          <label for="f-prefix" style="font-weight:400;font-size:0.82rem;margin-top:4px;">Root prefix every route sits under</label>
-          <input type="text" id="f-prefix" placeholder="nabu-service" />
+      <details id="path-rules">
+        <summary>Path differences <span class="opt">— read from your spec; open only to correct them</span></summary>
+        <div class="row">
+          <div>
+            <label for="f-prefix" class="sub">Root prefix every route sits under</label>
+            <input type="text" id="f-prefix" placeholder="nabu-service" />
+          </div>
         </div>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="f-drop-agenttrees" />
-        <label for="f-drop-agenttrees" style="margin:0;font-weight:400;">Your agent tree id sits directly after the prefix — no literal "agenttrees" segment (e.g. <code>/prefix/agent1/chat</code>, not <code>/prefix/agenttrees/agent1/chat</code>)</label>
-      </div>
-
-      <label style="margin-top:14px;">Renamed resources <span class="opt">(contract word → yours, e.g. conversations → sessions)</span></label>
-      <div class="rename-rows" id="rename-rows"></div>
-      <button type="button" class="add-rename" id="add-rename">+ add a rename</button>
-
-      <div class="checkbox-row" style="margin-top:14px;">
-        <input type="checkbox" id="f-split-stream" />
-        <label for="f-split-stream" style="margin:0;font-weight:400;">Chat streams on its <strong>own route</strong>, not the same endpoint with a <code>stream</code> flag</label>
-      </div>
-      <div class="row" id="stream-suffix-row" style="display:none;">
-        <div>
-          <label for="f-stream-suffix" style="font-weight:400;font-size:0.82rem;">Its route ends with</label>
-          <input type="text" id="f-stream-suffix" placeholder="stream" value="stream" />
+        <div class="checkbox-row">
+          <input type="checkbox" id="f-drop-agenttrees" />
+          <label for="f-drop-agenttrees" style="margin:0;font-weight:400;">Your agent id sits directly after the prefix — no literal "agenttrees" segment (e.g. <code>/prefix/agent1/chat</code>, not <code>/prefix/agenttrees/agent1/chat</code>)</label>
         </div>
-      </div>
 
-      <pre class="remap-preview" id="remap-preview" hidden></pre>
+        <label style="margin-top:14px;">Renamed resources <span class="opt">(contract word → yours, e.g. conversations → sessions)</span></label>
+        <div class="rename-rows" id="rename-rows"></div>
+        <button type="button" class="add-rename" id="add-rename">+ add a rename</button>
+
+        <div class="checkbox-row" style="margin-top:14px;">
+          <input type="checkbox" id="f-split-stream" />
+          <label for="f-split-stream" style="margin:0;font-weight:400;">Chat streams on its <strong>own route</strong>, not the same endpoint with a <code>stream</code> flag</label>
+        </div>
+        <div class="row" id="stream-suffix-row" style="display:none;">
+          <div>
+            <label for="f-stream-suffix" class="sub">Its route ends with</label>
+            <input type="text" id="f-stream-suffix" placeholder="stream" value="stream" />
+          </div>
+        </div>
+
+        <pre class="remap-preview" id="remap-preview" hidden></pre>
+      </details>
     </div>
 
     <div class="sub-fields" id="agent-fields">
@@ -240,6 +285,29 @@
 
     <div id="tech-check" class="tech-check"></div>
     <div id="detect-result" class="detect-result" hidden></div>
+
+    <!-- What the spec itself said. Filled by /api/detect; never asked for. -->
+    <div id="shape-found" class="shape-found" hidden>
+      <h3>Found in your spec</h3>
+      <dl class="summary-grid" id="shape-summary"></dl>
+      <div id="shape-scope"></div>
+      <div id="shape-alternatives"></div>
+      <div id="shape-warnings"></div>
+      <label class="sub" style="margin-top:14px;">
+        What to call them in the UI
+        <span class="opt">— taken from your own ids; change it if the word is wrong</span>
+      </label>
+      <div class="row">
+        <div>
+          <label for="f-tree-one" class="sub">one</label>
+          <input type="text" id="f-tree-one" placeholder="agent tree" />
+        </div>
+        <div>
+          <label for="f-tree-many" class="sub">more than one</label>
+          <input type="text" id="f-tree-many" placeholder="agent trees" />
+        </div>
+      </div>
+    </div>
 
     <div class="actions">
       <button class="secondary" id="cancel-1" type="button">Cancel</button>
@@ -297,6 +365,11 @@
   let bootstrap = null;
   let detected = { init: null, agentEndpoint: null, suggested: {} };
   let answers = {};
+  // A slot the human picked off `alternatives`, overriding the chat anchor.
+  let pickedSlot = null;
+  // Whether the tree term currently in the box was filled by detection (so a
+  // re-pick may replace it) or typed by a human (so it must not be touched).
+  let treeTermAuto = false;
 
   // ------------------------------------------------------------- heartbeat
   setInterval(() => fetch("/api/ping", { method: "POST" }).catch(() => {}), 5000);
@@ -381,6 +454,9 @@
   ["f-prefix", "f-drop-agenttrees", "f-split-stream", "f-stream-suffix"].forEach((id) =>
     $(id).addEventListener("input", updateRemapPreview),
   );
+  $("f-tree-one").addEventListener("input", () => {
+    treeTermAuto = false;
+  });
   $("f-split-stream").addEventListener("change", () => {
     $("stream-suffix-row").style.display = $("f-split-stream").checked ? "flex" : "none";
     updateRemapPreview();
@@ -443,7 +519,12 @@
         box.textContent = "Enter an OpenAPI URL or path, or pick a different option.";
         return false;
       }
-      body = { mode: "openapi", source, rules: currentRules() };
+      body = {
+        mode: "openapi",
+        source,
+        rules: currentRules(),
+        pick: pickedSlot ? { depth: pickedSlot.depth, prefix: pickedSlot.prefix } : null,
+      };
     } else if (mode === "agent") {
       const url = $("f-agent-url").value.trim();
       if (!url) {
@@ -465,11 +546,13 @@
         box.textContent =
           `spec        ${data.init.source}\n` +
           `baseUrl     ${data.init.baseUrl || "(same-origin)"}\n` +
-          (data.init.remapRules ? "remap       your path rules\n" : `remap       ${data.init.remapPrefix ? data.init.remapPrefix + " + path" : "none detected"}\n`) +
+          (data.init.remapRules ? `remap       path rules (from ${data.rulesFrom})\n` : `remap       ${data.init.remapPrefix ? data.init.remapPrefix + " + path" : "none detected"}\n`) +
           `conformance ${c.conformant}/${c.checked} operations`;
+        renderShape(data.shape);
       } else {
         box.classList.add("error");
         box.textContent = ["could not read a spec there:", ...(data.errors ?? [])].join("\n");
+        $("shape-found").hidden = true;
       }
     } else if (mode === "agent") {
       box.textContent = `your agent  ${data.agentEndpoint.url}\nstreaming   ${data.agentEndpoint.stream} (${data.streamSource})\nchat is mapped by a shim; every other family starts mocked.`;
@@ -479,8 +562,116 @@
     return true;
   }
 
+  // ------------------------------------------------------------ found shape
+  // Everything here came OUT of their openapi.json — the prefix, the ids,
+  // the noun those ids are built from, the split stream route. The form is
+  // filled from it rather than asking for any of it; the `details` block and
+  // the two term inputs are the override, not the primary path.
+  const plural = (one) =>
+    /(s|x|z|ch|sh)$/i.test(one) ? `${one}es` : /[^aeiou]y$/i.test(one) ? `${one.slice(0, -1)}ies` : `${one}s`;
+
+  function renderShape(shape) {
+    const panel = $("shape-found");
+    if (!shape) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+
+    const ids = shape.treeIds.length
+      ? shape.treeIds.map((i) => `<code>${i}</code>`).join(" ")
+      : "<em>a templated path parameter</em>";
+    $("shape-summary").innerHTML =
+      `<dt>found via</dt><dd>${shape.foundVia}${
+        shape.chatPaths?.length ? ` — <code>${shape.chatPaths[0]}</code>` : ""
+      }</dd>` +
+      `<dt>root prefix</dt><dd>${shape.prefix ? `<code>${shape.prefix}</code>` : "(none)"}</dd>` +
+      `<dt>${shape.treeIds.length === 1 ? "agent" : "agents"}</dt><dd>${ids}</dd>` +
+      `<dt>per agent</dt><dd>${shape.resources.map((r) => `<code>${r}</code>`).join(" ")}</dd>` +
+      (shape.splitStream ? `<dt>streaming</dt><dd>its own <code>/${"stream"}</code> route</dd>` : "");
+
+    // What it looked past. A tool that reads 300 endpoints, uses 6 and says
+    // nothing about the rest reads as one that gave up on the other 294.
+    const ignored = shape.ignoredPaths ?? [];
+    $("shape-scope").innerHTML = ignored.length
+      ? `<details><summary>Used <strong>${shape.usedPaths.length}</strong> of ${shape.pathsTotal} paths in your spec` +
+        ` — the other ${ignored.length} aren't agent routes</summary>` +
+        `<div class="ignored-list">${ignored.map((p) => `<code>${p}</code>`).join("<br />")}</div>` +
+        `</details>`
+      : `<p class="hint sub-hint">Used all ${shape.pathsTotal} paths in your spec.</p>`;
+
+    // One-click corrections, so a wrong pick on an unfamiliar spec costs a
+    // click rather than a hand-written remap.
+    const alts = shape.alternatives ?? [];
+    $("shape-alternatives").innerHTML = alts.length
+      ? `<details><summary>Wrong agents? ${alts.length} other place${alts.length === 1 ? "" : "s"} this could be</summary>` +
+        alts
+          .map(
+            (a, i) =>
+              `<button type="button" class="alt-pick" data-alt="${i}">` +
+              `<code>${a.prefix || "/"}</code> → ${a.ids.map((x) => `<code>${x}</code>`).join(" ")}` +
+              `${a.idCount > a.ids.length ? ` +${a.idCount - a.ids.length} more` : ""}` +
+              `<span class="alt-res">${a.resources.slice(0, 5).join(", ")}</span></button>`,
+          )
+          .join("") +
+        `</details>`
+      : "";
+    for (const button of document.querySelectorAll(".alt-pick")) {
+      button.addEventListener("click", async () => {
+        pickedSlot = alts[Number(button.dataset.alt)];
+        // Clear the rule fields first: they hold the PREVIOUS pick's derived
+        // values, and sending those back would read as "the human edited
+        // these" and suppress re-deriving for the slot just chosen.
+        $("f-prefix").value = "";
+        $("f-drop-agenttrees").checked = false;
+        $("f-split-stream").checked = false;
+        $("rename-rows").innerHTML = "";
+        if (treeTermAuto) {
+          $("f-tree-one").value = "";
+          $("f-tree-many").value = "";
+        }
+        await runDetect();
+      });
+    }
+
+    const warn = [];
+    if (shape.unmatchedTheirs.length) {
+      warn.push(
+        `<div class="banner warn">Not in the contract by that name: ` +
+          `${shape.unmatchedTheirs.map((r) => `<code>${r}</code>`).join(", ")}. ` +
+          (shape.unmatchedContract.length
+            ? `The contract has ${shape.unmatchedContract.slice(0, 6).map((r) => `<code>${r}</code>`).join(", ")}` +
+              `${shape.unmatchedContract.length > 6 ? ", …" : ""} with no match on your side. ` +
+              `If any of these are the same thing named differently, pair them under "Path differences" — ` +
+              `guessing that for you would write a remap that silently points at the wrong route.`
+            : "") +
+          `</div>`,
+      );
+    }
+    $("shape-warnings").innerHTML = warn.join("");
+
+    // Prefill the override fields so opening them shows what is in effect.
+    const rules = shape.rules ?? {};
+    $("f-prefix").value = (rules.prefix ?? "").replace(/^\//, "");
+    $("f-drop-agenttrees").checked = Boolean(rules.dropAgenttrees);
+    $("f-split-stream").checked = Boolean(rules.splitStream);
+    $("stream-suffix-row").style.display = rules.splitStream ? "flex" : "none";
+    if (rules.streamSuffix) $("f-stream-suffix").value = rules.streamSuffix;
+    updateRemapPreview();
+
+    // The noun, from their own ids. Only fills empty inputs, so a human
+    // correction survives a re-detect (treeTermAuto tracks which it is).
+    if (shape.treeTerm && !$("f-tree-one").value) {
+      $("f-tree-one").value = shape.treeTerm;
+      treeTermAuto = true;
+    }
+    if ($("f-tree-one").value && !$("f-tree-many").value) {
+      $("f-tree-many").value = plural($("f-tree-one").value);
+    }
+  }
+
   // ---------------------------------------------------------------- families
-  const SCREEN_FAMILIES = ["chat", "evaluations", "eval", "agents", "tasks", "settings"];
+  const SCREEN_FAMILIES = ["chat", "replay", "datasets", "judging", "agents", "tasks", "settings"];
 
   function renderFamilies() {
     const tbody = $("family-rows");

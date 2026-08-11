@@ -1,6 +1,5 @@
-// `npm run e2e`: the full Playwright suite, both auth modes
-// (cupel-phases.md:101 "a Playwright suite that walks all 13 user journeys in
-// both auth modes").
+// `npm run e2e`: the full Playwright suite that walks all 13 user journeys in
+// both auth modes.
 //
 // TWO Playwright runs, not one: AUTH_MODE is the mock's boot env
 // (mock/auth.py:65) and playwright.config.ts starts exactly one mock per run,

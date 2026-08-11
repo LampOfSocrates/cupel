@@ -1,6 +1,6 @@
 """The mock ships its own OpenAPI (/openapi.json) and the readiness
-script validates it against contract v0.3.0 as the FIRST conformance test
-(cupel-phases.md:98). Run: npm run test:mock.
+script validates it against the contract as the FIRST conformance test.
+Run: npm run test:mock.
 
 Test-shape choice (documented per task): pytest fetches /openapi.json from the
 app in-process (no uvicorn boot, no ports) and drives the Node CLI as a
@@ -75,7 +75,7 @@ def test_openapi_served_docs_stay_off():
 # ------------------------------------------------- first conformance runs
 def test_phase1_conformance_passes(spec_path):
     """--phase1-only must report FULL conformance: the mock implements the
-    whole v0.2.0 surface, so any gap here is a real mock bug (one was found
+    whole Phase-1 surface, so any gap here is a real mock bug (one was found
     and fixed: /tasks/stream didn't declare its
     text/event-stream content type — see SSE_RESPONSES in mock/main.py)."""
     proc = cupel_ready(str(spec_path), "--phase1-only", "--json")
@@ -88,7 +88,7 @@ def test_phase1_conformance_passes(spec_path):
 
 
 def test_full_run_reports_exactly_the_phase2_gaps(spec_path):
-    """Default (full v0.3.0) run: the missing set is the not-yet-implemented
+    """Default (full-contract) run: the missing set is the not-yet-implemented
     Phase-2 surface. Tolerant by design: later Phase-2 tasks (auth,
     workbench, ...) implement these endpoints one by one, and this
     test must keep passing as the missing set SHRINKS — so we assert subset
@@ -173,7 +173,7 @@ def test_declared_capabilities_match_the_contract(spec_path):
 
 
 def test_prefix_remap_and_headers_flow(spec_path, tmp_path):
-    """--prefix remaps contract paths before lookup (cupel-phases.md:75):
+    """--prefix remaps contract paths before lookup:
     against the unprefixed mock spec everything goes missing under a bogus
     prefix — proving the remap is applied — and --header parses k:v pairs."""
     proc = cupel_ready(str(spec_path), "--prefix", "/nabu-service",

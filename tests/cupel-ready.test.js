@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -194,7 +194,7 @@ describe("cupel-ready comparator", () => {
     ]);
   });
 
-  it("--prefix remaps contract paths before lookup (cupel-phases.md:75)", () => {
+  it("--prefix remaps contract paths before lookup", () => {
     const target = doc({
       "/nabu-service/things/{thingId}": conformingTarget().paths["/things/{thingId}"],
       "/nabu-service/things": conformingTarget().paths["/things"],
@@ -309,7 +309,7 @@ describe("cupel-ready comparator", () => {
 
 // Config-from-swagger: derive an agentic.config.ts target block.
 describe("cupel-ready --init", () => {
-  // Nabu-style fixture (cupel-phases.md:75): most routes live under
+  // Nabu-style fixture: most routes live under
   // /nabu-service, /healthz matches without any remap.
   const nabuContract = () =>
     doc({
@@ -437,6 +437,42 @@ describe("cupel-ready --init", () => {
     expect(block).toContain("remap: (path) => path,");
     expect(block).not.toContain('remap: (p) => "/nabu-service" + p,');
     expect(block).not.toContain("conformance without remap");
+  });
+
+  // Regression: a backend that enumerates its agents (/svc/agent1/chat,
+  // /svc/agent2/chat) used to score 0/N here — no `{tree}` template for the
+  // comparator to match — which is the most misleading answer this tool can
+  // give. It now folds the ids and puts the contract in the same shape.
+  it("reads an ENUMERATED spec instead of reporting it as entirely missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cupel-enum-"));
+    const file = join(dir, "openapi.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        openapi: "3.0.3",
+        info: { title: "svc", version: "1" },
+        paths: {
+          "/svc/agent1/chat": { post: { responses: { 200: jsonResponse() } } },
+          "/svc/agent2/chat": { post: { responses: { 200: jsonResponse() } } },
+        },
+      }),
+    );
+    const contractFile = join(dir, "contract.yaml");
+    writeFileSync(
+      contractFile,
+      YAML.stringify(doc({ "/agenttrees/{tree}/chat": { post: { tags: ["chat"], responses: { 200: jsonResponse() } } } })),
+    );
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await main([file, "--contract", contractFile, "--json"]);
+      const payload = JSON.parse(log.mock.calls.at(-1)[0]);
+      expect(payload.conformant).toBe(1);
+      expect(payload.folded_agents).toMatchObject({ prefix: "/svc", ids: ["agent1", "agent2"] });
+    } finally {
+      log.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("--json carries the report plus a structured init object (via main)", async () => {

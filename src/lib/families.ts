@@ -80,21 +80,22 @@ export function mockTargetId(): string {
 // `chat`. routeFamily() takes the first segment, so they need no entries.
 const ROUTE_FAMILY: Record<string, Family> = {
   "/chat": "chat",
-  // /studio merges two contract families — cases/sets/rubrics ("eval") and
-  // the run/results flow ("evaluations") — into one screen with tabs. This
-  // map is one-family-per-route (also what the mock badge names,
-  // shell/MockBadge.tsx), so it picks "eval" as the representative family;
-  // actual show/hide for the route and its nav entry goes through
-  // isStudioHidden() below, which checks both.
-  "/studio": "eval",
+  // /studio merges THREE contract families into one screen with tabs —
+  // "datasets" (cases, benchmarks), "judging" (rubrics) and "replay" (the
+  // results grid). This map is one-family-per-route (also what the mock badge
+  // names, shell/MockBadge.tsx), so it picks "datasets" as the representative
+  // family; actual show/hide for the route and its nav entry goes through
+  // isStudioHidden() below, which checks all three, and the individual tabs
+  // gate on their own family (pages/StudioPage.tsx).
+  "/studio": "datasets",
   // /evaluations/:id (the results-grid detail route) survives the merge on
   // its own — this entry is still what routeFamily() resolves it to.
-  "/evaluations": "evaluations",
+  "/evaluations": "replay",
   "/inspector": "admin",
   "/queue": "tasks",
   "/agents": "agents",
   "/trace": "trace",
-  "/forks": "evaluations",
+  "/forks": "replay",
   "/settings": "settings",
 };
 
@@ -110,14 +111,17 @@ export function isRouteHidden(path: string): boolean {
   return family !== null && isHidden(family);
 }
 
+/** The families /studio's tabs are drawn from, in tab order. */
+const STUDIO_FAMILIES: Family[] = ["datasets", "judging", "replay"];
+
 /**
- * /studio is visible if EITHER family it merges still answers something
- * other than `hide` — routeFamily()/isRouteHidden() model one family per
- * route, which doesn't fit a genuine two-family merge, so this is the one
- * route that bypasses them for its own show/hide decision.
+ * /studio is visible if ANY of the three families it merges still answers
+ * something other than `hide` — routeFamily()/isRouteHidden() model one family
+ * per route, which doesn't fit a genuine merge, so this is the one route that
+ * bypasses them for its own show/hide decision.
  */
 export function isStudioHidden(): boolean {
-  return isHidden("eval") && isHidden("evaluations");
+  return STUDIO_FAMILIES.every(isHidden);
 }
 
 /**

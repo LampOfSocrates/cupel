@@ -16,18 +16,22 @@ import { facts } from "../scripts/contract-facts.mjs";
 
 const DATED = {
   "docs/TASKS.md": "a dated log — each item records what was true when it shipped",
-  "docs/open-items.md": "a dated log of findings, quoting the counts as found",
-  "docs/spike-agui.md": "research spike, 2026-08-07; its whole §5a analysis is built on the count of the day",
   "docs/review-2026-08-05.md": "a dated review of a specific commit",
-  "docs/plan-agentic-app-maker.md": "superseded plan, kept as the record of what was superseded",
+  "docs/plans/plan-agentic-app-maker.md": "superseded plan, kept as the record of what was superseded",
 };
+// docs/spike-agui.md was exempt here while it was a dated research spike whose
+// arithmetic was frozen at contract v0.3.0. It is now a living blog post
+// ("Why Cupel doesn't speak AG-UI yet") written in the present tense, so it
+// takes the same guard as every other living document: its counts have to be
+// today's. A reader should never have to be told which contract version a
+// sentence's numbers belong to.
 
 function livingDocs() {
   const files = [];
   for (const name of readdirSync(".")) {
     if (/\.(md|html)$/.test(name)) files.push(name);
   }
-  for (const dir of ["docs", "scripts"]) {
+  for (const dir of ["docs", "docs/plans", "scripts"]) {
     if (!existsSync(dir)) continue;
     for (const name of readdirSync(dir)) {
       if (/\.(md|html|mjs)$/.test(name)) files.push(path.posix.join(dir, name));

@@ -86,8 +86,8 @@ export function TurnBubble({
         <Text size="xs" c="dimmed">
           {turn.author}
         </Text>
-        {/* Envelope affordance. cupel-phases.md:25: "every turn records its
-            context (date, timezone, region) at generation". Sketch 01 shows no
+        {/* Envelope affordance. Every turn records its
+            context (date, timezone, region) at generation. Sketch 01 shows no
             envelope UI, so the surface is deliberately minimal — a hover
             tooltip on the timestamp (dotted underline = discoverable), showing
             the EnvelopeChip the trace header reuses. */}
@@ -198,8 +198,7 @@ export function TurnBubble({
             </ActionIcon>
           )}
           {/* Collect. One icon in the existing row (same size, same subtle
-              variant), which is the whole point of "one keystroke"
-              (cupel-phases.md:79). */}
+              variant), which is the whole point of "one keystroke". */}
           {onCollect && (
             <ActionIcon
               size="sm"

@@ -2,8 +2,8 @@
 
 Run: npm run test:mock.
 
-Contract under test (openapi.yaml v0.3.0, cited by NAME because the line
-numbers in this repo's citations are known-stale):
+Contract under test (openapi.yaml, cited by NAME rather than by line number —
+line numbers into a moving document rot, so names are what survive):
 - info.description "Per-operation permissions (`x-requires`)" — every operation
   declares the one capability its caller must hold, and the two failures are
   deliberately different.

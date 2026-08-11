@@ -17,7 +17,7 @@ export function productTitle(label: string): Plugin {
   };
 }
 
-// Dev server on :5173 (cupel-phases.md:53 "npm run dev # studio on :5173").
+// Dev server on :5173 — `npm run dev` serves the studio there.
 // base is BUILD-ONLY (command === "build"): the hosted demo lives at
 // /cupel-demo/ on the same origin as the landing page (mock/root.py mounts
 // the whole app there), so a production build's emitted asset/script URLs

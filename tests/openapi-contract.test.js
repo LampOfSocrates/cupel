@@ -5,7 +5,7 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 
 const doc = YAML.parse(readFileSync("openapi.yaml", "utf8"));
 
-// feature-spec.md:116-131 filtered to Phase 1 (cupel-phases.md:9-66); tree-scoped
+// feature-spec.md:116-131 filtered to Phase 1; tree-scoped
 // per feature-spec.md:111, global routes unprefixed.
 const PHASE1_PATHS = [
   "/me",
@@ -42,9 +42,9 @@ const PHASE1_PATHS = [
   "/eval/evaluations/{evaluationId}/summary",
 ];
 
-// v0.3.0 additions — feature-spec.md:113-119, :124-130 filtered to Phase 2
-// (cupel-phases.md:69-118). Pro-tier repo/PR endpoints excluded (TASKS.md:56);
-// /assist is Phase 3 (feature-spec.md:115).
+// v0.3.0 additions — feature-spec.md:113-119, :124-130 filtered to Phase 2.
+// Repo/PR endpoints excluded as unbuilt (no paid tier — they are ordinary
+// roadmap work); /assist is Phase 3 (feature-spec.md:115).
 const PHASE2_PATHS = [
   "/auth/token",
   "/auth/logout",
@@ -96,7 +96,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("chat serves both modes on one endpoint via a stream flag (cupel-phases.md:43)", () => {
+  it("chat serves both modes on one endpoint via a stream flag", () => {
     const stream = doc.components.schemas.ChatRequest.properties.stream;
     expect(stream.type).toBe("boolean");
     expect(stream.default).toBe(true);
@@ -175,7 +175,7 @@ describe("P1-T00 OpenAPI contract", () => {
   });
 
   // NOTE: the Phase-1 test "no auth anywhere — Phase 1 has no security
-  // schemes (cupel-phases.md:10)" is REPLACED by design in v0.3.0. Phase 2
+  // schemes" is REPLACED by design in v0.3.0. Phase 2
   // introduces the bearerAuth security model (feature-spec.md:15-21), so the
   // old assertion inverts into the security-model tests in the
   // "P2-T00 contract v0.3.0" block below.
@@ -204,7 +204,7 @@ describe("P1-T00 OpenAPI contract", () => {
     }
   });
 
-  it("task lifecycle and result deep-links (cupel-phases.md:43, feature-spec.md:103)", () => {
+  it("task lifecycle and result deep-links (feature-spec.md:103)", () => {
     const task = doc.components.schemas.Task.properties;
     expect(task.status.enum).toEqual(["queued", "running", "done", "failed", "cancelled"]);
     // compact + import APPENDED in v0.3.0 — additive, Phase-1 values unchanged
@@ -251,9 +251,9 @@ describe("P1-T00 OpenAPI contract", () => {
   });
 });
 
-describe("contract v0.5.0", () => {
-  it("version is 0.5.0", () => {
-    expect(doc.info.version).toBe("0.5.0");
+describe("contract v0.6.0", () => {
+  it("version is 0.6.0", () => {
+    expect(doc.info.version).toBe("0.6.0");
   });
 
   it("security model: bearer JWT gates everything by default (feature-spec.md:15-21)", () => {
@@ -318,7 +318,7 @@ describe("contract v0.5.0", () => {
     expect(doc.components.responses.Conflict.description).toMatch(/tree_disabled/);
   });
 
-  it("Inspector is cross-user, filtered, paginated, audit-logged (cupel-phases.md:78)", () => {
+  it("Inspector is cross-user, filtered, paginated, audit-logged", () => {
     const params = doc.paths["/admin/conversations"].get.parameters.map((p) => p.name);
     for (const name of ["user_id", "tree", "date_from", "date_to", "score_min", "score_max", "page", "page_size"]) {
       expect(params, `filter ${name}`).toContain(name);
@@ -894,11 +894,15 @@ describe("contract v0.5.0", () => {
     expect(searches).toEqual(["GET /agenttrees/{tree}/conversations"]);
   });
 
-  it("NO pro-tier endpoints: repo/PR integration excluded (TASKS.md:56); /assist is Phase 3", () => {
+  // These are UNBUILT, not withheld — there is no paid tier. The assertion
+  // exists so a half-specified endpoint cannot leak into the contract ahead
+  // of its implementation, which would make `cupel-ready` report a gap
+  // against every adopter for something we do not ship either.
+  it("NO unbuilt endpoints: repo/PR integration absent; /assist is Phase 3", () => {
     for (const p of Object.keys(doc.paths)) {
-      expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is pro tier`).toBe(false);
-      expect(p.startsWith("/webhooks"), `${p} — git webhooks are pro tier`).toBe(false);
-      expect(/\/pr$/.test(p), `${p} — PR endpoints are pro tier`).toBe(false);
+      expect(p.startsWith("/settings/repo"), `${p} — /settings/repo is not built yet`).toBe(false);
+      expect(p.startsWith("/webhooks"), `${p} — git webhooks are not built yet`).toBe(false);
+      expect(/\/pr$/.test(p), `${p} — PR endpoints are not built yet`).toBe(false);
       expect(p.startsWith("/assist"), `${p} — /assist is Phase 3`).toBe(false);
     }
   });

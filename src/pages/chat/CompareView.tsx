@@ -39,7 +39,7 @@ import {
 import { createDraftStore, type DraftStore } from "./draftStore";
 import type { ChatSettings } from "./types";
 
-// A/B compare in chat, within one backend (docs/plan-ab-compare.md §2a, §3).
+// A/B compare in chat, within one backend (docs/plans/plan-ab-compare.md §2a, §3).
 //
 // The send is "re-fire, but for a new message instead of an existing turn":
 // POST /chat writes the shared user turn and generates the FIRST column, then
