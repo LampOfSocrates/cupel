@@ -1,0 +1,60 @@
+
+> cupel-studio@0.1.0 start /app
+> node scripts/dev.mjs
+
+
+Cupel
+  UI       http://localhost:5173
+  Backend  bundled demo mock · http://localhost:4010
+           storage: local · mock/cupel-mock.sqlite (local file, this machine only)
+           agentic.config.ts localMock.enabled = true — set it to false
+           when you point Cupel at your own backend
+
+[ui]   npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]   npm warn Unknown env config "npm-globalconfig". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]   npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]
+[ui]   > cupel-studio@0.1.0 dev
+[ui]   > vite --strictPort
+[ui]
+[ui]   (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[ui]     - import "./agentic.config" without a file extension (vite.config.ts:3:31). Add the file extension
+[ui]   Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+[ui]
+[ui]     VITE v8.2.1  ready in 305 ms
+[ui]
+[ui]     ➜  Local:   http://localhost:5173/
+[ui]     ➜  Network: use --host to expose
+[mock] INFO:     Started server process [48236]
+[mock] INFO:     Waiting for application startup.
+[mock] INFO:     Application startup complete.
+[mock] INFO:     Uvicorn running on http://127.0.0.1:4010 (Press CTRL+C to quit)
+[mock] INFO:     127.0.0.1:46412 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46428 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46430 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46430 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46430 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46428 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "GET /tasks?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "OPTIONS /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46444 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46444 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52238 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52254 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52238 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52260 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52260 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52238 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52254 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52260 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52254 - "GET /tasks?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52254 - "OPTIONS /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52268 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52254 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52268 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     Shutting down
+[ui] exited unexpectedly (code 143) — stopping the rest
+ ELIFECYCLE  Command failed with exit code 143.
