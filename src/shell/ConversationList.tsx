@@ -128,6 +128,8 @@ export function ConversationList({ tree }: Props) {
     <Stack gap={2}>
       <TextInput
         size="xs"
+        variant="filled"
+        radius="sm"
         placeholder="Search"
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}

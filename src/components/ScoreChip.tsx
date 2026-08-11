@@ -29,6 +29,7 @@ export function ScoreChip({
       size="sm"
       radius="xl"
       variant="light"
+      ff="monospace"
       color={scoreColor(score)}
       component={onClick ? "button" : "span"}
       onClick={onClick}

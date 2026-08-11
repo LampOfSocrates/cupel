@@ -113,7 +113,7 @@ export class ApiError extends Error {
   }
 }
 
-export function buildUrl(path: string, query?: Query): string {
+export function buildUrl(path: string, query?: Query, remapOpts?: { stream?: boolean }): string {
   // remap first (cupel-phases.md:75 — differently-named routes), then prefix
   // the target's baseUrl. The prod target's baseUrl is "" (same-origin) —
   // relative URLs need the page origin as base; absolute baseUrl values
@@ -123,8 +123,13 @@ export function buildUrl(path: string, query?: Query): string {
   // agentic.config.ts is served by the bundled demo backend while everything
   // else goes to the active one (src/api/target.ts getTargetForPath). With no
   // `families` block every path resolves to the active target, unchanged.
+  //
+  // remapOpts is per-request context (currently just chat's `{ stream }`) —
+  // a backend that splits streaming into its own route branches on it inside
+  // its own remap function; every other call site omits it and remap sees
+  // `undefined`, unchanged from before this parameter existed.
   const { baseUrl, remap } = getTargetForPath(path);
-  const url = new URL(baseUrl + (remap ? remap(path) : path), globalThis.location?.origin);
+  const url = new URL(baseUrl + (remap ? remap(path, remapOpts) : path), globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));
@@ -452,7 +457,7 @@ export const api = {
     // src/api/bareAgent.ts maps it onto these same events.
     const endpoint = bareAgent();
     if (endpoint) return bareAgentChat(endpoint, tree, req, opts);
-    const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`), {
+    const res = await fetch(buildUrl(`/agenttrees/${tree}/chat`, undefined, { stream: req.stream }), {
       method: "POST",
       // llmHeaders(): BYOK X-LLM-Key/X-LLM-Model when a key is stored
       // (docs/deployment.md:26). authHeaders(): bearer.

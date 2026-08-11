@@ -256,7 +256,15 @@ export function buildInit(contract, target, { source, id = null, label = null, p
  * replace the paste-it-yourself preamble while reusing the same derivations
  * and the same rendering — there is only ever one target-block renderer.
  */
-export function renderInitBlock(init, { header = null } = {}) {
+/**
+ * `remapLines`, when given, REPLACES the remap comment+field this function
+ * would otherwise derive from `init.remapPrefix` — the escape hatch for a
+ * remap richer than one prefix string (scripts/remap-rules.mjs's `renames` /
+ * `dropAgenttrees` / `splitStream`, item 40). `init.remapPrefix` stays the
+ * only source of truth for every existing caller (init.mjs, this script's
+ * own --init, create-app.mjs's plain-prefix path).
+ */
+export function renderInitBlock(init, { header = null, remapLines = null } = {}) {
   const baseComment = init.baseUrlComment ?? {
     servers: "from servers[0].url",
     "fetched-origin": "from the fetched URL's origin (spec declares no absolute servers[0].url)",
@@ -273,14 +281,18 @@ export function renderInitBlock(init, { header = null } = {}) {
     `  label: ${JSON.stringify(init.label)},`,
     `  baseUrl: ${JSON.stringify(init.baseUrl)}, // ${baseComment}`,
   ];
-  const without = init.conformance.withoutRemap;
-  if (init.remapPrefix) {
-    const withRemap = init.conformance.withRemap;
-    lines.push(`  // conformance without remap ${without.conformant}/${without.checked} -> with ${init.remapPrefix} remap ${withRemap.conformant}/${withRemap.checked}`);
-    lines.push(`  remap: (p) => ${JSON.stringify(init.remapPrefix)} + p,`);
+  if (remapLines) {
+    lines.push(...remapLines);
   } else {
-    lines.push(`  // conformance ${without.conformant}/${without.checked} without remap (no path-prefix remap detected)`);
-    if (init.remapNote) lines.push(`  // ${init.remapNote}`);
+    const without = init.conformance.withoutRemap;
+    if (init.remapPrefix) {
+      const withRemap = init.conformance.withRemap;
+      lines.push(`  // conformance without remap ${without.conformant}/${without.checked} -> with ${init.remapPrefix} remap ${withRemap.conformant}/${withRemap.checked}`);
+      lines.push(`  remap: (p) => ${JSON.stringify(init.remapPrefix)} + p,`);
+    } else {
+      lines.push(`  // conformance ${without.conformant}/${without.checked} without remap (no path-prefix remap detected)`);
+      if (init.remapNote) lines.push(`  // ${init.remapNote}`);
+    }
   }
   if (init.requiresToken) {
     const named = init.authSchemes

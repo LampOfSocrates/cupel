@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,6 +9,7 @@ import {
   applyGeneration,
   askOrder,
   copyTree,
+  detectBackend,
   detectStream,
   generate,
   isCopied,
@@ -234,6 +235,38 @@ describe("the generated config", () => {
     const block = renderFamiliesBlock({ eval: "hide", chat: "mine" }, "mock");
     expect(block.indexOf('"chat"')).toBeLessThan(block.indexOf('"eval"'));
   });
+
+  // item 40 — a backend whose routes need more than a prefix (renamed
+  // resource, dropped "agenttrees" segment, chat streaming on its own route).
+  it("writes a rules-based remap instead of the plain-prefix shape", () => {
+    const init = {
+      id: "nabu",
+      label: "Nabu",
+      baseUrl: "http://localhost:9999",
+      baseUrlSource: "servers",
+      requiresToken: false,
+      authSchemes: [],
+      remapRules: {
+        prefix: "nabu-service",
+        dropAgenttrees: true,
+        renames: [{ from: "conversations", to: "sessions" }],
+        splitStream: true,
+        streamSuffix: "stream",
+      },
+      remapPrefix: null,
+      remapNote: null,
+      conformance: { withoutRemap: null, withRemap: { conformant: 3, checked: 3 } },
+    };
+    const out = applyGeneration(source, {
+      product,
+      init,
+      answers: { ...answers, chat: "mine", conversations: "mine" },
+    });
+    expect(out).toContain('"conversations":"sessions"');
+    expect(out).toContain("opts?.stream");
+    expect(out).toContain("with these path rules");
+    expect(out).not.toContain('remap: (p) => "/nabu-service" + p,');
+  });
 });
 
 describe("the generated README", () => {
@@ -380,6 +413,38 @@ describe("stream shape detection", () => {
     });
     expect(result).toMatchObject({ stream: "sse" });
     expect(result.source).toMatch(/assumed/);
+  });
+});
+
+describe("backend detection with path rules (item 40)", () => {
+  it("finds a nabu-service-shaped backend a plain prefix can't reach", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cupel-nabu-"));
+    const spec = {
+      openapi: "3.0.3",
+      info: { title: "nabu", version: "1" },
+      paths: {
+        "/nabu-service/{tree}/chat": { post: { responses: { 200: { description: "ok" } } } },
+        "/nabu-service/{tree}/sessions": { get: { responses: { 200: { description: "ok" } } } },
+      },
+    };
+    const specFile = path.join(dir, "openapi.json");
+    writeFileSync(specFile, JSON.stringify(spec));
+    try {
+      const rules = {
+        prefix: "nabu-service",
+        dropAgenttrees: true,
+        renames: [{ from: "conversations", to: "sessions" }],
+        splitStream: true,
+      };
+      const withoutRules = await detectBackend(specFile, contract);
+      const withRules = await detectBackend(specFile, contract, rules);
+      // a plain prefix alone can't bridge the dropped "agenttrees" segment or
+      // the renamed resource — the rules-aware run finds strictly more.
+      expect(withRules.init.remapRules).toEqual(rules);
+      expect(withRules.report.conformant).toBeGreaterThan(withoutRules.report?.conformant ?? -1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

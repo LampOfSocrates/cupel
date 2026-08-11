@@ -23,6 +23,7 @@ export function EnvelopeChip({ envelope }: { envelope: ContextEnvelope | null | 
       radius="sm"
       tt="none"
       fw={400}
+      ff="monospace"
       fs={envelope ? undefined : "italic"}
       data-testid="envelope-chip"
     >

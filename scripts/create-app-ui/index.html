@@ -1,0 +1,618 @@
+<title>Create your Cupel app</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --border: #dcdde1;
+    --text: #1b1d21;
+    --muted: #6b6f76;
+    --accent: #2f6feb;
+    --accent-text: #ffffff;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --danger: #cf222e;
+    --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1c1f24;
+      --border: #33373e;
+      --text: #e7e9ec;
+      --muted: #9198a1;
+      --accent: #5b8ff9;
+      --accent-text: #0a0d12;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.45;
+  }
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .tagline { color: var(--muted); margin: 0 0 28px; font-size: 0.92rem; }
+  .steps { display: flex; gap: 8px; margin-bottom: 24px; font-size: 0.82rem; }
+  .steps span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .steps span.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .steps span.done { color: var(--ok); border-color: var(--ok); }
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  section.panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  section.panel p.hint { color: var(--muted); margin: 0 0 16px; font-size: 0.86rem; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  label .opt { font-weight: 400; color: var(--muted); }
+  input[type="text"], input[type="url"], select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.92rem;
+    font-family: var(--sans);
+  }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .radio-group { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 400;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .radio-group label.picked { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .radio-group input { margin: 0; }
+  .sub-fields { margin: 10px 0 0 26px; padding-left: 14px; border-left: 2px solid var(--border); display: none; }
+  .sub-fields.open { display: block; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; }
+  .checkbox-row input { margin: 0; }
+  .rename-rows { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+  .rename-row { display: flex; gap: 6px; align-items: center; }
+  .rename-row input { flex: 1; }
+  .rename-row button, .add-rename { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; padding: 6px 10px; font-size: 0.82rem; }
+  pre.remap-preview {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    overflow-x: auto;
+    color: var(--muted);
+    margin: 10px 0 0;
+  }
+  .tech-check { font-family: var(--mono); font-size: 0.8rem; white-space: pre-wrap; color: var(--muted); margin: 10px 0 0; }
+  .detect-result { font-size: 0.85rem; margin-top: 12px; padding: 10px 12px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
+  .detect-result.error { border-color: var(--danger); color: var(--danger); }
+  table.families { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  table.families th, table.families td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.families th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  .fam-name { font-family: var(--mono); font-weight: 600; }
+  .fam-desc { color: var(--muted); font-size: 0.82rem; }
+  .fam-suggest { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .toggle button {
+    border: none;
+    background: var(--panel);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .toggle button:last-child { border-right: none; }
+  .toggle button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .toggle button.on[data-answer="mock"] { background: var(--warn); }
+  .toggle button.on[data-answer="hide"] { background: var(--muted); }
+  .banner { padding: 10px 12px; border-radius: 6px; font-size: 0.85rem; margin: 12px 0; }
+  .banner.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+  .banner.danger { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+  .banner.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+  .summary-grid { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 0.88rem; margin: 12px 0; }
+  .summary-grid dt { color: var(--muted); }
+  .summary-grid dd { margin: 0; font-family: var(--mono); font-size: 0.85rem; }
+  .actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  button.primary, button.secondary {
+    padding: 9px 18px;
+    border-radius: 7px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: transparent; color: var(--text); }
+  .done-commands { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; font-size: 0.85rem; white-space: pre-wrap; }
+  footer.note { color: var(--muted); font-size: 0.8rem; margin-top: 10px; }
+  [hidden] { display: none !important; }
+</style>
+
+<main>
+  <h1>Create your Cupel app</h1>
+  <p class="tagline">Nothing is written until you click Generate on the last step.</p>
+
+  <div class="steps">
+    <span id="step-badge-1" class="active">1 · Setup</span>
+    <span id="step-badge-2">2 · Map families</span>
+    <span id="step-badge-3">3 · Generate</span>
+  </div>
+
+  <!-- Step 1: setup -->
+  <section class="panel" id="step-1">
+    <h2>Product &amp; backend</h2>
+    <p class="hint">What this app is called, and where your agent lives.</p>
+
+    <div class="row">
+      <div>
+        <label for="f-name">Product name</label>
+        <input type="text" id="f-name" placeholder="My Agent" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="f-tree-one">One agent tree is called</label>
+        <input type="text" id="f-tree-one" placeholder="agent tree" />
+      </div>
+      <div>
+        <label for="f-tree-many">...and more than one</label>
+        <input type="text" id="f-tree-many" placeholder="agent trees" />
+      </div>
+    </div>
+
+    <label>Your backend</label>
+    <div class="radio-group" id="backend-mode">
+      <label data-mode="none"><input type="radio" name="backend-mode" value="none" checked />No backend yet — mock everything for now</label>
+      <label data-mode="openapi"><input type="radio" name="backend-mode" value="openapi" />I have an OpenAPI document</label>
+      <label data-mode="agent"><input type="radio" name="backend-mode" value="agent" />I have a bare agent endpoint (no OpenAPI at all)</label>
+    </div>
+
+    <div class="sub-fields" id="openapi-fields">
+      <label for="f-openapi">OpenAPI URL or local path</label>
+      <input type="text" id="f-openapi" placeholder="https://api.example.com/openapi.json" />
+
+      <label>Path differences <span class="opt">(only if your routes aren't named like the contract's)</span></label>
+      <div class="row">
+        <div>
+          <label for="f-prefix" style="font-weight:400;font-size:0.82rem;margin-top:4px;">Root prefix every route sits under</label>
+          <input type="text" id="f-prefix" placeholder="nabu-service" />
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="f-drop-agenttrees" />
+        <label for="f-drop-agenttrees" style="margin:0;font-weight:400;">Your agent tree id sits directly after the prefix — no literal "agenttrees" segment (e.g. <code>/prefix/agent1/chat</code>, not <code>/prefix/agenttrees/agent1/chat</code>)</label>
+      </div>
+
+      <label style="margin-top:14px;">Renamed resources <span class="opt">(contract word → yours, e.g. conversations → sessions)</span></label>
+      <div class="rename-rows" id="rename-rows"></div>
+      <button type="button" class="add-rename" id="add-rename">+ add a rename</button>
+
+      <div class="checkbox-row" style="margin-top:14px;">
+        <input type="checkbox" id="f-split-stream" />
+        <label for="f-split-stream" style="margin:0;font-weight:400;">Chat streams on its <strong>own route</strong>, not the same endpoint with a <code>stream</code> flag</label>
+      </div>
+      <div class="row" id="stream-suffix-row" style="display:none;">
+        <div>
+          <label for="f-stream-suffix" style="font-weight:400;font-size:0.82rem;">Its route ends with</label>
+          <input type="text" id="f-stream-suffix" placeholder="stream" value="stream" />
+        </div>
+      </div>
+
+      <pre class="remap-preview" id="remap-preview" hidden></pre>
+    </div>
+
+    <div class="sub-fields" id="agent-fields">
+      <label for="f-agent-url">Your agent's HTTP endpoint</label>
+      <input type="url" id="f-agent-url" placeholder="http://localhost:9000/chat" />
+      <label for="f-agent-stream">How it streams</label>
+      <select id="f-agent-stream">
+        <option value="sse">SSE (token stream)</option>
+        <option value="json">Plain JSON reply</option>
+      </select>
+    </div>
+
+    <div id="tech-check" class="tech-check"></div>
+    <div id="detect-result" class="detect-result" hidden></div>
+
+    <div class="actions">
+      <button class="secondary" id="cancel-1" type="button">Cancel</button>
+      <button class="primary" id="to-step-2" type="button">Continue</button>
+    </div>
+  </section>
+
+  <!-- Step 2: families -->
+  <section class="panel" id="step-2" hidden>
+    <h2>Map each family</h2>
+    <p class="hint"><strong>mine</strong> = your backend · <strong>mock</strong> = the bundled demo backend, badged in the UI · <strong>hide</strong> = not rendered at all.</p>
+    <table class="families">
+      <thead><tr><th>Family</th><th>Operations</th><th style="width:230px;">Answer</th></tr></thead>
+      <tbody id="family-rows"></tbody>
+    </table>
+    <div id="family-banner"></div>
+    <div class="actions">
+      <button class="secondary" id="back-2" type="button">Back</button>
+      <button class="primary" id="to-step-3" type="button">Continue</button>
+    </div>
+  </section>
+
+  <!-- Step 3: review & generate -->
+  <section class="panel" id="step-3" hidden>
+    <h2>Review &amp; generate</h2>
+    <label for="f-out">Write to folder</label>
+    <input type="text" id="f-out" />
+    <dl class="summary-grid" id="summary"></dl>
+    <div id="generate-banner"></div>
+    <div class="checkbox-row" id="force-row" hidden>
+      <input type="checkbox" id="f-force" />
+      <label for="f-force" style="margin:0;font-weight:400;">Overwrite anyway (folder already has files)</label>
+    </div>
+    <div class="actions">
+      <button class="secondary" id="back-3" type="button">Back</button>
+      <button class="primary" id="generate" type="button">Generate</button>
+    </div>
+  </section>
+
+  <!-- Done -->
+  <section class="panel" id="step-done" hidden>
+    <h2 id="done-title">Done</h2>
+    <div id="done-body"></div>
+  </section>
+
+  <footer class="note">This page talks only to the local process that opened it — nothing here reaches the network except the OpenAPI probe you asked for.</footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ANSWERS = ["mine", "mock", "hide"];
+
+  let bootstrap = null;
+  let detected = { init: null, agentEndpoint: null, suggested: {} };
+  let answers = {};
+
+  // ------------------------------------------------------------- heartbeat
+  setInterval(() => fetch("/api/ping", { method: "POST" }).catch(() => {}), 5000);
+  window.addEventListener("beforeunload", () => {
+    navigator.sendBeacon?.("/api/ping", "");
+  });
+
+  // ---------------------------------------------------------------- steps
+  function showStep(n) {
+    for (const s of [1, 2, 3]) {
+      $(`step-${s}`).hidden = s !== n;
+      const badge = $(`step-badge-${s}`);
+      badge.classList.toggle("active", s === n);
+      badge.classList.toggle("done", s < n);
+    }
+    $("step-done").hidden = true;
+  }
+
+  function showDone(title, bodyHtml) {
+    for (const s of [1, 2, 3]) $(`step-${s}`).hidden = true;
+    $("step-done").hidden = false;
+    $("done-title").textContent = title;
+    $("done-body").innerHTML = bodyHtml;
+  }
+
+  // --------------------------------------------------------------- rename rows
+  function addRenameRow(from = "", to = "") {
+    const row = document.createElement("div");
+    row.className = "rename-row";
+    row.innerHTML =
+      `<input type="text" class="rename-from" placeholder="conversations" value="${from}" />` +
+      `<span>→</span>` +
+      `<input type="text" class="rename-to" placeholder="sessions" value="${to}" />` +
+      `<button type="button" title="remove">✕</button>`;
+    row.querySelector("button").addEventListener("click", () => {
+      row.remove();
+      updateRemapPreview();
+    });
+    row.querySelectorAll("input").forEach((el) => el.addEventListener("input", updateRemapPreview));
+    $("rename-rows").appendChild(row);
+  }
+  $("add-rename").addEventListener("click", () => addRenameRow());
+
+  function currentRules() {
+    const renames = [...document.querySelectorAll(".rename-row")].map((row) => ({
+      from: row.querySelector(".rename-from").value.trim(),
+      to: row.querySelector(".rename-to").value.trim(),
+    })).filter((r) => r.from);
+    return {
+      prefix: $("f-prefix").value.trim(),
+      dropAgenttrees: $("f-drop-agenttrees").checked,
+      renames,
+      splitStream: $("f-split-stream").checked,
+      streamSuffix: $("f-stream-suffix").value.trim() || "stream",
+    };
+  }
+
+  function updateRemapPreview() {
+    const rules = currentRules();
+    const active = rules.prefix || rules.dropAgenttrees || rules.renames.length || rules.splitStream;
+    const preview = $("remap-preview");
+    if (!active) {
+      preview.hidden = true;
+      return;
+    }
+    let example = "/agenttrees/agent1/conversations";
+    if (rules.dropAgenttrees) example = example.replace(/^\/agenttrees\//, "/");
+    for (const r of rules.renames) {
+      example = example.split("/").map((seg) => (seg === r.from ? r.to : seg)).join("/");
+    }
+    if (rules.prefix) example = `/${rules.prefix.replace(/^\/+|\/+$/g, "")}${example}`;
+    let chatExample = "/agenttrees/agent1/chat";
+    if (rules.dropAgenttrees) chatExample = chatExample.replace(/^\/agenttrees\//, "/");
+    if (rules.prefix) chatExample = `/${rules.prefix.replace(/^\/+|\/+$/g, "")}${chatExample}`;
+    const lines = [`conversations  ->  ${example}`, `chat (json)    ->  ${chatExample}`];
+    if (rules.splitStream) {
+      lines.push(`chat (stream)  ->  ${chatExample.replace(/\/chat$/, "/" + rules.streamSuffix)}`);
+    }
+    preview.textContent = lines.join("\n");
+    preview.hidden = false;
+  }
+  ["f-prefix", "f-drop-agenttrees", "f-split-stream", "f-stream-suffix"].forEach((id) =>
+    $(id).addEventListener("input", updateRemapPreview),
+  );
+  $("f-split-stream").addEventListener("change", () => {
+    $("stream-suffix-row").style.display = $("f-split-stream").checked ? "flex" : "none";
+    updateRemapPreview();
+  });
+
+  // -------------------------------------------------------------- backend mode
+  function selectedMode() {
+    return document.querySelector('input[name="backend-mode"]:checked').value;
+  }
+  document.querySelectorAll('input[name="backend-mode"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      document.querySelectorAll("#backend-mode label").forEach((l) => l.classList.toggle("picked", l.dataset.mode === input.value));
+      $("openapi-fields").classList.toggle("open", input.value === "openapi");
+      $("agent-fields").classList.toggle("open", input.value === "agent");
+    });
+  });
+
+  // ------------------------------------------------------------------ bootstrap
+  async function loadBootstrap() {
+    const res = await fetch("/api/bootstrap");
+    bootstrap = await res.json();
+    $("f-name").value = bootstrap.defaults.name;
+    $("f-tree-one").value = bootstrap.defaults.treeOne;
+    $("f-tree-many").value = bootstrap.defaults.treeMany;
+    $("f-openapi").value = bootstrap.defaults.openapi;
+    $("f-agent-url").value = bootstrap.defaults.agentEndpoint;
+    $("f-agent-stream").value = bootstrap.defaults.stream;
+    $("tech-check").textContent = bootstrap.tech.lines.join("\n");
+    if (!bootstrap.tech.pythonOk) {
+      $("tech-check").textContent +=
+        "\n\nThe bundled mock backend is Python/FastAPI. Without Python 3.11+ you can still\n" +
+        "generate this app — answer mine or hide rather than mock for every family — but\n" +
+        "anything answered mock will not run here until Python is installed.";
+    }
+    if (bootstrap.defaults.openapi) {
+      document.querySelector('input[name="backend-mode"][value="openapi"]').checked = true;
+      $("openapi-fields").classList.add("open");
+      document.querySelector('#backend-mode label[data-mode="openapi"]').classList.add("picked");
+    } else if (bootstrap.defaults.agentEndpoint) {
+      document.querySelector('input[name="backend-mode"][value="agent"]').checked = true;
+      $("agent-fields").classList.add("open");
+      document.querySelector('#backend-mode label[data-mode="agent"]').classList.add("picked");
+    } else {
+      document.querySelector('#backend-mode label[data-mode="none"]').classList.add("picked");
+    }
+  }
+
+  // -------------------------------------------------------------------- detect
+  async function runDetect() {
+    const mode = selectedMode();
+    const box = $("detect-result");
+    box.hidden = true;
+    box.classList.remove("error");
+    let body = { mode: "none" };
+    if (mode === "openapi") {
+      const source = $("f-openapi").value.trim();
+      if (!source) {
+        box.hidden = false;
+        box.classList.add("error");
+        box.textContent = "Enter an OpenAPI URL or path, or pick a different option.";
+        return false;
+      }
+      body = { mode: "openapi", source, rules: currentRules() };
+    } else if (mode === "agent") {
+      const url = $("f-agent-url").value.trim();
+      if (!url) {
+        box.hidden = false;
+        box.classList.add("error");
+        box.textContent = "Enter your agent's endpoint, or pick a different option.";
+        return false;
+      }
+      body = { mode: "agent", url, stream: $("f-agent-stream").value };
+    }
+    box.hidden = false;
+    box.textContent = "Checking…";
+    const res = await fetch("/api/detect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    detected = data;
+    if (mode === "openapi") {
+      if (data.init) {
+        const c = data.report;
+        box.textContent =
+          `spec        ${data.init.source}\n` +
+          `baseUrl     ${data.init.baseUrl || "(same-origin)"}\n` +
+          (data.init.remapRules ? "remap       your path rules\n" : `remap       ${data.init.remapPrefix ? data.init.remapPrefix + " + path" : "none detected"}\n`) +
+          `conformance ${c.conformant}/${c.checked} operations`;
+      } else {
+        box.classList.add("error");
+        box.textContent = ["could not read a spec there:", ...(data.errors ?? [])].join("\n");
+      }
+    } else if (mode === "agent") {
+      box.textContent = `your agent  ${data.agentEndpoint.url}\nstreaming   ${data.agentEndpoint.stream} (${data.streamSource})\nchat is mapped by a shim; every other family starts mocked.`;
+    } else {
+      box.hidden = true;
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------------- families
+  const SCREEN_FAMILIES = ["chat", "evaluations", "eval", "agents", "tasks", "settings"];
+
+  function renderFamilies() {
+    const tbody = $("family-rows");
+    tbody.innerHTML = "";
+    for (const name of bootstrap.families) {
+      const flag = bootstrap.defaults.familyFlags[name] ?? bootstrap.defaults.familyFlags.all;
+      const suggestion = detected.suggested[name] ?? { answer: "mock", source: "no backend given" };
+      answers[name] = flag ?? answers[name] ?? suggestion.answer;
+      const tr = document.createElement("tr");
+      const count = bootstrap.counts[name] ?? 0;
+      tr.innerHTML =
+        `<td><div class="fam-name">${name}</div><div class="fam-desc">${bootstrap.descriptions[name] ?? ""}</div>` +
+        `<div class="fam-suggest">suggested ${suggestion.answer} — ${suggestion.source}</div></td>` +
+        `<td>${count}</td>` +
+        `<td><div class="toggle" data-family="${name}">` +
+        ANSWERS.map((a) => `<button type="button" data-answer="${a}">${a}</button>`).join("") +
+        `</div></td>`;
+      tbody.appendChild(tr);
+      const toggle = tr.querySelector(".toggle");
+      const setActive = () => {
+        toggle.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.answer === answers[name]));
+      };
+      toggle.querySelectorAll("button").forEach((b) => {
+        b.addEventListener("click", () => {
+          answers[name] = b.dataset.answer;
+          setActive();
+          renderFamilyBanner();
+        });
+      });
+      setActive();
+    }
+    renderFamilyBanner();
+  }
+
+  function renderFamilyBanner() {
+    const banner = $("family-banner");
+    const values = Object.values(answers);
+    if (values.every((a) => a === "hide")) {
+      banner.innerHTML = `<div class="banner danger">Every family is hidden — that generates an app with no screens.</div>`;
+      return;
+    }
+    if (!SCREEN_FAMILIES.some((f) => answers[f] && answers[f] !== "hide")) {
+      banner.innerHTML = `<div class="banner danger">Every screen-bearing family is hidden — leave at least one of ${SCREEN_FAMILIES.join(", ")}.</div>`;
+      return;
+    }
+    const mocked = Object.keys(answers).filter((f) => answers[f] === "mock");
+    banner.innerHTML = mocked.length
+      ? `<div class="banner warn">${mocked.length} ${mocked.length === 1 ? "family needs" : "families need"} Python 3.11+ (served by the bundled mock): ${mocked.join(", ")}.</div>`
+      : `<div class="banner ok">Nothing is mocked — Node only, no Python needed.</div>`;
+  }
+
+  // ------------------------------------------------------------------ review
+  function renderSummary() {
+    const slugGuess = ($("f-name").value.trim() || "my-agent").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "app";
+    if (!$("f-out").value) $("f-out").value = `${slugGuess}-ui`;
+    const mocked = Object.keys(answers).filter((f) => answers[f] === "mock").length;
+    const mine = Object.keys(answers).filter((f) => answers[f] === "mine").length;
+    const hidden = Object.keys(answers).filter((f) => answers[f] === "hide").length;
+    const backend = detected.init
+      ? `${detected.init.id} → ${detected.init.baseUrl || "(same-origin)"}`
+      : detected.agentEndpoint
+        ? `${detected.agentEndpoint.url} (chat only)`
+        : "none — everything mocked";
+    $("summary").innerHTML =
+      `<dt>product</dt><dd>${$("f-name").value.trim() || "My Agent"}</dd>` +
+      `<dt>agent trees</dt><dd>${$("f-tree-one").value || "agent tree"} / ${$("f-tree-many").value || "agent trees"}</dd>` +
+      `<dt>backend</dt><dd>${backend}</dd>` +
+      `<dt>families</dt><dd>${mine} mine · ${mocked} mock · ${hidden} hide</dd>` +
+      `<dt>prerequisite</dt><dd>${mocked > 0 ? "Python 3.11+ (bundled mock)" : "Node only"}</dd>`;
+  }
+
+  // ----------------------------------------------------------------- generate
+  async function generateNow() {
+    const btn = $("generate");
+    btn.disabled = true;
+    const banner = $("generate-banner");
+    banner.innerHTML = `<div class="banner">Writing…</div>`;
+    const body = {
+      name: $("f-name").value.trim() || "My Agent",
+      out: $("f-out").value.trim(),
+      treeOne: $("f-tree-one").value.trim(),
+      treeMany: $("f-tree-many").value.trim(),
+      answers,
+      init: detected.init,
+      agentEndpoint: detected.agentEndpoint,
+      force: $("f-force").checked,
+    };
+    const res = await fetch("/api/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    btn.disabled = false;
+    if (res.status === 409) {
+      banner.innerHTML = `<div class="banner danger">${data.error}.</div>`;
+      $("force-row").hidden = false;
+      return;
+    }
+    if (!res.ok) {
+      banner.innerHTML = `<div class="banner danger">${data.error}</div>`;
+      return;
+    }
+    showDone(
+      "Your app is ready",
+      `<div class="done-commands">Wrote ${data.written} files to ${data.outDir}\n\n` +
+        `  cd ${data.outDir}\n  npm install\n  npm start\n\n` +
+        `Read README.md there first — it says what you own, what the mock is answering,\n` +
+        `and which endpoint to implement next.</div>` +
+        `<footer class="note">This same summary was printed in the terminal that opened this page. You can close this tab.</footer>`,
+    );
+  }
+
+  async function cancelAll() {
+    await fetch("/api/cancel", { method: "POST" }).catch(() => {});
+    showDone("Cancelled", `<p>Nothing was written. You can close this tab.</p>`);
+  }
+
+  // -------------------------------------------------------------------- wiring
+  $("to-step-2").addEventListener("click", async () => {
+    $("to-step-2").disabled = true;
+    const ok = await runDetect().finally(() => ($("to-step-2").disabled = false));
+    if (ok === false) return;
+    renderFamilies();
+    showStep(2);
+  });
+  $("back-2").addEventListener("click", () => showStep(1));
+  $("to-step-3").addEventListener("click", () => {
+    renderSummary();
+    showStep(3);
+  });
+  $("back-3").addEventListener("click", () => showStep(2));
+  $("generate").addEventListener("click", generateNow);
+  $("cancel-1").addEventListener("click", cancelAll);
+
+  loadBootstrap();
+  showStep(1);
+})();
+</script>

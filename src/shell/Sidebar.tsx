@@ -64,7 +64,7 @@ function QueueIndicator() {
     <Group gap={6} wrap="nowrap">
       {running && <Loader size={12} aria-label="Tasks running" />}
       {pendingCount > 0 && (
-        <Badge size="xs" variant="light" data-testid="queue-badge">
+        <Badge size="xs" variant="light" ff="monospace" data-testid="queue-badge">
           {pendingCount}
         </Badge>
       )}
@@ -215,7 +215,7 @@ export function Sidebar({
                 </ActionIcon>
               </Tooltip>
             ) : (
-              <Button variant="default" size="xs" onClick={() => navigate("/chat")}>
+              <Button variant="light" size="xs" radius="sm" onClick={() => navigate("/chat")}>
                 + New chat
               </Button>
             ))}
@@ -253,6 +253,8 @@ export function Sidebar({
             <Divider my="xs" />
             <Select
               size="xs"
+              variant="filled"
+              radius="sm"
               label="Tree"
               px={4}
               data={trees.map((t) => ({

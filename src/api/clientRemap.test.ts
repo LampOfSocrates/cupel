@@ -12,7 +12,10 @@ vi.mock("./target", async (importOriginal) => {
     id: "nabu",
     label: "Nabu",
     baseUrl: "http://localhost:9999",
-    remap: (path: string) => `/nabu-service${path}`,
+    // Item 40's split-stream shape: chat replies at ".../chat", chat's SSE
+    // stream at its own ".../stream" — `opts` is buildUrl's third argument.
+    remap: (path: string, opts?: { stream?: boolean }) =>
+      `/nabu-service${opts?.stream ? path.replace(/\/chat$/, "/stream") : path}`,
   };
   return { ...mod, getActiveTarget: () => nabu, getTargetForPath: () => nabu };
 });
@@ -30,6 +33,26 @@ describe("buildUrl through a remapped target", () => {
   it("query params attach after remapping", () => {
     expect(buildUrl("/tasks", { page: 2 })).toBe(
       "http://localhost:9999/nabu-service/tasks?page=2",
+    );
+  });
+});
+
+// A backend that splits streaming into its own route (item 40) branches on
+// buildUrl's third argument — every OTHER call site omits it, so remap must
+// see plain `undefined` there rather than crash on a missing param.
+describe("buildUrl passes per-request context to remap", () => {
+  it("routes a streaming chat call to the backend's own /stream path", () => {
+    expect(buildUrl("/agenttrees/agent1/chat", undefined, { stream: true })).toBe(
+      "http://localhost:9999/nabu-service/agenttrees/agent1/stream",
+    );
+  });
+
+  it("leaves a non-streaming chat call (or any other path) alone", () => {
+    expect(buildUrl("/agenttrees/agent1/chat", undefined, { stream: false })).toBe(
+      "http://localhost:9999/nabu-service/agenttrees/agent1/chat",
+    );
+    expect(buildUrl("/agenttrees/agent1/chat")).toBe(
+      "http://localhost:9999/nabu-service/agenttrees/agent1/chat",
     );
   });
 });

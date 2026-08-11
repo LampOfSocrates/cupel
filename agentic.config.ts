@@ -70,8 +70,15 @@ export interface BackendTarget {
    * path your backend expects. Applied by the client before prefixing
    * baseUrl. Example:
    *   remap: (path) => `/nabu-service${path}`,
+   *
+   * The second argument is per-request context the client itself knows —
+   * today just `{ stream }` on chat, for backends that split streaming into
+   * a SEPARATE route instead of Cupel's one endpoint + `stream` body flag
+   * (`npm run create`'s browser mapper writes this shape when you tell it
+   * your chat streams on its own path):
+   *   remap: (path, opts) => opts?.stream ? path.replace(/\/chat$/, "/stream") : path,
    */
-  remap?: (path: string) => string;
+  remap?: (path: string, opts?: { stream?: boolean }) => string;
   /**
    * Escape hatch for backends that don't speak the contract at all
    * (cupel-phases.md:75 "any backend at all via a small adapter module —

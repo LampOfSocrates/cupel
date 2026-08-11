@@ -306,6 +306,58 @@ Those items were `#1`–`#11` in the old scheme, and that is how the commits rea
     forced doing both renames in one sitting; `EvalCase` itself was NOT renamed to anything
     "benchmark"-flavored, only given the new field.
 
+40. **DONE 2026-08-11 — `npm run create`'s terminal questionnaire replaced by a local
+    browser mapper, plus path-remap rules real adopters need.** User-directed
+    (item 11's family model — mine/mock/hide, one question per family — was kept exactly;
+    only the delivery mechanism changed, confirmed by the user before building: browser
+    over terminal, family-level not per-operation, terminal path stays as `--yes` for CI).
+    (a) **The mapper**: `scripts/create-app-server.mjs` (plain Node `http`, ephemeral
+    127.0.0.1 port, no new dependency) serves `scripts/create-app-ui/index.html` (one
+    static file, vanilla JS, light/dark) and a small JSON API
+    (`/api/bootstrap`, `/api/detect`, `/api/generate`, `/api/cancel`, `/api/ping`); opens
+    the OS default browser (`start`/`open`/`xdg-open`), heartbeat-pings decide when the tab
+    is gone (90s), `CUPEL_CREATE_NO_OPEN=1` skips the auto-open for headless/CI use. `--yes`
+    is untouched — it never used the terminal prompts either, so it still writes with no
+    browser and no prompt.
+    (b) **A real ESM circular-import deadlock, found by actually running the CLI, not by
+    review**: `create-app-server.mjs` importing back from `create-app.mjs` (the process
+    entry point, which dynamically imports the server) left Node unable to finish
+    evaluating either module — `node scripts/create-app.mjs` exited instantly with code 13
+    ("Detected unsettled top-level await") and never printed the mapper's URL. Fixed by
+    extracting every decision function into `scripts/create-app-core.mjs`, which neither
+    the entry point nor the server statically depends on; `create-app.mjs` is now `export *`
+    from it plus `main()` alone. Existing tests needed no changes (they import from
+    `create-app.mjs`, which still re-exports everything) — this is the class of bug
+    `docs/react-migration.md`'s "prove this works" rule exists for; a scripted driver
+    (spawn the CLI, drive its HTTP API, assert exit 0) caught it where unit tests couldn't.
+    (c) **Path-remap rules** (`scripts/remap-rules.mjs`) — a plain prefix (existing
+    `cupel-ready --init` auto-detection) turned out not to cover real adopter shapes,
+    surfaced mid-build by the user's own example: `/nabu-service/agent1/chat` +
+    `/nabu-service/agent1/sessions` (root prefix, tree id with NO literal `agenttrees`
+    segment, "conversations" renamed to "sessions") **and** `/nabu-service/agent1/stream`
+    as chat's own SEPARATE streaming route rather than the contract's one endpoint + a
+    `stream` body flag — explicitly required by the user ("you must support both /chat and
+    /stream"), not left as a documented gap. One function
+    (`buildRemapFn`/`renderRemapSource`, tested for behavioral equivalence against each
+    other) composes prefix + drop-agenttrees + segment renames + a stream-route split, and
+    doubles as `remapContract` for conformance comparison at generation time, so the
+    suggested mine/mock answers reflect the adopter's REAL shape, not a guess. This forced
+    one small, backward-compatible core change: `BackendTarget.remap` and `buildUrl()`
+    gained a second argument (`{ stream }`, currently only chat) so a remap function CAN
+    route differently for the streaming request — every other call site omits it, unchanged.
+    `renderInitBlock` (cupel-ready.mjs) gained an optional `remapLines` override so a
+    rules-based remap can replace its plain-prefix rendering without forking it; the
+    existing `--prefix` auto-detection and its tests are untouched.
+    32 new tests (776 vitest total, up from item 39's 744), tsc clean, lint clean.
+    Manual proof, not just unit tests: a scripted driver spawns the real CLI headlessly
+    and drives `/api/bootstrap` → `/api/detect` → `/api/generate` over HTTP, and a plain
+    `--yes --json` run confirms the non-interactive path is byte-for-byte unchanged.
+    Deliberately left out: `--yes`/CI flags for the new path rules (browser-only for now —
+    a `--openapi-rules` flag is a small follow-up if CI ever needs it); auto-detecting
+    the rules (prefix + drop-agenttrees + renames) the way plain-prefix detection does,
+    rather than the adopter stating them — real auto-detection across that combined space
+    is more work than this session's scope and the manual form is honest about it.
+
 ---
 
 Not on the list, deliberately: a hosted multi-tenant platform (parked indefinitely); sidebar

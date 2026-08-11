@@ -426,6 +426,19 @@ describe("cupel-ready --init", () => {
     expect(block.endsWith("},")).toBe(true);
   });
 
+  // item 40: a remap richer than one prefix string (scripts/remap-rules.mjs)
+  // replaces the derived comment + `remap:` line wholesale.
+  it("remapLines overrides the plain-prefix remap rendering", () => {
+    const { init } = buildInit(nabuContract(), nabuTarget(), { source: "spec.json" });
+    const block = renderInitBlock(init, {
+      remapLines: ["  // conformance 3/3 operations with these path rules", "  remap: (path) => path,"],
+    });
+    expect(block).toContain("with these path rules");
+    expect(block).toContain("remap: (path) => path,");
+    expect(block).not.toContain('remap: (p) => "/nabu-service" + p,');
+    expect(block).not.toContain("conformance without remap");
+  });
+
   it("--json carries the report plus a structured init object (via main)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cupel-init-"));
     const contractPath = join(dir, "contract.json");
