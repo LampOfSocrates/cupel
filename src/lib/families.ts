@@ -87,10 +87,6 @@ const ROUTE_FAMILY: Record<string, Family> = {
   // routeFamily() consults first. Show/hide for the route and its nav entry
   // goes through isStudioHidden(), which checks the three merged families.
   "/studio": "datasets",
-  // /evaluations/:id is a legacy redirect into /studio/evaluations/:id now
-  // (App.tsx) — the entry is what gates that redirect route.
-  "/evaluations": "replay",
-  "/inspector": "admin",
   "/queue": "tasks",
   "/agents": "agents",
   "/trace": "trace",
@@ -198,8 +194,13 @@ export function mockedFamilyOfRoute(path: string): Family | null {
  */
 export function landingRoute(): string {
   const doors = ["/chat", "/studio", "/agents", "/queue", "/settings"];
-  return (
+  const door =
     doors.find((route) => (route === "/studio" ? !isStudioHidden() : !isRouteHidden(route))) ??
-    "/settings"
-  );
+    "/settings";
+  // Landing on Studio means landing on a TAB. Bare /studio would only redirect
+  // to one, and the app's own landing route should not arrive somewhere it has
+  // to bounce out of. No recursion: this branch is reachable only when
+  // isStudioHidden() is false, which guarantees defaultStudioPath finds a tab
+  // and never falls back here.
+  return door === "/studio" ? defaultStudioPath({ inspectorAllowed: false }) : door;
 }

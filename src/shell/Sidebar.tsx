@@ -31,7 +31,7 @@ import { api } from "../api/client";
 import { clearAuthToken, useAuthToken } from "../api/auth";
 import { useApp } from "../AppContext";
 import { useQueue } from "../QueueContext";
-import { familyAnswer, isRouteHidden, isStudioHidden, landingRoute } from "../lib/families";
+import { defaultStudioPath, familyAnswer, isRouteHidden, isStudioHidden, landingRoute } from "../lib/families";
 import { ConversationList } from "./ConversationList";
 
 // Doors: Chat (talk to the agent), Studio (cases/sets/rubrics, the
@@ -41,15 +41,25 @@ import { ConversationList } from "./ConversationList";
 // (feature-spec.md:5 "Expanded sidebar shows recent conversations under
 // Chat"); Queue carries the pending badge + running spinner
 // (feature-spec.md:107). Studio's own role gate for its Inspector tab lives
-// in StudioPage.tsx, not here — there is nothing left at this level to gate.
+// in the Studio route block (App.tsx), not here — there is nothing left at
+// this level to gate.
 interface NavLeaf {
+  /** The door's path PREFIX — what active state matches on, and the id here. */
   to: string;
+  /** Where the door actually goes, when that is deeper than the prefix. */
+  href?: string;
   label: string;
   icon: Icon;
 }
 const NAV: NavLeaf[] = [
   { to: "/chat", label: "Chat", icon: IconMessageCircle },
-  { to: "/studio", label: "Studio", icon: IconTool },
+  // Studio's door goes STRAIGHT to a tab. Bare /studio still resolves (a
+  // bookmark, a hand-typed path, a legacy redirect) but it resolves by
+  // redirecting, and the app's own front door should not need a bounce to know
+  // where it is going. inspectorAllowed: false is not a guess — if the door is
+  // visible at all then one of datasets/judging/replay survives
+  // (isStudioHidden), so the first visible tab is never the role-gated one.
+  { to: "/studio", href: defaultStudioPath({ inspectorAllowed: false }), label: "Studio", icon: IconTool },
   { to: "/queue", label: "Queue", icon: IconListDetails },
   { to: "/agents", label: "Agents", icon: IconRobot },
 ];
@@ -91,21 +101,25 @@ function isActivePath(pathname: string, to: string): boolean {
 // carrying the label that disappeared with the sidebar's text column.
 function RailLink({
   to,
+  href = to,
   label,
   icon: IconCmp,
   indicator,
 }: {
   to: string;
+  href?: string;
   label: string;
   icon: Icon;
   indicator?: { value?: number; processing?: boolean };
 }) {
   const { pathname } = useLocation();
+  // Active on the PREFIX, navigate to the href: Studio is active on any of its
+  // tabs, but its door opens the first one.
   const active = isActivePath(pathname, to);
   const button = (
     <ActionIcon
       component={RouterNavLink}
-      to={to}
+      to={href}
       variant={active ? "light" : "subtle"}
       color={active ? "blue" : "gray"}
       size="lg"
@@ -224,6 +238,7 @@ export function Sidebar({
                 <RailLink
                   key={entry.to}
                   to={entry.to}
+                  href={entry.href}
                   label={entry.label}
                   icon={entry.icon}
                   indicator={
@@ -235,7 +250,7 @@ export function Sidebar({
                 <NavLink
                   key={entry.to}
                   component={RouterNavLink}
-                  to={entry.to}
+                  to={entry.href ?? entry.to}
                   label={entry.label}
                   rightSection={entry.to === "/queue" ? <QueueIndicator /> : undefined}
                 />

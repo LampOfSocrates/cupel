@@ -121,7 +121,7 @@ Tree-scoped: conversation/run/chat resources live under `/agenttrees/{tree_id}/�
 - Chat: `POST /agenttrees/{tree}/chat` (SSE; queued → returns task_id), stop = `DELETE /tasks/{task_id}`, `POST /feedback` (writes a `scorer: human` judgment — single store with /eval/judgments), `POST /upload`, `GET/PUT /settings`
 - Agents: `GET /agenttrees/{tree}/agents`, `GET /agenttrees/{tree}/agents/{id}/instructions` + `POST …/instructions/versions` (versioned; carries `format`, YAML saves validated server-side too), `POST /agenttrees/{tree}/agents/{id}/snapshots` (immutable drafts), `GET/PUT /agenttrees/{tree}/agents/{id}/last-selection`
 - Conversations: `GET /agenttrees/{tree}/conversations` (paginated, `?search=`, `?forks_of={id}`, sorted by last activity; turns paged at `{id}/turns`; lineage on forks), `PATCH`/`DELETE /agenttrees/{tree}/conversations/{id}`
-- Runs: `POST /agenttrees/{tree}/replay`, `POST /agenttrees/{tree}/replay/turn` (`endpoints[]` → task + conversation per endpoint), `GET /agenttrees/{tree}/runs`, `GET /agenttrees/{tree}/runs/{id}`
+- Runs: `POST /agenttrees/{tree}/replay`, `POST /agenttrees/{tree}/replay/turn` (`endpoints[]` → task + conversation per endpoint), `GET /agenttrees/{tree}/evaluations`, `GET /agenttrees/{tree}/evaluations/{id}`
 - Trace: `GET /agenttrees/{tree}/turns/{turn_id}/trace`, `GET /spans/{id}/payload`
 - **Evaluation domain** (global; cases reference tree-scoped sources):
   - Import: `POST /eval/cases/import` (CSV/XLSX/pasted table, column mapping, per-row error report)

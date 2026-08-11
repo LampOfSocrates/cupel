@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
 import { api, ApiError } from "./api/client";
@@ -70,61 +70,11 @@ function LoginBounce() {
   return <Navigate to={sanitizeReturnTo(returnTo)} replace />;
 }
 
-// Every Studio tab is a path now (/studio/cases, /studio/evaluations/{id}, …),
-// so three generations of link are in the wild and all of them still resolve.
-// Query + hash ride along (a shared link may carry them); `replace` keeps Back
-// out of a redirect loop.
-//
-// /runs and /runs/{id} are the oldest — the pre-rename paths. Bare /runs meant
-// "the evaluations list", which is Studio's Evaluations tab.
-function LegacyRunsRedirect() {
-  const { evaluationId } = useParams();
-  const { search, hash } = useLocation();
-  const suffix = evaluationId ? `/${evaluationId}` : "";
-  return <Navigate to={`/studio/evaluations${suffix}${search}${hash}`} replace />;
-}
-
-// /evaluations/{id} was the standalone results grid. It is Studio's third
-// evaluation step now — the whole point of the move being that reading a result
-// no longer costs you the tab strip.
-function LegacyEvaluationRedirect() {
-  const { evaluationId } = useParams();
-  const { search, hash } = useLocation();
-  return <Navigate to={`/studio/evaluations/${evaluationId}${search}${hash}`} replace />;
-}
-
-// /inspector was its own route before the Studio merge; its filters live in
-// the URL by design (InspectorPage.tsx, "an inspection is a shareable
-// link"), so old links keep those filters rather than 404ing.
-function LegacyInspectorRedirect() {
-  const { search, hash } = useLocation();
-  return <Navigate to={`/studio/inspector${search}${hash}`} replace />;
-}
-
-// The tab was a `?tab=` query before it was a path, and that form is in the
-// wild too (shared links, the editor's Test-as-evaluation handoff, /runs
-// bookmarks that already redirected once). `results` is the rename: the tab is
-// Evaluations, and only its THIRD STEP is a set of results.
-const STUDIO_TAB_ALIASES: Record<string, string> = { results: "evaluations", sets: "benchmarks" };
-
-// A bare /studio: honour a legacy ?tab= if there is one, else open the first
-// tab this viewer can see. An unknown or hidden tab name falls through to the
-// same default via the /studio catch-all below.
+// A bare /studio has no content of its own — it is a layout route — so it opens
+// the first tab this viewer can see. An unknown or hidden tab path reaches the
+// same default through the /studio catch-all below.
 function StudioIndexRedirect({ home }: { home: string }) {
-  const { search, hash } = useLocation();
-  const params = new URLSearchParams(search);
-  const tab = params.get("tab");
-  if (tab) {
-    params.delete("tab");
-    const rest = params.toString();
-    return (
-      <Navigate
-        to={`/studio/${STUDIO_TAB_ALIASES[tab] ?? tab}${rest ? `?${rest}` : ""}${hash}`}
-        replace
-      />
-    );
-  }
-  return <Navigate to={`${home}${search}${hash}`} replace />;
+  return <Navigate to={home} replace />;
 }
 
 export function App() {
@@ -316,15 +266,6 @@ export function App() {
               <Route path="/chat/:conversationId" element={<ChatPage />} />
             </>
           )}
-          {/* Pre-split path for the results grid — now Studio's third
-              evaluation step. Still linked from the wild (share links, old
-              bookmarks), so it redirects rather than 404s. */}
-          {visible("/evaluations") && (
-            <Route path="/evaluations/:evaluationId" element={<LegacyEvaluationRedirect />} />
-          )}
-          {/* Pre-rename paths, still live in shared links (see above). */}
-          <Route path="/runs" element={<LegacyRunsRedirect />} />
-          <Route path="/runs/:evaluationId" element={<LegacyRunsRedirect />} />
           {/* Sibling fork comparison — "compare forks of the same turn
               across endpoints" (feature-spec.md:73), reached from a fork's
               lineage banner (design rationale in ForkComparePage.tsx). */}
@@ -371,10 +312,6 @@ export function App() {
               <Route path="*" element={<Navigate to={studioHome} replace />} />
             </Route>
           )}
-          {/* Old standalone paths — see the redirect components above for
-              why each still resolves instead of 404ing. */}
-          <Route path="/eval" element={<Navigate to="/studio" replace />} />
-          {inspectorAllowed && <Route path="/inspector" element={<LegacyInspectorRedirect />} />}
           {visible("/queue") && <Route path="/queue" element={<QueuePage />} />}
           {visible("/agents") && (
             <>

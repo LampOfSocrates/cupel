@@ -34,9 +34,9 @@ test("eval workbench: rubric → case → judge → spreadsheet import → bench
   api,
 }) => {
   const step = filmed(page, "Journey 13", 5);
-  // /eval redirects into /studio (UX polish 2026-08-10, Studio merge) —
-  // goto'ing the old path exercises that redirect still resolves.
-  await page.goto("/eval");
+  // Bare /studio is a layout route — it opens the first visible tab.
+  await page.goto("/studio");
+  await page.waitForURL(/\/studio\/cases$/);
   await expect(page.getByRole("heading", { name: "Studio" })).toBeVisible();
 
   await step("rubrics: create one, then save a second version of it", async () => {

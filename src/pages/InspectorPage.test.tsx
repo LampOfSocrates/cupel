@@ -27,10 +27,10 @@ import { InspectorPage } from "./InspectorPage";
 //   its own nav entry/route — that gate is tested in StudioPage.test.tsx
 //   ("Inspector tab" describe block), not here.
 
-function renderInspector(route = "/inspector") {
+function renderInspector(route = "/studio/inspector") {
   return renderApp(
     <Routes>
-      <Route path="/inspector" element={<InspectorPage />} />
+      <Route path="/studio/inspector" element={<InspectorPage />} />
     </Routes>,
     { route },
   );
@@ -112,7 +112,7 @@ describe("inspector table", () => {
   });
 
   it("keeps applied filters in the URL and clears them again", async () => {
-    renderInspector("/inspector?user_id=gen-persona-2");
+    renderInspector("/studio/inspector?user_id=gen-persona-2");
     await waitFor(() => expect(screen.getAllByTestId("inspector-row")).toHaveLength(1));
     expect(lastQuery().get("user_id")).toBe("gen-persona-2");
     expect((screen.getByLabelText("User") as HTMLInputElement).value).toBe("gen-persona-2");
@@ -122,7 +122,7 @@ describe("inspector table", () => {
   });
 
   it("paginates with ?page=", async () => {
-    renderInspector("/inspector?score_min=0");
+    renderInspector("/studio/inspector?score_min=0");
     await waitFor(() => expect(screen.getAllByTestId("inspector-row")).toHaveLength(2));
     // page_size is fixed at 25 so the fixtures fit one page — the control
     // still has to be disabled at the ends.
@@ -131,7 +131,7 @@ describe("inspector table", () => {
   });
 
   it("explains itself when nothing matches", async () => {
-    renderInspector("/inspector?user_id=nobody");
+    renderInspector("/studio/inspector?user_id=nobody");
     const empty = await screen.findByTestId("inspector-empty");
     expect(empty.textContent).toMatch(/every conversation in the system, whoever owns it/i);
   });

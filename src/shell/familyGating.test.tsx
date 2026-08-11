@@ -74,17 +74,15 @@ describe("hide", () => {
   });
 
   // A hidden family's screen must not render — its requests would go nowhere.
-  // /eval is a redirect into /studio now (App.tsx), so hitting it lands
-  // wherever /studio's OWN visibility says: still there while any of its three
-  // families answers (Studio has something to show), the front door only once
-  // all of them — and so the route itself — are gone.
-  it("a hand-typed /eval lands on Studio if another of its families still answers", async () => {
-    await boot({ datasets: "hide" }, "/eval");
-    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio"));
+  // Its TAB PATH is a route like any other, so a hand-typed one falls to the
+  // first tab that is still there rather than to a bare frame.
+  it("a hand-typed path for a hidden tab lands on the first visible one", async () => {
+    await boot({ datasets: "hide" }, "/studio/cases");
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio/rubrics"));
   });
 
-  it("a hand-typed /eval lands on the front door once every Studio family hides", async () => {
-    await boot(STUDIO_HIDDEN, "/eval");
+  it("a hand-typed /studio lands on the front door once every Studio family hides", async () => {
+    await boot(STUDIO_HIDDEN, "/studio");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/chat"));
   });
 

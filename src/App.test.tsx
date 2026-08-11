@@ -149,7 +149,7 @@ describe("boot auth", () => {
     const user = userEvent.setup();
     render(
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/evaluations"]}>
+        <MemoryRouter initialEntries={["/chat"]}>
           <App />
           <LocationProbe />
         </MemoryRouter>
@@ -175,64 +175,14 @@ describe("boot auth", () => {
   });
 });
 
-// Legacy /runs deep links (#2). The pages moved to /evaluations, but links
-// shared before the rename are in the wild, so /runs and /runs/{id} redirect
-// rather than 404. The redirect is a plain route, so it fires in BOTH auth
-// modes: off-mode straight through; auth-on after the login bounce replays
-// return_to — which still carries the OLD path — through the same route.
-describe("legacy /runs deep links (#2)", () => {
+// Deep links survive a boot 401 in auth-on mode: the login bounce carries the
+// FULL path as return_to and replays it afterwards. The evaluation grid is the
+// deepest link the app shares, and it is nested three levels inside Studio, so
+// it is the one worth pinning.
+describe("deep links through the login bounce", () => {
   const BASE = agenticConfig.targets.find((t) => t.id === "mock")!.baseUrl;
 
-  it("off-mode: a bookmarked /runs/{id} lands on /studio/evaluations/{id}", async () => {
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs/evaluation-old-1"]}>
-          <App />
-          <LocationProbe />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations/evaluation-old-1"),
-    );
-    // Not a 404 shell: the detail page for that evaluation actually rendered —
-    // and the Studio tab strip is around it, which is the point of the move.
-    await screen.findByText("Evaluation evaluation-old-1");
-    expect(screen.getByRole("tab", { name: "Cases" })).toBeInTheDocument();
-  });
-
-  it("the bare /runs redirects and keeps the query", async () => {
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs?from=share"]}>
-          <App />
-          <LocationProbe />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations?from=share"),
-    );
-  });
-
-  // `?tab=` was the middle generation of Studio link, and `results` is the tab
-  // that got renamed — it named both the tab and the flow's third step.
-  it("a legacy ?tab=results deep link lands on the Evaluations tab, query intact", async () => {
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/studio?tab=results&from=share"]}>
-          <App />
-          <LocationProbe />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations?from=share"),
-    );
-    await screen.findByRole("heading", { name: "Evaluations" });
-  });
-
-  it("auth-on: /runs/{id} → login carrying it as return_to → /evaluations/{id}", async () => {
+  it("auth-on: /studio/evaluations/{id} → login carrying return_to → back to the grid", async () => {
     const unauthorized = () =>
       HttpResponse.json(
         { code: "unauthorized", message: "Missing, invalid or expired bearer token." },
@@ -249,7 +199,7 @@ describe("legacy /runs deep links (#2)", () => {
     const user = userEvent.setup();
     render(
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={["/runs/evaluation-old-1"]}>
+        <MemoryRouter initialEntries={["/studio/evaluations/evaluation-old-1"]}>
           <App />
           <LocationProbe />
         </MemoryRouter>
@@ -257,19 +207,20 @@ describe("legacy /runs deep links (#2)", () => {
     );
 
     await screen.findByText("Sign in to continue");
-    // The OLD path is what gets carried — sanitizeReturnTo is not a route
-    // allowlist, so nothing rewrites it before the round-trip.
-    expect(screen.getByTestId("loc")).toHaveTextContent("/login?return_to=%2Fruns%2Fevaluation-old-1");
+    expect(screen.getByTestId("loc")).toHaveTextContent(
+      "/login?return_to=%2Fstudio%2Fevaluations%2Fevaluation-old-1",
+    );
 
     await user.type(screen.getByLabelText(/Email/), "admin@demo");
     await user.type(screen.getByLabelText(/^Password/), "demo");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    // Bounced to /runs/evaluation-old-1, then the redirect route takes it home.
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/evaluations/evaluation-old-1"),
+      expect(screen.getByTestId("loc")).toHaveTextContent("/studio/evaluations/evaluation-old-1"),
     );
+    // The grid renders, with the tab strip around it.
     await screen.findByText("Evaluation evaluation-old-1");
+    expect(screen.getByRole("tab", { name: "Cases" })).toBeInTheDocument();
   });
 });
 

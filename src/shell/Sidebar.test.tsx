@@ -67,20 +67,21 @@ describe("Sidebar queue badge", () => {
   });
 });
 
-// Doors: Chat and Studio — flat, no sublevels (UX polish 2026-08-10):
-// Evaluations, Eval workbench, and Inspector used to be a group plus a
-// separate role-gated entry; they're one route with tabs now
-// (StudioPage.test.tsx covers the tabs themselves). Casebooks was a third
-// entry until Casebook and EvalBenchmark merged; its collections are the
-// Benchmarks tab now, and /casebooks no longer exists.
+// Doors: Chat and Studio — flat, no sublevels: Evaluations, Eval workbench and
+// Inspector used to be a group plus a separate role-gated entry; they're one
+// route with tabs now (studio/studio.test.tsx covers the tabs themselves).
+// Casebooks was a third entry until Casebook and EvalBenchmark merged; its
+// collections are the Benchmarks tab now, and /casebooks no longer exists.
 describe("Sidebar Studio entry", () => {
-  it("is a flat link to /studio, not a group", async () => {
+  it("is a flat link, and opens a TAB rather than bouncing off bare /studio", async () => {
     const user = userEvent.setup();
     renderShell();
 
     expect(screen.queryByRole("button", { name: "Evaluate" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Studio" }));
-    expect(screen.getByTestId("loc")).toHaveTextContent("/studio|null");
+    // The door names its destination: /studio alone only redirects, and the
+    // app's own nav should not need the redirect to know where it is going.
+    expect(screen.getByTestId("loc")).toHaveTextContent("/studio/cases|null");
     expect(screen.queryByRole("link", { name: "Casebooks" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Inspector" })).not.toBeInTheDocument();
   });
