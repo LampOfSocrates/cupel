@@ -9,9 +9,10 @@ a Markdown document rots the moment a paragraph moves: 226 such citations had to
 re-pointed across 83 files after one doc lost five lines. When a doc explains WHY, quote
 the sentence into the comment and drop the pointer — the quote survives, the number doesn't.
 
-Read before any work: **docs/feature-spec.md** — the what; sketches/clean/ = target
-density, sketches/ = API wiring. docs/TASKS.md is the work queue, and its numbering is the
-commit convention (`N: <summary>`).
+**openapi.yaml is the spec.** It carries the WHAT in its own descriptions and owes nothing
+to a prose doc — no cross-references out, self-contained per operation. sketches/clean/ =
+target density, sketches/ = API wiring. docs/TASKS.md is the work queue, and its numbering
+is the commit convention (`N: <summary>`).
 
 **Docs state how the system behaves — never log the work that proved it.** No dated
 "verified on", no run/deploy/build ids, no rehearsal narrative, no cleanup or trial
