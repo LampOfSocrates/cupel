@@ -1,0 +1,5 @@
+# Bolt's Journal - Performance Insights & Learnings
+
+## 2025-02-13 - [Database Indexing on Migrated and Frequently Queried Columns]
+**Learning:** Database performance degrades significantly on standard SQLite queries (like filtering conversations by owner/user, looking up spans for a turn, or analytical batch-judgment checks) without appropriate database indices. Targeting frequently-scanned columns such as `turns(conversation_id)`, `spans(turn_id)`, `judgments(evaluation_id)`, `judgments(conversation_id)`, and `conversations(user_id)` drastically decreases lookup complexity from O(N) full-table scans to O(log N) indexed lookups, especially when handling massive seeded datasets. When doing so with migrations, creating indexes at the end of the `Db.__init__` block prevents schema boot errors during bootstrap migrations.
+**Action:** Always create performance indexes targeting foreign keys and heavily-queried columns at the very end of database initialization/migrations to maximize backend query speeds while avoiding schema lockups or boot-time table errors.
