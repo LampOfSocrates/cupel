@@ -13,6 +13,7 @@ import {
   Paper,
   Text,
   Textarea,
+  Tooltip,
 } from "@mantine/core";
 import { api } from "../../api/client";
 import type { Attachment } from "../../api/types";
@@ -223,11 +224,13 @@ export function Composer({
                     {p.error}
                   </Text>
                 )}
-                <CloseButton
-                  size="xs"
-                  aria-label={`Remove ${p.filename}`}
-                  onClick={() => removePending(p.key)}
-                />
+                <Tooltip label={`Remove ${p.filename}`} position="top" openDelay={500}>
+                  <CloseButton
+                    size="xs"
+                    aria-label={`Remove ${p.filename}`}
+                    onClick={() => removePending(p.key)}
+                  />
+                </Tooltip>
               </Group>
             </Paper>
           ))}
@@ -236,18 +239,21 @@ export function Composer({
       <Group align="flex-end" gap="xs">
         <FileButton multiple onChange={addFiles} inputProps={{ "aria-label": "Attach files input" }}>
           {({ onClick }) => (
-            <ActionIcon
-              size="lg"
-              variant="default"
-              aria-label="Attach files"
-              onClick={onClick}
-            >
-              +
-            </ActionIcon>
+            <Tooltip label="Attach files" position="top" openDelay={500}>
+              <ActionIcon
+                size="lg"
+                variant="default"
+                aria-label="Attach files"
+                onClick={onClick}
+              >
+                +
+              </ActionIcon>
+            </Tooltip>
           )}
         </FileButton>
         <Textarea
           placeholder="Message…"
+          aria-label="Message"
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
           // Paste images/files straight into the composer; text pastes fall
@@ -265,26 +271,30 @@ export function Composer({
           style={{ flex: 1 }}
         />
         {streaming ? (
-          <ActionIcon
-            size="lg"
-            variant="filled"
-            color="red"
-            aria-label="Stop generation"
-            onClick={onStop}
-            disabled={!canStop}
-          >
-            &#x25A0;
-          </ActionIcon>
+          <Tooltip label="Stop generation" position="top" openDelay={500}>
+            <ActionIcon
+              size="lg"
+              variant="filled"
+              color="red"
+              aria-label="Stop generation"
+              onClick={onStop}
+              disabled={!canStop}
+            >
+              &#x25A0;
+            </ActionIcon>
+          </Tooltip>
         ) : (
-          <ActionIcon
-            size="lg"
-            variant="filled"
-            aria-label="Send"
-            onClick={submit}
-            disabled={!input.trim() || uploading}
-          >
-            &#x2191;
-          </ActionIcon>
+          <Tooltip label="Send" position="top" openDelay={500}>
+            <ActionIcon
+              size="lg"
+              variant="filled"
+              aria-label="Send"
+              onClick={submit}
+              disabled={!input.trim() || uploading}
+            >
+              &#x2191;
+            </ActionIcon>
+          </Tooltip>
         )}
       </Group>
     </div>
