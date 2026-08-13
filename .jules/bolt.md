@@ -1,0 +1,5 @@
+# Bolt Performance Optimization Journal
+
+## 2026-08-13 - SQLite Mock Database Performance Indexes
+**Learning:** Common lookup fields in the mock database (such as `turns(conversation_id)`, `spans(turn_id)`, `judgments(evaluation_id)`, `judgments(conversation_id)`, and `conversations(user_id)`) were missing indexes. Since columns like `evaluation_id` or `user_id` are dynamically generated or renamed/modified during schema migrations, database indexes targeting them must be created *after* migrations complete in `Db.__init__` to avoid schema boot/migration errors. Additionally, mocking `os.name = 'nt'` in Python 3.12+ environments causes `pathlib.Path` to throw a `NotImplementedError` on POSIX systems (instantiating `WindowsPath`); we must mock target orchestration commands like `os.execvpe` directly instead of poisoning the host's `os.name` behavior.
+**Action:** Always place newly introduced database performance indexes after the migration chain execution block inside the database initiator, and verify that mock test suites do not monkeypatch global OS indicators which alter path behavior under Python 3.12+.
