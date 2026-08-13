@@ -1,0 +1,363 @@
+
+> cupel-studio@0.1.0 start /app
+> node scripts/dev.mjs
+
+
+Cupel
+  UI       http://localhost:5173
+  Backend  bundled demo mock · http://localhost:4010
+           storage: local · mock/cupel-mock.sqlite (local file, this machine only)
+           agentic.config.ts localMock.enabled = true — set it to false
+           when you point Cupel at your own backend
+
+[ui]   npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]   npm warn Unknown env config "npm-globalconfig". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]   npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+[ui]
+[ui]   > cupel-studio@0.1.0 dev
+[ui]   > vite --strictPort
+[ui]
+[mock] INFO:     Started server process [42776]
+[mock] INFO:     Waiting for application startup.
+[mock] INFO:     Application startup complete.
+[mock] INFO:     Uvicorn running on http://127.0.0.1:4010 (Press CTRL+C to quit)
+[ui]   (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[ui]     - import "./agentic.config" without a file extension (vite.config.ts:3:31). Add the file extension
+[ui]   Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+[ui]
+[ui]     VITE v8.2.1  ready in 372 ms
+[ui]
+[ui]     ➜  Local:   http://localhost:5173/
+[ui]     ➜  Network: use --host to expose
+[ui]   6:33:02 AM [vite] (client) [optimizer] bundling dependencies...
+[mock] INFO:     127.0.0.1:44356 - "GET /healthz HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /eval/rubrics HTTP/1.1" 201 Created
+[mock] INFO:     127.0.0.1:44356 - "POST /eval/rubrics HTTP/1.1" 201 Created
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_3ef106aff3 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_f8229842e1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_609d2669de HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b7d62529fd HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_c6ab5ba20d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b7c94863e7 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_82cf870a5d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_0856771a41 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ad6b495218 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6f91ee9ac1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_0b2d6463cb HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_211d26e96e HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_1d7d57fc22 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_f1bcc8c12b HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_f04e78a72a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_65b3b713ff HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_dcb83ca6b8 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_0f349677a0 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_216e0c1295 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_aee47a6b03 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_f87d6b6675 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_a5730ff3ea HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_79bbe26a7b HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6b6a86e8b5 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_2fd375dadb HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_4880155336 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_feab458272 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_2af81ae93c HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_02ed18b11f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_401fc2c24a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_e7e9c4e419 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_d119423484 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6a336edc11 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_26f5355118 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_7292c1d44f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_23e24dc99c HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_0d40ffe91a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent2/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations?forks_of=conv_a79aac80df HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_a79aac80df/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_22d8c15681 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_22d8c15681 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_22d8c15681 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_fb3f76a92a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_fb3f76a92a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations?forks_of=conv_e302931b1a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_e302931b1a/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_e16af3bf08 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_e16af3bf08 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_e16af3bf08 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_337a56ff07 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_337a56ff07 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations?forks_of=conv_30fed14409 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_30fed14409/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b4b57cc78d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b4b57cc78d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b4b57cc78d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_59f0e927ff HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_59f0e927ff HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_59f0e927ff HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations?forks_of=conv_f3610aa68a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_f3610aa68a/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_063bd4ce1d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_063bd4ce1d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_063bd4ce1d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_be6a289a32 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_be6a289a32 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent2/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_a2ce84dec9 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_a2ce84dec9 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_a2ce84dec9 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_a2ce84dec9 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent1/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_13727938bf HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_13727938bf HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_13727938bf HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_13727938bf HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ac103c900e HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ac103c900e HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ac103c900e HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ac103c900e HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/judgments?evaluation_id=eval_6e40f2c96f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ae99592479 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ae99592479 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ae99592479 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_ae99592479 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/judgments?evaluation_id=eval_74dda9dadd HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6a63015634 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6a63015634 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6a63015634 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_6a63015634 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_e302931b1a/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/judgments?subject_kind=turn&subject_id=turn_3fecd3fb8f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /feedback HTTP/1.1" 201 Created
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_09b2c43541/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/judgments?subject_kind=turn&subject_id=turn_092d09f7e2 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /feedback HTTP/1.1" 201 Created
+[mock] INFO:     127.0.0.1:44356 - "GET /agenttrees/agent1/conversations/conv_30fed14409/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /eval/judgments?subject_kind=turn&subject_id=turn_9e6c853538 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "POST /feedback HTTP/1.1" 201 Created
+[mock] INFO:     127.0.0.1:44356 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44356 - "GET /tasks/task_b33a8839c7 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44366 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44366 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44366 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44366 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44376 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44376 - "GET /agenttrees/agent2/conversations/conv_3a17fcc6e8/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44376 - "GET /agenttrees/agent2/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44376 - "POST /agenttrees/agent2/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:44564 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:44564 - "GET /tasks/task_3b16a05482 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56000 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56000 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56000 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56000 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:51472 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:51472 - "POST /agenttrees/agent1/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:36038 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:36038 - "GET /agenttrees/agent1/conversations/conv_09b2c43541/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:36038 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:36038 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:36046 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:36046 - "GET /tasks/task_884a8ac31f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:60530 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:60530 - "GET /tasks/task_81d3e2b428 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52086 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52086 - "POST /agenttrees/agent1/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:59416 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59416 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59416 - "GET /tasks/task_f9c65426d4 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56486 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56486 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56486 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56486 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:56494 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56494 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:56494 - "GET /tasks/task_9a435a5bee HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58212 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58212 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58212 - "GET /tasks/task_2a7b270273 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:34550 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:34550 - "GET /agenttrees/agent1/conversations/conv_80068f09eb/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:34550 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:34550 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:45180 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:45180 - "POST /agenttrees/agent1/replay HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:58024 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58024 - "GET /tasks/task_3cff97ba26 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58026 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58026 - "GET /agenttrees/agent2/conversations/conv_eda9a3b201/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58026 - "GET /agenttrees/agent2/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58026 - "POST /agenttrees/agent2/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:46076 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46076 - "GET /tasks/task_81398c8a63 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52936 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52936 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:52936 - "GET /tasks/task_c4650df6d4 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:37380 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:37380 - "GET /agenttrees/agent1/conversations/conv_1c04823565/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:37380 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:37380 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:46538 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46538 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46538 - "GET /tasks/task_39401ca4ee HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46542 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46542 - "GET /tasks/task_e7b94c188f HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59700 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59700 - "GET /tasks/task_38ea2fdc10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:54128 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:54128 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:54128 - "GET /tasks/task_bc12686680 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40434 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40434 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40434 - "GET /tasks/task_e547781dd8 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33286 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33286 - "GET /agenttrees/agent2/conversations/conv_5518df24b4/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33286 - "GET /agenttrees/agent2/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33286 - "POST /agenttrees/agent2/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:33290 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33290 - "GET /tasks/task_3d186465b4 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58830 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58830 - "GET /agenttrees/agent1/conversations/conv_a68fda5daa/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58830 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:58830 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:33304 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33304 - "GET /tasks/task_396677cc20 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:42596 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:42596 - "GET /agenttrees/agent1/conversations/conv_451e869a7f/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:42596 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:42596 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:41028 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:41028 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:41028 - "GET /tasks/task_4ba28be924 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:41042 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:41042 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:41042 - "GET /tasks/task_7820378005 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:54920 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:54920 - "GET /tasks/task_f3647c3541 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:51350 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:51350 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:51350 - "GET /tasks/task_29b394a534 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47592 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47592 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47592 - "GET /tasks/task_0328fa53f6 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35318 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35318 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35318 - "GET /tasks/task_9c9251ff5d HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35326 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35326 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35326 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35326 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:46968 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46968 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46968 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46968 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:40486 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40486 - "GET /agenttrees/agent1/conversations/conv_a68fda5daa/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40486 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40486 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:55298 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:55298 - "GET /agenttrees/agent1/conversations/conv_a68fda5daa/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:55298 - "GET /agenttrees/agent1/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:55298 - "POST /agenttrees/agent1/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:35944 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35944 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35944 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35944 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:35948 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:35948 - "GET /tasks/task_d0a0cc6006 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33022 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:33022 - "GET /tasks/task_8dccf19901 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:48830 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:48830 - "GET /tasks/task_30caeb5607 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59036 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59036 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:59036 - "GET /tasks/task_c4101574ac HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32774 - "GET /agenttrees/agent1/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32774 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32774 - "GET /tasks/task_491ac7314a HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32784 - "GET /agenttrees/agent2/conversations?origin=machine&page_size=10 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32784 - "GET /agenttrees/agent2/conversations/conv_81f0206637/turns?page_size=200 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32784 - "GET /agenttrees/agent2/endpoints HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:32784 - "POST /agenttrees/agent2/replay/turn HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:40012 - "GET /agenttrees/agent1/evaluations HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40012 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40012 - "GET /eval/rubrics HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:40012 - "POST /eval/judge HTTP/1.1" 202 Accepted
+[mock] INFO:     127.0.0.1:38514 - "POST /agenttrees/agent2/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38514 - "GET /tasks/task_690356acf6 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38014 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38016 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38016 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38014 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38016 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38014 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38016 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38030 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:38016 - "GET /tasks?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46988 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47000 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46988 - "GET /agenttrees HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "GET /me HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46988 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47000 - "GET /tasks/stream HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "GET /tasks?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "OPTIONS /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "POST /agenttrees/agent1/chat HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:47006 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[mock] INFO:     127.0.0.1:46412 - "GET /agenttrees/agent1/conversations?page=1 HTTP/1.1" 200 OK
+[ui]   npm notice
+[ui]   npm notice New minor version of npm available! 11.11.0 -> 11.19.0
+[ui]   npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.19.0
+[ui]   npm notice To update run: npm install -g npm@11.19.0
+[ui]   npm notice
+[ui] exited unexpectedly (code 143) — stopping the rest
+ ELIFECYCLE  Command failed with exit code 143.
