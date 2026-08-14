@@ -161,7 +161,8 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")  # take the subprocess.run branch
+    exec_calls = []
+    monkeypatch.setattr(boot.os, "execvpe", lambda file, args, env: exec_calls.append((file, args, env)))
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -181,10 +182,10 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
 
     assert cfg.read_text(encoding="utf-8").startswith("# GENERATED")
     assert calls[0][0][1] == "restore"
-    assert calls[1][0][:2] == ["litestream", "replicate"]
+    assert exec_calls[0][1][:2] == ["litestream", "replicate"]
     # Server still starts, and it is told no restore happened.
-    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "0"
-    assert calls[1][1]["CUPEL_STORAGE"] == "s3"
+    assert exec_calls[0][2]["CUPEL_STORAGE_RESTORED"] == "0"
+    assert exec_calls[0][2]["CUPEL_STORAGE"] == "s3"
     assert not db.exists()
 
 
@@ -192,7 +193,8 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")
+    exec_calls = []
+    monkeypatch.setattr(boot.os, "execvpe", lambda file, args, env: exec_calls.append((file, args, env)))
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -210,7 +212,7 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
 
     monkeypatch.setattr(boot.subprocess, "run", fake_run)
     assert boot.main() == 0
-    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "1"
+    assert exec_calls[0][2]["CUPEL_STORAGE_RESTORED"] == "1"
 
 
 # ------------------------------------------------------------------- WAL
@@ -229,6 +231,18 @@ def test_memory_databases_are_unaffected():
     db = Db(":memory:")
     assert db.journal_mode == "memory"
     assert db.all("SELECT * FROM meta") == []
+
+
+def test_database_performance_indexes_are_created():
+    """Verify performance indexes exist on foreign keys and frequently queried fields."""
+    db = Db(":memory:")
+    idx_rows = db.all("SELECT name FROM sqlite_master WHERE type = 'index'")
+    idx_names = {r["name"] for r in idx_rows}
+    assert "idx_turns_conversation_id" in idx_names
+    assert "idx_spans_turn_id" in idx_names
+    assert "idx_judgments_evaluation_id" in idx_names
+    assert "idx_judgments_conversation_id" in idx_names
+    assert "idx_conversations_user_id" in idx_names
 
 
 # --------------------------------------------------------- database_is_empty
