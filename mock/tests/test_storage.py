@@ -161,7 +161,6 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")  # take the subprocess.run branch
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -176,7 +175,11 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
         calls.append((argv, env))
         return Result(1 if argv[1] == "restore" else 0)  # restore fails
 
+    def fake_execvpe(cmd, args, env):
+        calls.append((args, env))
+
     monkeypatch.setattr(boot.subprocess, "run", fake_run)
+    monkeypatch.setattr(boot.os, "execvpe", fake_execvpe)
     assert boot.main() == 0
 
     assert cfg.read_text(encoding="utf-8").startswith("# GENERATED")
@@ -192,7 +195,6 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -208,7 +210,11 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
             db.write_bytes(b"")  # litestream pulled the replica down
         return Result()
 
+    def fake_execvpe(cmd, args, env):
+        calls.append((args, env))
+
     monkeypatch.setattr(boot.subprocess, "run", fake_run)
+    monkeypatch.setattr(boot.os, "execvpe", fake_execvpe)
     assert boot.main() == 0
     assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "1"
 

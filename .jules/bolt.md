@@ -1,0 +1,3 @@
+## 2026-03-30 - SQLite secondary performance indexes for foreign key lookups
+**Learning:** SQLite table queries on `turns`, `spans`, `judgments`, and `conversations` filtering by foreign key fields (`conversation_id`, `turn_id`, `evaluation_id`, `user_id`) result in full table scans unless explicitly indexed. Adding secondary indexes on these key columns reduces query complexity from O(N) to O(log N). Creating these indexes at the end of `Db.__init__` guarantees all migrations (such as adding `user_id` or renaming `run_id` to `evaluation_id`) have executed first.
+**Action:** Always create performance indexes on foreign keys and frequently filtered columns after running database migrations.
