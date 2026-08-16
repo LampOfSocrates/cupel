@@ -238,6 +238,15 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+            # Indexes on frequently queried foreign keys and filtered columns.
+            # Placed after migrations so columns added by migrations exist.
+            self.conn.executescript("""
+              CREATE INDEX IF NOT EXISTS idx_turns_conversation_id ON turns(conversation_id);
+              CREATE INDEX IF NOT EXISTS idx_spans_turn_id ON spans(turn_id);
+              CREATE INDEX IF NOT EXISTS idx_judgments_evaluation_id ON judgments(evaluation_id);
+              CREATE INDEX IF NOT EXISTS idx_judgments_conversation_id ON judgments(conversation_id);
+              CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+            """)
             self.conn.commit()
 
     def _migrate_eval_cases(self):
