@@ -238,6 +238,17 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+
+            # Performance indexes on foreign keys and frequently queried fields.
+            # Applied after migrations run in case columns (like user_id or evaluation_id)
+            # were added/renamed in older databases.
+            # Reduces lookup complexity from O(N) full table scans to O(log N).
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_id ON turns(conversation_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_spans_turn_id ON spans(turn_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_judgments_evaluation_id ON judgments(evaluation_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_judgments_conversation_id ON judgments(conversation_id)")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)")
+
             self.conn.commit()
 
     def _migrate_eval_cases(self):
