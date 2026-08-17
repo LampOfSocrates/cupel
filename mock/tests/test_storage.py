@@ -317,3 +317,20 @@ def test_healthz_s3_without_a_restore(monkeypatch, restored):
                 "mode": "s3", "restored": False}
 
     run(case())
+
+
+# ------------------------------------------------------------- indexes
+def test_performance_indexes_are_created():
+    db = Db(":memory:")
+    indexes = {row["name"] for row in db.all("SELECT name FROM sqlite_master WHERE type='index'")}
+    expected = {
+        "idx_turns_conversation_id",
+        "idx_spans_turn_id",
+        "idx_judgments_evaluation_id",
+        "idx_judgments_conversation_id",
+        "idx_conversations_user_id",
+        "idx_tasks_parent_id",
+        "idx_evaluation_rows_evaluation_id",
+        "idx_evaluation_cells_evaluation_id",
+    }
+    assert expected.issubset(indexes)
