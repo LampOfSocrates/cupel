@@ -238,6 +238,7 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+            self._create_indexes()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -436,6 +437,20 @@ class Db:
             self.conn.execute("ALTER TABLE eval_set_versions RENAME TO eval_benchmark_versions")
             self.conn.execute(
                 "ALTER TABLE eval_benchmark_versions RENAME COLUMN set_id TO benchmark_id")
+
+    def _create_indexes(self):
+        """Add performance indexes for common foreign keys and analytical query filters.
+        Must run after migrations so all target columns exist across upgraded schemas."""
+        self.conn.executescript("""
+CREATE INDEX IF NOT EXISTS idx_turns_conversation ON turns(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_spans_turn ON spans(turn_id);
+CREATE INDEX IF NOT EXISTS idx_judgments_evaluation ON judgments(evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_judgments_conversation ON judgments(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
+CREATE INDEX IF NOT EXISTS idx_eval_rows_evaluation ON evaluation_rows(evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_eval_cells_evaluation ON evaluation_cells(evaluation_id);
+""")
 
     def _migrate_judgment_subject_scorer(self):
         """Older databases carry the union shape: judgments(case_id,
