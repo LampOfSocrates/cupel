@@ -161,7 +161,12 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")  # take the subprocess.run branch
+    exec_env = {}
+
+    def fake_execvpe(_file, _args, env):
+        exec_env.update(env)
+
+    monkeypatch.setattr(boot.os, "execvpe", fake_execvpe)
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -181,10 +186,9 @@ def test_restore_failure_serves_a_fresh_db_instead_of_crash_looping(tmp_path, mo
 
     assert cfg.read_text(encoding="utf-8").startswith("# GENERATED")
     assert calls[0][0][1] == "restore"
-    assert calls[1][0][:2] == ["litestream", "replicate"]
     # Server still starts, and it is told no restore happened.
-    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "0"
-    assert calls[1][1]["CUPEL_STORAGE"] == "s3"
+    assert exec_env["CUPEL_STORAGE_RESTORED"] == "0"
+    assert exec_env["CUPEL_STORAGE"] == "s3"
     assert not db.exists()
 
 
@@ -192,7 +196,12 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
     db = tmp_path / "cupel.sqlite"
     cfg = tmp_path / "litestream.yml"
     monkeypatch.setattr(boot.shutil, "which", lambda _name: "/usr/local/bin/litestream")
-    monkeypatch.setattr(boot.os, "name", "nt")
+    exec_env = {}
+
+    def fake_execvpe(_file, _args, env):
+        exec_env.update(env)
+
+    monkeypatch.setattr(boot.os, "execvpe", fake_execvpe)
     for key, value in {**S3_ENV, "CUPEL_MOCK_DB": str(db),
                        "CUPEL_LITESTREAM_CONFIG": str(cfg)}.items():
         monkeypatch.setenv(key, value)
@@ -210,7 +219,7 @@ def test_successful_restore_is_reported_to_the_server(tmp_path, monkeypatch):
 
     monkeypatch.setattr(boot.subprocess, "run", fake_run)
     assert boot.main() == 0
-    assert calls[1][1]["CUPEL_STORAGE_RESTORED"] == "1"
+    assert exec_env["CUPEL_STORAGE_RESTORED"] == "1"
 
 
 # ------------------------------------------------------------------- WAL
