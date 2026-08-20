@@ -1288,6 +1288,24 @@ def test_fail_marker_is_inert_when_unset(monkeypatch):
     run(case())
 
 
+def test_database_indexes_exist(tmp_path):
+    from mock.db import Db
+    db_file = str(tmp_path / "indexes.sqlite")
+    db = Db(db_file)
+    indexes = {row["name"] for row in db.all("SELECT name FROM sqlite_master WHERE type = 'index'")}
+    expected = {
+        "idx_turns_conversation_id",
+        "idx_spans_turn_id",
+        "idx_judgments_evaluation_id",
+        "idx_judgments_conversation_id",
+        "idx_conversations_user_id",
+        "idx_tasks_parent_id",
+        "idx_evaluation_rows_evaluation_id",
+        "idx_evaluation_cells_evaluation_id",
+    }
+    assert expected <= indexes
+
+
 def test_persistence_across_app_restart(tmp_path):
     async def case():
         db_file = str(tmp_path / "mock.sqlite")
