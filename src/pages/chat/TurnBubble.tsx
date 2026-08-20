@@ -1,4 +1,4 @@
-import { useState, type RefObject } from "react";
+import { memo, useState, type RefObject } from "react";
 import {
   ActionIcon,
   Badge,
@@ -29,7 +29,9 @@ import { EnvelopeChip } from "../../components";
 import { Markdown } from "../../lib/markdown";
 import type { Rating } from "./types";
 
-export function TurnBubble({
+// Memoized to prevent re-rendering historical transcript turns whenever
+// new streaming tokens or draft/transcript state changes in Transcript.tsx.
+export const TurnBubble = memo(function TurnBubble({
   turn,
   thumb,
   onRate,
@@ -254,7 +256,7 @@ export function TurnBubble({
       )}
     </Paper>
   );
-}
+});
 
 // The "tell us more" box revealed by a thumb. Optional and dismissible: the
 // rating is already saved by the time this renders, so closing it costs
