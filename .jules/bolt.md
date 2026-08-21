@@ -1,0 +1,3 @@
+## 2026-08-16 - SQLite Index Creation After Schema Migrations
+**Learning:** Performance indexes targeting columns added or modified by schema migrations in `mock/db.py` must be executed at the end of `Db.__init__` after migrations run to prevent table/column missing boot errors on pre-existing databases.
+**Action:** Always create indexes at the end of `Db.__init__` using `CREATE INDEX IF NOT EXISTS` for frequently queried foreign key columns (`turns.conversation_id`, `spans.turn_id`, `judgments.evaluation_id`, `judgments.conversation_id`, `conversations.user_id`, `tasks.parent_id`, `evaluation_rows.evaluation_id`, and `evaluation_cells.evaluation_id`).
