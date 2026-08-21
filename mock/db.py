@@ -238,7 +238,22 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+            self._create_indexes()
             self.conn.commit()
+
+    def _create_indexes(self):
+        """Add performance indexes targeting frequently queried foreign keys.
+        Executed at the end of init so columns added by migrations exist."""
+        self.conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_turns_conversation_id ON turns(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_spans_turn_id ON spans(turn_id);
+            CREATE INDEX IF NOT EXISTS idx_judgments_evaluation_id ON judgments(evaluation_id);
+            CREATE INDEX IF NOT EXISTS idx_judgments_conversation_id ON judgments(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+            CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_evaluation_rows_evaluation_id ON evaluation_rows(evaluation_id);
+            CREATE INDEX IF NOT EXISTS idx_evaluation_cells_evaluation_id ON evaluation_cells(evaluation_id);
+        """)
 
     def _migrate_eval_cases(self):
         """Older databases carry eval_cases with PRIMARY KEY (id)
