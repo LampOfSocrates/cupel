@@ -1303,3 +1303,22 @@ def test_persistence_across_app_restart(tmp_path):
             conv = await with_turns(c, f"/agenttrees/agent1/conversations/{conv_id}")
             assert len(conv["turns"]) == 2  # SQLite survives restart
     run(case())
+
+
+def test_database_performance_indexes():
+    """Assert performance indexes exist on foreign keys / frequently queried columns."""
+    from mock.db import Db
+    db = Db(":memory:")
+    index_rows = db.all("SELECT name FROM sqlite_master WHERE type = 'index'")
+    indexes = {row["name"] for row in index_rows}
+    expected_indexes = {
+        "idx_turns_conversation_id",
+        "idx_spans_turn_id",
+        "idx_judgments_evaluation_id",
+        "idx_judgments_conversation_id",
+        "idx_conversations_user_id",
+        "idx_tasks_parent_id",
+        "idx_evaluation_rows_evaluation_id",
+        "idx_evaluation_cells_evaluation_id",
+    }
+    assert expected_indexes <= indexes
