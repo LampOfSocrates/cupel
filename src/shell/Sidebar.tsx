@@ -309,7 +309,7 @@ export function Sidebar({
                 mock/root.py mounts this whole app at /cupel-demo alongside
                 it), hence a plain <a href="/"> rather than RouterNavLink. */}
             <Tooltip label="Landing / FAQ" position="right" withArrow>
-              <ActionIcon component="a" href="/" variant="subtle" color="gray" size="lg">
+              <ActionIcon component="a" href="/" variant="subtle" color="gray" size="lg" aria-label="Landing / FAQ">
                 <IconHome size={20} stroke={1.5} />
               </ActionIcon>
             </Tooltip>
