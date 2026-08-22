@@ -238,7 +238,29 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+            self._create_indexes()
             self.conn.commit()
+
+    def _create_indexes(self):
+        """Create indexes on frequently queried columns to speed up API lookups
+        and analytical queries (e.g. turn fetching, task parent lookups, grid cell pagination,
+        inspector filters). Must run after all migrations complete."""
+        # Index on turns(conversation_id) speeds up listTurns and conversation_dict turn counting
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_id ON turns(conversation_id)")
+        # Index on spans(turn_id) speeds up trace lookups
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_spans_turn_id ON spans(turn_id)")
+        # Index on judgments(evaluation_id) speeds up evaluation summary queries
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_judgments_evaluation_id ON judgments(evaluation_id)")
+        # Index on judgments(conversation_id) speeds up listJudgments and inspector latest_score queries
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_judgments_conversation_id ON judgments(conversation_id)")
+        # Index on conversations(user_id) speeds up inspector user filtering
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)")
+        # Index on tasks(parent_id) speeds up child task resolution and task queue trees
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id)")
+        # Index on evaluation_rows(evaluation_id) speeds up paged grid row fetching
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_evaluation_rows_evaluation_id ON evaluation_rows(evaluation_id)")
+        # Index on evaluation_cells(evaluation_id) speeds up grid cell lookups per evaluation
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_evaluation_cells_evaluation_id ON evaluation_cells(evaluation_id)")
 
     def _migrate_eval_cases(self):
         """Older databases carry eval_cases with PRIMARY KEY (id)
