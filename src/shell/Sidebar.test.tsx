@@ -106,6 +106,15 @@ describe("Sidebar Landing / FAQ entry", () => {
     const link = screen.getByRole("link", { name: "Landing / FAQ" });
     expect(link).toHaveAttribute("href", "/");
   });
+
+  it("has accessible aria-label on collapsed rail", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    const collapsedLink = screen.getByRole("link", { name: "Landing / FAQ" });
+    expect(collapsedLink).toBeInTheDocument();
+    expect(collapsedLink).toHaveAttribute("href", "/");
+  });
 });
 
 // Desktop rail collapse (UX polish, planned 2026-08-10): a toggle swaps the
