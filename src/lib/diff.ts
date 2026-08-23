@@ -38,14 +38,18 @@ export function diffLines(a: string, b: string): DiffLine[] {
   const n = midA.length;
   const m = midB.length;
 
-  // lcs[i][j] = LCS length of midA[i..] vs midB[j..]
-  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  const cols = m + 1;
+  // Flatten 2D LCS matrix into a single 1D Int32Array to eliminate O(N) array
+  // allocations and reduce GC pressure during instruction diffing.
+  const lcs = new Int32Array((n + 1) * cols);
   for (let i = n - 1; i >= 0; i--) {
+    const rowOffset = i * cols;
+    const nextRowOffset = (i + 1) * cols;
     for (let j = m - 1; j >= 0; j--) {
-      lcs[i][j] =
+      lcs[rowOffset + j] =
         midA[i] === midB[j]
-          ? lcs[i + 1][j + 1] + 1
-          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+          ? lcs[nextRowOffset + j + 1] + 1
+          : Math.max(lcs[nextRowOffset + j], lcs[rowOffset + j + 1]);
     }
   }
 
@@ -54,11 +58,12 @@ export function diffLines(a: string, b: string): DiffLine[] {
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
+    const curOffset = i * cols + j;
     if (midA[i] === midB[j]) {
       out.push({ type: "equal", line: midA[i] });
       i++;
       j++;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+    } else if (lcs[(i + 1) * cols + j] >= lcs[curOffset + 1]) {
       out.push({ type: "del", line: midA[i] });
       i++;
     } else {
