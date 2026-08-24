@@ -1,4 +1,4 @@
-import { Children, type ReactNode } from "react";
+import { Children, memo, type ReactNode } from "react";
 import { Group, Text, UnstyledButton } from "@mantine/core";
 
 // Node card shared by the agent tree view and the trace call
@@ -37,7 +37,8 @@ interface TreeNodeProps {
   onClick?: () => void;
 }
 
-export function TreeNode({
+// Memoized to avoid re-rendering tree nodes when sibling state or parent live streaming updates occur.
+export const TreeNode = memo(function TreeNode({
   label,
   meta,
   kind = "agent",
@@ -86,7 +87,7 @@ export function TreeNode({
       {actions}
     </Group>
   );
-}
+});
 
 // Indented children container with elbow connector lines (the sketch's
 // #B4B2A9 right-angle connectors, drawn with borders — no graph lib).
