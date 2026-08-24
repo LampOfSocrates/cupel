@@ -124,47 +124,53 @@ export function TurnBubble({
           (feature-spec.md:11) — user turns carry no row. */}
       {turn.role === "assistant" && (
         <Group gap={4} justify="flex-end" mt={6}>
-          <ActionIcon
-            size="sm"
-            variant={thumb === "up" ? "light" : "subtle"}
-            color={thumb === "up" ? "blue" : "gray"}
-            aria-label="Thumbs up"
-            aria-pressed={thumb === "up"}
-            onClick={() => onRate("up")}
-          >
-            {thumb === "up" ? (
-              <IconThumbUpFilled size={16} stroke={1.5} />
-            ) : (
-              <IconThumbUp size={16} stroke={1.5} />
-            )}
-          </ActionIcon>
-          <ActionIcon
-            size="sm"
-            variant={thumb === "down" ? "light" : "subtle"}
-            color={thumb === "down" ? "blue" : "gray"}
-            aria-label="Thumbs down"
-            aria-pressed={thumb === "down"}
-            onClick={() => onRate("down")}
-          >
-            {thumb === "down" ? (
-              <IconThumbDownFilled size={16} stroke={1.5} />
-            ) : (
-              <IconThumbDown size={16} stroke={1.5} />
-            )}
-          </ActionIcon>
+          <Tooltip label="Thumbs up">
+            <ActionIcon
+              size="sm"
+              variant={thumb === "up" ? "light" : "subtle"}
+              color={thumb === "up" ? "blue" : "gray"}
+              aria-label="Thumbs up"
+              aria-pressed={thumb === "up"}
+              onClick={() => onRate("up")}
+            >
+              {thumb === "up" ? (
+                <IconThumbUpFilled size={16} stroke={1.5} />
+              ) : (
+                <IconThumbUp size={16} stroke={1.5} />
+              )}
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Thumbs down">
+            <ActionIcon
+              size="sm"
+              variant={thumb === "down" ? "light" : "subtle"}
+              color={thumb === "down" ? "blue" : "gray"}
+              aria-label="Thumbs down"
+              aria-pressed={thumb === "down"}
+              onClick={() => onRate("down")}
+            >
+              {thumb === "down" ? (
+                <IconThumbDownFilled size={16} stroke={1.5} />
+              ) : (
+                <IconThumbDown size={16} stroke={1.5} />
+              )}
+            </ActionIcon>
+          </Tooltip>
           {/* "copy copies raw markdown" (feature-spec.md:272) — Turn.content,
               not the rendered HTML. */}
           <CopyButton value={turn.content} timeout={1500}>
             {({ copied, copy }) => (
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                color={copied ? "teal" : "gray"}
-                aria-label={copied ? "Copied" : "Copy message"}
-                onClick={copy}
-              >
-                {copied ? <IconCheck size={16} stroke={1.5} /> : <IconCopy size={16} stroke={1.5} />}
-              </ActionIcon>
+              <Tooltip label={copied ? "Copied" : "Copy message"}>
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  color={copied ? "teal" : "gray"}
+                  aria-label={copied ? "Copied" : "Copy message"}
+                  onClick={copy}
+                >
+                  {copied ? <IconCheck size={16} stroke={1.5} /> : <IconCopy size={16} stroke={1.5} />}
+                </ActionIcon>
+              </Tooltip>
             )}
           </CopyButton>
           {/* Link-copy sits next to copy because it is the same gesture (put
@@ -173,55 +179,63 @@ export function TurnBubble({
           {shareUrl && (
             <CopyButton value={shareUrl} timeout={1500}>
               {({ copied, copy }) => (
-                <ActionIcon
-                  size="sm"
-                  variant="subtle"
-                  color={copied ? "teal" : "gray"}
-                  aria-label={copied ? "Link copied" : "Copy link to turn"}
-                  onClick={copy}
-                >
-                  {copied ? <IconCheck size={16} stroke={1.5} /> : <IconLink size={16} stroke={1.5} />}
-                </ActionIcon>
+                <Tooltip label={copied ? "Link copied" : "Copy link to turn"}>
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    color={copied ? "teal" : "gray"}
+                    aria-label={copied ? "Link copied" : "Copy link to turn"}
+                    onClick={copy}
+                  >
+                    {copied ? <IconCheck size={16} stroke={1.5} /> : <IconLink size={16} stroke={1.5} />}
+                  </ActionIcon>
+                </Tooltip>
               )}
             </CopyButton>
           )}
           {/* Fork — sketch 01 tags this icon "POST …/replay/turn". */}
           {onFork && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Fork turn"
-              onClick={onFork}
-            >
-              <IconGitFork size={16} stroke={1.5} />
-            </ActionIcon>
+            <Tooltip label="Fork turn">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label="Fork turn"
+                onClick={onFork}
+              >
+                <IconGitFork size={16} stroke={1.5} />
+              </ActionIcon>
+            </Tooltip>
           )}
           {/* Collect. One icon in the existing row (same size, same subtle
               variant), which is the whole point of "one keystroke". */}
           {onCollect && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Collect into eval benchmark"
-              onClick={onCollect}
-            >
-              <IconLayoutGrid size={16} stroke={1.5} />
-            </ActionIcon>
+            <Tooltip label="Collect into eval benchmark">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label="Collect into eval benchmark"
+                onClick={onCollect}
+              >
+                <IconLayoutGrid size={16} stroke={1.5} />
+              </ActionIcon>
+            </Tooltip>
           )}
           {/* "trace icon on every turn — in Chat, results grid cells, and
               drill-in" (feature-spec.md:141); routes to the trace view. */}
           {onTrace && (
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Open trace"
-              onClick={onTrace}
-            >
-              <IconActivity size={16} stroke={1.5} />
-            </ActionIcon>
+            <Tooltip label="Open trace">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label="Open trace"
+                onClick={onTrace}
+              >
+                <IconActivity size={16} stroke={1.5} />
+              </ActionIcon>
+            </Tooltip>
           )}
         </Group>
       )}
