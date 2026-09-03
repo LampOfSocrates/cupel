@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Alert, Anchor, Badge, Button, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Stack, Text } from "@mantine/core";
 import { api, ApiError } from "../api/client";
 import { getSseEnabled } from "../api/backendPrefs";
 import type {
@@ -13,6 +13,7 @@ import type {
 import { ApiErrorNote, ForkModal } from "../components";
 import { CollectModal } from "../components/CollectModal";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
+import { usePageHeader } from "../shell/PageHeaderContext";
 import { useAsync } from "../hooks/useAsync";
 import { useApp } from "../AppContext";
 import { TURN_PARAM, turnShareUrl } from "../lib/shareLink";
@@ -75,6 +76,10 @@ export function ChatPage() {
   // loaded length stops matching any total the server gave us.
   const [earliestPage, setEarliestPage] = useState(1);
   const [title, setTitle] = useState<string | null>(null);
+  // The thread names the page. Falls back to "New chat" only when there is no
+  // conversation yet — an existing conversation whose title has not loaded
+  // shows the plain route name rather than briefly claiming to be a new chat.
+  usePageHeader(title ?? (conversationId ? "Chat" : "New chat"));
   // Lineage + agent off the loaded Conversation. Lineage is "Present iff this
   // conversation is a fork" (openapi.yaml:1369) and drives the header banner;
   // agent_id seeds the fork modal's optional version select.
@@ -457,10 +462,10 @@ export function ChatPage() {
       {/* Header per sketches: title left, settings affordance right —
           clean/01-chat.svg header shows a bare "⚙" at the right edge;
           annotated 01-chat.svg shows "model · temp ⚙" in the same spot. */}
-      <Group justify="space-between" wrap="nowrap">
-        {/* lineClamp + minWidth:0 — a long title truncates instead of shoving
-            the ⚙ off a phone screen. */}
-        <Title order={4} lineClamp={1} style={{ minWidth: 0 }}>{title ?? (conversationId ? " " : "New chat")}</Title>
+      {/* The title moved UP: the handoff names the page once, in the top bar
+          (src/shell/TopBar.tsx), so rendering it here too would print it
+          twice. The row keeps the right-hand controls it always had. */}
+      <Group justify="flex-end" wrap="nowrap">
         <Group gap="xs" wrap="nowrap">
           <CompareToggle
             enabled={compare}

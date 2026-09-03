@@ -1,0 +1,24 @@
+/* Global rules the Mantine theme object cannot express — everything else lives
+   in src/theme.ts. Imported once, from src/main.tsx, after Mantine's own
+   stylesheet so these win. */
+
+body {
+  /* Handoff: "-webkit-font-smoothing:antialiased on body". At 10–12px the
+     design's whole scale sits below where subpixel rendering stops helping. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Canvas. The app is a full-viewport flex row, so nothing else paints the
+     ground behind the panels. */
+  background: var(--mantine-color-gray-1);
+  color: var(--mantine-color-gray-9);
+}
+
+/* The design is desktop-only: "Below the sum of the min-widths, regions scroll
+   rather than reflow. No mobile layout is designed." Scrolling belongs to the
+   region that overflows, never the page. */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

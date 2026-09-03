@@ -14,6 +14,8 @@
     "ready": "node scripts/cupel-ready.mjs",
     "start": "node scripts/dev.mjs",
     "dev": "vite",
+    "dev:msw": "vite --mode msw",
+    "dump:mockdata": "node scripts/dump-mockdata.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -61,5 +63,10 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

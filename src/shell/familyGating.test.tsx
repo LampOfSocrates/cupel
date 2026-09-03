@@ -78,7 +78,9 @@ describe("hide", () => {
   // first tab that is still there rather than to a bare frame.
   it("a hand-typed path for a hidden tab lands on the first visible one", async () => {
     await boot({ datasets: "hide" }, "/studio/cases");
-    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio/rubrics"));
+    // Feedbacks, not Rubrics: both are `judging`, and Feedbacks sits first in
+    // STUDIO_TABS — the landing tab is whichever survives first, not a named one.
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/studio/feedbacks"));
   });
 
   it("a hand-typed /studio lands on the front door once every Studio family hides", async () => {

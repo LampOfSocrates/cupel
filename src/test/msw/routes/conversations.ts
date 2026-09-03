@@ -220,7 +220,12 @@ export const conversationHandlers = [
     const search = url.searchParams.get("search")?.trim().toLowerCase();
     // Tombstones are never listed (openapi.yaml listConversations: no
     // include_deleted, deliberately) — they are reached by id only.
-    let items = (forksOf ? (mockForks[forksOf] ?? []) : mockRoots).filter((c) => !c.deleted);
+    // Roots are held as ONE list across trees, so the listing scopes by
+    // tree_id the way mock/main.py's queries do — without it a tree would
+    // list another tree's history. Forks are already keyed by their root.
+    let items = (
+      forksOf ? (mockForks[forksOf] ?? []) : mockRoots.filter((c) => c.tree_id === params.tree)
+    ).filter((c) => !c.deleted);
     // ?agent_id= — "view recent conversations for this agent"
     // (openapi.yaml:365-371).
     const agentId = url.searchParams.get("agent_id");

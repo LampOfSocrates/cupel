@@ -24,6 +24,7 @@ import { TracePage } from "./pages/TracePage";
 import { StudioFrame } from "./pages/studio/StudioFrame";
 import { CasesTab } from "./pages/studio/CasesTab";
 import { BenchmarksTab } from "./pages/studio/BenchmarksTab";
+import { FeedbacksTab } from "./pages/studio/FeedbacksTab";
 import { RubricsTab } from "./pages/studio/RubricsTab";
 import { EvaluationsPage } from "./pages/EvaluationsPage";
 import { InspectorPage } from "./pages/InspectorPage";
@@ -299,6 +300,9 @@ export function App() {
                   <Route path="cases" element={<CasesTab />} />
                   <Route path="benchmarks" element={<BenchmarksTab />} />
                 </>
+              )}
+              {!isHidden("judging") && (
+                <Route path="feedbacks" element={<FeedbacksTab />} />
               )}
               {!isHidden("judging") && <Route path="rubrics" element={<RubricsTab />} />}
               {!isHidden("replay") && (

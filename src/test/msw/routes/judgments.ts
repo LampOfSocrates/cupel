@@ -10,15 +10,20 @@ import { allConversations } from "./conversations";
 // newest first") — POST /feedback unshifts; fixtures seed via pushHumanJudgment
 // (oldest first, so the newest ends up in front).
 //
-// conversation_id is NOT a Judgment field (it is a server-side scope index, see
-// mock/db.py judgments), so the mirror keeps it beside each row rather than on
-// it — that is what serves ?conversation_id= without inventing wire surface.
+// conversation_id is BOTH: a wire field since contract v0.7.0 and still the
+// server-side scope index it always was (mock/db.py judgments). store() stamps
+// it on the row; the map beside it is what ?conversation_id= and ?tree= filter
+// on, so a fixture can carry a scope the row does not.
 export const mockJudgments: Judgment[] = [];
 const conversationScope = new Map<string, string | null>();
 export const feedbackRequests: FeedbackRequest[] = [];
 export const judgmentRequests: URL[] = [];
 
 function store(judgment: Judgment, conversationId: string | null): Judgment {
+  // conversation_id is a wire field as of contract v0.7.0, so it goes ON the
+  // row — the scope map stays because ?conversation_id= and ?tree= filter
+  // through it and a fixture may set one without the other.
+  judgment.conversation_id = conversationId;
   mockJudgments.unshift(judgment);
   conversationScope.set(judgment.id, conversationId);
   return judgment;
@@ -126,9 +131,32 @@ export const judgmentHandlers = [
     if (evaluationId) items = items.filter((j) => j.evaluation_id === evaluationId);
     const scorerRef = url.searchParams.get("scorer_ref");
     if (scorerRef) items = items.filter((j) => j.scorer.ref === scorerRef);
+    const scorerKind = url.searchParams.get("scorer_kind");
+    if (scorerKind) items = items.filter((j) => j.scorer.kind === scorerKind);
+    // Both scope filters read the ROW first and fall back to the map: the row
+    // is the wire truth since v0.7.0, and the map still answers for a fixture
+    // pushed straight onto the array (the browser worker's demo dataset) that
+    // never went through store().
+    const scopeOf = (j: Judgment) => j.conversation_id ?? conversationScope.get(j.id) ?? null;
     const conversationId = url.searchParams.get("conversation_id");
-    if (conversationId)
-      items = items.filter((j) => conversationScope.get(j.id) === conversationId);
+    if (conversationId) items = items.filter((j) => scopeOf(j) === conversationId);
+    // ?tree= reaches the agent tree through the same scope map, one hop
+    // further out — judgment → its conversation → that conversation's tree.
+    // The real mock does it as a subquery on the denormalized column
+    // (mock/main.py list_judgments); a tombstoned conversation stays in scope
+    // in both, because deleting a conversation does not retract its feedback.
+    const tree = url.searchParams.get("tree");
+    if (tree) {
+      const inTree = new Set(
+        allConversations()
+          .filter((c) => c.tree_id === tree)
+          .map((c) => c.id),
+      );
+      items = items.filter((j) => {
+        const scope = scopeOf(j);
+        return scope != null && inTree.has(scope);
+      });
+    }
     return HttpResponse.json(pageOf(items, url, 50));
   }),
 ];

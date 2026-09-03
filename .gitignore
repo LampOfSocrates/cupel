@@ -20,3 +20,7 @@ agentic.config.ts.tmp
 .env
 .env.*
 !.env.example
+# The one exception, and it holds no secret: a single flag that switches
+# `vite --mode msw` (npm run dev:msw) onto the browser MSW worker. Ignored, it
+# would leave a fresh clone running that script against no fake at all.
+!.env.msw

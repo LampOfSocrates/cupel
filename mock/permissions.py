@@ -31,7 +31,7 @@ runs this code and is allowed, rather than skipping it.
 import re
 
 # openapi.yaml info.version — the contract these requirements were read from.
-CONTRACT_VERSION = "0.6.0"
+CONTRACT_VERSION = "0.7.0"
 
 TREE_PERMISSIONS = ("view", "tune", "evaluate")
 ROLES = ("admin", "inspect")

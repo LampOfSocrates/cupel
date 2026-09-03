@@ -111,6 +111,11 @@ export interface StudioTab {
 export const STUDIO_TABS: StudioTab[] = [
   { segment: "cases", label: "Cases", family: "datasets" },
   { segment: "benchmarks", label: "Benchmarks", family: "datasets" },
+  // Feedback is `judging` like Rubrics, and for the same reason: a thumb is a
+  // human judgment, stored in the one judgment table a rubric's LLM score
+  // lands in (openapi.yaml postFeedback, "sharing a single store with
+  // /eval/judgments"). A backend that answers judging answers both.
+  { segment: "feedbacks", label: "Feedbacks", family: "judging" },
   { segment: "rubrics", label: "Rubrics", family: "judging" },
   { segment: "evaluations", label: "Evaluations", family: "replay" },
   { segment: "inspector", label: "Inspector", family: "admin", role: "inspect" },

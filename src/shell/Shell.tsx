@@ -1,13 +1,16 @@
 import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
-import { AppShell, Burger, Group, Text } from "@mantine/core";
+import { AppShell, Box, Burger, Group, Text } from "@mantine/core";
 import { useDisclosure, useLocalStorage, useMediaQuery } from "@mantine/hooks";
 import { useBackendTarget } from "../api/target";
 import { product } from "../lib/product";
 import { mockedFamilyOfRoute } from "../lib/families";
 import { EnvBanner, ENV_BANNER_HEIGHT, resolveBanner } from "./EnvBanner";
 import { MockBadge } from "./MockBadge";
+import { PageHeaderProvider } from "./PageHeaderContext";
 import { Sidebar } from "./Sidebar";
+import { TopBar, TOP_BAR_HEIGHT } from "./TopBar";
+import { WorkDock } from "./WorkDock";
 
 // The navbar breakpoint is load-bearing, not cosmetic:
 // BELOW it Mantine renders the navbar as a full-width overlay
@@ -15,7 +18,7 @@ import { Sidebar } from "./Sidebar";
 // navbar-offset:0), so without a `collapsed.mobile` state it simply buries the
 // page — the reported bug ("in portrait I only see the sidebar"). `sm`
 // (48em/768px) puts phones in portrait AND landscape on the burger; tablets
-// and desktops keep the fixed 280px column and are untouched.
+// and desktops keep the fixed sidebar column and are untouched.
 const NAV_BREAKPOINT = "sm";
 // One pixel-equivalent below theme.breakpoints.sm, so exactly one of
 // "burger" / "fixed column" is true at any width. Drives what JS needs to know
@@ -26,7 +29,10 @@ const MOBILE_BAR_HEIGHT = 44;
 // own UI / Slack / VS Code, and it sidesteps drag-resize's edge cases (min/max
 // clamping, cursor affordance, touch support). Persisted device-locally, same
 // convention as the backend-target picker (src/api/target.ts).
-const NAVBAR_WIDTH = 280;
+// 190px is the handoff's pinned sidebar width, and it is a design token rather
+// than a comfort setting — the whole layout's remaining widths are specified
+// against it (design_handoff_cupel_studio/README.md, "Fixed widths").
+const NAVBAR_WIDTH = 190;
 const NAVBAR_RAIL_WIDTH = 68;
 
 // Shell frame per sketches/clean/01-chat.svg: left sidebar + main content.
@@ -70,9 +76,19 @@ export function Shell() {
   // own: on a page the bundled mock answers, that bar exists on every width.
   const mockedFamily = mockedFamilyOfRoute(pathname);
   const barHeight = isMobile || mockedFamily ? MOBILE_BAR_HEIGHT : 0;
-  const headerHeight = (banner ? ENV_BANNER_HEIGHT : 0) + barHeight;
+  // The handoff's top bar is part of the frame, not of any page, so it lives in
+  // the header slot with the banner and the mobile bar and every route gets it.
+  const headerHeight = (banner ? ENV_BANNER_HEIGHT : 0) + barHeight + TOP_BAR_HEIGHT;
+
+  // The dock is a workspace preference, not navigation: it survives reloads
+  // and route changes, device-locally, like the sidebar rail beside it.
+  const [workOpen, setWorkOpen] = useLocalStorage({
+    key: "cupel-work-dock-open",
+    defaultValue: false,
+  });
 
   return (
+    <PageHeaderProvider>
     <AppShell
       header={headerHeight > 0 ? { height: headerHeight } : undefined}
       navbar={{
@@ -83,7 +99,7 @@ export function Shell() {
       padding="md"
     >
       {headerHeight > 0 && (
-        <AppShell.Header withBorder={barHeight > 0}>
+        <AppShell.Header withBorder={false}>
           {banner && <EnvBanner />}
           {barHeight > 0 && (
             <Group h={MOBILE_BAR_HEIGHT} px="xs" gap="sm" wrap="nowrap">
@@ -105,6 +121,7 @@ export function Shell() {
               {mockedFamily && <MockBadge family={mockedFamily} />}
             </Group>
           )}
+          <TopBar workOpen={workOpen} onToggleWork={() => setWorkOpen((v) => !v)} />
         </AppShell.Header>
       )}
       <AppShell.Navbar
@@ -123,9 +140,19 @@ export function Shell() {
           onToggleCollapsed={isMobile ? undefined : () => setRailCollapsed((v) => !v)}
         />
       </AppShell.Navbar>
-      <AppShell.Main>
-        <Outlet />
+      {/* The dock is docked to the VIEWPORT, not to the page body: it must not
+          scroll away with the content it is reporting on. Main keeps its own
+          scroll and the dock sits under it, so opening the dock shortens the
+          page rather than covering it. */}
+      <AppShell.Main
+        style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}
+      >
+        <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Outlet />
+        </Box>
+        {workOpen && <WorkDock onClose={() => setWorkOpen(false)} />}
       </AppShell.Main>
     </AppShell>
+    </PageHeaderProvider>
   );
 }

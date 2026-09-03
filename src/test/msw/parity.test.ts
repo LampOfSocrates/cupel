@@ -1031,6 +1031,32 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(await api.judgments({ conversation_id: "c1" })).not.toContainEqual(judgment);
   });
 
+  it("?scorer_kind= and ?tree= narrow the shared judgment store (contract v0.7.0)", async () => {
+    // The two filters feedback triage is built on. They exist because thumbs
+    // and judge scores share ONE append-only store and a judgment records its
+    // subject, never its tree — so "the human feedback on this tree" is a
+    // question the store cannot otherwise be asked.
+    //
+    // Seeded here rather than relied on: the store starts empty per test, and
+    // the point is that BOTH kinds are present and the filter separates them.
+    pushHumanJudgment("t2", "c1", "down", "2026-08-04T10:05:00Z", "missed the refund window");
+    pushLlmJudgment({ case_id: "case-1", score: 0.4 });
+
+    const humans = await api.judgments({ scorer_kind: "human" });
+    expect(humans.items.length).toBeGreaterThan(0);
+    expect(humans.items.every((j) => j.scorer.kind === "human")).toBe(true);
+
+    const llms = await api.judgments({ scorer_kind: "llm" });
+    expect(llms.items.every((j) => j.scorer.kind === "llm")).toBe(true);
+
+    // Every fixture conversation is on agent1, so agent1 keeps the thumbs and
+    // a tree with no conversations answers empty rather than unfiltered — the
+    // failure the filter exists to prevent.
+    const onTree = await api.judgments({ scorer_kind: "human", tree: "agent1" });
+    expect(onTree.items.length).toBeGreaterThan(0);
+    expect(await api.judgments({ tree: "agent2" })).toMatchObject({ items: [] });
+  });
+
   it("adding the same turn to a benchmark twice appends one version, then nothing", async () => {
     // The merged noun's duplicate rule: "adding a referent the latest version
     // already holds appends nothing and returns that version unchanged"

@@ -1,8 +1,19 @@
 openapi: 3.0.3
 info:
   title: Cupel API — Phase 2 contract
-  version: 0.6.0
+  version: 0.7.0
   description: |
+    New in v0.7.0 — feedback triage becomes answerable. Two optional filters
+    on listJudgments, `scorer_kind` (human | llm) and `tree`, plus a nullable
+    `conversation_id` on Judgment so a listed note can lead back to the turn
+    it is about. Additive: no path, schema or required key
+    changed, so a v0.6.0 client keeps working. It is a MINOR bump rather than
+    none because ignoring an unknown query parameter is a conformant thing for
+    a backend to do, and here that failure is silent and wrong — a feedback
+    queue scoped to one tree would quietly answer with every tree's, and a
+    reviewer's queue with the judge's machine scores mixed in. A backend
+    upgrading from v0.6.0 implements two equality filters and nothing else.
+
     New in v0.6.0 — a FAMILY rename, no path, schema or operation changed.
     The `eval` tag was 19 of the contract's 67 operations behind a single
     mine/mock/hide answer, and its name sat four characters from
@@ -2294,6 +2305,13 @@ paths:
 
         Every filter is an equality match, AND-ed. subject_kind and subject_id
         may be used alone or together.
+
+        `tree` and `conversation_id` are SCOPE filters — neither is a field on
+        Judgment, both narrow by where the subject turn lives. A backend that
+        ignores an unknown query parameter answers a scoped request with the
+        whole store, which is why both are listed here rather than left to the
+        client: silently returning another tree's feedback is worse than
+        returning none.
       parameters:
         - name: subject_kind
           in: query
@@ -2311,6 +2329,14 @@ paths:
           in: query
           description: Judgment.scorer.ref — the rubric id for an LLM judge.
           schema: { type: string }
+        - name: scorer_kind
+          in: query
+          description: >
+            Judgment.scorer.kind. `human` selects thumbs and their notes,
+            `llm` the judge's scores. Feedback triage asks for `human` — the
+            two kinds share one store, so without this filter a reviewer's
+            queue fills with machine scores.
+          schema: { type: string, enum: [human, llm] }
         - name: conversation_id
           in: query
           description: >
@@ -2318,6 +2344,19 @@ paths:
             this conversation — its thumbed turns and the cells replayed from
             it. Serves the chat view, which re-renders every turn's 👍/👎 in
             one request.
+          schema: { type: string }
+        - name: tree
+          in: query
+          description: >
+            Scope filter, not a Judgment field: judgments whose subject turn
+            belongs to a conversation in this agent tree. A judgment records
+            its subject, not the tree, so without this a caller cannot ask
+            "the feedback on THIS tree" without first fetching every
+            conversation to find out which turns are in scope.
+
+            Permission is the reason it must be served, not convenience:
+            an unpermitted tree answers 404 like everywhere else, so an
+            unfiltered store must never be the way a client narrows the list.
           schema: { type: string }
         - name: page
           in: query
@@ -3872,6 +3911,20 @@ components:
           type: number
           description: For scorer kind human, 1 = 👍 and 0 = 👎.
         reasoning: { type: string, nullable: true }
+        conversation_id:
+          type: string
+          nullable: true
+          description: >
+            The conversation the subject turn belongs to — a SCOPE like
+            evaluation_id, not the subject. Added in v0.7.0 because a judgment
+            was otherwise a dead end: it names a turn id, and every route to a
+            turn (listTurns, the chat view) is addressed by conversation, so a
+            feedback list could show a note but never take you to what the note
+            was about.
+
+            Null when the server cannot attribute one — a thumb on a turn it
+            does not recognise, or an LLM judgment of a standalone eval case,
+            which belongs to no conversation at all.
         created_at: { type: string, format: date-time }
 
     JudgmentPage:

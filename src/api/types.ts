@@ -359,6 +359,10 @@ export interface Judgment {
   evaluation_id?: string | null;
   score: number;
   reasoning?: string | null;
+  /** openapi.yaml Judgment.conversation_id (v0.7.0) — a SCOPE like
+   * evaluation_id, not the subject. Null when the server cannot attribute one:
+   * an LLM judgment of a standalone eval case belongs to no conversation. */
+  conversation_id?: string | null;
   created_at: string;
 }
 
@@ -366,14 +370,19 @@ export interface Judgment {
 export type JudgmentPage = Page<Judgment>;
 
 // openapi.yaml listJudgments query params. Equality filters, AND-ed.
-// conversation_id has no matching Judgment field — it is a scope filter the
-// chat view uses to re-render a whole conversation's 👍/👎 in one request.
+// conversation_id and tree have no matching Judgment field — both are scope
+// filters that narrow by where the subject turn lives: conversation_id serves
+// the chat view (a whole conversation's 👍/👎 in one request), tree serves
+// feedback triage. scorer_kind separates thumbs from judge scores, which
+// share one store.
 export interface JudgmentListParams extends PageParams {
   subject_kind?: "case" | "turn";
   subject_id?: string;
   evaluation_id?: string;
   scorer_ref?: string;
+  scorer_kind?: "human" | "llm";
   conversation_id?: string;
+  tree?: string;
 }
 
 // openapi.yaml:1250 SelectionItem — ":1258 Absent/null = whole conversation;

@@ -2,7 +2,7 @@
 
 Before pointing Cupel at your backend, check whether it is ready —
 `cupel-ready` compares your backend's OpenAPI document
-against Cupel's contract (`openapi.yaml`, v0.6.0) and reports every missing
+against Cupel's contract (`openapi.yaml`, v0.7.0) and reports every missing
 endpoint or mismatched shape.
 
 ## Usage

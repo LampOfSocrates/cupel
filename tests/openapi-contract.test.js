@@ -251,9 +251,9 @@ describe("OpenAPI contract", () => {
   });
 });
 
-describe("contract v0.6.0", () => {
-  it("version is 0.6.0", () => {
-    expect(doc.info.version).toBe("0.6.0");
+describe("contract v0.7.0", () => {
+  it("version is 0.7.0", () => {
+    expect(doc.info.version).toBe("0.7.0");
   });
 
   it("security model: bearer JWT gates everything by default (feature-spec.md:15-21)", () => {
@@ -417,6 +417,9 @@ describe("contract v0.6.0", () => {
     const judgment = doc.components.schemas.Judgment;
     expect(judgment.required).toEqual(["id", "subject", "scorer", "score", "created_at"]);
     expect(Object.keys(judgment.properties).sort()).toEqual([
+      // v0.7.0: the second SCOPE beside evaluation_id. Without it a judgment
+      // names a turn id and nothing that can reach that turn.
+      "conversation_id",
       "created_at",
       "evaluation_id",
       "id",
@@ -425,6 +428,10 @@ describe("contract v0.6.0", () => {
       "scorer",
       "subject",
     ]);
+    // A scope, like evaluation_id — and nullable, because an LLM judgment of a
+    // standalone eval case belongs to no conversation at all.
+    expect(judgment.properties.conversation_id.nullable).toBe(true);
+    expect(judgment.required).not.toContain("conversation_id");
     expect(judgment.properties.subject.$ref).toBe("#/components/schemas/JudgmentSubject");
     expect(judgment.properties.scorer.$ref).toBe("#/components/schemas/Scorer");
     // evaluation_id is a SCOPE, never a subject: one case scored inside two
@@ -458,7 +465,13 @@ describe("contract v0.6.0", () => {
       "subject_id",
       "evaluation_id",
       "scorer_ref",
+      // v0.7.0: thumbs and judge scores share one store, so triage needs to
+      // ask for one kind…
+      "scorer_kind",
+      // …and the two scope filters narrow by where the subject turn lives —
+      // neither is a field on Judgment.
       "conversation_id",
+      "tree",
       "page",
       "page_size",
     ]);

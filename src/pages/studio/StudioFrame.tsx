@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Alert, Badge, Group, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Alert, Badge, Group, Stack, Tabs, Text } from "@mantine/core";
 import { api } from "../../api/client";
 import { useApp } from "../../AppContext";
 import { ApiErrorNote, errorMessage } from "../../components/ApiErrorNote";
@@ -193,8 +193,11 @@ export function StudioFrame() {
   return (
     <StudioProvider value={value}>
       <Stack gap="sm" p="md">
-        <Group justify="space-between">
-          <Title order={4}>Studio</Title>
+        {/* No "Studio" heading here any more: the top bar names the page, and
+            it names the TAB you are on (routeTitle), which is more than this
+            said. The scoping note stays — it is a caveat about the data, not a
+            title. */}
+        <Group justify="flex-end">
           <Text size="xs" c="dimmed">
             Cases, benchmarks and rubrics are global — they are not scoped to a single{" "}
             {product.tree.one}.

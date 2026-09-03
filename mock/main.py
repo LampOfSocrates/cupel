@@ -2517,21 +2517,33 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     @app.get("/eval/judgments")
     async def list_judgments(subject_kind: str | None = None, subject_id: str | None = None,
                              evaluation_id: str | None = None, scorer_ref: str | None = None,
-                             conversation_id: str | None = None,
+                             conversation_id: str | None = None, scorer_kind: str | None = None,
+                             tree: str | None = None,
                              page: int = 1, page_size: int = 50):
         """listJudgments — equality filters, AND-ed, newest first.
 
-        conversation_id is the one filter with no matching wire field: it
-        selects on the denormalized scope column (mock/db.py judgments), which
-        is what lets the chat view re-render every turn's 👍/👎 in one request
-        instead of one per turn."""
+        conversation_id and tree are the filters with no matching wire field.
+        conversation_id selects on the denormalized scope column (mock/db.py
+        judgments), which is what lets the chat view re-render every turn's
+        👍/👎 in one request instead of one per turn; tree reaches the agent
+        tree through that same column, since a judgment records its subject
+        and never the tree. scorer_kind IS a stored column — thumbs and judge
+        scores share one table, so feedback triage needs it to see only the
+        human ones."""
         where, params = ["1=1"], []
         for col, val in (("subject_kind", subject_kind), ("subject_id", subject_id),
                          ("evaluation_id", evaluation_id), ("scorer_ref", scorer_ref),
-                         ("conversation_id", conversation_id)):
+                         ("conversation_id", conversation_id), ("scorer_kind", scorer_kind)):
             if val:
                 where.append(f"{col} = ?")
                 params.append(val)
+        if tree:
+            # Tombstoned conversations stay in scope: a deleted conversation
+            # does not retract the feedback left on it, and the triage list is
+            # exactly where that feedback still has to be answerable.
+            where.append(
+                "conversation_id IN (SELECT id FROM conversations WHERE tree_id = ?)")
+            params.append(tree)
         page, page_size = clamp_page(page, page_size, 200)
         clause = " AND ".join(where)
         total = db.one(f"SELECT COUNT(*) AS n FROM judgments WHERE {clause}", params)["n"]

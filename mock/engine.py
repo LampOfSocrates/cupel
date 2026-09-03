@@ -691,8 +691,12 @@ class Engine:
 
 
 def judgment_dict(row: dict) -> dict:
-    """Row -> openapi.yaml Judgment. conversation_id stays behind: it is a
-    physical query index (mock/db.py judgments), not a wire field."""
+    """Row -> openapi.yaml Judgment.
+
+    conversation_id used to stay behind as a physical query index (mock/db.py
+    judgments). It is a wire field as of contract v0.7.0: without it a
+    judgment names a turn id and nothing that can reach that turn, since every
+    route to a turn is addressed by conversation."""
     return {
         "id": row["id"],
         "subject": {"kind": row["subject_kind"], "id": row["subject_id"]},
@@ -705,5 +709,6 @@ def judgment_dict(row: dict) -> dict:
         "evaluation_id": row["evaluation_id"],
         "score": row["score"],
         "reasoning": row["reasoning"],
+        "conversation_id": row["conversation_id"],
         "created_at": row["created_at"],
     }

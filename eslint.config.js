@@ -26,6 +26,9 @@ export default [
       "coverage/**",
       "mock/**",
       "sketches/**",
+      // Vendored verbatim by `msw init` — regenerated on every msw upgrade,
+      // so nothing here is ours to fix.
+      "public/mockServiceWorker.js",
     ],
   },
   {
