@@ -17,6 +17,12 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - Demo data generator/simulator, tree switcher for multiple agent trees.
 
 ## Recently tried
+- 2026-09-04: Evaluations step 1 rebuilt to the handoff, read off Cupel.dc.html rather than
+  the README: the split INVERTS (grid collapses to a 46px ribbon on first pick, panel takes
+  the width), Selected panel with group/turn ✕ and a docked In/Out pane. Selection rules
+  extracted to one tested module — two surfaces mutate the same set and the narrowing case
+  ("all" minus one turn = every OTHER turn) is the one they would implement differently.
+  The picker is controlled now; collapse is derived, not stored.
 - 2026-09-04: Feedback records WHO left it. Scorer.ref carries the rater's user id for
   kind human (it already carried the rubric id for kind llm, so scorer_ref now filters
   "everything this person scored" for free) + a denormalized display_name, because
@@ -31,15 +37,12 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - 2026-09-03: Contract v0.7.0 — listJudgments gains `scorer_kind` and `tree`; Judgment gains
   nullable `conversation_id`. Additive, but a MINOR bump on purpose: ignoring an unknown
   query param is conformant, and here that failure is silent and wrong.
-- 2026-09-03: Theme re-cut to the handoff's own tokens. The palette already matched; the TYPE
-  did not — the previous pass chased "roomier, larger type" (13–22px) where the handoff pins
-  9.5–12px and says so. Now 10/11/11.5/12/16px, flat headings, shadows off, sidebar 190px.
 
 ## Next
-- Design handoff, screens still to do (tokens + shell are done): dense conversation grid
-  with turn expansion, Evaluations step 1 (selection model, Selected panel, In/Out pane,
-  ribbon collapse) and step 2 (sub-agent prompt editor with per-run draft semantics),
-  step 3 table/side-by-side, Chat 3-column, Traces 216/flex/296.
+- Design handoff, screens still to do (tokens, shell, Evaluations step 1 are done):
+  Evaluations step 2 (picked ribbon, sub-agent prompt editor with per-run draft semantics,
+  Run setup pane) and step 3 (table / side-by-side), the dense conversation grid with turn
+  expansion for Studio ▸ Conversations, Chat 3-column, Traces 216/flex/296.
 - Studio ▸ Feedbacks: list, rater and jump built. Still missing its two ACTIONS — publish
   as a new instruction version, and re-run similar turns (pre-seed an Evaluations run).
 - Memory panel (task 12): view/edit/clear per tree; 4 contracted-but-unbuilt operations

@@ -45,6 +45,14 @@ function renderEvaluations(route = "/studio/evaluations", state?: unknown) {
   );
 }
 
+// The browse grid auto-collapses to a ribbon on the FIRST pick (the handoff's
+// "the stage you finished shrinks to a ribbon you can always reopen"), so any
+// test that picks twice has to reopen it in between — exactly as a person does.
+async function reopenBrowse(user: ReturnType<typeof userEvent.setup>) {
+  const ribbon = screen.queryByTestId("browse-ribbon");
+  if (ribbon) await user.click(ribbon);
+}
+
 describe("EvaluationsPage — landing", () => {
   it("lists evaluations from GET evaluations and routes to the detail on row click", async () => {
     const user = userEvent.setup();
@@ -76,6 +84,7 @@ describe("EvaluationsPage — stepper", () => {
     expect(next).toBeEnabled();
 
     // unticking empties the selection again → gate re-closes
+    await reopenBrowse(user);
     await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
     expect(next).toBeDisabled();
   });
@@ -90,6 +99,7 @@ describe("EvaluationsPage — stepper", () => {
     await screen.findByText("Refund escalation");
     await user.click(screen.getByRole("button", { name: "Toggle turns of Refund escalation" }));
     await user.click(await screen.findByRole("checkbox", { name: "Select turn t2" }));
+    await reopenBrowse(user);
     await user.click(screen.getByRole("checkbox", { name: "Select Billing dispute" }));
     await user.click(screen.getByRole("button", { name: "Configure ▸" }));
 
@@ -224,8 +234,11 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     expect(screen.getByRole("button", { name: "Queue" })).toBeInTheDocument();
     expect(screen.getByTestId("snapshot-badge")).toHaveTextContent("v1-draft (a3f9)");
 
-    // the remembered selection preloads the picker (visible via Back)
+    // the remembered selection preloads the picker (visible via Back). It
+    // arrives non-empty, so step 1 opens with the grid already a ribbon —
+    // reopen it to read the checkbox back.
     await user.click(screen.getByRole("button", { name: "Back" }));
+    await reopenBrowse(user);
     expect(
       await screen.findByRole("checkbox", { name: "Select Refund escalation" }),
     ).toBeChecked();
@@ -276,8 +289,10 @@ describe("EvaluationsPage — Test as evaluation arrival", () => {
     renderEvaluations("/studio/evaluations/new", arrival);
     await screen.findByTestId("config-0");
 
-    // widen the preloaded selection, then queue
+    // widen the preloaded selection, then queue. The selection arrives
+    // non-empty, so the grid is a ribbon on arrival at step 1.
     await user.click(screen.getByRole("button", { name: "Back" }));
+    await reopenBrowse(user);
     await user.click(await screen.findByRole("checkbox", { name: "Select Billing dispute" }));
     await user.click(screen.getByRole("button", { name: "Configure ▸" }));
     await user.click(screen.getByRole("button", { name: "Queue" }));

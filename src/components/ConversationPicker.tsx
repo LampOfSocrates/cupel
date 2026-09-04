@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Checkbox,
@@ -12,6 +12,15 @@ import {
 import { useDebouncedValue } from "@mantine/hooks";
 import { api } from "../api/client";
 import type { Conversation, SelectionItem, Turn } from "../api/types";
+import {
+  fromItems,
+  isPicked,
+  setConversation as pickConversation,
+  setTurn as pickTurn,
+  toItems,
+  type ConvSelection,
+  type Selection,
+} from "../pages/studio/selection";
 
 // Evaluations step 1 — "ConversationPicker: search/filter/multi-select conversations,
 // expandable to pick individual turns within a conversation (checkbox per
@@ -36,37 +45,22 @@ import type { Conversation, SelectionItem, Turn } from "../api/types";
 // (openapi.yaml:681-683), growth is an explicit "Load more", and a row's height
 // depends on whether its turns are expanded.
 
-type ConvSelection = "all" | Set<string>;
+// The selection RULES live in src/pages/studio/selection.ts, not here: the
+// Selected panel mutates the same selection through the same rules, and the
+// narrowing case ("all" minus one turn = every other turn) is exactly the one
+// two implementations would get differently.
 
 interface Props {
   tree: string;
   onSelectionChange: (items: SelectionItem[]) => void;
   /**
-   * Mount-time seed for the selection (the per-agent remembered
-   * selection, feature-spec.md:87 — and Back-from-Configure restores what was
-   * picked). Read once on mount; later prop changes are ignored — the picker
-   * owns its selection state after that.
+   * The selection, OWNED BY THE CALLER. Controlled rather than seeded-then-
+   * forgotten, because the Selected panel beside this grid removes from the
+   * same selection — two copies of it would drift the moment either surface
+   * changed one. The caller already holds it (the evaluation draft), so this
+   * removes a duplicate rather than adding a prop.
    */
-  initialSelection?: SelectionItem[];
-}
-
-// Inverse of toItems, for the mount-time seed: "Absent/null = whole
-// conversation; present = just these turns" (openapi.yaml:1258).
-function fromItems(items: SelectionItem[]): Map<string, ConvSelection> {
-  const map = new Map<string, ConvSelection>();
-  for (const item of items) {
-    map.set(item.conversation_id, item.turn_ids == null ? "all" : new Set(item.turn_ids));
-  }
-  return map;
-}
-
-function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
-  const items: SelectionItem[] = [];
-  for (const [conversation_id, sel] of selected) {
-    if (sel === "all") items.push({ conversation_id });
-    else if (sel.size > 0) items.push({ conversation_id, turn_ids: [...sel] });
-  }
-  return items;
+  selection?: SelectionItem[];
 }
 
 // "assistant turns selectable per the Evaluations semantics" — the grid re-generates
@@ -74,7 +68,7 @@ function toItems(selected: Map<string, ConvSelection>): SelectionItem[] {
 // so only assistant turns carry checkboxes; user turns render as dimmed context.
 const assistantTurns = (turns: Turn[]): Turn[] => turns.filter((t) => t.role === "assistant");
 
-export function ConversationPicker({ tree, onSelectionChange, initialSelection }: Props) {
+export function ConversationPicker({ tree, onSelectionChange, selection: selectionProp }: Props)  {
   const [search, setSearch] = useState("");
   // The input keeps the urgent value; everything downstream of it re-renders at
   // low priority so a keystroke is never blocked by the list.
@@ -90,9 +84,8 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
   // which is also the only moment they are needed. `total` per conversation
   // rides along so a row can say when it is showing a prefix.
   const [turnsById, setTurnsById] = useState<Record<string, { items: Turn[]; total: number }>>({});
-  const [selected, setSelected] = useState<Map<string, ConvSelection>>(() =>
-    fromItems(initialSelection ?? []),
-  );
+  // Derived, not stored: the caller's array IS the selection.
+  const selected = useMemo(() => fromItems(selectionProp ?? []), [selectionProp]);
 
   const load = useCallback(
     async (pageNum: number, append: boolean) => {
@@ -127,40 +120,25 @@ export function ConversationPicker({ tree, onSelectionChange, initialSelection }
   // The three handlers below are useCallback'd so memo(PickerRow) holds across
   // the renders that do not touch the selection — typing, paging, expanding.
   const update = useCallback(
-    (mutate: (next: Map<string, ConvSelection>) => void) => {
-      const next = new Map(selected);
-      mutate(next);
-      setSelected(next);
-      onSelectionChange(toItems(next));
+    (apply: (current: Selection) => Selection) => {
+      onSelectionChange(toItems(apply(selected)));
     },
     [selected, onSelectionChange],
   );
 
   const toggleConversation = useCallback(
     (conv: Conversation, checked: boolean) => {
-      update((next) => {
-        if (checked) next.set(conv.id, "all");
-        else next.delete(conv.id);
-      });
+      update((current) => pickConversation(current, conv.id, checked));
     },
     [update],
   );
 
   const toggleTurn = useCallback(
     (conv: Conversation, turnId: string, checked: boolean) => {
-      update((next) => {
-        const current = next.get(conv.id);
-        // Unticking a turn while the whole conversation is selected narrows to
-        // an explicit turn list (all assistant turns minus this one).
-        const set =
-          current === "all"
-            ? new Set(assistantTurns(turnsById[conv.id]?.items ?? []).map((t) => t.id))
-            : new Set(current ?? []);
-        if (checked) set.add(turnId);
-        else set.delete(turnId);
-        if (set.size === 0) next.delete(conv.id);
-        else next.set(conv.id, set);
-      });
+      // The loaded transcript is what lets "all" narrow to "every turn but
+      // this one" — see setTurn's note on why the ids must be passed in.
+      const allIds = assistantTurns(turnsById[conv.id]?.items ?? []).map((t) => t.id);
+      update((current) => pickTurn(current, conv.id, turnId, checked, allIds));
     },
     [update, turnsById],
   );
@@ -300,7 +278,7 @@ const PickerRow = memo(function PickerRow({
                     {turn.content.slice(0, 60)}
                   </Text>
                 }
-                checked={selection === "all" || (selection instanceof Set && selection.has(turn.id))}
+                checked={selection === "all" || (selection?.has(turn.id) ?? false)}
                 onChange={(e) => onToggleTurn(conv, turn.id, e.currentTarget.checked)}
               />
             ) : (

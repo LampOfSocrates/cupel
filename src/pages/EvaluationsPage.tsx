@@ -4,7 +4,8 @@ import { Alert, Button, Group, Loader, Paper, Stack, Stepper, Text, Title } from
 import { api } from "../api/client";
 import type { Agent, Rubric, Variant, SelectionItem } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
-import { ConversationPicker, RunConfigPanel, RunsList } from "../components";
+import { RunConfigPanel, RunsList } from "../components";
+import { SelectStep } from "./studio/SelectStep";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { ApiErrorNote, errorMessage, errorTitle } from "../components/ApiErrorNote";
 import { useApp } from "../AppContext";
@@ -302,12 +303,12 @@ export function EvaluationsPage({ mode }: { mode: "list" | "stepper" }) {
           {/* Step 1 Select (feature-spec.md:44): "ConversationPicker:
               search/filter/multi-select conversations, expandable to pick
               individual turns" — server-side search inside the picker.
-              initialSelection restores the current picks (remembered
+              `selection` is controlled — the draft owns the picks (remembered
               last-selection on Test-as-evaluation arrival, or Back from Configure). */}
-          <ConversationPicker
+          <SelectStep
             tree={tree}
+            selection={selection}
             onSelectionChange={(items: SelectionItem[]) => dispatch({ type: "select", items })}
-            initialSelection={selection}
           />
           <Group justify="space-between">
             <Button variant="default" size="xs" onClick={() => navigate("/studio/evaluations")}>

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { ConversationPicker } from "./ConversationPicker";
+import type { SelectionItem } from "../api/types";
 import { conversationRequests } from "../test/msw/handlers";
 
 // Contract under test: SelectionItem (openapi.yaml:1250-1259) — "Absent/null =
@@ -10,10 +12,28 @@ import { conversationRequests } from "../test/msw/handlers";
 // Search is server-side ?search= (openapi.yaml:352-354). Fixtures: c1 has
 // turns t1 (user) + t2 (assistant); c2 has t8/t9; c3 has none.
 
+// The picker is CONTROLLED: the caller owns the selection so the Selected
+// panel beside it can remove from the same one. So the harness has to hold it
+// too — an uncontrolled render would drop every pick as soon as it was made,
+// which is the app's own wiring, not a test detail.
+function Harness({ onSelectionChange }: { onSelectionChange: (items: unknown) => void }) {
+  const [selection, setSelection] = useState<SelectionItem[]>([]);
+  return (
+    <ConversationPicker
+      tree="agent1"
+      selection={selection}
+      onSelectionChange={(items) => {
+        setSelection(items);
+        onSelectionChange(items);
+      }}
+    />
+  );
+}
+
 function renderPicker(onSelectionChange: (items: unknown) => void) {
   return render(
     <MantineProvider env="test">
-      <ConversationPicker tree="agent1" onSelectionChange={onSelectionChange} />
+      <Harness onSelectionChange={onSelectionChange} />
     </MantineProvider>,
   );
 }
