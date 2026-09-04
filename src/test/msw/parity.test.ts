@@ -1057,6 +1057,25 @@ describe("MSW ↔ contract parity: behavioural agreement with mock/main.py", () 
     expect(await api.judgments({ tree: "agent2" })).toMatchObject({ items: [] });
   });
 
+  it("a thumb records WHO left it; an LLM judgment names no person", async () => {
+    // Scorer.ref means "what produced this score" for both kinds — the rubric
+    // for a judge, the person for a human — which is why listJudgments'
+    // existing scorer_ref filter works for feedback without a new parameter.
+    const thumb = await api.postFeedback({ message_id: "t2", rating: "down", comment: "wrong" });
+    expect(thumb.scorer.kind).toBe("human");
+    expect(thumb.scorer.ref).toBeTruthy();
+    expect(thumb.scorer.display_name).toBeTruthy();
+    // A thumb still runs no rubric and no model.
+    expect(thumb.scorer.version).toBeNull();
+    expect(thumb.scorer.model).toBeNull();
+
+    pushLlmJudgment({ case_id: "case-1", score: 0.9 });
+    const llm = (await api.judgments({ scorer_kind: "llm" })).items[0];
+    // The judge is named by `model`; display_name is the human counterpart.
+    expect(llm.scorer.display_name ?? null).toBeNull();
+    expect(llm.scorer.model).toBeTruthy();
+  });
+
   it("adding the same turn to a benchmark twice appends one version, then nothing", async () => {
     // The merged noun's duplicate rule: "adding a referent the latest version
     // already holds appends nothing and returns that version unchanged"

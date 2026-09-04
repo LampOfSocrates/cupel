@@ -342,7 +342,13 @@ export interface JudgmentSubject {
 // motivating future kind and needs no reshape.
 export interface Scorer {
   kind: "llm" | "human";
+  /** What produced the score: the rubric id for kind llm, the RATER'S USER ID
+   * for kind human (v0.7.0). Null when the server cannot attribute one. */
   ref?: string | null;
+  /** The rater's name, for kind human only — denormalized at write time
+   * because /admin/users, the contract's only name lookup, is admin-gated
+   * (openapi.yaml Scorer.display_name). Null for kind llm. */
+  display_name?: string | null;
   version?: number | null;
   model?: string | null;
 }

@@ -195,7 +195,10 @@ CREATE TABLE IF NOT EXISTS judgments (
   id TEXT PRIMARY KEY,
   subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL,
   scorer_kind TEXT NOT NULL, scorer_ref TEXT, scorer_version INTEGER,
-  scorer_model TEXT,
+  -- scorer_model names the judge for kind llm; scorer_display_name names the
+  -- person for kind human, stamped at write time (openapi.yaml Scorer).
+  -- Pre-existing databases gain it in Db._migrate_judgment_rater below.
+  scorer_model TEXT, scorer_display_name TEXT,
   evaluation_id TEXT, conversation_id TEXT,
   score REAL NOT NULL, reasoning TEXT, created_at TEXT NOT NULL);
 """
@@ -238,6 +241,10 @@ class Db:
             self._migrate_casebooks_into_eval_benchmarks()
             self._migrate_eval_sets_into_eval_benchmarks()
             self._migrate_judgment_subject_scorer()
+            # LAST, and it must stay last: it reads scorer_ref/scorer_kind,
+            # which _migrate_judgment_subject_scorer above is what creates on a
+            # pre-t7c database.
+            self._migrate_judgment_rater()
             self.conn.commit()
 
     def _migrate_eval_cases(self):
@@ -298,6 +305,35 @@ class Db:
             "UPDATE conversations SET user_id = COALESCE("
             " (SELECT t.author FROM turns t WHERE t.conversation_id = conversations.id"
             "  AND t.role = 'user' ORDER BY t.rowid LIMIT 1), 'dev')")
+
+    def _migrate_judgment_rater(self):
+        """Older databases carry human judgments with no rater at all, and
+        CREATE TABLE IF NOT EXISTS above is a no-op for them. One ALTER plus a
+        backfill.
+
+        Backfill rule: the same one new rows use (mock/main.py
+        judgment_rater) — the owner of the conversation the thumbed turn
+        belongs to. Rows the rule cannot resolve keep NULL rather than being
+        given "dev": a judgment written before anyone was recorded has no
+        rater, and inventing one would put a name on words nobody said.
+        Idempotent: the column's presence is the marker."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(judgments)")}
+        if not cols or "scorer_display_name" in cols:
+            return
+        self.conn.execute("ALTER TABLE judgments ADD COLUMN scorer_display_name TEXT")
+        self.conn.execute(
+            "UPDATE judgments SET scorer_ref = ("
+            "  SELECT c.user_id FROM conversations c WHERE c.id = judgments.conversation_id)"
+            " WHERE scorer_kind = 'human' AND scorer_ref IS NULL")
+        self.conn.execute(
+            # COALESCE OUTSIDE the subquery: a generator persona
+            # ("gen-persona-3") owns conversations without being a users row,
+            # so the lookup misses and the id itself is the best name there is.
+            # Inside, the subquery would return NULL and the name would vanish.
+            "UPDATE judgments SET scorer_display_name = COALESCE("
+            "  (SELECT u.name FROM users u WHERE u.id = judgments.scorer_ref),"
+            "  judgments.scorer_ref)"
+            " WHERE scorer_kind = 'human' AND scorer_ref IS NOT NULL")
 
     def _migrate_run_to_evaluation(self):
         """Older databases carry the pre-rename physical names: tables runs /

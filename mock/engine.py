@@ -703,6 +703,10 @@ def judgment_dict(row: dict) -> dict:
         "scorer": {
             "kind": row["scorer_kind"],
             "ref": row["scorer_ref"],
+            # The person, for kind human — stamped when the row was written
+            # (mock/main.py judgment_rater). Null for an LLM judge, whose
+            # `model` already names it.
+            "display_name": row["scorer_display_name"],
             "version": row["scorer_version"],
             "model": row["scorer_model"],
         },

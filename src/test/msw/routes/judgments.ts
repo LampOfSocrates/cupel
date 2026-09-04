@@ -2,7 +2,7 @@
 // (POST /feedback) and the listing every drawer reads (GET /eval/judgments).
 import { http, HttpResponse } from "msw";
 import type { FeedbackRequest, Judgment } from "../../../api/types";
-import { BASE, counters, pageOf } from "../state";
+import { BASE, counters, mockMe, pageOf } from "../state";
 import { allConversations } from "./conversations";
 
 // ---------------------------------------------------------- judgments state
@@ -36,6 +36,9 @@ export function pushHumanJudgment(
   created_at: string,
   // The thumb's optional comment, stored on reasoning.
   reasoning: string | null = null,
+  // Who left it — Scorer.ref + display_name since v0.7.0. Defaults to the
+  // off-mode identity the real mock stamps (mock/auth.py DEV_USER).
+  rater: { id: string; name: string } = { id: "dev", name: "Dev User" },
 ): Judgment {
   // A thumb: subject = the turn, scorer = {kind: human} with ref/version/model
   // null ("a thumb runs no rubric and no model", openapi.yaml Scorer);
@@ -44,7 +47,7 @@ export function pushHumanJudgment(
     {
       id: `j-${++counters.judgment}`,
       subject: { kind: "turn", id: turn_id },
-      scorer: { kind: "human", ref: null, version: null, model: null },
+      scorer: { kind: "human", ref: rater.id, display_name: rater.name, version: null, model: null },
       evaluation_id: null,
       score: rating === "up" ? 1 : 0,
       reasoning,
@@ -97,7 +100,16 @@ export const judgmentHandlers = [
     const judgment: Judgment = {
       id: `j-fb-${++counters.judgment}`,
       subject: { kind: "turn", id: body.message_id },
-      scorer: { kind: "human", ref: null, version: null, model: null },
+      // The rater, resolved the way mock/main.py judgment_rater does: no
+      // verified user in the fake, so it is the conversation's owner, and the
+      // off-mode identity when there is no conversation to ask.
+      scorer: {
+        kind: "human",
+        ref: mockMe.user.id,
+        display_name: mockMe.user.name,
+        version: null,
+        model: null,
+      },
       evaluation_id: null,
       score: body.rating === "up" ? 1 : 0,
       // FeedbackRequest.comment lands on reasoning, mirroring the

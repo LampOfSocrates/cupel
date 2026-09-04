@@ -6,7 +6,9 @@ info:
     New in v0.7.0 — feedback triage becomes answerable. Two optional filters
     on listJudgments, `scorer_kind` (human | llm) and `tree`, plus a nullable
     `conversation_id` on Judgment so a listed note can lead back to the turn
-    it is about. Additive: no path, schema or required key
+    it is about, and a rater on Scorer: `ref` carries the person's user id for
+    kind human (it already carried the rubric id for kind llm) alongside a new
+    nullable `display_name`, so a feedback queue can say who left each note. Additive: no path, schema or required key
     changed, so a v0.6.0 client keeps working. It is a MINOR bump rather than
     none because ignoring an unknown query parameter is a conformant thing for
     a backend to do, and here that failure is silent and wrong — a feedback
@@ -3857,9 +3859,16 @@ components:
         WHO or WHAT produced the score. kind llm = an LLM judge: ref is the
         rubric id, version the rubric version that ran, model the judge model
         — judge_model plus rubric_id and version. kind human = a
-        👍/👎 from a person: ref, version and model
-        are all null, because a thumb runs no rubric and no model — nothing is
-        invented to stand in for one.
+        👍/👎 from a person: ref is that PERSON'S user id and display_name
+        their name at the time they wrote it; version and model stay null,
+        because a thumb runs no rubric and no model — nothing is invented to
+        stand in for one.
+
+        ref carrying the person (v0.7.0) rather than a new field is what makes
+        listJudgments' existing `scorer_ref` filter mean "everything this
+        person scored", for a human exactly as it already meant "everything
+        this rubric scored" for a judge. Both are the answer to "what produced
+        this score".
 
         Only the kinds something produces today are declared. A deterministic
         check (kind check, ref = the check's id, version its version) is the
@@ -3870,7 +3879,23 @@ components:
         ref:
           type: string
           nullable: true
-          description: What the scorer ran — the rubric id for kind llm; null for kind human.
+          description: >
+            What produced the score — the rubric id for kind llm, the rater's
+            user id for kind human. Null when the server cannot attribute one.
+        display_name:
+          type: string
+          nullable: true
+          description: >
+            The rater's name for kind llm's human counterpart — set for kind
+            human, null for kind llm, whose `model` already names it.
+
+            DENORMALIZED ON PURPOSE, stamped when the judgment is written.
+            Judgments are append-only and read by anyone who can see the tree,
+            while the only name lookup in the contract is /admin/users, which
+            requires the admin role — so resolving `ref` at read time would
+            show names to admins and bare ids to everyone else. Stamping also
+            makes the row say who wrote it AT THE TIME: a later rename does not
+            rewrite history it was not part of.
         version:
           type: integer
           nullable: true

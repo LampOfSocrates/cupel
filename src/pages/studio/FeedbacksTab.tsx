@@ -22,11 +22,12 @@ import { useStudio } from "./StudioContext";
 // listing that costs one request per row is how a queue becomes unusable at
 // the size a queue matters, and the note plus the link is enough to triage.
 //
-// WHAT THE CONTRACT CANNOT YET SAY: who left the feedback. Judgment.scorer for
-// a human is {kind: human} with ref/version/model all null (openapi.yaml
-// Scorer), so there is no rater identity to render. The handoff asks for it;
-// it needs a contract change, and inventing "Someone" here would be worse than
-// leaving the column out.
+// WHO left it comes from Scorer: `ref` is the rater's user id and
+// `display_name` their name as of writing (contract v0.7.0). The name is
+// denormalized onto the judgment rather than looked up here, because
+// /admin/users — the contract's only name lookup — needs the admin role, and a
+// feedback queue that showed names to admins and bare ids to everyone else
+// would be worse than either.
 
 const PAGE_SIZE = 50;
 
@@ -43,6 +44,17 @@ function Sentiment({ score }: { score: number }) {
       {down ? "👎 down" : "👍 up"}
     </Badge>
   );
+}
+
+/**
+ * Who to credit. The name, else the bare user id, else nothing to credit —
+ * BLANK counts as absent, not as a name: `??` alone would render an empty
+ * string where a person should be, which reads as a broken row rather than an
+ * unattributed one.
+ */
+function raterName(judgment: Judgment): string {
+  const { display_name: name, ref } = judgment.scorer;
+  return name?.trim() || ref?.trim() || "Unattributed";
 }
 
 function FeedbackRow({ judgment }: { judgment: Judgment }) {
@@ -66,6 +78,12 @@ function FeedbackRow({ judgment }: { judgment: Judgment }) {
             </Text>
           )}
           <Group gap={8} mt={2} wrap="nowrap">
+            {/* The rater leads the meta line: triage is about whose complaint
+                this is at least as much as which turn it landed on. An
+                unattributed row says so rather than borrowing a name. */}
+            <Text fz="xs" fw={500} c="gray.7">
+              {raterName(judgment)}
+            </Text>
             <Text ff="monospace" fz="xs" c="gray.5">
               {subject.id}
             </Text>

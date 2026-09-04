@@ -445,6 +445,9 @@ def test_judge_by_benchmark_id_fans_out_over_membership():
                 assert judgments[0]["subject"] == {"kind": "case", "id": c_["id"]}
                 assert judgments[0]["scorer"] == {
                     "kind": "llm", "ref": rubric["id"], "version": rubric["version"],
+                    # display_name names the PERSON for kind human; an LLM
+                    # judge is already named by `model` (openapi.yaml Scorer).
+                    "display_name": None,
                     "model": "claude-haiku-4-5"}
     run(case())
 

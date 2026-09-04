@@ -66,6 +66,30 @@ describe("Studio ▸ Feedbacks", () => {
     expect(screen.queryByText("a model said this")).not.toBeInTheDocument();
   });
 
+  it("names who left the feedback", async () => {
+    pushHumanJudgment("t2", "c1", "down", "2026-08-04T10:05:00Z", "wrong policy quoted", {
+      id: "u_priya",
+      name: "Priya N.",
+    });
+    renderFeedbacks();
+
+    // Triage is about whose complaint this is, so the name leads the meta line.
+    await screen.findByText("Priya N.");
+  });
+
+  it("falls back to the id, then says so, rather than borrowing a name", async () => {
+    // A judgment the server could not attribute: ref and display_name both
+    // null. Inventing "Someone" would put a name on words nobody said.
+    pushHumanJudgment("t2", "c1", "down", "2026-08-04T10:05:00Z", "unattributed note", {
+      id: "",
+      name: "",
+    });
+    renderFeedbacks();
+
+    await screen.findByText("unattributed note");
+    expect(screen.getByText("Unattributed")).toBeInTheDocument();
+  });
+
   it("explains what to do when there is no feedback yet", async () => {
     renderFeedbacks();
     await waitFor(() =>

@@ -446,9 +446,14 @@ describe("contract v0.7.0", () => {
     const scorer = doc.components.schemas.Scorer;
     expect(scorer.required).toEqual(["kind"]); // a human thumb carries kind alone
     expect(scorer.properties.kind.enum).toEqual(["llm", "human"]);
-    for (const key of ["ref", "version", "model"]) {
+    // display_name joins them in v0.7.0: the rater's name, denormalized so a
+    // non-admin can read a feedback queue (/admin/users is admin-gated).
+    for (const key of ["ref", "display_name", "version", "model"]) {
       expect(scorer.properties[key].nullable, `scorer.${key}`).toBe(true);
     }
+    // Still not required — an LLM judge has no display_name, and a thumb the
+    // server cannot attribute has neither it nor ref.
+    expect(scorer.required).not.toContain("display_name");
 
     // The summary aggregates per scorer identity through the SAME schema, so a
     // future non-rubric scorer needs no second shape.

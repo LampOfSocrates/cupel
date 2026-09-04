@@ -59,6 +59,18 @@ SEED_USERS = [
 ]
 
 
+# The identity an UNVERIFIED caller acts as. Off-mode has no signed-in user,
+# and GET /me still has to answer with somebody — this is that somebody, in ONE
+# place because more than one endpoint now attributes work to them: /me
+# advertises it, and a thumb left in off-mode is stamped with it
+# (mock/main.py judgment_rater). Two literals would be two identities that
+# could disagree about who "dev" is.
+#
+# Deliberately NOT a users row: rows in `users` are accounts that can sign in,
+# and creating one would make the off-mode identity authenticable.
+DEV_USER = {"id": "dev", "name": "Dev User", "email": "dev@cupel.local"}
+
+
 def auth_on() -> bool:
     """AUTH_MODE=on enables enforcement; unset/"off"/anything else = off.
     Read per request (like config.live_disabled) so tests can monkeypatch."""

@@ -5662,7 +5662,8 @@ export const demoJudgments: Judgment[] = [
     },
     "scorer": {
       "kind": "human",
-      "ref": null,
+      "ref": "gen-persona-6",
+      "display_name": "gen-persona-6",
       "version": null,
       "model": null
     },
@@ -5680,7 +5681,8 @@ export const demoJudgments: Judgment[] = [
     },
     "scorer": {
       "kind": "human",
-      "ref": null,
+      "ref": "gen-persona-2",
+      "display_name": "gen-persona-2",
       "version": null,
       "model": null
     },
@@ -5698,7 +5700,8 @@ export const demoJudgments: Judgment[] = [
     },
     "scorer": {
       "kind": "human",
-      "ref": null,
+      "ref": "gen-persona-2",
+      "display_name": "gen-persona-2",
       "version": null,
       "model": null
     },
@@ -5717,6 +5720,7 @@ export const demoJudgments: Judgment[] = [
     "scorer": {
       "kind": "llm",
       "ref": "rub_f0d143771e",
+      "display_name": null,
       "version": 1,
       "model": "claude-haiku-4-5"
     },
@@ -5735,6 +5739,7 @@ export const demoJudgments: Judgment[] = [
     "scorer": {
       "kind": "llm",
       "ref": "rub_f0d143771e",
+      "display_name": null,
       "version": 1,
       "model": "claude-haiku-4-5"
     },
@@ -5753,6 +5758,7 @@ export const demoJudgments: Judgment[] = [
     "scorer": {
       "kind": "llm",
       "ref": "rub_ecd98a839f",
+      "display_name": null,
       "version": 1,
       "model": "claude-haiku-4-5"
     },
@@ -5771,6 +5777,7 @@ export const demoJudgments: Judgment[] = [
     "scorer": {
       "kind": "llm",
       "ref": "rub_ecd98a839f",
+      "display_name": null,
       "version": 1,
       "model": "claude-haiku-4-5"
     },

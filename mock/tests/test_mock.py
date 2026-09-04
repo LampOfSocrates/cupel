@@ -401,7 +401,11 @@ def test_feedback_appends_human_judgment():
             assert judg["scorer"]["kind"] == "human" and judg["score"] == 1.0
             # A thumb subjects the TURN and invents no rubric to score it with.
             assert judg["subject"] == {"kind": "turn", "id": turn_id}
-            assert judg["scorer"]["ref"] is None and judg["scorer"]["version"] is None
+            # v0.7.0: ref names the PERSON for kind human. version stays
+            # null — a thumb still runs no rubric.
+            assert judg["scorer"]["ref"] == "dev"
+            assert judg["scorer"]["display_name"] == "Dev User"
+            assert judg["scorer"]["version"] is None
             assert judg["scorer"]["model"] is None and judg["evaluation_id"] is None
             got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]
             assert len(got) == 1 and got[0]["id"] == judg["id"]
@@ -433,7 +437,7 @@ def test_feedback_comment_stores_as_reasoning_and_appends():
             assert judg["scorer"]["kind"] == "human" and judg["score"] == 0.0
             assert judg["reasoning"] == "wrong refund window"  # trimmed
             assert judg["subject"] == {"kind": "turn", "id": turn_id}
-            assert judg["scorer"]["ref"] is None
+            assert judg["scorer"]["ref"] == "dev"
 
             # append-only: two judgments for the turn, newest first
             got = (await c.get("/eval/judgments", params={"subject_kind": "turn", "subject_id": turn_id})).json()["items"]

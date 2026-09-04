@@ -546,6 +546,43 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
     # unchanged (code forbidden, same message) and mock/tests/test_admin.py
     # still pins them.
 
+    def judgment_rater(request: Request, conversation_id: str | None) -> tuple[str | None, str | None]:
+        """(user id, display name) for a human judgment — Scorer.ref and
+        Scorer.display_name (openapi.yaml Scorer).
+
+        Resolution order, one code path and never a mode branch, mirroring
+        conversation_owner above:
+        1. the AuthGate-verified user — a real signed-in rater;
+        2. else the OWNER of the conversation the thumbed turn belongs to. A
+           thumb is left by whoever is in the conversation, and it is what
+           gives the demo its six personas (mock/generator.py PERSONAS)
+           instead of one name on every row;
+        3. else (None, None) — no rater. Nothing is invented: a thumb the
+           server cannot attribute is better unattributed than credited to
+           somebody who did not write it.
+
+        The name is DENORMALIZED into the row here because the only name
+        lookup in the contract is /admin/users, which needs the admin role —
+        resolving at read time would show names to admins and ids to everyone
+        else (openapi.yaml Scorer.display_name)."""
+        user = request_user(request)
+        if user:
+            return user["id"], user["name"]
+        owner = None
+        if conversation_id:
+            row = db.one("SELECT user_id FROM conversations WHERE id = ?", (conversation_id,))
+            owner = row["user_id"] if row else None
+        if not owner:
+            return None, None
+        if owner == auth.DEV_USER["id"]:
+            # The off-mode identity is not a users row (auth.DEV_USER says
+            # why), so it is named from the same constant /me answers with.
+            return owner, auth.DEV_USER["name"]
+        known = db.one("SELECT name FROM users WHERE id = ?", (owner,))
+        # A generator persona owns conversations without being a users row, so
+        # the id is the best name there is.
+        return owner, (known["name"] if known else owner)
+
     def conversation_owner(request: Request, body: dict) -> str:
         """The owning user stamped on a new conversation
         (AdminConversationItem.user_id, openapi.yaml:3139).
@@ -651,7 +688,7 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             return auth.me_payload(user)
         trees = db.all("SELECT id FROM trees")
         return {
-            "user": {"id": "dev", "name": "Dev User", "email": "dev@cupel.local"},
+            "user": dict(auth.DEV_USER),
             "roles": ["admin", "inspect"],
             "permissions": {t["id"]: ["view", "tune", "evaluate"] for t in trees},
         }
@@ -1332,15 +1369,17 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
         comment = body.get("comment")
         reasoning = comment.strip() if isinstance(comment, str) and comment.strip() else None
         # Thumbs persist in the single judgment store: subject = the TURN that
-        # was thumbed, scorer = {kind: human} with ref/version/model all null —
-        # a thumb runs no rubric and no model, and nothing is invented to stand
-        # in for one (openapi.yaml Scorer).
+        # was thumbed, scorer = {kind: human} naming the PERSON — ref their
+        # user id, display_name their name as of now (see judgment_rater).
+        # version and model stay null: a thumb runs no rubric and no model, and
+        # nothing is invented to stand in for one (openapi.yaml Scorer).
+        rater_id, rater_name = judgment_rater(request, turn["conversation_id"])
         db.run(
             "INSERT INTO judgments (id, subject_kind, subject_id, scorer_kind,"
-            " conversation_id, score, reasoning, created_at)"
-            " VALUES (?, 'turn', ?, 'human', ?, ?, ?, ?)",
-            (jid, turn["id"], turn["conversation_id"], 1.0 if rating == "up" else 0.0,
-             reasoning, now))
+            " scorer_ref, scorer_display_name, conversation_id, score, reasoning, created_at)"
+            " VALUES (?, 'turn', ?, 'human', ?, ?, ?, ?, ?, ?)",
+            (jid, turn["id"], rater_id, rater_name, turn["conversation_id"],
+             1.0 if rating == "up" else 0.0, reasoning, now))
         return judgment_dict(db.one("SELECT * FROM judgments WHERE id = ?", (jid,)))
 
     # --------------------------------------------------------- evaluations
