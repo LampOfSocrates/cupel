@@ -37,11 +37,161 @@ export const demoTrees: AgentTree[] = [
 ];
 
 export const demoAgents: Record<string, Agent[]> = {
-  "agent1": [],
-  "agent2": []
+  "agent1": [
+    {
+      "id": "ag_concierge",
+      "name": "Concierge",
+      "parent_id": null,
+      "live_version": 3,
+      "tools": [
+        "search_kb"
+      ],
+      "enabled": true,
+      "format": "text"
+    },
+    {
+      "id": "ag_refunds",
+      "name": "Refunds",
+      "parent_id": "ag_concierge",
+      "live_version": 1,
+      "tools": [
+        "lookup_order",
+        "refund"
+      ],
+      "enabled": true,
+      "format": "text"
+    },
+    {
+      "id": "ag_shipping",
+      "name": "Shipping",
+      "parent_id": "ag_concierge",
+      "live_version": 1,
+      "tools": [
+        "track_parcel"
+      ],
+      "enabled": true,
+      "format": "text"
+    }
+  ],
+  "agent2": [
+    {
+      "id": "ag_ops",
+      "name": "Ops",
+      "parent_id": null,
+      "live_version": 2,
+      "tools": [
+        "run_query"
+      ],
+      "enabled": true,
+      "format": "text"
+    },
+    {
+      "id": "ag_deploys",
+      "name": "Deploys",
+      "parent_id": "ag_ops",
+      "live_version": 1,
+      "tools": [
+        "rollout_status"
+      ],
+      "enabled": true,
+      "format": "text"
+    }
+  ]
 };
 
-export const demoInstructions: Record<string, InstructionHistory> = {};
+export const demoInstructions: Record<string, InstructionHistory> = {
+  "ag_concierge": {
+    "agent_id": "ag_concierge",
+    "format": "text",
+    "live_version": 3,
+    "versions": [
+      {
+        "version": 1,
+        "content": "You are Concierge (v1).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      },
+      {
+        "version": 2,
+        "content": "You are Concierge (v2).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.\n- Prefer bullet lists for multi-part answers.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      },
+      {
+        "version": 3,
+        "content": "You are Concierge (v3).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.\n- Prefer bullet lists for multi-part answers.\n- Always confirm resolution before closing.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      }
+    ]
+  },
+  "ag_refunds": {
+    "agent_id": "ag_refunds",
+    "format": "text",
+    "live_version": 1,
+    "versions": [
+      {
+        "version": 1,
+        "content": "You are Refunds (v1).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      }
+    ]
+  },
+  "ag_shipping": {
+    "agent_id": "ag_shipping",
+    "format": "text",
+    "live_version": 1,
+    "versions": [
+      {
+        "version": 1,
+        "content": "You are Shipping (v1).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      }
+    ]
+  },
+  "ag_ops": {
+    "agent_id": "ag_ops",
+    "format": "text",
+    "live_version": 2,
+    "versions": [
+      {
+        "version": 1,
+        "content": "You are Ops (v1).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      },
+      {
+        "version": 2,
+        "content": "You are Ops (v2).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.\n- Prefer bullet lists for multi-part answers.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      }
+    ]
+  },
+  "ag_deploys": {
+    "agent_id": "ag_deploys",
+    "format": "text",
+    "live_version": 1,
+    "versions": [
+      {
+        "version": 1,
+        "content": "You are Deploys (v1).\n\n- Answer concisely in markdown.\n- Use your tools before guessing.\n- Escalate to a human when unsure.",
+        "format": "text",
+        "created_at": "2026-08-05T14:09:20.998Z",
+        "promoted_from_snapshot_id": null
+      }
+    ]
+  }
+};
 
 export const demoEndpoints: Record<string, Endpoint[]> = {
   "agent1": [

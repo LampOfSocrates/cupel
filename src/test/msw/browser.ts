@@ -64,8 +64,12 @@ export function seedDemoData(): void {
   mockTrees.length = 0;
   mockTrees.push(...demoTrees);
 
-  for (const key of Object.keys(mockAgents)) delete mockAgents[key];
-  Object.assign(mockAgents, demoAgents);
+  // Replace only what the dump actually holds. A wipe-then-assign left the app
+  // with NO agents when the dump came back empty — an emptier world than the
+  // fixtures it replaced, which is never the point of loading demo data.
+  for (const [tree, agents] of Object.entries(demoAgents)) {
+    if (agents.length) mockAgents[tree] = agents;
+  }
   Object.assign(mockInstructions, demoInstructions);
   Object.assign(mockEndpoints, demoEndpoints);
 

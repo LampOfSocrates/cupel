@@ -5,6 +5,8 @@ import { api } from "../api/client";
 import type { Agent, Rubric, Variant, SelectionItem } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { RunConfigPanel, RunsList } from "../components";
+import { InstructionsForRun, type RunDraft } from "./studio/InstructionsForRun";
+import { PickedRibbon } from "./studio/PickedRibbon";
 import { SelectStep } from "./studio/SelectStep";
 import { ReadOnlyTreeBanner } from "../shell/ReadOnlyTreeBanner";
 import { ApiErrorNote, errorMessage, errorTitle } from "../components/ApiErrorNote";
@@ -111,6 +113,11 @@ export function EvaluationsPage({ mode }: { mode: "list" | "stepper" }) {
   // id (openapi.yaml responses.Forbidden). A string kept neither.
   const [error, setError] = useState<unknown>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
+  // The per-run instruction override, held as TEXT until Queue. It becomes a
+  // snapshot there (see queueEvaluation) rather than per keystroke: snapshots
+  // are immutable and append-only, so snapshotting as you type would leave a
+  // permanent record of every backspace.
+  const [runDraft, setRunDraft] = useState<RunDraft | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [versionsByAgent, setVersionsByAgent] = useState<Record<string, number[]>>({});
   const versionsRequested = useRef(new Set<string>());
@@ -205,7 +212,24 @@ export function EvaluationsPage({ mode }: { mode: "list" | "stepper" }) {
       // POST /agenttrees/{tree}/replay → "202: Work enqueued; evaluation row appears
       // immediately and fills incrementally" (openapi.yaml:616-617) — navigate
       // straight to the detail route, which owns the live fill.
-      const accepted = await api.replay(tree, { selection, configs });
+      // An edited instruction becomes a SNAPSHOT — "an untested draft"
+      // (openapi.yaml Variant) — and the run carries its id. The live version
+      // is not touched; publishing one is a separate, explicit action.
+      let runConfigs = configs;
+      if (runDraft) {
+        const snapshot = await api.createSnapshot(tree, runDraft.agentId, {
+          content: runDraft.content,
+        });
+        // instruction_version XOR snapshot_id, so the version is cleared where
+        // the snapshot lands — sending both is a 422 by contract.
+        runConfigs = configs.map((cfg) => ({
+          ...cfg,
+          agent_id: runDraft.agentId,
+          snapshot_id: snapshot.snapshot_id,
+          instruction_version: null,
+        }));
+      }
+      const accepted = await api.replay(tree, { selection, configs: runConfigs });
       // The draft outlives this page now, so a QUEUED one has to be spent
       // explicitly — otherwise the tab goes on advertising a draft that ran.
       dispatch({ type: "reset" });
@@ -331,6 +355,21 @@ export function EvaluationsPage({ mode }: { mode: "list" | "stepper" }) {
               prefilled from the baseline so changing one axis = one field".
               baseline = {} = the stored originals / live version
               (openapi.yaml:1489 "neither = the live version"). */}
+          {/* What you picked, as a ribbon you can open — the same progressive
+              collapse step 1 gives the browse grid. */}
+          <PickedRibbon
+            tree={tree}
+            selection={selection}
+            onChange={() => dispatch({ type: "goToStep", step: 0 })}
+          />
+          {agents && agents.length > 0 && (
+            <InstructionsForRun
+              tree={tree}
+              agents={agents}
+              draft={runDraft}
+              onDraftChange={setRunDraft}
+            />
+          )}
           <Text size="xs" c="dimmed">
             baseline: stored originals · prefilled
           </Text>

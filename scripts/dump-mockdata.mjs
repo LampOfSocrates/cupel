@@ -60,11 +60,19 @@ async function get(pathname, params) {
   return res.json();
 }
 
-/** Walk a paged collection (Page schema: items/page/page_size/total). */
+/**
+ * Walk a collection.
+ *
+ * Not every collection in the contract is PAGED — listAgents and listEndpoints
+ * answer with a bare array — so a helper that only understands {items, total}
+ * silently returns nothing for them. It did, and the demo dataset shipped with
+ * zero agents until the Configure step had none to instruct.
+ */
 async function all(pathname, params) {
   const out = [];
   for (let page = 1; ; page += 1) {
     const body = await get(pathname, { ...params, page, page_size: 100 });
+    if (Array.isArray(body)) return body;
     if (!body?.items?.length) break;
     out.push(...body.items);
     if (out.length >= (body.total ?? out.length)) break;

@@ -9,7 +9,9 @@ import {
   mockLastSelections,
   mockEvaluations,
   mockSnapshots,
+  instructionSaveRequests,
   replayRequests,
+  snapshotRequests,
   rubricRequests,
   evaluationListRequests,
   taskStreamRig,
@@ -87,6 +89,37 @@ describe("EvaluationsPage — stepper", () => {
     await reopenBrowse(user);
     await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
     expect(next).toBeDisabled();
+  });
+
+  it("an instruction edited for the run becomes a SNAPSHOT, never a version", async () => {
+    const user = userEvent.setup();
+    renderEvaluations();
+    await user.click(await screen.findByRole("button", { name: "New evaluation" }));
+
+    await screen.findByText("Refund escalation");
+    await user.click(screen.getByRole("checkbox", { name: "Select Refund escalation" }));
+    await user.click(screen.getByRole("button", { name: "Configure ▸" }));
+
+    const box = await screen.findByRole("textbox", { name: "Instructions for Concierge" });
+    await waitFor(() => expect(box).not.toHaveValue(""));
+    await user.type(box, " Always cite the policy.");
+    await user.click(screen.getByRole("button", { name: "Queue" }));
+
+    // ONE snapshot, at queue time — not one per keystroke. Snapshots are
+    // immutable and append-only, so that would be a permanent record of every
+    // backspace.
+    await waitFor(() => expect(snapshotRequests).toHaveLength(1));
+    expect(snapshotRequests[0].agentId).toBe("ag_concierge");
+    expect(snapshotRequests[0].body.content).toContain("Always cite the policy.");
+
+    // The run carries the snapshot; the live instruction version is untouched.
+    await waitFor(() => expect(replayRequests).toHaveLength(1));
+    const config = replayRequests[0].body.configs![0];
+    expect(config.agent_id).toBe("ag_concierge");
+    expect(config.snapshot_id).toBeTruthy();
+    // instruction_version XOR snapshot_id — sending both is a 422 by contract.
+    expect(config.instruction_version).toBeNull();
+    expect(instructionSaveRequests).toHaveLength(0);
   });
 
   it("queues a replay whose POST body matches the contract exactly, then navigates to the pending grid", async () => {

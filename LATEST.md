@@ -17,6 +17,13 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - Demo data generator/simulator, tree switcher for multiple agent trees.
 
 ## Recently tried
+- 2026-09-04: Evaluations step 2 — picked ribbon (turn cards, fetched only when opened) and
+  the sub-agent instruction editor. A per-run edit is a SNAPSHOT minted at Queue, never an
+  instruction version: the live one stays live. One override per run, because Variant holds
+  a single agent_id + snapshot_id — the UI says so before the fact rather than sending
+  something narrower than the screen implies. Fixed a bug this exposed: the dump helper
+  only understood paged collections, so listAgents (a bare array) dumped empty and
+  browser.ts then REPLACED the fixture agents with nothing.
 - 2026-09-04: Feedbacks' two actions close the handoff's core loop — "publish an
   instruction change" (to the agent's editor, resolved through the conversation since a
   judgment names only a turn) and "re-run similar turns" (a seedSelection handoff that
@@ -37,15 +44,14 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
   which is why the demo shows six personas instead of Dev User on every line.
 - 2026-09-03: Studio ▸ Feedbacks built — the triage side of the thumbs-down loop, one
   request (scorer_kind=human + tree), note + turn id + jump-to-conversation.
-- 2026-09-03: App shell to the handoff — top bar (title + subtitle + Work pill) and a docked
-  Work queue. Titles travel up via PageHeaderContext, so Chat and Studio stopped printing
-  their own. ETA is derived from the task's own rate and SUPPRESSED when implausible.
 
 ## Next
-- Design handoff, screens still to do (tokens, shell, Evaluations step 1 are done):
-  Evaluations step 2 (picked ribbon, sub-agent prompt editor with per-run draft semantics,
-  Run setup pane) and step 3 (table / side-by-side), the dense conversation grid with turn
-  expansion for Studio ▸ Conversations, Chat 3-column, Traces 216/flex/296.
+- Design handoff, screens still to do (tokens, shell, Evaluations steps 1-2 are done):
+  step 3 (table / side-by-side + the stat tiles), the Run setup pane's 380↔560 expand
+  toggle, the dense conversation grid with turn expansion for Studio ▸ Conversations,
+  Chat 3-column, Traces 216/flex/296.
+- Multi-agent instruction overrides are NOT expressible: Variant carries one agent_id +
+  snapshot_id, so a run overrides one agent. The design's editor implies several.
 - Studio ▸ Feedbacks: done except "versions sourced from feedback are visibly marked as
   such" — InstructionSave carries no provenance field, so that needs a contract change.
 - Memory panel (task 12): view/edit/clear per tree; 4 contracted-but-unbuilt operations
