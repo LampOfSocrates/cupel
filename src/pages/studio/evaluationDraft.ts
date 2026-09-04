@@ -21,9 +21,19 @@ export interface TestInRunsState {
   snapshot_label: string;
 }
 
-/** Router state the stepper can arrive with — the editor's Test-as-evaluation handoff. */
+/** Router state the stepper can arrive with. */
 export interface Handoff {
+  /** The editor's Test-as-evaluation handoff. */
   testInRuns?: TestInRunsState;
+  /**
+   * A selection to start from — Studio ▸ Feedbacks' "re-run similar turns",
+   * which sends you here with the complained-about turn already picked.
+   *
+   * It seeds step 1 rather than skipping to step 2 on purpose: the point of
+   * that action is to widen one complaint into a set worth replaying, so the
+   * screen you land on has to be the one where you add to it.
+   */
+  seedSelection?: SelectionItem[];
 }
 
 export const emptyConfig = (): Variant => ({});
@@ -75,7 +85,10 @@ export function evaluationDraftReducer(
     case "arrive": {
       if (action.key === state.navKey) return state;
       const next = { ...state, navKey: action.key };
-      const { testInRuns } = action.handoff ?? {};
+      const { testInRuns, seedSelection } = action.handoff ?? {};
+      if (seedSelection?.length) {
+        return { ...next, step: 0, selection: seedSelection };
+      }
       if (!testInRuns) return next;
       return {
         ...next,

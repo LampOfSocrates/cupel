@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Anchor, Badge, Box, Button, Group, Loader, Stack, Text } from "@mantine/core";
 import { Link } from "react-router";
 import { api } from "../../api/client";
-import type { Judgment, JudgmentPage } from "../../api/types";
+import type { Conversation, Judgment, JudgmentPage } from "../../api/types";
 import { useApp } from "../../AppContext";
 import { useAsync } from "../../hooks/useAsync";
 import { relativeTime } from "../../lib/relativeTime";
@@ -57,8 +57,18 @@ function raterName(judgment: Judgment): string {
   return name?.trim() || ref?.trim() || "Unattributed";
 }
 
-function FeedbackRow({ judgment }: { judgment: Judgment }) {
+function FeedbackRow({
+  judgment,
+  conversation,
+}: {
+  judgment: Judgment;
+  conversation: Conversation | undefined;
+}) {
   const { conversation_id: conversationId, subject } = judgment;
+  // Both actions need to know WHICH agent the complaint is about, and a
+  // judgment does not carry one — it names a turn. The conversation does
+  // (Conversation.agent_id), which is why the listing is fetched alongside.
+  const agentId = conversation?.agent_id ?? null;
   return (
     <Box
       px={16}
@@ -108,6 +118,42 @@ function FeedbackRow({ judgment }: { judgment: Judgment }) {
               </Text>
             )}
           </Group>
+
+          {/* The two ways a complaint turns into work. Both are HANDOFFS, not
+              in-place mutations: publishing an instruction from a triage list
+              without seeing the instruction would be editing prose nobody has
+              read, and the note says what the agent got wrong, never what the
+              new instruction should say. A person still writes that. */}
+          <Group gap={12} mt={4} wrap="nowrap">
+            {agentId ? (
+              <Anchor
+                component={Link}
+                to={`/agents/${agentId}/editor`}
+                state={{ fromFeedback: { judgment_id: judgment.id, note: judgment.reasoning } }}
+                fz="xs"
+              >
+                Publish an instruction change
+              </Anchor>
+            ) : (
+              <Text fz="xs" c="gray.5">
+                No agent on this conversation
+              </Text>
+            )}
+            {conversationId && (
+              <Anchor
+                component={Link}
+                to="/studio/evaluations/new"
+                state={{
+                  seedSelection: [
+                    { conversation_id: conversationId, turn_ids: [subject.id] },
+                  ],
+                }}
+                fz="xs"
+              >
+                Re-run similar turns first
+              </Anchor>
+            )}
+          </Group>
         </Box>
       </Group>
     </Box>
@@ -126,6 +172,13 @@ export function FeedbacksTab() {
   );
   // Pages 2..n, appended. Held apart from `first` so a tree switch drops them
   // automatically with the query they belonged to.
+  // The conversations these judgments point into — one listing, not one
+  // request per row. Used for the agent id both actions need.
+  const conversations = useAsync<Conversation[]>(
+    () => api.conversations(tree, { page_size: 100 }).then((p) => p.items),
+    [tree],
+  );
+
   const [more, setMore] = useState<{ tree: string; items: Judgment[]; page: number }>({
     tree,
     items: [],
@@ -139,6 +192,7 @@ export function FeedbacksTab() {
     if (first.error) setError(first.error);
   }, [first.error, setError]);
 
+  const byConversation = new Map((conversations.data ?? []).map((c) => [c.id, c]));
   const extra = more.tree === tree ? more.items : [];
   const items = first.data ? [...first.data.items, ...extra] : null;
   const total = first.data?.total ?? 0;
@@ -206,7 +260,11 @@ export function FeedbacksTab() {
       </Group>
 
       {items.map((judgment) => (
-        <FeedbackRow key={judgment.id} judgment={judgment} />
+        <FeedbackRow
+          key={judgment.id}
+          judgment={judgment}
+          conversation={byConversation.get(judgment.conversation_id ?? "")}
+        />
       ))}
 
       {items.length < total && (

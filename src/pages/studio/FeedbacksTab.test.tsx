@@ -90,6 +90,36 @@ describe("Studio ▸ Feedbacks", () => {
     expect(screen.getByText("Unattributed")).toBeInTheDocument();
   });
 
+  it("offers the two ways a complaint becomes work", async () => {
+    pushHumanJudgment("t2", "c1", "down", "2026-08-04T10:05:00Z", "wrong policy quoted");
+    renderFeedbacks();
+
+    // Both are handoffs to a screen that can do the thing properly, not
+    // in-place mutations: nothing here knows what the new instruction should
+    // say, and the note does not say either.
+    const publish = await screen.findByRole("link", { name: "Publish an instruction change" });
+    // c1's agent, resolved through the conversation — a judgment names a turn,
+    // never an agent.
+    expect(publish).toHaveAttribute("href", "/agents/ag_refunds/editor");
+
+    const rerun = screen.getByRole("link", { name: "Re-run similar turns first" });
+    expect(rerun).toHaveAttribute("href", "/studio/evaluations/new");
+  });
+
+  it("says so rather than offering a dead action when the agent cannot be resolved", async () => {
+    // Feedback on a DELETED conversation. Deleting does not retract the
+    // feedback left on it, so the row stays in the queue — but a tombstone is
+    // never listed, so there is no agent to send an instruction change to.
+    pushHumanJudgment("t1", "c-gone", "down", "2026-08-04T10:05:00Z", "note on a deleted thread");
+    renderFeedbacks();
+
+    await screen.findByText("note on a deleted thread");
+    expect(screen.getByText("No agent on this conversation")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Publish an instruction change" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("explains what to do when there is no feedback yet", async () => {
     renderFeedbacks();
     await waitFor(() =>

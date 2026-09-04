@@ -17,6 +17,12 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - Demo data generator/simulator, tree switcher for multiple agent trees.
 
 ## Recently tried
+- 2026-09-04: Feedbacks' two actions close the handoff's core loop — "publish an
+  instruction change" (to the agent's editor, resolved through the conversation since a
+  judgment names only a turn) and "re-run similar turns" (a seedSelection handoff that
+  lands on step 1 with that turn picked, because the point is to WIDEN one complaint).
+  Both are handoffs, not in-place writes: nothing here knows what the new instruction
+  should say, and the note does not say either.
 - 2026-09-04: Evaluations step 1 rebuilt to the handoff, read off Cupel.dc.html rather than
   the README: the split INVERTS (grid collapses to a 46px ribbon on first pick, panel takes
   the width), Selected panel with group/turn ✕ and a docked In/Out pane. Selection rules
@@ -34,17 +40,14 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - 2026-09-03: App shell to the handoff — top bar (title + subtitle + Work pill) and a docked
   Work queue. Titles travel up via PageHeaderContext, so Chat and Studio stopped printing
   their own. ETA is derived from the task's own rate and SUPPRESSED when implausible.
-- 2026-09-03: Contract v0.7.0 — listJudgments gains `scorer_kind` and `tree`; Judgment gains
-  nullable `conversation_id`. Additive, but a MINOR bump on purpose: ignoring an unknown
-  query param is conformant, and here that failure is silent and wrong.
 
 ## Next
 - Design handoff, screens still to do (tokens, shell, Evaluations step 1 are done):
   Evaluations step 2 (picked ribbon, sub-agent prompt editor with per-run draft semantics,
   Run setup pane) and step 3 (table / side-by-side), the dense conversation grid with turn
   expansion for Studio ▸ Conversations, Chat 3-column, Traces 216/flex/296.
-- Studio ▸ Feedbacks: list, rater and jump built. Still missing its two ACTIONS — publish
-  as a new instruction version, and re-run similar turns (pre-seed an Evaluations run).
+- Studio ▸ Feedbacks: done except "versions sourced from feedback are visibly marked as
+  such" — InstructionSave carries no provenance field, so that needs a contract change.
 - Memory panel (task 12): view/edit/clear per tree; 4 contracted-but-unbuilt operations
   (GET/PUT/DELETE /agenttrees/{tree}/memory, POST .../memory/compact).
 - docs/persistence.md (task 13): document intended physical storage layout (Postgres,
