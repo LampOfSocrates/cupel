@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import {
-  ActionIcon,
-  Alert,
-  Anchor,
-  Badge,
-  Box,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Paper, SegmentedControl, Select, Stack, Text, Title } from "@mantine/core";
 import { api } from "../api/client";
 import type { JudgeConfig, Rubric, Evaluation, Result } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
@@ -26,6 +12,7 @@ import {
   ScoreChip,
   STATUS_COLOR,
 } from "../components";
+import { useLocalStorage } from "@mantine/hooks";
 import { useApp } from "../AppContext";
 import { ResultTiles } from "./studio/ResultTiles";
 
@@ -170,6 +157,10 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
   );
   const evaluation = loaded?.[0] ?? null;
   const summary = loaded?.[1] ?? null;
+  const [resultsView, setResultsView] = useLocalStorage<"table" | "sidebyside">({
+    key: "cupel-results-view",
+    defaultValue: "table",
+  });
 
   const fireJudge = useCallback(
     // `silent`: the AUTO path must never replace the page with an error Alert
@@ -611,10 +602,26 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
           rubric)" (feature-spec.md:62) — the server denormalizes that into
           Result.latest_score, joined to its case by Result.case_id
           (openapi.yaml:1654-1664); chip tap opens the judgment drawer. */}
+      {/* Two readings of one grid: across for scores, down for what the
+          columns actually said. A view preference, so it is device-local like
+          every other one here rather than a route or server state. */}
+      <Group justify="flex-end">
+        <SegmentedControl
+          size="xs"
+          value={resultsView}
+          onChange={(value) => setResultsView(value as "table" | "sidebyside")}
+          data={[
+            { value: "table", label: "Table" },
+            { value: "sidebyside", label: "Side-by-side" },
+          ]}
+          aria-label="Results layout"
+        />
+      </Group>
       <ComparisonView
         evaluation={evaluation}
         renderAnnotation={renderAnnotation}
         renderCellAction={renderCellAction}
+        layout={resultsView}
       />
       {/* The grid is one page of rows. Say which page, and offer the rest —
           a comparison that silently stopped at row 50 would read as "these are

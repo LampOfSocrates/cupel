@@ -51,9 +51,9 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 
 ## Next
 - Design handoff, screens still to do (tokens, shell, Evaluations steps 1-2 are done):
-  step 3's Table / Side-by-side toggle (the stat tiles are done), the Run setup pane's 380↔560 expand
-  toggle, the dense conversation grid with turn expansion for Studio ▸ Conversations,
-  Chat 3-column, Traces 216/flex/296.
+  the Run setup pane's 380↔560 expand toggle, the dense conversation grid with turn
+  expansion for Studio ▸ Conversations, Chat 3-column, Traces 216/flex/296.
+  (Evaluations steps 1-3 are done.)
 - Multi-agent instruction overrides are NOT expressible: Variant carries one agent_id +
   snapshot_id, so a run overrides one agent. The design's editor implies several.
 - Studio ▸ Feedbacks: done except "versions sourced from feedback are visibly marked as

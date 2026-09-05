@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EvaluationRow, EvaluationScoreSummary, Result } from "../../api/types";
-import { betterWorse, resultTiles } from "./resultsSummary";
+import { bestColumn, betterWorse, resultTiles } from "./resultsSummary";
 
 const cell = (score: number | null, status: Result["status"] = "done"): Result => ({
   status,
@@ -127,5 +127,24 @@ describe("resultTiles", () => {
     ]);
     expect(resultTiles(bare, [])).toEqual([]);
     expect(resultTiles(null, [])).toEqual([]);
+  });
+});
+
+describe("bestColumn", () => {
+  it("names the highest-scoring column", () => {
+    expect(bestColumn([cell(0.4), cell(0.9), cell(0.6)])).toBe(1);
+  });
+
+  it("names nobody when the top score is tied", () => {
+    // A "best" two columns share is not a winner.
+    expect(bestColumn([cell(0.9), cell(0.9)])).toBeNull();
+  });
+
+  it("names nobody when nothing is scored", () => {
+    expect(bestColumn([cell(null), cell(null, "pending")])).toBeNull();
+  });
+
+  it("ignores unscored columns rather than treating them as zero", () => {
+    expect(bestColumn([cell(null), cell(0.3)])).toBe(1);
   });
 });

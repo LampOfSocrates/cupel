@@ -146,3 +146,30 @@ export function resultTiles(
 
   return tiles;
 }
+
+/**
+ * Which column won a row — the side-by-side card's "best:" label.
+ *
+ * Null when nothing on the row is scored, or when the top score is TIED: a
+ * "best" that two columns share is not a winner, and naming one of them would
+ * invent a verdict the numbers do not support.
+ */
+export function bestColumn(
+  cells: readonly { latest_score?: number | null }[],
+): number | null {
+  let best = -Infinity;
+  let at: number | null = null;
+  let tied = false;
+  cells.forEach((cell, index) => {
+    const score = cell.latest_score;
+    if (score == null) return;
+    if (score > best) {
+      best = score;
+      at = index;
+      tied = false;
+    } else if (score === best) {
+      tied = true;
+    }
+  });
+  return tied ? null : at;
+}

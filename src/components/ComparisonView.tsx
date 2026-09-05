@@ -1,7 +1,8 @@
 import { memo, type ReactNode } from "react";
-import { Badge, Group, Loader, Table, Text } from "@mantine/core";
+import { Badge, Box, Group, Loader, Stack, Table, Text } from "@mantine/core";
 import { Markdown } from "../lib/markdown";
 import type { Evaluation, Result, EvaluationRow } from "../api/types";
+import { bestColumn } from "../pages/studio/resultsSummary";
 
 // Evaluations step 3 — comparison grid (feature-spec.md:49): "baseline column + one
 // column per run config, row per turn". Evaluation.columns index 0 = baseline
@@ -28,6 +29,12 @@ interface Props {
   // feature-spec.md:72 "'re-run this turn with…' on any results cell").
   // Invoked for DONE cells only, like renderAnnotation.
   renderCellAction?: (cell: Result, ctx: CellContext) => ReactNode;
+  /**
+   * "table" reads across — one row per prompt, one cell per column, best for
+   * scanning scores. "sidebyside" reads down — the columns' answers in full,
+   * for judging what they actually said. The handoff's toggle.
+   */
+  layout?: "table" | "sidebyside";
 }
 
 interface CellProps {
@@ -100,7 +107,92 @@ const CellContent = memo(function CellContent({
   }
 }, sameCell);
 
-export function ComparisonView({ evaluation, renderAnnotation, renderCellAction }: Props) {
+/**
+ * Per-prompt cards: one row's columns read down the page instead of across it.
+ *
+ * The table answers "which column scored better"; this answers "what did they
+ * actually SAY", which a cell clipped to two lines in a grid cannot. Same data,
+ * same slots — only the arrangement differs, so nothing here re-derives a cell.
+ */
+function SideBySide({ evaluation, renderAnnotation, renderCellAction }: Props) {
+  return (
+    <Stack gap="sm" data-testid="comparison-sidebyside">
+      {evaluation.rows.items.map((row, rowIndex) => {
+        const best = bestColumn(row.cells);
+        return (
+          <Box
+            key={row.source.turn_id}
+            style={{ border: "1px solid var(--mantine-color-gray-3)", borderRadius: 7 }}
+          >
+            <Group
+              px={12}
+              py={6}
+              justify="space-between"
+              wrap="nowrap"
+              bg="gray.0"
+              style={{ borderBottom: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text ff="monospace" fz="xs" c="gray.5" truncate>
+                {row.source.turn_id}
+              </Text>
+              {/* Absent on a tie or an unscored row — see bestColumn. */}
+              {best != null && (
+                <Text fz="xs" c="gray.6">
+                  best: {evaluation.columns[best]?.label ?? `column ${best + 1}`}
+                </Text>
+              )}
+            </Group>
+            <Group gap={0} align="stretch" wrap="nowrap">
+              {row.cells.map((cell, columnIndex) => (
+                <Box
+                  key={columnIndex}
+                  p={10}
+                  data-testid={`sbs-cell-${rowIndex}-${columnIndex}`}
+                  data-status={cell.status}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    borderRight:
+                      columnIndex < row.cells.length - 1
+                        ? "1px solid var(--mantine-color-gray-3)"
+                        : undefined,
+                    background: columnIndex === 0 ? "var(--mantine-color-gray-0)" : undefined,
+                  }}
+                >
+                  <Text fz="xs" c="gray.6" mb={4} truncate>
+                    {evaluation.columns[columnIndex]?.label ?? ""}
+                  </Text>
+                  <CellContent
+                    cell={cell}
+                    ctx={{ rowIndex, columnIndex, source: row.source }}
+                    renderAnnotation={renderAnnotation}
+                    renderCellAction={renderCellAction}
+                  />
+                </Box>
+              ))}
+            </Group>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+export function ComparisonView({
+  evaluation,
+  renderAnnotation,
+  renderCellAction,
+  layout = "table",
+}: Props) {
+  if (layout === "sidebyside") {
+    return (
+      <SideBySide
+        evaluation={evaluation}
+        renderAnnotation={renderAnnotation}
+        renderCellAction={renderCellAction}
+      />
+    );
+  }
   return (
     <Table.ScrollContainer minWidth={400}>
       <Table verticalSpacing="xs" data-testid="comparison-grid">

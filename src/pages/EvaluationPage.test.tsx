@@ -730,4 +730,22 @@ describe("EvaluationPage grid paging + ETag", () => {
     await screen.findByText("Approved refunds land in 3-5 days.");
     expect(screen.queryByTestId("grid-pager")).not.toBeInTheDocument();
   });
+
+  it("switches the grid between reading across and reading down", async () => {
+    const user = userEvent.setup();
+    seedRunningEvaluation();
+    renderDetail("evaluation-live");
+    // Wait on CONTENT, as the tests around this one do: the grid mounts only
+    // once the evaluation read lands.
+    await screen.findByText("Approved refunds land in 3-5 days.");
+    expect(screen.getByTestId("comparison-grid")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Side-by-side" }));
+    // Same data, other arrangement — the table is gone, the cards are there.
+    await screen.findByTestId("comparison-sidebyside");
+    expect(screen.queryByTestId("comparison-grid")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Table" }));
+    await screen.findByTestId("comparison-grid");
+  });
 });
