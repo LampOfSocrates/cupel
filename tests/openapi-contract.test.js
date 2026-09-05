@@ -459,6 +459,18 @@ describe("contract v0.7.0", () => {
     // future non-rubric scorer needs no second shape.
     const summary = doc.components.schemas.EvaluationScoreSummary;
     expect(summary.required).toEqual(["evaluation_id", "scorers"]);
+    // v0.7.0 by_column: the same figures per grid column (0 = baseline), so the
+    // results header can report a CHANGE and not just a level. Optional — a
+    // backend that omits it leaves the client showing levels and no deltas.
+    const perScorer = summary.properties.scorers.items;
+    expect(perScorer.required).not.toContain("by_column");
+    expect(perScorer.properties.by_column.nullable).toBe(true);
+    expect(perScorer.properties.by_column.items.required).toEqual([
+      "column_index",
+      "mean",
+      "count",
+      "distribution",
+    ]);
     expect(summary.properties.scorers.items.properties.scorer.$ref).toBe(
       "#/components/schemas/Scorer"
     );

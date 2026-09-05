@@ -85,6 +85,23 @@ const dangerClay: MantineColorsTuple = [
   "#5F2117",
 ];
 
+// Positive green — the one status colour the handoff adds beyond danger:
+// #2F6B34 for a delta that moved the right way (shade 7, matching danger's).
+// It is a STATUS colour, never a series colour, and never the sole carrier of
+// meaning — every delta beside it also spells the direction out.
+const positiveMoss: MantineColorsTuple = [
+  "#EFF5EF",
+  "#DCE9DD",
+  "#B9D3BC",
+  "#93BB98",
+  "#6FA376",
+  "#4F8A58",
+  "#3B7742",
+  "#2F6B34",
+  "#245227",
+  "#18371A",
+];
+
 export const theme = createTheme({
   fontFamily: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyMonospace:
@@ -143,6 +160,7 @@ export const theme = createTheme({
     accent: accentBlue,
     warning: warningSand,
     danger: dangerClay,
+    positive: positiveMoss,
   },
   // Depth comes from borders and background tints only.
   shadows: {

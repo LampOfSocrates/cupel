@@ -3,7 +3,10 @@ info:
   title: Cupel API — Phase 2 contract
   version: 0.7.0
   description: |
-    New in v0.7.0 — feedback triage becomes answerable. Two optional filters
+    New in v0.7.0 — feedback triage becomes answerable, and an evaluation can
+    report a CHANGE. EvaluationScoreSummary's scorers gain `by_column`, the same
+    mean/count/distribution per grid column (index 0 = baseline), so the results
+    header can say "+0.9" and "was 9" instead of only a level. Two optional filters
     on listJudgments, `scorer_kind` (human | llm) and `tree`, plus a nullable
     `conversation_id` on Judgment so a listed note can lead back to the turn
     it is about, and a rater on Scorer: `ref` carries the person's user id for
@@ -3988,6 +3991,33 @@ components:
                 type: array
                 description: Bucketed score counts for the sparkline.
                 items: { type: integer }
+              by_column:
+                type: array
+                nullable: true
+                description: >
+                  The same three figures per GRID COLUMN — index 0 is the
+                  baseline (Evaluation.columns). Added in v0.7.0 so the results
+                  summary can state a CHANGE rather than a level: "average 4.4,
+                  +0.9" and "1 thumbs-down, was 9" are both this scorer's
+                  numbers for a variant column beside its baseline column.
+
+                  Without it a client can only show the run's overall mean,
+                  which is the one number that answers nothing — an evaluation
+                  exists to compare a variant against what it replaced. Deriving
+                  it client-side would mean a judgment listing per cell.
+
+                  Omitted (or null) by a backend that does not break its scores
+                  down per column; a client then shows levels and no deltas.
+                items:
+                  type: object
+                  required: [column_index, mean, count, distribution]
+                  properties:
+                    column_index: { type: integer }
+                    mean: { type: number }
+                    count: { type: integer }
+                    distribution:
+                      type: array
+                      items: { type: integer }
 
     # ------------------------------------------------------------------- auth
     AuthTokenRequest:

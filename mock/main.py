@@ -2616,10 +2616,42 @@ def create_app(db_path: str | None = None, token_delay: float | None = None,
             distribution = [0, 0, 0, 0, 0]
             for s in scores:
                 distribution[min(int(s["score"] * 5), 4)] += 1
+            # Per-COLUMN breakdown (v0.7.0). A judgment names its subject —
+            # an eval case or a turn — and evaluation_cells is what says which
+            # column that subject sits in, so the join is the only way to get
+            # "this scorer, on the variant" apart from "this scorer, on the
+            # baseline". Without it the header can only report a level, and an
+            # evaluation exists to report a change.
+            by_column = []
+            columns = db.all(
+                "SELECT c.col_idx AS col_idx, AVG(jg.score) AS mean, COUNT(*) AS count"
+                " FROM judgments jg"
+                " JOIN evaluation_cells c ON c.evaluation_id = jg.evaluation_id"
+                "  AND jg.subject_id IN (c.case_id, c.turn_id)"
+                " WHERE jg.evaluation_id = ? AND jg.scorer_kind = ?"
+                "  AND jg.scorer_ref IS ? AND jg.scorer_version IS ?"
+                " GROUP BY c.col_idx ORDER BY c.col_idx",
+                (evaluationId, g["scorer_kind"], g["scorer_ref"], g["scorer_version"]))
+            for col in columns:
+                col_scores = db.all(
+                    "SELECT jg.score AS score FROM judgments jg"
+                    " JOIN evaluation_cells c ON c.evaluation_id = jg.evaluation_id"
+                    "  AND jg.subject_id IN (c.case_id, c.turn_id)"
+                    " WHERE jg.evaluation_id = ? AND jg.scorer_kind = ?"
+                    "  AND jg.scorer_ref IS ? AND jg.scorer_version IS ? AND c.col_idx = ?",
+                    (evaluationId, g["scorer_kind"], g["scorer_ref"], g["scorer_version"],
+                     col["col_idx"]))
+                col_dist = [0, 0, 0, 0, 0]
+                for s_ in col_scores:
+                    col_dist[min(int(s_["score"] * 5), 4)] += 1
+                by_column.append({"column_index": col["col_idx"],
+                                  "mean": round(col["mean"], 4), "count": col["count"],
+                                  "distribution": col_dist})
             scorers.append({"scorer": {"kind": g["scorer_kind"], "ref": g["scorer_ref"],
                                        "version": g["scorer_version"], "model": None},
                             "mean": round(g["mean"], 4), "count": g["count"],
-                            "distribution": distribution})
+                            "distribution": distribution,
+                            "by_column": by_column})
         return {"evaluation_id": evaluationId, "scorers": scorers}
 
     # ------------------------------------------------- static SPA (last!)

@@ -686,11 +686,22 @@ export interface JudgmentEvent {
 // distribution sparkline)' (feature-spec.md:49)". One group per SCORER
 // IDENTITY (kind + ref + version); the judge model is not part of the key, so
 // the group's scorer carries model: null.
+/** One column's figures inside a scorer's summary (v0.7.0). Index 0 = baseline. */
+export interface ColumnScoreSummary {
+  column_index: number;
+  mean: number;
+  count: number;
+  distribution: number[];
+}
+
 export interface ScorerScoreSummary {
   scorer: Scorer;
   mean: number;
   count: number;
   distribution: number[];
+  /** Per-column breakdown — absent from a backend that does not report one,
+   * in which case the results header shows levels and no deltas. */
+  by_column?: ColumnScoreSummary[] | null;
 }
 
 export interface EvaluationScoreSummary {

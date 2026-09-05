@@ -17,6 +17,12 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
 - Demo data generator/simulator, tree switcher for multiple agent trees.
 
 ## Recently tried
+- 2026-09-05: Step 3 stat tiles — average / better / worse / thumbs-down, each stated as a
+  CHANGE against the baseline column. Needed a contract addition: ScorerScoreSummary gains
+  by_column (same figures per grid column, 0 = baseline), since a client could otherwise
+  only show the run's overall mean, the one number that answers nothing. Better/worse is
+  per-ROW from the grid, which no aggregate can recover. No tile is invented: nothing
+  scored, no tiles.
 - 2026-09-04: Evaluations step 2 — picked ribbon (turn cards, fetched only when opened) and
   the sub-agent instruction editor. A per-run edit is a SNAPSHOT minted at Queue, never an
   instruction version: the live one stays live. One override per run, because Variant holds
@@ -42,12 +48,10 @@ backend-agnostic via a single `agentic.config.ts` + `openapi.yaml` contract.
   /admin/users is the only name lookup and it is admin-gated. Server resolves rater as
   verified user → the conversation's owner → nobody; existing rows backfilled the same way,
   which is why the demo shows six personas instead of Dev User on every line.
-- 2026-09-03: Studio ▸ Feedbacks built — the triage side of the thumbs-down loop, one
-  request (scorer_kind=human + tree), note + turn id + jump-to-conversation.
 
 ## Next
 - Design handoff, screens still to do (tokens, shell, Evaluations steps 1-2 are done):
-  step 3 (table / side-by-side + the stat tiles), the Run setup pane's 380↔560 expand
+  step 3's Table / Side-by-side toggle (the stat tiles are done), the Run setup pane's 380↔560 expand
   toggle, the dense conversation grid with turn expansion for Studio ▸ Conversations,
   Chat 3-column, Traces 216/flex/296.
 - Multi-agent instruction overrides are NOT expressible: Variant carries one agent_id +

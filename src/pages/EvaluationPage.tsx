@@ -27,6 +27,7 @@ import {
   STATUS_COLOR,
 } from "../components";
 import { useApp } from "../AppContext";
+import { ResultTiles } from "./studio/ResultTiles";
 
 // Evaluations step 3 — Results, and the detail route for old evaluations (feature-spec.md:49:
 // "Comparison grid: baseline column + one column per run config, row per
@@ -551,6 +552,11 @@ function EvaluationBody({ rubrics }: { rubrics: Rubric[] }) {
           other scorer kind falls back to its ref, so a future deterministic
           check renders here without a code change. Distribution = tiny inline
           CSS bars over the bucketed counts — deliberately no chart lib. */}
+      {/* The headline: what the change DID, as tiles. The per-scorer mean and
+          distribution below stay — they say what each scorer measured; these
+          say whether it was an improvement. */}
+      <ResultTiles summary={summary} rows={evaluation?.rows.items ?? []} />
+
       {summary != null && summary.scorers.length > 0 && (
         <Group gap="xl" data-testid="evaluation-summary">
           {summary.scorers.map((r) => {
